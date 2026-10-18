@@ -5,6 +5,11 @@
 	UI 는 선임이 Controllers 에 추가합니다 (State.onChanged / Net.on 사용, docs/REMOTES.md 참고).
 ]]
 
+-- 처음 복제가 끝난 뒤에 시작 (ReplicatedStorage 모듈을 바로 인덱싱하므로)
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)

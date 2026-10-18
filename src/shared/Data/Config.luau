@@ -17,6 +17,9 @@ local Config = {
 	MAX_PLAYERS = 7,
 	PLOT_COUNT = 7,
 	INCUBATOR_SLOTS = 8, -- [추정] 베이스 하나의 부화 슬롯 수
+	-- 펫 보관함 상한 (DataStore 4MB·네트워크 보호). 넘치면 장착 안 된 펫 중 수입이 가장 낮은 펫을 자동 판매
+	PET_INVENTORY_MAX = 500,
+	PET_AUTO_SELL_SECONDS = 60, -- 자동 판매 가격 = 그 펫 초당 수입 × 이 초
 
 	------------------------------------------------------------------
 	-- 낮/밤 주기 (설계문서 2장)
@@ -91,6 +94,9 @@ local Config = {
 	INCOME_TICK_SECONDS = 1,
 	TREADMILL_TICK_SECONDS = 1,
 	TREADMILL_STEPS_PER_SECOND = 1, -- 설계문서 9-2 "한 걸음 = 1초" [추정]
+	-- 러닝머신 배율: 걸음당 속도 × 이 값 (설계문서 14-1 은 G = 3). 밸런스 조정용으로 G 와 따로 둠.
+	-- tests/sim_progress.luau 로 확인 (2단계 수석: 결과는 docs/REMOTES.md 가 아니라 보고서에)
+	TREADMILL_MULTIPLIER = 3,
 	OFFLINE_INCOME_CAP_SECONDS = 24 * 60 * 60, -- 오프라인 수입 상한 24시간
 	OFFLINE_INCOME_RATE = 1, -- 오프라인 수입 비율 (1 = 100%)
 	OFFLINE_POPUP_MIN_SECONDS = 60, -- 이보다 짧게 나갔다 오면 팝업 안 띄움
@@ -100,6 +106,13 @@ local Config = {
 	------------------------------------------------------------------
 	FREE_REWARD_SPEED = 10000,
 	FREE_REWARD_GROUP_ID = 0, -- 0 = 그룹 확인 안 함. 그룹을 만들면 ID를 넣으세요.
+
+	------------------------------------------------------------------
+	-- 개발 명령 (DevCommands) 허용 목록
+	--   비어 있으면: 스튜디오에서만, 누구나
+	--   UserId 를 넣으면: 그 사람만 (스튜디오 + 실서버 둘 다)
+	------------------------------------------------------------------
+	DEV_USER_IDS = {} :: { number },
 
 	------------------------------------------------------------------
 	-- 도구 (설계문서 10장)
@@ -112,13 +125,64 @@ local Config = {
 	BEAR_TRAP_LIFETIME = 90,
 	BEAR_TRAP_MAX_ACTIVE = 3,
 	STARTING_BEAR_TRAPS = 3, -- [추정] "초반엔 개수 제한"
+	-- 근접 무기(방망이·구역 무기)는 쿨다운을 같이 씀 (무기를 바꿔 들며 쿨다운 피하기 방지)
+	-- 무기별 사거리·넉백·쿨다운은 shared/Data/Weapons.luau
+
+	------------------------------------------------------------------
+	-- 퓨전 머신 (설계문서 9-4, FusionService / shared/FusionRules)
+	------------------------------------------------------------------
+	FUSION_RADIUS = 12, -- 내 베이스 퓨전 머신 파트 표면에서 이 거리 안이어야 함
+	FUSION_BONUS_MUTATION_CHANCE = 0.10, -- 결과에 새 자연 돌연변이가 붙을 확률
+	FUSION_BONUS_MUTATION_WEIGHTS = { silver = 5, golden = 2, rainbow = 0.5 } :: { [string]: number },
+
+	------------------------------------------------------------------
+	-- 벚꽃: 사쿠라 인큐베이터 (설계문서 4장, SakuraService)
+	------------------------------------------------------------------
+	SAKURA_UNLOCK_PET = "crane", -- 학 1마리를 바치면 해금
+	SAKURA_RADIUS = 14, -- 인큐베이터 파트 표면에서 이 거리 안
+	SAKURA_APPLY_COST = 1, -- [추정] 블룸 1번에 크리스탈 몇 개
+	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 알을 베이스에 배달할 때마다
+	SAKURA_CRYSTAL_DROPS_PER_RESET = 3, -- [추정] 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 수
+	SAKURA_CRYSTAL_PICKUP_DISTANCE = 12,
+	SAKURA_CRYSTAL_MAX = 999999,
+
+	------------------------------------------------------------------
+	-- 천사&악마: 제단 / 비밀 통로 합성 (설계문서 4장, AltarService)
+	------------------------------------------------------------------
+	ALTAR_RADIUS = 14,
+	ALTAR_RINGLORD_CHANCE = 0.20, -- 링로드 20% / 링 가드 80%
+	SHRINE_RADIUS = 14,
+	EGG_QUEUE_MAX = 20, -- 부화 슬롯이 가득 찼을 때 선물 알(제단·합성·퀘스트)이 기다리는 줄 길이
+
+	------------------------------------------------------------------
+	-- 마법의 숲 퀘스트 (설계문서 4장, QuestService / shared/Data/Quests)
+	------------------------------------------------------------------
+	QUEST_SECRET_EGG_CHANCE = 0.01, -- 퀘스트를 끝낸 사람이 서버에 있으면 초기화마다 영혼 세계 수호자 알 등장 확률
+
+	------------------------------------------------------------------
+	-- 치트 방지 2단계: 서버 위치 검증 (AntiCheatService / Logic/MoveCheck)
+	--   1초마다 HumanoidRootPart 수평 이동 거리를 재서
+	--   (WalkSpeed × SPEED_FACTOR) × 경과초 + SLACK 보다 멀면 마지막 정상 위치로 되돌림 + 경고
+	------------------------------------------------------------------
+	MOVE_CHECK_INTERVAL = 1,
+	MOVE_CHECK_SPEED_FACTOR = 1.5,
+	MOVE_CHECK_SLACK = 30,
+	MOVE_CHECK_KICK_WARNINGS = 5, -- 경고가 이만큼 쌓이면 Kick (저장 안 함)
+	MOVE_CHECK_WARNING_DECAY_SECONDS = 120, -- [추정] 경고 1개가 저절로 사라지는 시간 (렉 오탐이 오래 쌓이지 않게)
+	MOVE_CHECK_EXEMPT_AFTER_TELEPORT = 2, -- 서버가 순간이동시킨 뒤 검사 쉬는 시간
+	MOVE_CHECK_EXEMPT_AFTER_RAGDOLL = 1.5, -- 래그돌이 끝난 뒤 검사 쉬는 시간
+	-- 알 든 사람 (BaseService 0.2초 틱): 한 틱에 WalkSpeed × 경과초 × FACTOR + SLACK 보다 멀리 움직이면 알을 원래 자리에 떨어뜨림
+	CARRY_JUMP_SPEED_FACTOR = 1.5,
+	CARRY_JUMP_SLACK = 8,
+	-- 배달: 알을 주운 곳에서 배달 패드까지 거리 ÷ (WalkSpeed × FACTOR) 보다 빨리 오면 거부 (알은 둥지로)
+	DELIVERY_TIME_SPEED_FACTOR = 1.3,
 
 	------------------------------------------------------------------
 	-- 저장 (DataService)
 	------------------------------------------------------------------
 	DATASTORE_NAME = "StealAnEgg_PlayerData",
 	DATASTORE_KEY_PREFIX = "player_",
-	SCHEMA_VERSION = 1,
+	SCHEMA_VERSION = 2,
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

@@ -155,4 +155,98 @@ return function(T, Loader)
 		T.eq(DataSchema.newUid(d, "i"), "i2")
 		T.eq(d.nextUid, 3)
 	end)
+
+	T.suite("DataSchema v2")
+
+	local Pets = Loader.require("ReplicatedStorage/Shared/Data/Pets")
+	local function discoverAll(biomeId, except)
+		local discovered = {}
+		for _, pet in Pets.inBiome(biomeId) do
+			if not (except and except[pet.id]) then
+				discovered[pet.id] = true
+			end
+		end
+		return discovered
+	end
+
+	T.test("버전 2 기본값", function()
+		T.eq(Config.SCHEMA_VERSION, 2)
+		local d = DataSchema.default(0)
+		T.eq(d.version, 2)
+		T.eq(d.sakuraCrystals, 0)
+		T.falsy(d.sakuraUnlocked)
+		T.falsy(d.questsRewarded)
+		T.eq(#d.weapons, 0)
+		T.eq(#d.eggQueue, 0)
+		T.eq(next(d.shrineUsed), nil)
+		T.eq(next(d.quests), nil)
+	end)
+
+	T.test("마이그레이션 1 → 2: 도감 기록으로 무기 채움 (천사&악마 18종 규칙)", function()
+		local v1 = {
+			version = 1,
+			money = 500,
+			indexDiscovered = discoverAll("angels_demons", { equinox = true, aetheron = true }),
+		}
+		local migrated = DataSchema.migrate(v1)
+		T.eq(migrated.version, 2)
+		T.eq(migrated.weapons[1], "angel_spear")
+		local d = DataSchema.reconcile(migrated, 0)
+		T.eq(d.version, 2)
+		T.eq(d.money, 500)
+		T.eq(d.weapons[1], "angel_spear")
+		T.eq(d.sakuraCrystals, 0)
+		-- version 이 없던 아주 옛 데이터도 1 로 보고 변환
+		T.eq(DataSchema.migrate({ money = 1 }).version, 2)
+	end)
+
+	T.test("새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음", function()
+		T.truthy(DataSchema.isNewerVersion({ version = 3 }))
+		T.falsy(DataSchema.isNewerVersion({ version = 2 }))
+		T.falsy(DataSchema.isNewerVersion({ version = 1 }))
+		T.falsy(DataSchema.isNewerVersion(nil))
+		T.eq(DataSchema.migrate({ version = 3 }).version, 3)
+	end)
+
+	T.test("v2 필드 보정: 잘못된 값 버리기", function()
+		local queue = {}
+		for i = 1, Config.EGG_QUEUE_MAX + 5 do
+			table.insert(queue, { petId = "ring_guard", size = "big", mutations = { "golden" }, source = "altar" })
+			if i == 2 then
+				table.insert(queue, { petId = "없는펫", size = "big", mutations = {}, source = "altar" })
+			end
+		end
+		table.insert(queue, 1, { petId = "jitterbug", size = "이상함", mutations = {}, source = "해킹" })
+		local d = DataSchema.reconcile({
+			version = 2,
+			sakuraCrystals = -3,
+			sakuraUnlocked = "yes",
+			shrineUsed = { equinox = true, chicken = true },
+			quests = { deliver_eggs = 999, fuse_once = 0.5, ["가짜"] = 3 },
+			questsRewarded = true,
+			weapons = { "katana", "baseball_bat", "가짜무기", "katana" },
+			eggQueue = queue,
+		}, 0)
+		T.eq(d.sakuraCrystals, 0)
+		T.falsy(d.sakuraUnlocked)
+		T.truthy(d.shrineUsed.equinox)
+		T.eq(d.shrineUsed.chicken, nil)
+		T.eq(d.quests.deliver_eggs, 20, "목표까지")
+		T.eq(d.quests.fuse_once, nil, "0 은 안 적음")
+		T.eq(d.quests["가짜"], nil)
+		T.truthy(d.questsRewarded)
+		T.eq(#d.weapons, 1)
+		T.eq(d.weapons[1], "katana")
+		T.eq(#d.eggQueue, Config.EGG_QUEUE_MAX)
+		T.eq(d.eggQueue[1].size, "normal")
+		T.eq(d.eggQueue[1].source, "altar", "모르는 출처 → altar")
+		T.eq(d.eggQueue[2].mutations[1], "golden")
+	end)
+
+	T.test("무기: 저장된 무기 ∪ 도감으로 해금되는 무기", function()
+		local d = DataSchema.reconcile({ weapons = { "scythe" }, indexDiscovered = discoverAll("lake") }, 0)
+		T.eq(#d.weapons, 2)
+		T.eq(d.weapons[1], "water_bat", "구역 순서")
+		T.eq(d.weapons[2], "scythe")
+	end)
 end

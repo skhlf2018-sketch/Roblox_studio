@@ -30,12 +30,33 @@ return function(T, Loader)
 		T.eq(weapons[1], "water_bat")
 	end)
 
-	T.test("천사&악마 무기는 합성·제단 펫까지 20종 전부 필요", function()
+	T.test("천사&악마 무기는 합성 펫 2종 제외 18종이면 해금 (제단 펫은 필요)", function()
 		local discovered = discoverBiome("angels_demons")
 		discovered.aetheron = nil
-		T.eq(#Progression.unlockedWeapons(discovered), 0)
-		discovered.aetheron = true
+		discovered.equinox = nil
+		local found, total = Progression.weaponProgress(discovered, "angels_demons")
+		T.eq(total, 18)
+		T.eq(found, 18)
 		T.eq(Progression.unlockedWeapons(discovered)[1], "angel_spear")
+		discovered.ring_guard = nil -- 제단 펫은 빠지면 안 됨
+		T.eq(#Progression.unlockedWeapons(discovered), 0)
+		-- 도감 화면 진행도는 그대로 20종 기준
+		local _, all = Progression.biomeProgress(discovered, "angels_demons")
+		T.eq(all, 20)
+	end)
+
+	T.test("마법의 숲 무기는 퀘스트 펫까지 10종 필요", function()
+		local discovered = discoverBiome("enchanted_forest")
+		T.eq(Progression.unlockedWeapons(discovered)[1], "hammer")
+		discovered.spirit_world_guardian = nil
+		T.eq(#Progression.unlockedWeapons(discovered), 0)
+		local _, total = Progression.weaponProgress(discovered, "enchanted_forest")
+		T.eq(total, 10)
+	end)
+
+	T.test("무기 없는 구역은 요구 목록이 비어 있음", function()
+		T.eq(#Progression.weaponRequirement("forest"), 0)
+		T.falsy(Progression.isWeaponUnlocked(discoverBiome("forest"), "forest"))
 	end)
 
 	T.test("전체 도감 완성", function()

@@ -18,7 +18,8 @@ export type Session = {
 	loaded: boolean,
 	saveEnabled: boolean,
 	saving: boolean,
-	released: boolean,
+	releasing: boolean, -- 나갈 때 저장(락 해제) 진행 중
+	released: boolean, -- 락 해제 저장이 성공함 (이후 저장 안 함)
 	plotIndex: number,
 	carryingUid: string?,
 	carryPenalty: number,
@@ -32,6 +33,8 @@ export type Session = {
 	hasMoneyPass: boolean,
 	inSafeZone: boolean,
 	cooldowns: { [string]: number },
+	moveExemptUntil: number, -- 이 시각(os.clock)까지 위치 검증 쉼 (서버 순간이동·래그돌)
+	busy: { [string]: boolean }, -- yield 하는 요청 중복 방지 (예: 무료 보상 그룹 확인)
 }
 
 local Sessions = {}
@@ -50,6 +53,7 @@ function Sessions.create(player: Player): Session
 		loaded = false,
 		saveEnabled = false,
 		saving = false,
+		releasing = false,
 		released = false,
 		plotIndex = 0,
 		carryingUid = nil,
@@ -64,6 +68,8 @@ function Sessions.create(player: Player): Session
 		hasMoneyPass = false,
 		inSafeZone = false,
 		cooldowns = {},
+		moveExemptUntil = 0,
+		busy = {},
 	}
 	sessions[player] = session
 	return session
@@ -92,6 +98,11 @@ end
 
 function Sessions.isStunned(session: Session, now: number): boolean
 	return now < session.stunnedUntil or now < session.frozenUntil
+end
+
+-- 위치 검증을 seconds 동안 쉼 (서버가 순간이동시키거나 날려 보낼 때)
+function Sessions.exemptMovement(session: Session, seconds: number)
+	session.moveExemptUntil = math.max(session.moveExemptUntil, os.clock() + seconds)
 end
 
 -- 쿨다운 확인 + 통과하면 시각 기록

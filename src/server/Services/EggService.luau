@@ -15,6 +15,14 @@
 
 	대기(Intermission) 때: 둥지·바닥 알 전부 지우고 새로 놓음 + "ALL EGG RESET!" + 희귀 알 추첨/공지.
 	들고 있는 알은 지우지 않음 (밤에 베이스로 텔레포트되어 배달 가능).
+	초기화가 끝나면 EggService.resetDone:fire(cycleNumber) → 사쿠라 크리스탈·퀘스트 비밀 알이 이어서 놓임.
+
+	2단계:
+	  - spawnSpecialEgg: 다른 서비스가 특별 알을 둥지에 놓음 (예: 영혼 세계 수호자, questOnly = 퀘스트 끝낸 사람만 줍기)
+	  - 순간이동 방지: 주운 위치·시각(pickedPosition/pickedAt)을 기억 → BaseService 가 배달 때 확인.
+	    서버가 순간이동시키면 resetCarryOrigin 으로 기준점을 옮김.
+	  - confiscate: 치트 의심 배달은 알을 원래 둥지로 돌려보냄 (그 자리에 떨어뜨리면 다시 주워 배달 가능하므로)
+	  - 알 모양: Ball 파트 + SpecialMesh(Sphere, Y 1.25배) "EggShape" (선임 EggVisualService 가 모양을 바꾸면 지워도 됨)
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -39,6 +47,7 @@ local Sessions = require(Server.Sessions)
 local Character = require(Server.Util.Character)
 local Gui = require(Server.Util.Gui)
 local Ragdoll = require(Server.Util.Ragdoll)
+local Signal = require(Server.Util.Signal)
 local MapBuilder = require(script.Parent.MapBuilder)
 local CycleService = require(script.Parent.CycleService)
 local SpeedService = require(script.Parent.SpeedService)
@@ -57,6 +66,7 @@ export type Egg = {
 	size: string,
 	mutations: { string },
 	special: boolean,
+	questOnly: boolean, -- 퀘스트 3개를 끝낸 사람만 주울 수 있음
 	part: BasePart,
 	prompt: ProximityPrompt,
 	state: EggState,
@@ -64,7 +74,14 @@ export type Egg = {
 	nestIndex: number?,
 	carrier: Player?,
 	pickedAt: number,
+	pickedPosition: Vector3?, -- 마지막으로 주운(또는 서버가 순간이동시킨) 위치
+	originAt: number, -- pickedPosition 을 기록한 시각 (os.clock)
 	droppedAt: number,
+}
+
+export type SpecialEggOptions = {
+	questOnly: boolean?,
+	announce: boolean?,
 }
 
 type NestSlot = {
@@ -87,6 +104,11 @@ export type DeliveredEgg = {
 local Attr = Tags.PlayerAttributes
 
 local EggService = {}
+
+-- 초기화(대기 단계) 알 배치가 끝난 뒤 (cycleNumber)
+EggService.resetDone = Signal.new()
+
+local EGG_HEIGHT_SCALE = 1.25 -- 알은 옆보다 위아래로 1.25배 김 (SpecialMesh Scale)
 
 local eggs: { [string]: Egg } = {}
 local nests: { [string]: { NestSlot } } = {}
@@ -122,6 +144,11 @@ local function eggDiameter(sizeId: string): number
 	return Config.EGG_BASE_DIAMETER * (if size then size.eggScale else 1)
 end
 
+-- 알 파트의 보이는 높이 (Ball 파트 지름 × 1.25)
+local function eggHeight(part: BasePart): number
+	return part.Size.Y * EGG_HEIGHT_SCALE
+end
+
 -- 파트를 만들 때 필요한 알 정보
 type EggSeed = {
 	uid: string,
@@ -131,6 +158,7 @@ type EggSeed = {
 	size: string,
 	mutations: { string },
 	special: boolean,
+	questOnly: boolean,
 }
 
 local function eggTitle(egg: EggSeed): string
@@ -157,7 +185,12 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	local part = Instance.new("Part")
 	part.Name = "Egg_" .. egg.uid
 	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(d, d * 1.25, d)
+	part.Size = Vector3.new(d, d, d) -- Ball 은 크기가 항상 같은 값 → 길쭉한 모양은 SpecialMesh 로
+	local mesh = Instance.new("SpecialMesh")
+	mesh.Name = "EggShape"
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, EGG_HEIGHT_SCALE, 1)
+	mesh.Parent = part
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanTouch = false
@@ -190,6 +223,7 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	part:SetAttribute("Size", egg.size)
 	part:SetAttribute("Mutations", table.concat(egg.mutations, ","))
 	part:SetAttribute("Special", egg.special)
+	part:SetAttribute("QuestOnly", egg.questOnly)
 	part:SetAttribute("EggState", "Nest")
 	CollectionService:AddTag(part, Tags.Egg)
 
@@ -197,13 +231,14 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	prompt.Name = "StealPrompt"
 	prompt.ActionText = "훔치기"
 	prompt.ObjectText = eggTitle(egg)
+		.. (if egg.questOnly then "\n(마법의 숲 퀘스트를 끝낸 사람만)" else "")
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = Config.PROMPT_DISTANCE
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = part
 
-	Gui.billboard(part, eggTitle(egg), d * 0.9 + 1.5, 70)
+	Gui.billboard(part, eggTitle(egg), d * EGG_HEIGHT_SCALE * 0.7 + 1.5, 70)
 	part.Parent = MapBuilder.getFolder("Eggs")
 	return part, prompt
 end
@@ -226,7 +261,7 @@ local function placeOnNest(egg: Egg, slot: NestSlot)
 	end
 	local p = slot.part.Position
 	egg.part.Anchored = true
-	egg.part.CFrame = CFrame.new(p.X, nestTop(slot.part) + egg.part.Size.Y / 2, p.Z)
+	egg.part.CFrame = CFrame.new(p.X, nestTop(slot.part) + eggHeight(egg.part) / 2, p.Z)
 	egg.prompt.ActionText = "훔치기"
 	egg.prompt.Enabled = true
 	egg.carrier = nil
@@ -247,7 +282,13 @@ local function connectPrompt(prompt: ProximityPrompt, uid: string)
 	end)
 end
 
-local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits, special: boolean): Egg
+local function spawnEgg(
+	slot: NestSlot,
+	pet: Pets.Pet,
+	traits: EggRoll.EggTraits,
+	special: boolean,
+	questOnly: boolean?
+): Egg
 	eggCounter += 1
 	local seed: EggSeed = {
 		uid = "e" .. tostring(eggCounter),
@@ -257,6 +298,7 @@ local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits
 		size = traits.size,
 		mutations = traits.mutations,
 		special = special,
+		questOnly = questOnly == true,
 	}
 	local part, prompt = makeEggPart(seed)
 	local egg: Egg = {
@@ -267,6 +309,7 @@ local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits
 		size = seed.size,
 		mutations = seed.mutations,
 		special = seed.special,
+		questOnly = seed.questOnly,
 		part = part,
 		prompt = prompt,
 		state = "Nest",
@@ -274,6 +317,8 @@ local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits
 		nestIndex = slot.index,
 		carrier = nil,
 		pickedAt = 0,
+		pickedPosition = nil,
+		originAt = 0,
 		droppedAt = 0,
 	}
 	eggs[egg.uid] = egg
@@ -390,6 +435,54 @@ function EggService.resetAll(cycleNumber: number)
 			end
 		end
 	end
+	EggService.resetDone:fire(cycleNumber)
+end
+
+-- 특별 알 하나를 그 구역의 무작위 둥지에 놓음 (원래 있던 알은 지움). 놓은 알 uid (둥지가 없으면 nil)
+function EggService.spawnSpecialEgg(biomeId: string, petId: string, options: SpecialEggOptions?): string?
+	local pet = Pets.get(petId)
+	local slots = nests[biomeId]
+	if not pet or not slots or #slots == 0 then
+		return nil
+	end
+	-- 누가 들고 있는 알의 예약 둥지는 피함
+	local free: { NestSlot } = {}
+	for _, slot in slots do
+		local current = if slot.eggUid then eggs[slot.eggUid] else nil
+		if not current or current.state ~= "Carried" then
+			table.insert(free, slot)
+		end
+	end
+	if #free == 0 then
+		return nil
+	end
+	local slot = free[math.clamp(math.floor(rand() * #free) + 1, 1, #free)]
+	local old = if slot.eggUid then eggs[slot.eggUid] else nil
+	if old then
+		destroyEgg(old)
+	end
+	local questOnly = options ~= nil and options.questOnly == true
+	local egg = spawnEgg(slot, pet, EggRoll.rollTraits(rand), true, questOnly)
+	if options and options.announce then
+		local biome = Biomes.get(biomeId)
+		local rarity = Rarities.get(pet.rarity)
+		Net.fireAll(Remotes.ToClient.Announce, {
+			kind = "rareEgg",
+			text = string.format(
+				"%s 구역에 %s %s 알 등장!%s",
+				if biome then biome.name else biomeId,
+				if rarity then rarity.name else pet.rarity,
+				pet.name,
+				if questOnly then " (퀘스트를 끝낸 사람만 주울 수 있어요)" else ""
+			),
+			biomeId = biomeId,
+			petId = pet.id,
+			rarity = pet.rarity,
+			eggUid = egg.uid,
+			questOnly = questOnly,
+		})
+	end
+	return egg.uid
 end
 
 ------------------------------------------------------------------
@@ -401,7 +494,7 @@ local function attachToHead(egg: Egg, player: Player): boolean
 	if not head then
 		return false
 	end
-	local offset = head.Size.Y / 2 + egg.part.Size.Y / 2 + 0.3
+	local offset = head.Size.Y / 2 + eggHeight(egg.part) / 2 + 0.3
 	egg.part.CFrame = head.CFrame * CFrame.new(0, offset, 0)
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
@@ -441,6 +534,16 @@ function EggService.tryPickup(player: Player, uid: string)
 		Net.notify(player, "error", "이미 알을 들고 있어요!")
 		return
 	end
+	if egg.questOnly and not data.questsRewarded then
+		if Sessions.useCooldown(session, "questOnlyNotice", 3, os.clock()) then
+			Net.notify(
+				player,
+				"error",
+				"마법의 숲 퀘스트를 모두 끝낸 사람만 주울 수 있는 알이에요!"
+			)
+		end
+		return
+	end
 	local now = os.clock()
 	if Sessions.isStunned(session, now) then
 		return
@@ -459,6 +562,8 @@ function EggService.tryPickup(player: Player, uid: string)
 	egg.prompt.Enabled = false
 	egg.carrier = player
 	egg.pickedAt = now
+	egg.pickedPosition = root.Position
+	egg.originAt = now
 	setState(egg, "Carried")
 	-- 둥지 예약은 유지 (구역을 벗어날 때 풀림). 바닥 알은 예약 없음.
 
@@ -528,7 +633,7 @@ local function placeDropped(egg: Egg, position: Vector3, ignore: { Instance })
 	end
 	local y = MapBuilder.groundY(position, ignore)
 	egg.part.Anchored = true
-	egg.part.CFrame = CFrame.new(position.X, y + egg.part.Size.Y / 2, position.Z)
+	egg.part.CFrame = CFrame.new(position.X, y + eggHeight(egg.part) / 2, position.Z)
 	egg.part.AssemblyLinearVelocity = Vector3.zero
 	egg.prompt.ActionText = "줍기"
 	egg.prompt.Enabled = true
@@ -557,10 +662,45 @@ function EggService.dropCarried(player: Player, cause: CatchCause): EggOutcome?
 	return "DropHere"
 end
 
--- 잡힘/맞음: 알 놓치기 + 래그돌 + Caught 알림
-function EggService.knockOut(player: Player, fromPosition: Vector3?, cause: CatchCause, byName: string)
+-- 알을 지정한 위치에 떨어뜨림 (치트 의심: 순간이동하기 전 마지막 정상 위치에)
+function EggService.dropCarriedAt(player: Player, position: Vector3): EggOutcome?
+	local egg = EggService.getCarried(player)
+	if not egg then
+		return nil
+	end
+	local character = player.Character
+	clearCarry(player)
+	ensurePart(egg)
+	placeDropped(egg, position, if character then { character } else {})
+	return "DropHere"
+end
+
+-- 치트 의심 배달: 알을 원래 둥지(없으면 같은 구역 빈 둥지)로 돌려보냄, 둥지가 없으면 없앰
+function EggService.confiscate(player: Player)
+	local egg = EggService.getCarried(player)
+	if not egg then
+		return
+	end
+	clearCarry(player)
+	ensurePart(egg)
+	if not returnToNest(egg) then
+		destroyEgg(egg)
+	end
+end
+
+-- 서버가 알 든 사람을 순간이동시켰을 때: 배달 거리 검사 기준점을 새 위치로
+function EggService.resetCarryOrigin(player: Player, position: Vector3)
+	local egg = EggService.getCarried(player)
+	if egg then
+		egg.pickedPosition = position
+		egg.originAt = os.clock()
+	end
+end
+
+-- 잡힘/맞음: 알 놓치기 + 래그돌 + Caught 알림. power = 무기 넉백 배율 (기본 1)
+function EggService.knockOut(player: Player, fromPosition: Vector3?, cause: CatchCause, byName: string, power: number?)
 	local outcome = EggService.dropCarried(player, cause)
-	local velocity = Ragdoll.apply(player, fromPosition)
+	local velocity = Ragdoll.apply(player, fromPosition, nil, power)
 	Net.fire(player, Remotes.ToClient.Caught, {
 		cause = cause,
 		by = byName,

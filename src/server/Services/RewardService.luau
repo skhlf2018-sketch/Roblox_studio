@@ -47,18 +47,24 @@ function RewardService.onPlayerReady(player: Player)
 end
 
 function RewardService.claimFree(player: Player)
-	local _, data = Sessions.getLoaded(player)
-	if not data or data.freeRewardClaimed then
+	local session, data = Sessions.getLoaded(player)
+	if not session or not data or data.freeRewardClaimed or session.busy.freeReward then
 		return
 	end
 	local groupId = Config.FREE_REWARD_GROUP_ID
 	if groupId > 0 then
+		-- IsInGroup 은 기다림(yield) → 그 사이 두 번째 요청이 들어와도 중복 지급 안 되게 표시
+		session.busy.freeReward = true
 		local ok, inGroup = pcall(function(): boolean
 			return player:IsInGroup(groupId)
 		end)
+		session.busy.freeReward = false
 		if not ok or not inGroup then
 			Net.notify(player, "error", "그룹에 가입한 뒤 다시 눌러 주세요!")
 			return
+		end
+		if data.freeRewardClaimed or player.Parent == nil then
+			return -- 기다리는 사이 이미 받았거나 나감
 		end
 	end
 	data.freeRewardClaimed = true

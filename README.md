@@ -21,11 +21,21 @@ rojo serve                                                # 스튜디오 Rojo �
 selene src                                                # 린트
 stylua --check src tests                                  # 포맷 검사 (고치려면 stylua src tests)
 lune run tests/run.luau                                   # 순수 로직 테스트
+lune run tests/sim_progress.luau                          # 밸런스 리포트 (구역별 추천 속도 도달 시간, 테스트 아님)
+lune run tests/sim_progress.luau sweep                    #   러닝머신 배율 바꿔 보기 / whatif = 도감 속도 보상 공식 바꿔 보기
 ```
 
 ## 스튜디오에서 해보기
 
 1. `build/StealAnEgg.rbxl` 열기 → 플레이(F5).
 2. 저장을 시험하려면: 게임을 게시하고 게임 설정 > 보안 > "Studio에서 API 서비스 접근 허용" 켜기. 안 켜면 "메모리 모드"(저장 안 됨) 경고가 뜨고 게임은 그대로 돌아갑니다.
-3. 스튜디오 전용 채팅 명령: `/money 1e9`, `/speed 1e9`, `/skip`(낮/밤 넘기기), `/grow`(부화 슬롯 알 다 키우기), `/trap 5`.
+3. 스튜디오 전용 채팅 명령: `/money 1e9`, `/speed 1e9`, `/skip`(낮/밤 넘기기), `/grow`(부화 슬롯 알 다 키우기), `/trap 5`,
+   `/crystal 5`(사쿠라 크리스탈), `/pet crane 3`(펫 바로 받기 — 퓨전·제단·합성 시험), `/quests`(마법의 숲 퀘스트 전부 끝내기).
+   `Config.DEV_USER_IDS` 에 UserId 를 넣으면 그 사람만 (실서버에서도) 쓸 수 있음.
 4. 낮 길이를 줄이려면 Workspace 에 숫자 Attribute `DebugDaySeconds` 추가 (스튜디오에서만 적용).
+
+## 게시할 때 꼭 할 것
+
+- **Game Settings > Places 에서 Max Players 를 7 로 설정.** (`default.project.json` 의 `Players.MaxPlayers` 는 읽기 전용이라 적용되지 않음.)
+  베이스가 7칸이라 8번째 사람은 베이스 없이 들어오고(배달·러닝머신 불가), 누가 나가면 그때 베이스를 받습니다.
+- 저장을 켜려면 게임 설정 > 보안 > "Studio에서 API 서비스 접근 허용" (스튜디오 테스트용).

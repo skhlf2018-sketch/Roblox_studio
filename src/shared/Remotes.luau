@@ -27,6 +27,14 @@ local Remotes = {
 		HatchResult = "HatchResult",
 		OfflineIncome = "OfflineIncome",
 		IndexRewarded = "IndexRewarded",
+		-- 2단계
+		FusionResult = "FusionResult",
+		EggGranted = "EggGranted",
+		SakuraResult = "SakuraResult",
+		AltarUpdate = "AltarUpdate",
+		ShrineResult = "ShrineResult",
+		QuestUpdate = "QuestUpdate",
+		PetsSold = "PetsSold",
 	},
 
 	-- 클라 → 서버 (전부 서버에서 인자 검증 + 레이트 리밋)
@@ -40,6 +48,12 @@ local Remotes = {
 		UseTool = "UseTool",
 		ClaimIndexReward = "ClaimIndexReward",
 		ClaimFreeReward = "ClaimFreeReward",
+		-- 2단계
+		FuseRequest = "FuseRequest",
+		SakuraOffer = "SakuraOffer",
+		SakuraApply = "SakuraApply",
+		AltarOffer = "AltarOffer",
+		ShrineFuse = "ShrineFuse",
 	},
 
 	-- 클라 → 서버 레이트 리밋: burst = 한 번에 허용, perSecond = 초당 회복
@@ -53,13 +67,29 @@ local Remotes = {
 		UseTool = { burst = 4, perSecond = 2 },
 		ClaimIndexReward = { burst = 5, perSecond = 1 },
 		ClaimFreeReward = { burst = 2, perSecond = 0.2 },
+		FuseRequest = { burst = 3, perSecond = 1 },
+		SakuraOffer = { burst = 2, perSecond = 0.5 },
+		SakuraApply = { burst = 5, perSecond = 2 },
+		AltarOffer = { burst = 3, perSecond = 1 },
+		ShrineFuse = { burst = 2, perSecond = 0.5 },
 	} :: { [string]: { burst: number, perSecond: number } },
 
 	-- PurchaseUpgrade 의 kind
-	UpgradeKinds = { Pen = "Pen", Treadmill = "Treadmill", Trail = "Trail" },
+	UpgradeKinds = { Pen = "Pen", Treadmill = "Treadmill", Trail = "Trail" } :: { [string]: string },
 
-	-- UseTool 의 kind
-	ToolKinds = { Bat = "Bat", BearTrap = "BearTrap" },
+	-- UseTool 의 kind = 서버가 Backpack 에 넣어 주는 Tool 이름
+	--   Bat(기본 야구 방망이), BearTrap(곰덫), 나머지는 구역 도감 완성 무기 (shared/Data/Weapons.luau 의 toolKind)
+	ToolKinds = {
+		Bat = "Bat",
+		BearTrap = "BearTrap",
+		WaterBat = "WaterBat",
+		Katana = "Katana",
+		Axe = "Axe",
+		AngelSpear = "AngelSpear",
+		Hammer = "Hammer",
+		CandyCane = "CandyCane",
+		Scythe = "Scythe",
+	} :: { [string]: string },
 }
 
 return Remotes

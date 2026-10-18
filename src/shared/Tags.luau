@@ -28,10 +28,18 @@ local Tags = {
 	IndexBoard = "IndexBoard", -- 도감 보드 자리(빈 파트). Attr: PlotIndex
 	TrailShop = "TrailShop", -- 트레일 상점 자리(빈 파트). Attr: PlotIndex
 
+	-- 구역 특수 장소 (2단계). 맵에 없으면 서버가 구역 안에 임시 파트를 만들어 둠 (Util/Landmarks)
+	--   선임이 같은 태그·Attribute 로 진짜 모델 파트를 두면 임시 파트는 안 만들어짐.
+	SakuraIncubator = "SakuraIncubator", -- 벚꽃 구역 사쿠라 인큐베이터. Attr: Unlocked 는 플레이어 Attr SakuraUnlocked 참고
+	Altar = "Altar", -- 천사&악마 제단 2개. Attr: Side ("light" = 천국 / "dark" = 지옥), PendingCount(대기 중인 제물 수)
+	Shrine = "Shrine", -- 천사&악마 비밀 통로(폭포 옆) 합성 제단
+	QuestGate = "QuestGate", -- 마법의 숲 퀘스트 문 (퀘스트 3개 끝낸 사람만 통과: CollisionGroup "QuestGate")
+
 	-- 동적 오브젝트 (서버가 만듦)
-	Egg = "Egg", -- 둥지/바닥/머리 위 알. Attr: EggUid, PetId, BiomeId, Rarity, Size, Mutations, Special, EggState
-	IncubatingEgg = "IncubatingEgg", -- 부화 슬롯 위 알. Attr: EggUid, OwnerUserId, PetId, Progress, Required, Ready
+	Egg = "Egg", -- 둥지/바닥/머리 위 알. Attr: EggUid, PetId, BiomeId, Rarity, Size, Mutations, Special, EggState, QuestOnly
+	IncubatingEgg = "IncubatingEgg", -- 부화 슬롯 위 알. Attr: EggUid, OwnerUserId, PetId, Progress, Required, Ready, Mutations
 	BearTrap = "BearTrap", -- 설치된 곰덫. Attr: OwnerUserId
+	SakuraCrystal = "SakuraCrystal", -- 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 (ProximityPrompt "CrystalPrompt" 로 줍기)
 
 	SpawnLocation = "MainSpawn",
 }
@@ -54,6 +62,17 @@ Tags.PlayerAttributes = {
 	InSafeZone = "InSafeZone",
 	DataLoaded = "DataLoaded",
 	SaveEnabled = "SaveEnabled",
+	-- 2단계
+	SakuraCrystals = "SakuraCrystals", -- 사쿠라 크리스탈 개수
+	SakuraUnlocked = "SakuraUnlocked", -- 사쿠라 인큐베이터 해금했나
+	QuestsDone = "QuestsDone", -- 마법의 숲 퀘스트 3개 완료 (문 통과 가능)
+	MoveWarnings = "MoveWarnings", -- 비정상 이동 경고 수 (저장 안 함, 5 = Kick)
+}
+
+-- 서버가 만드는 CollisionGroup 이름 (QuestService)
+Tags.CollisionGroups = {
+	QuestGate = "QuestGate", -- 퀘스트 문 파트
+	QuestPassed = "QuestPassed", -- 퀘스트 끝낸 플레이어 캐릭터 → 문과 안 부딪힘
 }
 
 -- ReplicatedStorage.GameState 폴더 Attribute

@@ -25,7 +25,15 @@ export type IncubatorRecord = {
 	required: number, -- 다 자라는 데 필요한 시간(초) = 원본 ÷ GROWTH_MULTIPLIER
 }
 
--- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 1)
+-- 부화 슬롯이 가득 찼을 때 기다리는 선물 알 (제단·비밀 통로 합성·퀘스트 보상, 저장됨)
+export type QueuedEgg = {
+	petId: string,
+	size: string,
+	mutations: { string },
+	source: string, -- "altar" | "shrine" | "quest"
+}
+
+-- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 2)
 export type PlayerData = {
 	version: number,
 	money: number,
@@ -44,6 +52,14 @@ export type PlayerData = {
 	freeRewardClaimed: boolean,
 	nextUid: number,
 	stats: { [string]: number },
+	-- 버전 2 (2단계)
+	weapons: { string }, -- 해금한 구역 무기 id (Data/Weapons, 기본 방망이 제외)
+	sakuraCrystals: number, -- 사쿠라 크리스탈 개수
+	sakuraUnlocked: boolean, -- 사쿠라 인큐베이터 해금 (학 바침)
+	shrineUsed: { [string]: boolean }, -- 비밀 통로 합성 사용 (결과 petId → true, 계정당 1번)
+	quests: { [string]: number }, -- 마법의 숲 퀘스트 진행도 (quest id → 숫자)
+	questsRewarded: boolean, -- 퀘스트 3개 완료 보상(문 열림 + 지터버그 알)을 받았나
+	eggQueue: { QueuedEgg },
 }
 
 -- 알 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)
@@ -55,6 +71,15 @@ export type EggInfo = {
 	size: string,
 	mutations: { string },
 	special: boolean,
+}
+
+-- 퀘스트 1개 진행 상황 (Snapshot.quests / QuestUpdate)
+export type QuestView = {
+	id: string,
+	name: string,
+	progress: number,
+	target: number,
+	done: boolean,
 }
 
 -- 클라이언트로 보내는 전체 상태 (Snapshot)
@@ -76,9 +101,17 @@ export type Snapshot = {
 	unlockedWeapons: { string },
 	tools: { [string]: number },
 	incubators: { IncubatorRecord },
+	eggQueue: { QueuedEgg },
 	freeRewardClaimed: boolean,
 	plotIndex: number,
 	saveEnabled: boolean,
+	-- 2단계
+	sakuraCrystals: number,
+	sakuraUnlocked: boolean,
+	shrineUsed: { [string]: boolean },
+	quests: { QuestView },
+	questsDone: boolean,
+	petInventoryMax: number,
 }
 
 return {}

@@ -83,13 +83,27 @@ return function(T, Loader)
 		T.eq(Economy.nextPenCost(11), nil)
 	end)
 
-	T.test("러닝머신: 잠김 0, 1레벨 2×3=6/초, 10레벨 2000×3=6000/초", function()
+	T.test("러닝머신: 잠김 0, 걸음당 속도 × 러닝머신 배율 × 초당 걸음", function()
+		local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
+		local k = Config.TREADMILL_MULTIPLIER * Config.TREADMILL_STEPS_PER_SECOND
 		T.eq(Economy.treadmillGainPerSecond(0), 0)
-		T.eq(Economy.treadmillGainPerSecond(1), 6)
-		T.eq(Economy.treadmillGainPerSecond(10), 6000)
-		T.eq(Economy.treadmillGainPerSecond(10, 2), 12000)
+		T.eq(Economy.treadmillGainPerSecond(1), 2 * k)
+		T.eq(Economy.treadmillGainPerSecond(10), 2000 * k)
+		T.eq(Economy.treadmillGainPerSecond(10, 2), 4000 * k)
 		T.eq(Economy.nextTreadmillCost(0), 1000)
 		T.eq(Economy.nextTreadmillCost(10), nil)
+	end)
+
+	T.test("보관함 넘침: 장착 안 된 펫 중 수입이 가장 낮은 펫", function()
+		local pets = {
+			{ uid = "p1", petId = "chicken", size = "normal", mutations = {} }, -- 3 (장착)
+			{ uid = "p2", petId = "bear", size = "normal", mutations = {} },
+			{ uid = "p3", petId = "dog", size = "normal", mutations = {} }, -- 6
+			{ uid = "p4", petId = "chicken", size = "big", mutations = {} }, -- 4.5
+		}
+		T.eq(Economy.cheapestUnequipped(pets, { "p1" }), "p4")
+		T.eq(Economy.cheapestUnequipped(pets, {}), "p1")
+		T.eq(Economy.cheapestUnequipped(pets, { "p1", "p2", "p3", "p4" }), nil)
 	end)
 
 	T.test("트레일: 가장 높은 배율 하나만 (중첩 아님)", function()

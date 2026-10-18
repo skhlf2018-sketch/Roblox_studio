@@ -19,8 +19,10 @@ local Character = require(script.Parent.Character)
 
 local Ragdoll = {}
 
--- 날려 보낼 방향 속도 (fromPosition 에서 멀어지는 쪽 + 위로)
-function Ragdoll.knockbackVelocity(rootPosition: Vector3, fromPosition: Vector3?): Vector3
+-- 날려 보낼 방향 속도 (fromPosition 에서 멀어지는 쪽 + 위로). power = 무기 넉백 배율 (기본 1)
+--   수평 × power, 위쪽 × √power (센 무기도 하늘 끝까지 날아가진 않게)
+function Ragdoll.knockbackVelocity(rootPosition: Vector3, fromPosition: Vector3?, power: number?): Vector3
+	local p = math.clamp(power or 1, 0.1, 5)
 	local away = Vector3.new(0, 0, 0)
 	if fromPosition then
 		local flat = Vector3.new(rootPosition.X - fromPosition.X, 0, rootPosition.Z - fromPosition.Z)
@@ -31,11 +33,11 @@ function Ragdoll.knockbackVelocity(rootPosition: Vector3, fromPosition: Vector3?
 	if away.Magnitude < 0.5 then
 		away = Vector3.new(0, 0, -1)
 	end
-	return away * Config.KNOCKBACK_SPEED + Vector3.new(0, Config.KNOCKBACK_UP_SPEED, 0)
+	return away * Config.KNOCKBACK_SPEED * p + Vector3.new(0, Config.KNOCKBACK_UP_SPEED * math.sqrt(p), 0)
 end
 
 -- (날려 보낸 속도) 를 돌려줌. 캐릭터가 없으면 nil.
-function Ragdoll.apply(player: Player, fromPosition: Vector3?, seconds: number?): Vector3?
+function Ragdoll.apply(player: Player, fromPosition: Vector3?, seconds: number?, power: number?): Vector3?
 	local session = Sessions.get(player)
 	local _, humanoid, root = Character.get(player)
 	if not session or not humanoid or not root then
@@ -44,11 +46,13 @@ function Ragdoll.apply(player: Player, fromPosition: Vector3?, seconds: number?)
 	local duration = seconds or Config.RAGDOLL_SECONDS
 	local now = os.clock()
 	session.stunnedUntil = math.max(session.stunnedUntil, now + duration)
+	-- 날아가는 동안 + 끝난 뒤 잠깐은 위치 검증 쉼 (AntiCheatService)
+	Sessions.exemptMovement(session, duration + Config.MOVE_CHECK_EXEMPT_AFTER_RAGDOLL)
 	player:SetAttribute(Tags.PlayerAttributes.Stunned, true)
 
 	humanoid.PlatformStand = true
 
-	local velocity = Ragdoll.knockbackVelocity(root.Position, fromPosition)
+	local velocity = Ragdoll.knockbackVelocity(root.Position, fromPosition, power)
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "KnockbackAttachment"
 	attachment.Parent = root

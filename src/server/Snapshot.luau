@@ -4,6 +4,7 @@
 
 	Snapshot.send(player)              → Remote "Snapshot" (전체)
 	Snapshot.section(player, "pets")   → Remote "DataUpdate" ("pets", payload)  (일부만)
+	Snapshot.equipment(player)         → DataUpdate("pets", { equipped, penSlots, incomePerSecond }) — 장착만 바뀜 (pets 목록 생략)
 
 	섹션 종류와 payload 모양은 docs/REMOTES.md 참고.
 	돈·속도처럼 자주 바뀌는 값은 Player Attribute 로 복제 (Tags.PlayerAttributes).
@@ -12,8 +13,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Data.Config)
 local Economy = require(Shared.Economy)
-local Progression = require(Shared.Progression)
+local QuestRules = require(Shared.QuestRules)
 local Remotes = require(Shared.Remotes)
 local Types = require(Shared.Types)
 local Net = require(script.Parent.Net)
@@ -21,7 +23,7 @@ local Sessions = require(script.Parent.Sessions)
 
 local Snapshot = {}
 
-export type Section = "pets" | "incubators" | "index" | "upgrades" | "tools" | "flags"
+export type Section = "pets" | "incubators" | "index" | "upgrades" | "tools" | "flags" | "special" | "quests"
 
 function Snapshot.build(player: Player): Types.Snapshot?
 	local session, data = Sessions.getLoaded(player)
@@ -43,12 +45,19 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		indexDiscovered = data.indexDiscovered,
 		indexClaimed = data.indexClaimed,
 		indexCompleteClaimed = data.indexCompleteClaimed,
-		unlockedWeapons = Progression.unlockedWeapons(data.indexDiscovered),
+		unlockedWeapons = data.weapons,
 		tools = data.tools,
 		incubators = data.incubators,
+		eggQueue = data.eggQueue,
 		freeRewardClaimed = data.freeRewardClaimed,
 		plotIndex = session.plotIndex,
 		saveEnabled = session.saveEnabled,
+		sakuraCrystals = data.sakuraCrystals,
+		sakuraUnlocked = data.sakuraUnlocked,
+		shrineUsed = data.shrineUsed,
+		quests = QuestRules.view(data.quests),
+		questsDone = data.questsRewarded,
+		petInventoryMax = Config.PET_INVENTORY_MAX,
 	}
 end
 
@@ -73,13 +82,13 @@ function Snapshot.section(player: Player, section: Section)
 			incomePerSecond = session.incomePerSecond,
 		}
 	elseif section == "incubators" then
-		payload = { incubators = data.incubators }
+		payload = { incubators = data.incubators, eggQueue = data.eggQueue }
 	elseif section == "index" then
 		payload = {
 			indexDiscovered = data.indexDiscovered,
 			indexClaimed = data.indexClaimed,
 			indexCompleteClaimed = data.indexCompleteClaimed,
-			unlockedWeapons = Progression.unlockedWeapons(data.indexDiscovered),
+			unlockedWeapons = data.weapons,
 		}
 	elseif section == "upgrades" then
 		payload = {
@@ -91,10 +100,31 @@ function Snapshot.section(player: Player, section: Section)
 		}
 	elseif section == "tools" then
 		payload = { tools = data.tools }
+	elseif section == "special" then
+		payload = {
+			sakuraCrystals = data.sakuraCrystals,
+			sakuraUnlocked = data.sakuraUnlocked,
+			shrineUsed = data.shrineUsed,
+		}
+	elseif section == "quests" then
+		payload = { quests = QuestRules.view(data.quests), questsDone = data.questsRewarded }
 	else
 		payload = { freeRewardClaimed = data.freeRewardClaimed }
 	end
 	Net.fire(player, Remotes.ToClient.DataUpdate, section, payload)
+end
+
+-- 장착만 바뀌었을 때: pets 목록(최대 500마리)은 다시 보내지 않음. State 가 합쳐서 나머지는 그대로 둠.
+function Snapshot.equipment(player: Player)
+	local session, data = Sessions.getLoaded(player)
+	if not session or not data then
+		return
+	end
+	Net.fire(player, Remotes.ToClient.DataUpdate, "pets", {
+		equipped = data.equipped,
+		penSlots = Economy.penSlots(data.penLevel),
+		incomePerSecond = session.incomePerSecond,
+	})
 end
 
 return Snapshot

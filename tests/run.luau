@@ -19,6 +19,9 @@ local specs = {
 	require("./progression.spec"),
 	require("./server_logic.spec"),
 	require("./format.spec"),
+	require("./fusion.spec"),
+	require("./special.spec"),
+	require("./anticheat.spec"),
 }
 
 for _, spec in specs do

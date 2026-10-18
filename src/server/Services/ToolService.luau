@@ -5,12 +5,14 @@
 	도구는 서버가 Backpack 에 Tool 로 넣어 줌 (RequiresHandle = false, 이름 = 종류).
 	클라는 Tool.Activated 때 UseTool(kind) 만 보냄. 대상·위치는 클라가 정하지 않고 서버가 찾음.
 
-	- Bat(야구 방망이, 기본 지급): 쿨다운 BAT_COOLDOWN_SECONDS, 사거리 BAT_RANGE,
-	  내 앞쪽(내적 ≥ BAT_FACING_DOT)의 가장 가까운 플레이어를 래그돌 + 알 떨어뜨림(그 자리).
+	- 근접 무기 (shared/Data/Weapons.luau): Bat(야구 방망이, 기본 지급) + 구역 도감 완성 무기 7개
+	  (WaterBat 물 방망이, Katana 카타나, Axe 도끼, AngelSpear 천사의 창, Hammer 망치, CandyCane 사탕 지팡이, Scythe 낫)
+	  무기마다 사거리·넉백·쿨다운이 다르고(뒤 구역일수록 큼), 쿨다운은 모든 근접 무기가 같이 씀 ("melee").
+	  내 앞쪽(내적 ≥ BAT_FACING_DOT)의 사거리 안 가장 가까운 플레이어를 래그돌 + 알 떨어뜨림(그 자리).
+	  구역 무기는 data.weapons(저장)에 있는 것만 지급·사용 가능 (IndexService.weaponsChanged 때 바로 지급).
 	- BearTrap(곰덫, 개수 제한 data.tools.bearTrap): 발밑에 설치, 다른 사람이 밟으면
 	  BEAR_TRAP_STUN_SECONDS(5초) 묶임 + 알 떨어뜨림. 한 사람당 동시에 BEAR_TRAP_MAX_ACTIVE 개.
 	- 안전 구역(아무 베이스 반경 안)에서는 쓰지도, 맞지도 않음.
-	- 구역 도감 무기(물 방망이·카타나…)는 3단계 (사거리·힘 표를 만들어 Bat 처리에 연결 예정).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -19,8 +21,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
+local Weapons = require(Shared.Data.Weapons)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
@@ -30,6 +34,7 @@ local Validate = require(Server.Logic.Validate)
 local MapBuilder = require(script.Parent.MapBuilder)
 local SpeedService = require(script.Parent.SpeedService)
 local EggService = require(script.Parent.EggService)
+local IndexService = require(script.Parent.IndexService)
 
 type Trap = {
 	part: BasePart,
@@ -77,15 +82,29 @@ local function isEquipped(player: Player, kind: string): boolean
 	return toolIn(player.Character, kind) ~= nil
 end
 
+-- 이 무기를 쓸 수 있나 (기본 방망이 또는 해금한 구역 무기)
+local function ownsWeapon(data: Types.PlayerData, weapon: Weapons.Weapon): boolean
+	return weapon.biome == nil or table.find(data.weapons, weapon.id) ~= nil
+end
+
 function ToolService.refreshTools(player: Player)
 	local _, data = Sessions.getLoaded(player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not data or not backpack then
 		return
 	end
-	if not findTool(player, ToolKinds.Bat) then
-		makeTool(ToolKinds.Bat, "야구 방망이: 다른 플레이어를 날려 알을 떨어뜨려요").Parent =
-			backpack
+	for _, weapon in Weapons.list do
+		local tool = findTool(player, weapon.toolKind)
+		if ownsWeapon(data, weapon) then
+			if not tool then
+				tool = makeTool(weapon.toolKind, weapon.tip)
+				tool.Parent = backpack
+			end
+			tool:SetAttribute("WeaponId", weapon.id)
+			tool:SetAttribute("Range", weapon.range)
+		elseif tool then
+			tool:Destroy()
+		end
 	end
 	local trapCount = data.tools.bearTrap or 0
 	local trapTool = findTool(player, ToolKinds.BearTrap)
@@ -101,20 +120,23 @@ function ToolService.refreshTools(player: Player)
 end
 
 ------------------------------------------------------------------
--- 방망이
+-- 근접 무기 (방망이 + 구역 무기)
 ------------------------------------------------------------------
 
-local function useBat(player: Player)
-	local session = Sessions.get(player)
+local function useMelee(player: Player, weapon: Weapons.Weapon)
+	local session, data = Sessions.getLoaded(player)
 	local root = Character.getRoot(player)
-	if not session or not root or not Character.isAlive(player) then
+	if not session or not data or not root or not Character.isAlive(player) then
 		return
 	end
 	local now = os.clock()
-	if Sessions.isStunned(session, now) or not isEquipped(player, ToolKinds.Bat) then
+	if Sessions.isStunned(session, now) or not isEquipped(player, weapon.toolKind) then
 		return
 	end
-	if not Sessions.useCooldown(session, ToolKinds.Bat, Config.BAT_COOLDOWN_SECONDS, now) then
+	if not ownsWeapon(data, weapon) then
+		return -- 해금 안 한 무기 (Tool 은 서버만 주므로 정상이라면 안 생김)
+	end
+	if not Sessions.useCooldown(session, "melee", weapon.cooldown, now) then
 		return
 	end
 	if MapBuilder.isInSafeZone(root.Position) then
@@ -136,7 +158,7 @@ local function useBat(player: Player)
 			then
 				local offset = otherRoot.Position - root.Position
 				local distance = offset.Magnitude
-				if distance <= Config.BAT_RANGE and distance < bestDistance then
+				if distance <= weapon.range and distance < bestDistance then
 					local flat = Vector3.new(offset.X, 0, offset.Z)
 					local facing = if flat.Magnitude > 0.01 then look:Dot(flat.Unit) else 1
 					if facing >= Config.BAT_FACING_DOT and not MapBuilder.isInSafeZone(otherRoot.Position) then
@@ -147,7 +169,7 @@ local function useBat(player: Player)
 		end
 	end
 	if best then
-		EggService.knockOut(best, root.Position, "player", player.DisplayName)
+		EggService.knockOut(best, root.Position, "player", player.DisplayName, weapon.knockback)
 	end
 end
 
@@ -237,12 +259,12 @@ local function trapTick()
 							and dy < 5
 							and not MapBuilder.isInSafeZone(root.Position)
 						then
-							EggService.dropCarried(other, "player")
+							local outcome = EggService.dropCarried(other, "player")
 							SpeedService.freeze(other, Config.BEAR_TRAP_STUN_SECONDS)
 							Net.fire(other, Remotes.ToClient.Caught, {
 								cause = "trap",
 								by = trap.owner.DisplayName,
-								eggOutcome = "DropHere",
+								eggOutcome = outcome or "None",
 								ragdollSeconds = 0,
 								stunSeconds = Config.BEAR_TRAP_STUN_SECONDS,
 							})
@@ -285,11 +307,20 @@ end
 function ToolService.start()
 	Net.on(Remotes.ToServer.UseTool, function(player: Player, kind: unknown)
 		local k = Validate.oneOf(kind, ToolKinds)
-		if k == ToolKinds.Bat then
-			useBat(player)
-		elseif k == ToolKinds.BearTrap then
-			placeTrap(player)
+		if not k then
+			return
 		end
+		if k == ToolKinds.BearTrap then
+			placeTrap(player)
+			return
+		end
+		local weapon = Weapons.byTool(k)
+		if weapon then
+			useMelee(player, weapon)
+		end
+	end)
+	IndexService.weaponsChanged:connect(function(player: Player)
+		ToolService.refreshTools(player)
 	end)
 	task.spawn(function()
 		while true do

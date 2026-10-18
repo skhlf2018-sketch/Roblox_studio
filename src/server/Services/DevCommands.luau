@@ -1,6 +1,8 @@
 --!strict
 --[[
-	DevCommands — 스튜디오 테스트 전용 채팅 명령 (실서버에서는 아예 연결 안 됨: RunService:IsStudio())
+	DevCommands — 테스트용 채팅 명령
+	  - Config.DEV_USER_IDS 가 비어 있으면: 스튜디오에서만, 누구나 (실서버에서는 아예 연결 안 됨)
+	  - DEV_USER_IDS 에 UserId 를 넣으면: 그 사람만 (스튜디오·실서버 둘 다)
 	주임·선임이 뒤 구역을 바로 시험해 볼 수 있게.
 
 	  /money 1e9        돈 더하기
@@ -8,24 +10,45 @@
 	  /skip             지금 낮/밤/대기 단계를 바로 끝냄
 	  /grow             내 부화 슬롯 알을 전부 다 자란 상태로
 	  /trap 5           곰덫 개수 더하기
+	  /crystal 5        사쿠라 크리스탈 더하기
+	  /pet crane 3      펫 바로 받기 (퓨전·제단·합성 시험용, 최대 20마리)
+	  /quests           마법의 숲 퀘스트 전부 끝내기
 ]]
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Data.Config)
+local Pets = require(ReplicatedStorage.Shared.Data.Pets)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Validate = require(Server.Logic.Validate)
+local DataSchema = require(Server.Logic.DataSchema)
 local Net = require(Server.Net)
 local Wallet = require(script.Parent.Wallet)
 local CycleService = require(script.Parent.CycleService)
 local ToolService = require(script.Parent.ToolService)
+local PetService = require(script.Parent.PetService)
+local IndexService = require(script.Parent.IndexService)
+local SakuraService = require(script.Parent.SakuraService)
+local QuestService = require(script.Parent.QuestService)
 
 local DevCommands = {}
 
+local function isAllowed(player: Player): boolean
+	if #Config.DEV_USER_IDS > 0 then
+		return table.find(Config.DEV_USER_IDS, player.UserId) ~= nil
+	end
+	return RunService:IsStudio()
+end
+
 local function handle(player: Player, message: string)
-	local command, arg = string.match(message, "^/(%a+)%s*(%S*)")
+	if not isAllowed(player) then
+		return
+	end
+	local command, arg, arg2 = string.match(message, "^/(%a+)%s*(%S*)%s*(%S*)")
 	if not command then
 		return
 	end
@@ -49,6 +72,19 @@ local function handle(player: Player, message: string)
 		data.tools.bearTrap = (data.tools.bearTrap or 0) + math.floor(amount)
 		ToolService.refreshTools(player)
 		Snapshot.section(player, "tools")
+	elseif command == "crystal" and amount > 0 then
+		SakuraService.addCrystals(player, amount)
+	elseif command == "pet" and arg ~= nil and Pets.get(arg) then
+		local count = math.clamp(math.floor(Validate.finiteNumber(tonumber(arg2)) or 1), 1, 20)
+		for _ = 1, count do
+			PetService.addPet(
+				player,
+				{ uid = DataSchema.newUid(data, "p"), petId = arg, size = "normal", mutations = {} }
+			)
+		end
+		IndexService.discover(player, arg)
+	elseif command == "quests" then
+		QuestService.completeAll(player)
 	else
 		return
 	end
@@ -56,7 +92,7 @@ local function handle(player: Player, message: string)
 end
 
 function DevCommands.start()
-	if not RunService:IsStudio() then
+	if #Config.DEV_USER_IDS == 0 and not RunService:IsStudio() then
 		return
 	end
 	local function hook(player: Player)
@@ -68,7 +104,7 @@ function DevCommands.start()
 	for _, player in Players:GetPlayers() do
 		hook(player)
 	end
-	print("[DevCommands] 스튜디오 개발 명령 켜짐: /money /speed /skip /grow /trap")
+	print("[DevCommands] 개발 명령 켜짐: /money /speed /skip /grow /trap /crystal /pet /quests")
 end
 
 return DevCommands

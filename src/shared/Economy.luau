@@ -93,21 +93,44 @@ function Economy.totalIncome(records: { PetRecord }, equippedUids: { string }, m
 	return total * (moneyMultiplier or 1)
 end
 
--- Equip Best: 수입이 높은 순서로 slots 마리의 uid
+-- Equip Best: 수입이 높은 순서로 slots 마리의 uid (수입은 정렬 전에 한 번만 계산)
+type Entry = { uid: string, income: number }
+
 function Economy.bestEquipSet(records: { PetRecord }, slots: number): { string }
-	local sorted = table.clone(records)
-	table.sort(sorted, function(a: PetRecord, b: PetRecord): boolean
-		local ia, ib = Economy.recordIncome(a), Economy.recordIncome(b)
-		if ia == ib then
+	local entries: { Entry } = table.create(#records)
+	for i, record in records do
+		entries[i] = { uid = record.uid, income = Economy.recordIncome(record) }
+	end
+	table.sort(entries, function(a: Entry, b: Entry): boolean
+		if a.income == b.income then
 			return a.uid < b.uid
 		end
-		return ia > ib
+		return a.income > b.income
 	end)
 	local result: { string } = {}
-	for i = 1, math.min(slots, #sorted) do
-		table.insert(result, sorted[i].uid)
+	for i = 1, math.min(slots, #entries) do
+		table.insert(result, entries[i].uid)
 	end
 	return result
+end
+
+-- 보관함이 넘칠 때 팔 펫: 장착 안 된 펫 중 수입이 가장 낮은 펫의 uid (없으면 nil)
+function Economy.cheapestUnequipped(records: { PetRecord }, equippedUids: { string }): string?
+	local equipped: { [string]: boolean } = {}
+	for _, uid in equippedUids do
+		equipped[uid] = true
+	end
+	local bestUid: string? = nil
+	local bestIncome = math.huge
+	for _, record in records do
+		if not equipped[record.uid] then
+			local income = Economy.recordIncome(record)
+			if income < bestIncome or (income == bestIncome and bestUid ~= nil and record.uid < bestUid) then
+				bestUid, bestIncome = record.uid, income
+			end
+		end
+	end
+	return bestUid
 end
 
 ------------------------------------------------------------------
@@ -172,9 +195,12 @@ function Economy.treadmillPerStep(level: number): number
 	return entry.perStep
 end
 
--- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × G × 초당 걸음 × 부스터
+-- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × 러닝머신 배율(기본 G = 3) × 초당 걸음 × 부스터
 function Economy.treadmillGainPerSecond(level: number, boost: number?): number
-	return Economy.treadmillPerStep(level) * Config.GROWTH_MULTIPLIER * Config.TREADMILL_STEPS_PER_SECOND * (boost or 1)
+	return Economy.treadmillPerStep(level)
+		* Config.TREADMILL_MULTIPLIER
+		* Config.TREADMILL_STEPS_PER_SECOND
+		* (boost or 1)
 end
 
 -- 다음 러닝머신 레벨 비용 (0 → 1 은 해금 비용, 최대면 nil)

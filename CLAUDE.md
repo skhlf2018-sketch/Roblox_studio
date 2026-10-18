@@ -14,5 +14,6 @@
 
 결정된 것:
 - 게임 엔진: **로블록스 스튜디오** (Luau). 코드는 이 저장소에 Rojo 프로젝트 형태로 둡니다.
-- 클라우드 세션에서는 스튜디오 MCP 에 직접 연결할 수 없습니다. 세션 시작 시 `tools/setup-roblox-tools.sh` 로 Rojo·Lune·Selene·StyLua 와 공식 문서를 받아 작업합니다.
-- 아직 미정: 첫 번째 게임이 어떤 게임인지.
+- 사장님 윈도우 PC(D:\준수\RobloxST\Roblox_studio)에서 작업할 때는 `tools/setup-roblox-tools.ps1` 로 도구를 받습니다. 스튜디오가 설치되어 있고 `.mcp.json` 에 스튜디오 MCP(`%LOCALAPPDATA%\Roblox\mcp.bat`)가 등록되어 있습니다. 스튜디오에서 "Enable Studio as MCP server"를 켜야 연결됩니다.
+- 클라우드 세션에서는 스튜디오 MCP 에 직접 연결할 수 없습니다. `tools/setup-roblox-tools.sh` 로 Rojo·Lune·Selene·StyLua 와 공식 문서를 받아 작업합니다.
+- 첫 번째 게임: **계란 훔치기** (Steal An Egg 재현, 성장 3배, 사탕 왕국·유령 성 추가). 스펙은 `docs/GAME_DESIGN.md`. 코드는 `src/`, 테스트는 `tests/`, 빌드는 `build/StealAnEgg.rbxl`.

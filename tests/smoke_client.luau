@@ -560,7 +560,8 @@ local function body()
 		penLevel = 1,
 		penSlots = 7,
 		treadmillLevel = 0,
-		trails = { "grey" },
+		trails = { "grey", "blue" },
+		equippedTrail = "grey",
 		trailMultiplier = 1.5,
 		indexDiscovered = { chicken = true, dog = true },
 		indexClaimed = { chicken = true },
@@ -700,9 +701,37 @@ local function body()
 	check(tr and tr.args[1] == "Trail" and tr.args[2] == "green", "PurchaseUpgrade(Trail, green) 보냄")
 	local greyCard = playerGui:FindFirstChild("Trail_grey", true)
 	check(
-		greyCard and greyCard:FindFirstChild("Owned") and greyCard.Owned.Text == "장착됨",
-		"가진 트레일 = '장착됨'"
+		greyCard and greyCard:FindFirstChild("Unequip") and greyCard.Unequip.Text == "장착 해제",
+		"장착 중인 트레일 = '장착 해제'"
 	)
+	check(click(greyCard and greyCard:FindFirstChild("Unequip")), "트레일 장착 해제 누름")
+	local eq = lastSent("EquipTrail")
+	check(eq and eq.args[1] == "none", "EquipTrail(none) 보냄")
+	local blueCard = playerGui:FindFirstChild("Trail_blue", true)
+	check(
+		blueCard and blueCard:FindFirstChild("Equip") and blueCard.Equip.Text == "장착",
+		"가졌지만 장착 안 한 트레일 = '장착'"
+	)
+	check(click(blueCard and blueCard:FindFirstChild("Equip")), "트레일 장착 누름")
+	eq = lastSent("EquipTrail")
+	check(eq and eq.args[1] == "blue", "EquipTrail(blue) 보냄")
+	fire("DataUpdate", "upgrades", { equippedTrail = "blue", trailMultiplier = 2.5 })
+	blueCard = playerGui:FindFirstChild("Trail_blue", true)
+	greyCard = playerGui:FindFirstChild("Trail_grey", true)
+	check(
+		blueCard and blueCard:FindFirstChild("Unequip") and greyCard and greyCard:FindFirstChild("Equip"),
+		"DataUpdate(upgrades) 뒤 카드 갱신 (blue 장착 해제 / grey 장착)"
+	)
+	player:SetAttribute("EquippedTrail", "blue")
+	sigOf(player, "Attr_EquippedTrail"):Fire()
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	check(
+		hrp and hrp:FindFirstChild("EquippedTrailFx") and hrp.EquippedTrailFx:IsA("Trail"),
+		"캐릭터에 장착 트레일 꼬리"
+	)
+	player:SetAttribute("EquippedTrail", "none")
+	sigOf(player, "Attr_EquippedTrail"):Fire()
+	check(hrp and hrp:FindFirstChild("EquippedTrailFx") == nil, "해제하면 꼬리 사라짐")
 	-- 인덱스: 숲 카드 → 개 고르기 → 획득! / 다른 구역 탭 / 모두 획득
 	Windows.open("Index")
 	check(click(playerGui:FindFirstChild("Tab_lake", true)), "인덱스 구역 탭 (호수)")

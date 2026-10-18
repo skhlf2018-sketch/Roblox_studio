@@ -223,7 +223,7 @@ return function(T, Loader)
 	-- [2판 마무리 임시] 서버가 먼저 만들고 선임이 버튼을 붙이는 중인 Remote. 클라가 보내기 시작하면
 	-- 아래 두 번째 테스트가 실패해서 "이 목록에서 지우라"고 알려 줌 (목록이 저절로 남아 있지 않게).
 	--   EquipTrail: 트레일 상점 창 카드의 장착/장착 해제 버튼
-	local AWAITING_CLIENT = { EquipTrail = true }
+	local AWAITING_CLIENT = {}
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",

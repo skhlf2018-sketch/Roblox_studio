@@ -42,7 +42,10 @@ end
 
 function TestKit.near(actual, expected, tolerance, msg)
 	if typeof(actual) ~= "number" or math.abs(actual - expected) > tolerance then
-		error(string.format("%s: 기대 %s ± %s, 실제 %s", msg or "near", fmt(expected), fmt(tolerance), fmt(actual)), 2)
+		error(
+			string.format("%s: 기대 %s ± %s, 실제 %s", msg or "near", fmt(expected), fmt(tolerance), fmt(actual)),
+			2
+		)
 	end
 end
 

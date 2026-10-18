@@ -122,7 +122,14 @@ pet("toucan", "큰부리새", "Toucan", "rare", 110, 40)
 pet("chimpanzee", "침팬지", "Chimpanzee", "rare", 90, 30)
 pet("crocodile", "악어", "Crocodile", "epic", 420, mins(1))
 pet("gorilla", "고릴라", "Gorilla", "legendary", 4.8 * K, mins(2))
-pet("orangutini_ananassini", "오랑구티니 아나나시니", "Orangutini Ananassini", "legendary", 5.5 * K, mins(2, 30))
+pet(
+	"orangutini_ananassini",
+	"오랑구티니 아나나시니",
+	"Orangutini Ananassini",
+	"legendary",
+	5.5 * K,
+	mins(2, 30)
+)
 pet("spider", "거미", "Spider", "mythic", 22 * K, mins(4, 30))
 pet("tiger", "호랑이", "Tiger", "mythic", 28 * K, mins(6))
 pet("king_snake", "킹 스네이크", "King Snake", "secret", 3.5 * M, hours(1, 30))
@@ -176,7 +183,14 @@ biome("cosmic")
 pet("centapede", "지네", "Centapede", "epic", 1.5 * K, mins(2))
 pet("cosmic_lizard", "코스믹 도마뱀", "Cosmic Lizard", "legendary", 30 * K, mins(4))
 pet("cosmic_gorilla", "코스믹 고릴라", "Cosmic Gorilla", "mythic", 180 * K, mins(7))
-pet("la_vacca_saturno_saturnita", "라 바카 사투르노 사투르니타", "La Vacca Saturno Saturnita", "cosmic", 2.2 * M, mins(13))
+pet(
+	"la_vacca_saturno_saturnita",
+	"라 바카 사투르노 사투르니타",
+	"La Vacca Saturno Saturnita",
+	"cosmic",
+	2.2 * M,
+	mins(13)
+)
 pet("cosmic_dragon", "코스믹 드래곤", "Cosmic Dragon", "secret", 60 * M, hours(3))
 pet("cosmic_skeleton_boss", "코스믹 스켈레톤 보스", "Cosmic Skeleton Boss", "secret", 45 * M, hours(2, 30))
 pet("eternal_luna_dragon", "이터널 루나 드래곤", "Eternal Luna Dragon", "eternal", 250 * M, hours(7))
@@ -242,7 +256,15 @@ pet("starry_fox", "별 여우", "Starry Fox", "secret", 750 * M, hours(3))
 pet("celestial_sunlion", "천상의 사자", "Celestial Sunlion", "eternal", 2 * B, hours(11))
 pet("royal_skywhale", "왕의 하늘고래", "Royal Skywhale", "divine", 8 * B, hours(20))
 pet("jitterbug", "지터버그", "Jitterbug", "secret", 130 * M, 20, { source = "quest" })
-pet("spirit_world_guardian", "영혼 세계 수호자", "Spirit World Guardian", "divine", 26 * B, hours(20), { source = "quest" })
+pet(
+	"spirit_world_guardian",
+	"영혼 세계 수호자",
+	"Spirit World Guardian",
+	"divine",
+	26 * B,
+	hours(20),
+	{ source = "quest" }
+)
 
 -- 14. 사탕 왕국 Candy Kingdom (신규)
 biome("candy_kingdom")

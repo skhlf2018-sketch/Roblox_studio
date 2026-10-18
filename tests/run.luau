@@ -16,6 +16,7 @@ local specs = {
 	require("./eggrules.spec"),
 	require("./eggroll.spec"),
 	require("./cycle.spec"),
+	require("./progression.spec"),
 	require("./server_logic.spec"),
 	require("./format.spec"),
 }

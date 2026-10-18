@@ -65,7 +65,10 @@ function Economy.petIncome(petId: string, sizeId: string, mutations: { string })
 	if not pet then
 		return 0
 	end
-	return pet.income * Config.GROWTH_MULTIPLIER * Economy.sizeMultiplier(sizeId) * Economy.mutationMultiplier(mutations)
+	return pet.income
+		* Config.GROWTH_MULTIPLIER
+		* Economy.sizeMultiplier(sizeId)
+		* Economy.mutationMultiplier(mutations)
 end
 
 function Economy.recordIncome(record: PetRecord): number

@@ -54,9 +54,33 @@ local Treadmill: { TreadmillLevel } = {
 }
 
 local Trails: { Trail } = {
-	{ id = "grey", order = 1, name = "회색", nameEn = "Grey", multiplier = 1.5, cost = 100, color = { 150, 150, 150 } },
-	{ id = "green", order = 2, name = "초록", nameEn = "Green", multiplier = 2, cost = 5 * K, color = { 80, 200, 80 } },
-	{ id = "blue", order = 3, name = "파랑", nameEn = "Blue", multiplier = 2.5, cost = 75 * K, color = { 60, 120, 255 } },
+	{
+		id = "grey",
+		order = 1,
+		name = "회색",
+		nameEn = "Grey",
+		multiplier = 1.5,
+		cost = 100,
+		color = { 150, 150, 150 },
+	},
+	{
+		id = "green",
+		order = 2,
+		name = "초록",
+		nameEn = "Green",
+		multiplier = 2,
+		cost = 5 * K,
+		color = { 80, 200, 80 },
+	},
+	{
+		id = "blue",
+		order = 3,
+		name = "파랑",
+		nameEn = "Blue",
+		multiplier = 2.5,
+		cost = 75 * K,
+		color = { 60, 120, 255 },
+	},
 	{
 		id = "purple",
 		order = 4,

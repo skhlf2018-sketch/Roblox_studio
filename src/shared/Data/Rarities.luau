@@ -28,10 +28,38 @@ export type Rarity = {
 }
 
 local list: { Rarity } = {
-	{ id = "common", order = 1, name = "일반", nameEn = "Common", color = { 160, 160, 160 }, textColor = { 255, 255, 255 } },
-	{ id = "uncommon", order = 2, name = "고급", nameEn = "Uncommon", color = { 85, 200, 85 }, textColor = { 255, 255, 255 } },
-	{ id = "rare", order = 3, name = "희귀", nameEn = "Rare", color = { 60, 130, 255 }, textColor = { 255, 255, 255 } },
-	{ id = "epic", order = 4, name = "에픽", nameEn = "Epic", color = { 165, 80, 230 }, textColor = { 255, 255, 255 } },
+	{
+		id = "common",
+		order = 1,
+		name = "일반",
+		nameEn = "Common",
+		color = { 160, 160, 160 },
+		textColor = { 255, 255, 255 },
+	},
+	{
+		id = "uncommon",
+		order = 2,
+		name = "고급",
+		nameEn = "Uncommon",
+		color = { 85, 200, 85 },
+		textColor = { 255, 255, 255 },
+	},
+	{
+		id = "rare",
+		order = 3,
+		name = "희귀",
+		nameEn = "Rare",
+		color = { 60, 130, 255 },
+		textColor = { 255, 255, 255 },
+	},
+	{
+		id = "epic",
+		order = 4,
+		name = "에픽",
+		nameEn = "Epic",
+		color = { 165, 80, 230 },
+		textColor = { 255, 255, 255 },
+	},
 	{
 		id = "legendary",
 		order = 5,
@@ -40,7 +68,14 @@ local list: { Rarity } = {
 		color = { 255, 200, 40 },
 		textColor = { 40, 30, 0 },
 	},
-	{ id = "mythic", order = 6, name = "신화", nameEn = "Mythic", color = { 230, 50, 50 }, textColor = { 255, 255, 255 } },
+	{
+		id = "mythic",
+		order = 6,
+		name = "신화",
+		nameEn = "Mythic",
+		color = { 230, 50, 50 },
+		textColor = { 255, 255, 255 },
+	},
 	{
 		id = "cosmic",
 		order = 7,

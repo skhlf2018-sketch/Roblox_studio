@@ -128,7 +128,15 @@ return function(T, Loader)
 	T.test("부화 슬롯: 필요 시간 다시 계산, 슬롯 중복·범위 밖 제거", function()
 		local d = DataSchema.reconcile({
 			incubators = {
-				{ uid = "i1", petId = "king_snake", size = "normal", mutations = {}, slot = 1, progress = 99999, required = 5 },
+				{
+					uid = "i1",
+					petId = "king_snake",
+					size = "normal",
+					mutations = {},
+					slot = 1,
+					progress = 99999,
+					required = 5,
+				},
 				{ uid = "i2", petId = "chicken", size = "normal", mutations = {}, slot = 1, progress = 0 },
 				{ uid = "i3", petId = "chicken", size = "normal", mutations = {}, slot = 99, progress = 0 },
 				{ uid = "i4", petId = "dog", size = "normal", mutations = {}, slot = 2, progress = 2 },

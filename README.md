@@ -34,7 +34,8 @@ lune run tests/sim_progress.luau sweep                    #   러닝머신 배�
 3. 스튜디오 전용 채팅 명령: `/money 1e9`, `/speed 1e9`, `/skip`(낮/밤 넘기기), `/grow`(부화 슬롯 알 다 키우기), `/trap 5`,
    `/crystal 5`(사쿠라 크리스탈), `/pet crane 3`(펫 바로 받기 — 퓨전·제단·합성 시험), `/quests`(마법의 숲 퀘스트 전부 끝내기).
    `Config.DEV_USER_IDS` 에 UserId 를 넣으면 그 사람만 (실서버에서도) 쓸 수 있음.
-4. 낮 길이를 줄이려면 Workspace 에 숫자 Attribute `DebugDaySeconds` 추가 (스튜디오에서만 적용).
+4. 테스트 도구: `tools/studio-mcp.ps1`(스튜디오 MCP에 명령 보내기), `tools/studio-run.ps1 -File x.luau -DataModel Server`(스튜디오 안에서 Luau 실행). 스튜디오 실제 테스트 결과는 `docs/TEST_REPORT.md` 8장.
+5. 낮 길이를 줄이려면 Workspace 에 숫자 Attribute `DebugDaySeconds` 추가 (스튜디오에서만 적용).
 
 ## 게시할 때 꼭 할 것
 

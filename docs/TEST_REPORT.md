@@ -1062,3 +1062,43 @@ S3 이면 8구역 3~5h, 13구역 20~30h, 15구역 40~60h 목표를 모두 지키
 
 ### src/shared/FusionRules.luau (1)
 - 줄 193 [type] Expected this to be '("count" | "duplicate" | "mismatch" | "unknown" | "weaker")?' but got '(string | string | string | string | string)?' caused by: Not all union options are compatible. Expected this to be...
+
+## 8. 스튜디오 실제 플레이 테스트 (본부장, 2026-10-18, 커밋 8558d23 + 채팅 설정 변경)
+
+사장님 PC의 로블록스 스튜디오에 MCP로 직접 연결해서 `build/StealAnEgg.rbxl` 을 플레이(F5)하고 확인했습니다. 캐릭터 이동은 클라이언트 PathfindingService + `Humanoid:MoveTo` 로, 줍기는 ProximityPrompt `InputHoldBegin/End` 로, 나머지는 Remote 로 흉내 냈습니다.
+
+| # | 확인한 것 | 결과 |
+|---|---|---|
+| 1 | 서버 시작, 출력창 빨간 오류 | **통과** — 우리 코드 오류 0건. 로블록스 내부 `UIBlox FoundationProvider` 경고만 반복(무시해도 됨) |
+| 2 | 맵 생성 | **통과** — 구역 15, 둥지 120, 알 120, 베이스 7, 특수 장소 태그 전부 존재, 임시 파트 없음(`Specials` 에는 사쿠라 크리스탈 3개만) |
+| 3 | 경비 15마리 | **통과** — 전부 체력 100, `RequiresNeck=false`, Idle 상태로 대기 (B1 고침 확인) |
+| 4 | 화면(HUD·메뉴 6개·핫바·베이스 표지판) | **통과** — 스크린샷 확인 |
+| 5 | 알 줍기 → RUN!! → 경비 추격 → 잡힘 | **통과** — 가만히 서 있으면 닭에게 잡히고, 래그돌로 약 70스터드 날아가고, **구역 안이라 알이 둥지로 복귀** |
+| 6 | 알 들고 집까지 도망 → 배달 → 부화 슬롯 | **통과** — 속도 20(알 들면 18) vs 닭 9. 12초 만에 배달, 슬롯 1에 5초 부화 |
+| 7 | 밤 30배 성장, "다 자랐어요" 알림 | **통과** |
+| 8 | 부화(HatchEgg) → 펫 카드 → 수입 | **통과** — 개 $6/초(=2×3배), 돈이 1초마다 오름, 우리에 펫 모델 + `$6/초` 이름표 |
+| 9 | 도감 보상(ClaimIndexReward) | **통과** — 개: 속도 +420, 돈 +$200 |
+| 10 | 무료 보상(ClaimFreeReward) | **통과** — 1회 +10,000 속도, 2회째 거부 |
+| 11 | 상점: 우리 L2($1K, 8칸), 러닝머신 L1($1K)·L2($15K) | **통과** |
+| 12 | 트레일: 회색($100, ×1.5) → 파랑(×2.5), 회색 재구매 시 돈 안 빠짐 | **통과** |
+| 13 | 러닝머신 위 5초 | **통과** — +75 속도(레벨 2 = 걸음당 5 × 3배 × 5초) |
+| 14 | 곰덫: 베이스 밖에서 설치, 개수 8→7 | **통과** |
+| 15 | 방망이: UseTool 시 Tool `SwingTick` 갱신(B10) | **통과** |
+| 16 | 낮/밤/초기화 `/skip` 3회 | **통과** — 밤·초기화에 벽 60/60 켜짐, 낮에 0/60, 조명 ClockTime 변화, "ALL EGG RESET!"·특별 알 공지 |
+| 17 | 퓨전: 닭 3마리($9) → 새(고급, $24/초), 장착 유지 | **통과** |
+| 18 | 장착 해제 / Equip Best | **통과** |
+| 19 | 퀘스트 `/quests` → 문 CollisionGroup 전환 | **통과** |
+| 20 | 치트 방지 | **통과** — 테스트 도구가 캐릭터를 96스터드/초로 옮겼을 때 "경고 1/5" 발생 |
+| 21 | 채팅 치트 명령 | **고쳐서 통과** — 아래 고장 S1 |
+
+### 스튜디오에서 발견해 고친 것
+- **S1 (중간) 채팅 명령 무반응.** 자리(place)가 옛 채팅(`LegacyChatService`)이라 `/money …` 가 Player.Chatted 로 오지 않았고, 수석이 등록한 `TextChatCommand` 도 새 채팅에서만 동작합니다. `default.project.json` 에 `TextChatService.ChatVersion = TextChatService` 를 넣어 새 채팅으로 바꿨습니다. 바꾼 뒤 `/money`, `/speed`, `/trap`, `/skip`, `/pet`, `/quests` 전부 동작 확인.
+- **S2 (낮음) 길찾기 걸림.** 숲 둥지 `Egg_e3`(−162, 202) 로 가는 길에서 PathfindingService 경로가 23번째 지점에서 막혔습니다(장식 또는 둥지 테두리로 추정). 다른 둥지(`Egg_e7`)는 문제없음. 실제 플레이어는 돌아가면 되지만, 선임이 장식 배치를 한 번 더 볼 것.
+
+### 아직 스튜디오에서 못 본 것
+- 사쿠라 인큐베이터·제단·비밀 통로(먼 구역까지 걸어가는 테스트 생략), 폰 에뮬레이터 화면, 실제 DataStore 저장(게시 전), 2인 플레이(서로 알 뺏기), 소리(ID 전부 0).
+- 키보드로 `/` 를 눌러 채팅창에 치는 경로는 테스트 도구의 한계로 자동화하지 못했습니다. 사장님이 직접 쳐 보면 됩니다.
+
+### 테스트에 쓴 도구
+- `tools/studio-mcp.ps1`: 스튜디오 MCP(`%LOCALAPPDATA%\Roblox\mcp.bat`)에 명령 하나를 보내는 다리. Claude 세션에 MCP 가 안 붙었을 때 사용.
+- `tools/studio-run.ps1`: Luau 파일을 스튜디오 Edit/Client/Server 에서 실행(CRLF→LF 변환 포함).

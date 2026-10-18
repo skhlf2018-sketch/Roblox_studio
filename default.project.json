@@ -26,6 +26,12 @@
       "$properties": {
         "ClockTime": 14
       }
+    },
+    "TextChatService": {
+      "$properties": {
+        "ChatVersion": "TextChatService",
+        "CreateDefaultTextChannels": true
+      }
     }
   }
 }

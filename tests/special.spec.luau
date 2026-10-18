@@ -202,17 +202,19 @@ return function(T, Loader)
 		T.eq(bat.toolKind, Remotes.ToolKinds.Bat)
 	end)
 
-	T.test("뒤 구역 무기일수록 사거리·넉백·쿨다운이 큼", function()
+	T.test("뒤 구역 무기일수록 사거리·넉백은 크고 쿨다운은 짧음 (1.2초 → 0.8초)", function()
 		local prev = nil
 		for _, w in Weapons.list do
 			if prev then
 				T.truthy(w.order > prev.order, w.id .. " order")
 				T.truthy(w.range > prev.range, w.id .. " range")
 				T.truthy(w.knockback > prev.knockback, w.id .. " knockback")
-				T.truthy(w.cooldown > prev.cooldown, w.id .. " cooldown")
+				T.truthy(w.cooldown < prev.cooldown, w.id .. " cooldown")
 			end
 			prev = w
 		end
+		T.eq(Weapons.list[1].cooldown, 1.2)
+		T.eq(Weapons.list[#Weapons.list].cooldown, 0.8)
 	end)
 
 	T.test("모든 무기 Tool 이름이 Remotes.ToolKinds 에 있음 (+ 곰덫)", function()

@@ -10,8 +10,7 @@
 	- cooldown: 쿨다운(초). 근접 무기는 쿨다운을 같이 씀 (바꿔 들기로 쿨다운 피하기 방지)
 	- excludeSources: 해금 판정에서 빼는 펫 출처 (천사&악마는 합성 펫 2종 제외 → 18종이면 완성)
 
-	뒤 구역일수록 사거리·넉백·쿨다운이 모두 큼 [추정: 본부장 지시 "사거리·넉백 힘·쿨다운이 뒤 구역일수록 큼"]
-	→ 센 무기일수록 한 방이 멀리·세게 날리지만 다시 휘두르기까지 조금 더 걸림.
+	뒤 구역 무기일수록 사거리·넉백이 크고, 쿨다운은 조금씩 짧아짐 (방망이 1.2초 → 낫 0.8초) [본부장 결정]
 ]]
 
 local Config = require(script.Parent.Config)
@@ -52,7 +51,7 @@ local list: { Weapon } = {
 		biome = "lake",
 		range = 10.5,
 		knockback = 1.15,
-		cooldown = 1.3,
+		cooldown = 1.15,
 		tip = "물 방망이: 방망이보다 조금 더 멀리 날려요",
 	},
 	{
@@ -64,7 +63,7 @@ local list: { Weapon } = {
 		biome = "cherry_blossom",
 		range = 12,
 		knockback = 1.35,
-		cooldown = 1.4,
+		cooldown = 1.1,
 		tip = "카타나: 벚꽃 구역 도감 완성 무기",
 	},
 	{
@@ -76,7 +75,7 @@ local list: { Weapon } = {
 		biome = "titan_temple",
 		range = 13,
 		knockback = 1.5,
-		cooldown = 1.5,
+		cooldown = 1.0,
 		tip = "도끼: 타이탄 사원 도감 완성 무기",
 	},
 	{
@@ -88,7 +87,7 @@ local list: { Weapon } = {
 		biome = "angels_demons",
 		range = 14.5,
 		knockback = 1.65,
-		cooldown = 1.6,
+		cooldown = 0.95,
 		tip = "천사의 창: 천사&악마 도감 완성 무기",
 		excludeSources = { fusion = true },
 	},
@@ -101,7 +100,7 @@ local list: { Weapon } = {
 		biome = "enchanted_forest",
 		range = 15.5,
 		knockback = 1.85,
-		cooldown = 1.7,
+		cooldown = 0.9,
 		tip = "망치: 마법의 숲 도감 완성 무기",
 	},
 	{
@@ -113,7 +112,7 @@ local list: { Weapon } = {
 		biome = "candy_kingdom",
 		range = 16.5,
 		knockback = 2.05,
-		cooldown = 1.8,
+		cooldown = 0.85,
 		tip = "사탕 지팡이: 사탕 왕국 도감 완성 무기",
 	},
 	{
@@ -125,7 +124,7 @@ local list: { Weapon } = {
 		biome = "haunted_castle",
 		range = 18,
 		knockback = 2.3,
-		cooldown = 1.9,
+		cooldown = 0.8,
 		tip = "낫: 유령 성 도감 완성 무기",
 	},
 }

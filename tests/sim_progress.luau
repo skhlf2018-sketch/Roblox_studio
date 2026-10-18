@@ -6,9 +6,10 @@
 	  lune run tests/sim_progress.luau whatif     (참고) 도감 속도 보상 공식의 지수를 바꾸면? — 게임 코드는 안 바뀜
 
 	2단계 결과 요약 (러닝머신 배율 3):
-	  도감 속도 보상(Index.reward, 추천 속도에 정비례)이 속도의 대부분을 줌 → 한 구역 펫 몇 마리만 발견해도
-	  다음 구역이 열려서 9~15구역이 1시간 안에 연달아 열림. 러닝머신 배율은 1~48 어디로 바꿔도 이 모양은 안 바뀜.
-	  도감 속도 보상을 빼면(러닝머신만) 반대로 13구역 이후는 100시간 넘게 걸림.
+	  도감 속도 보상이 추천 속도에 정비례(지수 1)일 때는 한 구역 펫 몇 마리만 발견해도 다음 구역이 열려서
+	  9~15구역이 1시간 안에 연달아 열렸음 (15구역 ≈ 7시간). 러닝머신 배율은 1~48 어디로 바꿔도 이 모양은 안 바뀜.
+	  → 본부장 결정: 지수 0.8 (Index.SPEED_BIOME_EXPONENT), 러닝머신 배율 3 유지.
+	  whatif 모드는 이 실행 안에서만 Index.SPEED_BIOME_EXPONENT 를 바꿔 봄 (파일은 안 바뀜).
 
 	게임 코드(Config·Economy·Upgrades·Pets·EggRoll·Index ...)를 Loader 로 그대로 불러 씁니다.
 	→ Config 숫자를 바꾸면 이 리포트도 바로 바뀜.
@@ -64,20 +65,9 @@ end
 
 local NORMAL_PENALTY = Sizes.get("normal").speedPenalty
 
--- whatif 모드에서만 바꿈: 도감 속도 보상 = RARITY_SPEED × max(1, 추천 속도 / 3600) ^ indexExponent
--- (게임 코드 Index.reward 는 지수 1 = 지금 그대로)
-local indexExponent = 1
-
+-- 도감 보상은 게임 코드 Index.reward 그대로 (whatif 모드는 Index.SPEED_BIOME_EXPONENT 를 잠깐 바꿔 봄)
 local function indexReward(pet, biome)
-	local reward = Index.reward(pet.rarity, pet.income, biome.recommendedSpeed)
-	if indexExponent ~= 1 then
-		local scale = math.max(1, biome.recommendedSpeed / Index.SPEED_BIOME_REFERENCE)
-		reward = {
-			speed = math.floor((Index.RARITY_SPEED[pet.rarity] or 0) * scale ^ indexExponent + 0.5),
-			money = reward.money,
-		}
-	end
-	return reward
+	return Index.reward(pet.rarity, pet.income, biome.recommendedSpeed)
 end
 
 local function simulate(seed, indexSpeed)
@@ -306,7 +296,7 @@ end
 local mode = process.args[1]
 
 if mode == "whatif" then
-	-- 참고용: 러닝머신 배율 × 도감 속도 보상 지수 조합 (게임 코드는 안 바뀜)
+	-- 참고용: 러닝머신 배율 × 도감 속도 보상 지수 조합 (이 실행 안에서만 값을 바꿔 봄, 파일은 안 바뀜)
 	print(
 		"도감 속도 보상 지수 what-if (속도 보상 = 희귀도 기본 × (추천 속도/3600)^지수, 시드 5개 중앙값)"
 	)
@@ -326,7 +316,7 @@ if mode == "whatif" then
 		}
 	do
 		Config.TREADMILL_MULTIPLIER = combo[1]
-		indexExponent = combo[2]
+		Index.SPEED_BIOME_EXPONENT = combo[2]
 		local r = runMany(true, 5)
 		print(
 			pad(combo[1], 9)

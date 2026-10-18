@@ -144,4 +144,25 @@ return function(T, Loader)
 			T.truthy(Index.RARITY_SPEED[r.id] ~= nil, r.id)
 		end
 	end)
+
+	T.test("도감 속도 보상: 뒤 구역은 (추천 속도/3600)^0.8 배 (정비례보다 느리게)", function()
+		T.eq(Index.SPEED_BIOME_EXPONENT, 0.8)
+		local prehistoric = Biomes.get("prehistoric").recommendedSpeed -- 18M → 배율 5000
+		local dodo = Index.reward("rare", Pets.get("dodo").income, prehistoric)
+		T.eq(dodo.speed, math.floor(620 * 5000 ^ 0.8 + 0.5))
+		T.truthy(dodo.speed > 620 * 900 and dodo.speed < 620 * 920, "5000^0.8 ≈ 911")
+		T.eq(dodo.money, 28000, "돈 보상은 그대로")
+		-- 추천 속도가 3600 이하(숲·호수)면 배율 1
+		T.eq(Index.reward("epic", 320, Biomes.get("lake").recommendedSpeed).speed, 800)
+		-- 뒤 구역일수록 보상이 커짐, 하지만 추천 속도 대비 비율은 줄어듦
+		local prevSpeed, prevRatio = 0, math.huge
+		for _, b in Biomes.list do
+			if b.recommendedSpeed > Index.SPEED_BIOME_REFERENCE then
+				local s = Index.reward("cosmic", 1, b.recommendedSpeed).speed
+				T.truthy(s > prevSpeed, b.id .. " 증가")
+				T.truthy(s / b.recommendedSpeed < prevRatio, b.id .. " 비율 감소")
+				prevSpeed, prevRatio = s, s / b.recommendedSpeed
+			end
+		end
+	end)
 end

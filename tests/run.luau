@@ -22,6 +22,15 @@ local specs = {
 	require("./fusion.spec"),
 	require("./special.spec"),
 	require("./anticheat.spec"),
+	require("./services_core.spec"),
+	require("./services_gameplay.spec"),
+	require("./services_system.spec"),
+	require("./services_tools.spec"),
+	require("./services_world.spec"),
+	require("./design_doc.spec"),
+	require("./rules_boundary.spec"),
+	require("./save_data.spec"),
+	require("./crossrefs.spec"),
 }
 
 for _, spec in specs do

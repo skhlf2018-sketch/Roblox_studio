@@ -32,6 +32,10 @@ local PROJECT_FILE = "default.project.json"
 local nodeMeta = {}
 local cache = {} -- fsPath → 모듈 반환값
 local loading = {} -- 순환 require 감지
+-- 서비스 테스트용 (tests/ServerHarness.luau 가 씀): 순수 로직 테스트는 이 셋을 안 건드림
+local mocks = {} -- fsPath → 가짜 모듈 값 (require 하면 진짜 파일 대신 이것을 돌려줌)
+local serviceOverrides = {} -- 서비스 이름 → 가짜 서비스 (game:GetService 가 먼저 돌려줌)
+local extraGlobals = {} -- 모듈 환경에 더해 줄 전역 (task, Instance, os ...)
 
 local function joinPath(a, b)
 	if a == "" then
@@ -178,6 +182,10 @@ nodeMeta.__index = function(self, key)
 		end
 	elseif key == "GetService" then
 		return function(_, serviceName)
+			local override = serviceOverrides[serviceName]
+			if override ~= nil then
+				return override
+			end
 			local child = findChild(self, serviceName)
 			assert(child, "Loader: 서비스 없음 — " .. tostring(serviceName))
 			return child
@@ -245,7 +253,7 @@ end
 local requireNode -- forward
 
 local function makeEnvironment(node)
-	return {
+	local env = {
 		script = node,
 		game = getRoot(),
 		require = function(target)
@@ -255,6 +263,10 @@ local function makeEnvironment(node)
 			return requireNode(target)
 		end,
 	}
+	for key, value in extraGlobals do
+		env[key] = value
+	end
+	return env
 end
 
 requireNode = function(node)
@@ -264,6 +276,9 @@ requireNode = function(node)
 		error("Loader: ModuleScript 가 아닙니다 — " .. tostring(props.name), 2)
 	end
 	local file = props.file
+	if mocks[file] ~= nil then
+		return mocks[file]
+	end
 	if cache[file] ~= nil then
 		return cache[file]
 	end
@@ -295,6 +310,49 @@ end
 
 function Loader.require(path)
 	return requireNode(Loader.get(path))
+end
+
+------------------------------------------------------------------
+-- 서비스 테스트용 도구 (ServerHarness 가 사용)
+------------------------------------------------------------------
+
+-- 가짜 모듈: Loader.mock("ServerScriptService/Server/Services/MapBuilder", { ... })
+function Loader.mock(path, value)
+	local node = Loader.get(path)
+	local props = rawget(node, "__props")
+	assert(props.kind == "module" and props.file, "Loader.mock: ModuleScript 가 아님 — " .. path)
+	mocks[props.file] = value
+end
+
+-- 가짜 서비스: Loader.service("Players", { ... }) → game:GetService("Players") 가 이것을 돌려줌
+function Loader.service(name, value)
+	serviceOverrides[name] = value
+end
+
+-- 모듈 환경에 더할 전역 (Loader.globals({ task = ..., Instance = ... })). 이미 불러온 모듈에는 적용 안 됨.
+function Loader.globals(values)
+	for key, value in values do
+		extraGlobals[key] = value
+	end
+end
+
+-- 루트(game) 노드: 가짜 game 이 GetService 를 이쪽으로 넘길 때 씀
+function Loader.root()
+	return getRoot()
+end
+
+-- 불러온 모듈 캐시 비우기 (다음 require 때 다시 불러옴). 가짜들은 그대로.
+function Loader.reset()
+	table.clear(cache)
+	table.clear(loading)
+end
+
+-- 가짜 모듈·서비스·전역을 전부 치우고 캐시도 비움 (서비스 테스트가 끝난 뒤)
+function Loader.clearFakes()
+	table.clear(mocks)
+	table.clear(serviceOverrides)
+	table.clear(extraGlobals)
+	Loader.reset()
 end
 
 return Loader

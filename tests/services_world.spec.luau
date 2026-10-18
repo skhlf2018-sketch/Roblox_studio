@@ -180,7 +180,7 @@ return function(T, Loader)
 			local alert = w.H.sent(w.player, "RunAlert")[1][1]
 			T.eq(alert.egg.biomeId, "forest")
 			T.eq(alert.guardName, "닭")
-			T.eq(alert.guardSpeed, 10)
+			T.near(alert.guardSpeed, 9, 1e-9, "숲 추천 10 × (1 - 보통 알 0.1)")
 			T.near(alert.yourSpeed, w.Config.STARTING_SPEED * (1 - penalty), 1e-9)
 			T.near(
 				w.player.Character.humanoid.WalkSpeed,
@@ -654,7 +654,12 @@ return function(T, Loader)
 				end
 			end
 			T.eq(humanoid.moveTarget.X, home.X, "집 쪽으로 걸어감")
-			T.near(humanoid.WalkSpeed, w.SpeedMath.guardBaseWalkSpeed(10), 1e-9, "돌아갈 때는 평소 속도")
+			T.near(
+				humanoid.WalkSpeed,
+				w.SpeedMath.guardBaseWalkSpeed(w.SpeedMath.guardSpeedFor(10)),
+				1e-9,
+				"돌아갈 때는 평소 속도 (숲 경비 속도 = 10 × 0.9)"
+			)
 			-- 집에 도착하면 Idle
 			guardRoot(model).CFrame = { Position = home }
 			w.H.advance(0.2)

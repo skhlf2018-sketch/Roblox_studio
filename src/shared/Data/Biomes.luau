@@ -3,8 +3,8 @@
 	Biomes — 구역 15개 (설계문서 4장). 모든 구역 처음부터 열림(해금 비용 없음).
 
 	- recommendedSpeed: 입구 표지판에 적는 추천 속도 (원본 숫자)
-	- guardSpeed: 경비 속도 = recommendedSpeed × Config.GUARD_SPEED_RATIO (아래에서 자동 계산)
-	  → "실효 속도 ≥ 추천 속도면 못 잡고, 모자라면 잡힘" (SpeedMath.guardChaseRatio 참고)
+	- guardSpeed: 경비 속도 = recommendedSpeed × Config.GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소) (아래에서 자동 계산,
+	  SpeedMath.guardSpeedFor 와 같은 식) → "추천 속도면 보통 알은 안전, 큰 알일수록 더 필요"
 	- guardPersistence: 뒤 구역일수록 더 끈질김(추격 포기 거리 배율) [추정]
 	- weapon: 구역 도감 완성 시 받는 무기 (nil = 없음)
 	- sides: 천사&악마처럼 주기마다 둥지 풀이 바뀌는 구역 ("light"/"dark")
@@ -12,6 +12,9 @@
 ]]
 
 local Config = require(script.Parent.Config)
+local Sizes = require(script.Parent.Sizes)
+
+local NORMAL_PENALTY = (Sizes.get(Sizes.DEFAULT) :: Sizes.Size).speedPenalty
 
 export type BiomeId = string
 
@@ -254,8 +257,8 @@ local list: { Biome } = {
 
 local byId: { [string]: Biome } = {}
 for _, biome in list do
-	-- 경비 속도는 추천 속도와 연동 (데이터에 따로 적지 않음)
-	biome.guardSpeed = biome.recommendedSpeed * Config.GUARD_SPEED_RATIO
+	-- 경비 속도는 추천 속도와 연동 (데이터에 따로 적지 않음). 보통 알 무게 감소를 기준에 포함.
+	biome.guardSpeed = biome.recommendedSpeed * Config.GUARD_SPEED_RATIO * (1 - NORMAL_PENALTY)
 	byId[biome.id] = biome
 end
 

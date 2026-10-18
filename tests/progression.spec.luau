@@ -59,6 +59,16 @@ return function(T, Loader)
 		T.falsy(Progression.isWeaponUnlocked(discoverBiome("forest"), "forest"))
 	end)
 
+	T.test("곰덫 도감 보상: 희귀 이상 +1, 그 발견으로 구역 완성이면 +5 더", function()
+		T.eq(Progression.trapsForDiscovery({ chicken = true }, "chicken"), 0, "일반")
+		T.eq(Progression.trapsForDiscovery({ raccoon = true }, "raccoon"), 1, "희귀")
+		T.eq(Progression.trapsForDiscovery({}, "raccoon"), 0, "발견 표에 없으면 0")
+		local forest = discoverBiome("forest")
+		T.eq(Progression.trapsForDiscovery(forest, "chicken"), 5, "마지막이 일반 펫이어도 구역 완성 +5")
+		T.eq(Progression.trapsForDiscovery(forest, "brr_brr_patapim"), 6)
+		T.eq(Progression.trapsForDiscovery({ x = true }, "없는펫"), 0)
+	end)
+
 	T.test("전체 도감 완성", function()
 		local all = {}
 		for _, pet in Pets.list do

@@ -43,7 +43,7 @@ local Attr = Tags.PlayerAttributes
 
 local PlayerLifecycle = {}
 
-local function safely(name: string, fn: (Player) -> (), player: Player)
+local function safely(name: string, fn: (Player) -> ...any, player: Player)
 	local ok, err = pcall(fn, player)
 	if not ok then
 		warn(string.format("[PlayerLifecycle] %s 실패 (%s): %s", name, player.Name, tostring(err)))

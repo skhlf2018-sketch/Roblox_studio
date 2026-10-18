@@ -26,19 +26,29 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("구역 15개, 순서·추천 속도 오름차순, 경비 속도 = 추천 속도", function()
-		T.eq(#Biomes.list, 15)
-		local prev = 0
-		for i, b in Biomes.list do
-			T.eq(b.order, i, b.id .. " order")
-			T.truthy(b.recommendedSpeed > prev, b.id .. " 추천 속도 증가")
-			prev = b.recommendedSpeed
-			T.eq(b.guardSpeed, b.recommendedSpeed * Config.GUARD_SPEED_RATIO, b.id .. " guardSpeed")
-			T.eq(b.nests, 8, b.id .. " 둥지 8개")
+	T.test(
+		"구역 15개, 순서·추천 속도 오름차순, 경비 속도 = 추천 속도 × (1 - 보통 알 무게 감소)",
+		function()
+			local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
+			T.eq(#Biomes.list, 15)
+			local prev = 0
+			for i, b in Biomes.list do
+				T.eq(b.order, i, b.id .. " order")
+				T.truthy(b.recommendedSpeed > prev, b.id .. " 추천 속도 증가")
+				prev = b.recommendedSpeed
+				T.near(
+					b.guardSpeed,
+					b.recommendedSpeed * Config.GUARD_SPEED_RATIO * (1 - Sizes.get("normal").speedPenalty),
+					b.recommendedSpeed * 1e-12,
+					b.id .. " guardSpeed"
+				)
+				T.near(b.guardSpeed, SpeedMath.guardSpeedFor(b.recommendedSpeed), b.recommendedSpeed * 1e-12, b.id)
+				T.eq(b.nests, 8, b.id .. " 둥지 8개")
+			end
+			T.eq(Biomes.get("candy_kingdom").recommendedSpeed, 150e9)
+			T.eq(Biomes.get("haunted_castle").recommendedSpeed, 500e9)
 		end
-		T.eq(Biomes.get("candy_kingdom").recommendedSpeed, 150e9)
-		T.eq(Biomes.get("haunted_castle").recommendedSpeed, 500e9)
-	end)
+	)
 
 	T.test("펫 134종 (설계문서 5장 목록 그대로)", function()
 		-- 11개 구역 × 8 = 88, 천사&악마 20, 마법의 숲 10, 사탕 왕국 8, 유령 성 8

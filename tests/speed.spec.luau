@@ -36,11 +36,19 @@ return function(T, Loader)
 		T.eq(SpeedMath.walkSpeedFor(1e4, 0), free)
 	end)
 
-	T.test("추천 속도 이상이면 경비가 못 잡음 (ratio < 1)", function()
+	T.test("추천 속도면 보통 알을 들어도 경비가 못 잡음, 그보다 2% 모자라면 잡힘", function()
+		local normal = Sizes.get("normal").speedPenalty
 		for _, b in Biomes.list do
-			T.truthy(SpeedMath.canEscape(b.guardSpeed, b.recommendedSpeed), b.id .. " 같은 속도")
+			T.truthy(SpeedMath.canEscape(b.guardSpeed, b.recommendedSpeed), b.id .. " 알 없이 같은 속도")
+			T.truthy(
+				SpeedMath.canEscape(b.guardSpeed, SpeedMath.carrySpeed(b.recommendedSpeed, normal)),
+				b.id .. " 보통 알"
+			)
 			T.truthy(SpeedMath.canEscape(b.guardSpeed, b.recommendedSpeed * 2), b.id .. " 2배")
-			T.falsy(SpeedMath.canEscape(b.guardSpeed, b.recommendedSpeed * 0.9), b.id .. " 90%")
+			T.falsy(
+				SpeedMath.canEscape(b.guardSpeed, SpeedMath.carrySpeed(b.recommendedSpeed * 0.98, normal)),
+				b.id .. " 98% + 보통 알"
+			)
 		end
 	end)
 
@@ -64,13 +72,19 @@ return function(T, Loader)
 		T.truthy(SpeedMath.canEscape(forest.guardSpeed, carrying))
 	end)
 
-	T.test("큰 알은 추천 속도보다 더 빨라야 안전 (requiredSpeed)", function()
-		local need = SpeedMath.requiredSpeed(1e4, Sizes.get("big").speedPenalty)
-		T.near(need, 1e4 / 0.8, 1e-6)
-		local carry = SpeedMath.carrySpeed(need, Sizes.get("big").speedPenalty)
-		T.truthy(SpeedMath.canEscape(1e4, carry))
-		T.falsy(SpeedMath.canEscape(1e4, SpeedMath.carrySpeed(1e4, Sizes.get("big").speedPenalty)))
-	end)
+	T.test(
+		"큰 알은 추천 속도보다 더 빨라야 안전 (requiredSpeed = 이 값보다 커야 안전)",
+		function()
+			local big = Sizes.get("big").speedPenalty
+			local guard = SpeedMath.guardSpeedFor(1e4)
+			T.near(guard, 9e3, 1e-6)
+			local need = SpeedMath.requiredSpeed(1e4, big)
+			T.near(need, 9e3 * Config.GUARD_CHASE_MARGIN / 0.8, 1e-6)
+			T.truthy(SpeedMath.canEscape(guard, SpeedMath.carrySpeed(need * 1.0001, big)))
+			T.falsy(SpeedMath.canEscape(guard, SpeedMath.carrySpeed(need * 0.9999, big)))
+			T.falsy(SpeedMath.canEscape(guard, SpeedMath.carrySpeed(1e4, big)), "표지판 속도로는 큰 알 위험")
+		end
+	)
 
 	T.test("평소 경비 WalkSpeed = 같은 로그 곡선", function()
 		T.eq(SpeedMath.guardBaseWalkSpeed(900), SpeedMath.toWalkSpeed(900))

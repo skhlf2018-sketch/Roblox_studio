@@ -141,7 +141,7 @@ function CycleService.run()
 				task.wait(0.2)
 			end
 			skipRequested = false
-			local nextPhase = Cycle.nextPhase(phase)
+			local nextPhase: Phase = Cycle.nextPhase(phase)
 			if nextPhase == "Intermission" then
 				cycleNumber += 1
 			end

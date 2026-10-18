@@ -412,14 +412,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"아주 큰 유한 수(1e300)는 받아들임, 소수 레벨은 내림, 범위 밖은 끝값으로",
+		"아주 큰 유한 수(1e300)는 상한(MONEY_MAX·SPEED_MAX)까지, 소수 레벨은 내림, 범위 밖은 끝값으로",
 		function()
 			local d = DataSchema.reconcile(
 				{ money = 1e300, speed = 1e300, penLevel = 3.9, treadmillLevel = 99, sakuraCrystals = 5e9 },
 				0
 			)
-			T.eq(d.money, 1e300)
-			T.eq(d.speed, 1e300)
+			T.eq(d.money, Config.MONEY_MAX)
+			T.eq(d.speed, Config.SPEED_MAX)
 			T.eq(d.penLevel, 3)
 			T.eq(d.treadmillLevel, Upgrades.TREADMILL_MAX_LEVEL)
 			T.eq(d.sakuraCrystals, Config.SAKURA_CRYSTAL_MAX)

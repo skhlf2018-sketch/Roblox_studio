@@ -17,7 +17,7 @@
 	플레이어 모델 ("러닝머신 위에서 쉬지 않고, 돈은 전부 업그레이드에" 반방치 플레이어):
 	  - 시간의 100% 를 러닝머신 위에서 보냄 (1초마다 Economy.treadmillGainPerSecond)
 	  - 매 낮/밤 주기(298초)마다 알을 TRIPS_PER_CYCLE 개만 훔쳐 옴 (왕복 시간은 무시 = 러닝머신 손실 없음)
-	      어느 구역: 보통 알(-10%)을 들고도 경비보다 빠른 가장 뒤 구역
+	      어느 구역: 보통 알(-10%)을 들고도 경비가 못 잡는 가장 뒤 구역 (게임과 같은 SpeedMath.canEscape)
 	      어떤 알: 그 구역 둥지 8개(일반 추첨 + 초기화 특별 알) 중 들고 도망칠 수 있는 알,
 	              도감에 없는 펫 우선 → 수입이 가장 높은 알
 	  - 부화 슬롯 8칸, 부화 시간 ÷3, 밤 30배. 다 자라면 바로 부화 → 장착 칸만큼 수입 높은 펫 장착
@@ -40,6 +40,7 @@ local Index = Loader.require("ReplicatedStorage/Shared/Data/Index")
 local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
 local Cycle = Loader.require("ReplicatedStorage/Shared/Cycle")
 local Format = Loader.require("ReplicatedStorage/Shared/Format")
+local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
 
 local HOURS = 100
 local SEEDS = 9
@@ -157,7 +158,7 @@ local function simulate(seed, indexSpeed)
 	local function zoneFor()
 		local zone = Biomes.list[1]
 		for _, biome in Biomes.list do
-			if effective() * (1 - NORMAL_PENALTY) >= biome.recommendedSpeed then
+			if SpeedMath.canEscape(biome.guardSpeed, SpeedMath.carrySpeed(effective(), NORMAL_PENALTY)) then
 				zone = biome
 			end
 		end
@@ -183,7 +184,7 @@ local function simulate(seed, indexSpeed)
 		local best, bestNew, bestValue = nil, false, -1
 		for _, egg in eggs do
 			local size = Sizes.get(egg.traits.size)
-			if effective() * (1 - size.speedPenalty) >= biome.recommendedSpeed then
+			if SpeedMath.canEscape(biome.guardSpeed, SpeedMath.carrySpeed(effective(), size.speedPenalty)) then
 				local value = Economy.petIncome(egg.pet.id, egg.traits.size, egg.traits.mutations)
 				local isNew = not discovered[egg.pet.id]
 				if (isNew and not bestNew) or (isNew == bestNew and value > bestValue) then

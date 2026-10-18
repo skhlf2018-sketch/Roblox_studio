@@ -171,8 +171,8 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	end
 	local src = raw :: { [string]: unknown }
 
-	data.money = finiteNonNegative(src.money, data.money)
-	data.speed = finiteNonNegative(src.speed, data.speed)
+	data.money = math.min(Config.MONEY_MAX, finiteNonNegative(src.money, data.money))
+	data.speed = math.min(Config.SPEED_MAX, finiteNonNegative(src.speed, data.speed))
 	data.penLevel = integerIn(src.penLevel, 1, Upgrades.PEN_MAX_LEVEL, 1)
 	data.treadmillLevel = integerIn(src.treadmillLevel, 0, Upgrades.TREADMILL_MAX_LEVEL, 0)
 	data.lastSaveTime = finiteNonNegative(src.lastSaveTime, 0)
@@ -223,6 +223,42 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		end
 	end
 
+	-- 보관함 상한 (PET_INVENTORY_MAX): 넘치면 장착 안 된 펫 중 수입이 낮은 펫부터 팔고 돈으로 바꿈
+	-- (PetService 의 자동 판매와 같은 규칙: 돈 = 초당 수입 × PET_AUTO_SELL_SECONDS)
+	local excess = #data.pets - Config.PET_INVENTORY_MAX
+	if excess > 0 then
+		local equippedSet: { [string]: boolean } = {}
+		for _, uid in data.equipped do
+			equippedSet[uid] = true
+		end
+		local candidates: { { uid: string, income: number } } = {}
+		for _, record in data.pets do
+			if not equippedSet[record.uid] then
+				table.insert(candidates, { uid = record.uid, income = Economy.recordIncome(record) })
+			end
+		end
+		table.sort(candidates, function(a, b): boolean
+			if a.income == b.income then
+				return a.uid < b.uid
+			end
+			return a.income < b.income
+		end)
+		local sell: { [string]: boolean } = {}
+		local earned = 0
+		for i = 1, math.min(excess, #candidates) do
+			sell[candidates[i].uid] = true
+			earned += candidates[i].income * Config.PET_AUTO_SELL_SECONDS
+		end
+		local kept: { PetRecord } = {}
+		for _, record in data.pets do
+			if not sell[record.uid] then
+				table.insert(kept, record)
+			end
+		end
+		data.pets = kept
+		data.money = math.min(Config.MONEY_MAX, data.money + earned)
+	end
+
 	-- 트레일
 	if typeof(src.trails) == "table" then
 		local owned: { [string]: boolean } = {}
@@ -247,7 +283,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	-- 도구
 	if typeof(src.tools) == "table" then
 		local tools = src.tools :: { [string]: unknown }
-		data.tools.bearTrap = integerIn(tools.bearTrap, 0, 999, data.tools.bearTrap)
+		data.tools.bearTrap = integerIn(tools.bearTrap, 0, Config.BEAR_TRAP_MAX_OWNED, data.tools.bearTrap)
 	end
 
 	-- 부화 슬롯

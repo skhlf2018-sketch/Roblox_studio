@@ -3,11 +3,13 @@
 	Wallet — 돈/속도 숫자를 바꾸는 유일한 통로 (서버 전용)
 	돈·속도를 바꾸면 Attribute 와 leaderstats 도 같이 갱신됩니다.
 	클라에는 돈/속도를 바꾸는 Remote 가 없습니다.
+	상한: 돈 Config.MONEY_MAX, 속도 Config.SPEED_MAX (넘치지 않게 자름)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Data.Config)
 local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local Server = script.Parent.Parent
@@ -73,7 +75,7 @@ function Wallet.addMoney(player: Player, amount: number)
 	if not data or amount ~= amount or amount <= 0 or amount == math.huge then
 		return
 	end
-	data.money += amount
+	data.money = math.min(Config.MONEY_MAX, data.money + amount)
 	Wallet.syncMoney(player)
 end
 
@@ -96,7 +98,7 @@ function Wallet.addSpeed(player: Player, amount: number)
 	if not data or amount ~= amount or amount <= 0 or amount == math.huge then
 		return
 	end
-	data.speed += amount
+	data.speed = math.min(Config.SPEED_MAX, data.speed + amount)
 	Wallet.syncSpeed(player)
 end
 

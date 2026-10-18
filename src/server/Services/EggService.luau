@@ -616,7 +616,7 @@ local function returnToNest(egg: Egg): boolean
 		end
 	end
 	-- 예약이 풀린 알이면 같은 구역의 빈 둥지로
-	for _, slot in nests[egg.biomeId] or {} do
+	for _, slot in (nests[egg.biomeId] or {}) :: { NestSlot } do
 		if slot.eggUid == nil then
 			placeOnNest(egg, slot)
 			return true
@@ -733,7 +733,7 @@ end
 -- 주기 처리 (0.2초마다)
 ------------------------------------------------------------------
 
-local function tick()
+local function tick(): ...any
 	local now = os.clock()
 
 	for _, egg in table.clone(eggs) do

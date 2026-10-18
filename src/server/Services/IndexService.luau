@@ -5,6 +5,8 @@
 	보상 공식은 shared/Data/Index.luau (닭 +420/$100, 라쿤 +620/$4,500, 파타핌 +1,000/$180,000 과 일치)
 	구역 펫을 전부 발견하면 그 구역 무기 해금 (Progression.unlockedWeapons, 천사&악마는 합성 펫 제외 18종)
 	  → data.weapons 에 저장 + IndexService.weaponsChanged:fire(player, 새 무기 id 목록) → ToolService 가 도구 지급
+	곰덫 보상 (설계문서 10장): 희귀(Rare) 이상 펫 첫 발견마다 +1, 구역 펫 전부 발견 때 +5 (Progression.trapsForDiscovery)
+	  → 발견 즉시 data.tools.bearTrap 에 더함 + IndexService.toolsChanged:fire(player)
 	전체 완성 보너스는 한 번만 (indexCompleteClaimed).
 
 	Remote: ClaimIndexReward("all" | petId)
@@ -13,6 +15,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Data.Config)
 local Pets = require(Shared.Data.Pets)
 local Index = require(Shared.Data.Index)
 local Weapons = require(Shared.Data.Weapons)
@@ -30,6 +33,8 @@ local IndexService = {}
 
 -- 새 무기 해금 (player, { weaponId })
 IndexService.weaponsChanged = Signal.new()
+-- 곰덫 개수가 늘어남 (player) → ToolService 가 도구·DataUpdate("tools") 갱신
+IndexService.toolsChanged = Signal.new()
 
 -- 처음 본 펫이면 true
 function IndexService.discover(player: Player, petId: string): boolean
@@ -58,6 +63,21 @@ function IndexService.discover(player: Player, petId: string): boolean
 	end
 	if #newWeapons > 0 then
 		IndexService.weaponsChanged:fire(player, newWeapons)
+	end
+	-- 곰덫 보상 (희귀 이상 첫 발견 +1, 구역 완성 +5, 최대 BEAR_TRAP_MAX_OWNED)
+	local traps = Progression.trapsForDiscovery(data.indexDiscovered, petId)
+	if traps > 0 then
+		local before = data.tools.bearTrap or 0
+		data.tools.bearTrap = math.min(Config.BEAR_TRAP_MAX_OWNED, (data.tools.bearTrap or 0) + traps)
+		local gained = data.tools.bearTrap - before
+		if gained > 0 then
+			Net.notify(
+				player,
+				"success",
+				string.format("도감 보상: 곰덫 +%d (지금 %d개)", gained, data.tools.bearTrap)
+			)
+			IndexService.toolsChanged:fire(player)
+		end
 	end
 	Snapshot.section(player, "index")
 	return true

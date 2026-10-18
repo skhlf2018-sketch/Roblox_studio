@@ -53,16 +53,20 @@ local Config = {
 	CARRY_WALKSPEED_MIN = 8, -- 알을 들었을 때 WalkSpeed 하한
 	STARTING_SPEED = 20, -- [추정] 시작 속도 (숲 추천 속도 10 → 초거대 알을 들어도 숲 경비는 못 잡음)
 	STARTING_MONEY = 0,
+	-- 상한 (숫자가 터지거나 저장이 이상해지지 않게). 정상 플레이로는 닿지 않는 값.
+	MONEY_MAX = 1e30,
+	SPEED_MAX = 1e24,
 
 	------------------------------------------------------------------
 	-- 경비 동물 (GuardianService)
+	--   경비 속도 = 구역 추천 속도 × GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소 0.10)  (SpeedMath.guardSpeedFor)
 	--   추격 속도 = 알 든 플레이어의 WalkSpeed × 비율
-	--   비율 = clamp((경비 속도 / 플레이어 실효 속도) ^ EXPONENT × MARGIN, MIN, MAX)
-	--   → 실효 속도 ≥ 경비 속도(= 추천 속도)면 비율 < 1 이라 절대 못 잡음
+	--   비율 = clamp((경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN, MIN, MAX)
+	--   → 추천 속도면 보통 알은 안전 (필요 배율 보통 0.99 / 큼 1.11 / 거대 1.37 / 초거대 1.78)
 	------------------------------------------------------------------
-	GUARD_SPEED_RATIO = 1, -- 경비 속도 = 구역 추천 속도 × 이 값
+	GUARD_SPEED_RATIO = 1, -- 경비 속도 배율 (위 식의 첫 번째 곱)
 	GUARD_CHASE_EXPONENT = 1,
-	GUARD_CHASE_MARGIN = 0.97, -- 속도가 딱 같으면 경비가 3% 느림
+	GUARD_CHASE_MARGIN = 0.99, -- 속도가 딱 같으면 경비가 1% 느림 (2단계 B4: 0.97 → 0.99)
 	GUARD_CHASE_MIN_RATIO = 0.5,
 	GUARD_CHASE_MAX_RATIO = 2.5,
 	GUARD_MAX_WALKSPEED = 250,
@@ -125,6 +129,7 @@ local Config = {
 	BEAR_TRAP_LIFETIME = 90,
 	BEAR_TRAP_MAX_ACTIVE = 3,
 	STARTING_BEAR_TRAPS = 3, -- [추정] "초반엔 개수 제한"
+	BEAR_TRAP_MAX_OWNED = 99, -- [추정] 가질 수 있는 곰덫 최대 (도감 보상으로 늘어남: Data/Index TRAPS_*)
 	-- 근접 무기(방망이·구역 무기)는 쿨다운을 같이 씀 (무기를 바꿔 들며 쿨다운 피하기 방지)
 	-- 무기별 사거리·넉백·쿨다운은 shared/Data/Weapons.luau
 

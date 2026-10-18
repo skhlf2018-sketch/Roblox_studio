@@ -406,5 +406,57 @@ return function(T, Loader)
 		end
 	)
 
+	------------------------------------------------------------------
+	T.suite("서비스: ToolService 2단계 보충 (SwingTick · 곰덫 도감 보상)")
+
+	T.test(
+		"휘두르기가 실제로 처리되면 손에 든 Tool 에 SwingTick, 쿨다운 중에는 안 바뀜",
+		function()
+			local w = world()
+			local bat = w.A.backpack:FindFirstChild("Bat")
+			w.H.equip(w.A, "Bat")
+			w.H.advance(1)
+			T.eq(bat:GetAttribute("SwingTick"), nil)
+			use(w, "Bat")
+			local first = bat:GetAttribute("SwingTick")
+			T.truthy(type(first) == "number", "휘두름 표시")
+			w.H.advance(0.5)
+			use(w, "Bat") -- 쿨다운 중
+			T.eq(bat:GetAttribute("SwingTick"), first)
+			w.H.advance(1.3)
+			use(w, "Bat")
+			T.truthy(bat:GetAttribute("SwingTick") > first)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"곰덫 도감 보상: 희귀 이상 첫 발견 +1, 구역 완성 +5, 일반·고급은 0, 가방 Count 갱신",
+		function()
+			local w = world()
+			local start = w.da.tools.bearTrap
+			w.IndexService.discover(w.A, "chicken") -- 일반
+			w.IndexService.discover(w.A, "bird") -- 고급
+			T.eq(w.da.tools.bearTrap, start)
+			w.IndexService.discover(w.A, "raccoon") -- 희귀
+			T.eq(w.da.tools.bearTrap, start + 1)
+			w.IndexService.discover(w.A, "raccoon") -- 두 번째는 아무것도 없음
+			T.eq(w.da.tools.bearTrap, start + 1)
+			-- 숲 나머지: 개(일반), 굴 올빼미(희귀), 곰·여우(에픽), 파타핌(전설) → +4, 마지막에 구역 완성 +5
+			for _, id in { "dog", "burrowing_owl", "bear", "fox", "brr_brr_patapim" } do
+				w.IndexService.discover(w.A, id)
+			end
+			T.eq(w.da.tools.bearTrap, start + 1 + 4 + 5)
+			w.H.advance(0.1)
+			T.eq(w.A.backpack:FindFirstChild("BearTrap"):GetAttribute("Count"), w.da.tools.bearTrap)
+			T.truthy(w.H.hasNotify(w.A, "success", "곰덫 +"))
+			-- 최대치에서 멈춤
+			w.da.tools.bearTrap = w.Config.BEAR_TRAP_MAX_OWNED
+			w.IndexService.discover(w.A, "turtle")
+			T.eq(w.da.tools.bearTrap, w.Config.BEAR_TRAP_MAX_OWNED)
+			w.H.uninstall()
+		end
+	)
+
 	ServerHarness.install(Loader, T).uninstall()
 end

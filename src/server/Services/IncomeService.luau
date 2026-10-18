@@ -22,7 +22,10 @@ function IncomeService.start()
 			last = now
 			for player, session in Sessions.all() do
 				if session.loaded and session.incomePerSecond > 0 then
-					local ok, err = pcall(Wallet.addMoney, player, session.incomePerSecond * dt)
+					local amount = session.incomePerSecond * dt
+					local ok, err = pcall(function(): ...any
+						Wallet.addMoney(player, amount)
+					end)
 					if not ok then
 						warn("[IncomeService] " .. tostring(err))
 					end

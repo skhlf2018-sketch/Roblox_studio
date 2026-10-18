@@ -243,6 +243,26 @@ return function(T, Loader)
 		T.eq(d.eggQueue[2].mutations[1], "golden")
 	end)
 
+	T.test("돈·속도 상한, 넘친 펫은 팔아서 돈으로 (장착 펫은 안 팖)", function()
+		local d = DataSchema.reconcile({ money = 1e300, speed = 1e300 }, 0)
+		T.eq(d.money, Config.MONEY_MAX)
+		T.eq(d.speed, Config.SPEED_MAX)
+		local pets = {}
+		for i = 1, Config.PET_INVENTORY_MAX + 3 do
+			table.insert(pets, { uid = "p" .. i, petId = "chicken", size = "normal", mutations = {} })
+		end
+		pets[1].petId = "dog" -- 장착 펫 (수입 6)
+		local loaded = DataSchema.reconcile({ pets = pets, equipped = { "p2" }, money = 0 }, 0)
+		T.eq(#loaded.pets, Config.PET_INVENTORY_MAX)
+		T.eq(loaded.equipped[1], "p2")
+		local kept = {}
+		for _, p in loaded.pets do
+			kept[p.uid] = true
+		end
+		T.truthy(kept.p1 and kept.p2, "비싼 펫·장착 펫은 남음")
+		T.eq(loaded.money, 3 * 3 * Config.PET_AUTO_SELL_SECONDS, "닭 3마리 × $3 × 60초")
+	end)
+
 	T.test("무기: 저장된 무기 ∪ 도감으로 해금되는 무기", function()
 		local d = DataSchema.reconcile({ weapons = { "scythe" }, indexDiscovered = discoverAll("lake") }, 0)
 		T.eq(#d.weapons, 2)

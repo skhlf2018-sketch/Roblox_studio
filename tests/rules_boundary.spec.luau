@@ -38,11 +38,14 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"보통 알(-10%)을 들면 추천 속도 그대로로는 잡힘 — 안전선은 추천 × 0.97 ÷ 0.9 (표지판 숫자보다 약 8% 더 필요)",
+		"보통 알(-10%)을 들어도 표지판 추천 속도면 안전 (2단계 B4), 1.5% 모자라면 잡힘",
 		function()
+			local normal = Sizes.get("normal").speedPenalty
 			for _, b in Biomes.list do
-				local carryNormal = SpeedMath.carrySpeed(b.recommendedSpeed, Sizes.get("normal").speedPenalty)
-				T.falsy(SpeedMath.canEscape(b.guardSpeed, carryNormal), b.id .. " 표지판 속도 그대로면 잡힘")
+				local carryNormal = SpeedMath.carrySpeed(b.recommendedSpeed, normal)
+				T.truthy(SpeedMath.canEscape(b.guardSpeed, carryNormal), b.id .. " 표지판 속도면 안전")
+				local carryShort = SpeedMath.carrySpeed(b.recommendedSpeed * 0.985, normal)
+				T.falsy(SpeedMath.canEscape(b.guardSpeed, carryShort), b.id .. " 1.5% 모자라면 잡힘")
 			end
 		end
 	)
@@ -68,14 +71,17 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"큰 알일수록 필요한 속도가 커짐: 표지판 속도 대비 보통 1.078배, 큼 1.21배, 거대 1.49배, 초거대 1.94배",
+		"큰 알일수록 필요한 속도가 커짐: 표지판 속도 대비 보통 0.99배, 큼 1.11배, 거대 1.37배, 초거대 1.78배",
 		function()
-			local expected = { normal = 1.0778, big = 1.2125, huge = 1.4923, giant = 1.94 }
+			-- 경비 속도 = 추천 × 0.9 (보통 알 무게 감소 포함), 안전선 = 경비 × MARGIN ÷ (1 - 감소)
+			local expected = { normal = 0.99, big = 1.11375, huge = 1.37077, giant = 1.782 }
 			for _, size in Sizes.list do
-				T.near(MARGIN / (1 - size.speedPenalty), expected[size.id], 0.001, size.id)
+				T.near(SpeedMath.requiredSpeed(1, size.speedPenalty), expected[size.id], 0.001, size.id)
+				T.near(0.9 * MARGIN / (1 - size.speedPenalty), expected[size.id], 0.001, size.id .. " (식 그대로)")
 			end
-			-- 설계문서 4장: "큰 알은 추천 속도보다 15~20% 더 빨라야 안전" — 큼(+21%) 은 맞지만 초거대는 +94% 라 문서 표현보다 훨씬 가혹함
-			T.truthy(MARGIN / (1 - Sizes.get("big").speedPenalty) > 1.15)
+			-- 본부장 결정(2단계 B4): 보통 알은 표지판 속도면 안전, 큼 약 +12%, 거대 약 +38%, 초거대 약 +80%
+			T.truthy(SpeedMath.requiredSpeed(1, Sizes.get("normal").speedPenalty) < 1)
+			T.truthy(SpeedMath.requiredSpeed(1, Sizes.get("big").speedPenalty) > 1.1)
 		end
 	)
 

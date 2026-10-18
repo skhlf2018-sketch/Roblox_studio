@@ -237,6 +237,27 @@ return function(T, Loader)
 		w.H.uninstall()
 	end)
 
+	T.test(
+		"밤이 되면 알이 없어도 구역 안에 있던 사람은 집으로 (밤 벽에 안 갇힘), 길에 있으면 그대로",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local forest = w.H.map.zones.forest
+			w.H.spawn(w.player, forest.centerX + 10, 3, forest.centerZ)
+			w.H.map.inPlot = false
+			w.H.setPhase("Night")
+			T.eq(w.player.Character.root.Position.X, 0, "구역 안 → 베이스 바닥 위")
+			T.eq(w.player.Character.root.Position.Y, 4)
+			T.truthy(w.session.moveExemptUntil > w.H.clock(), "서버 순간이동 → 위치 검증 쉼")
+			w.H.teleport(w.player, 0, 3, 60) -- 길 (구역 밖)
+			w.H.setPhase("Day")
+			w.H.setPhase("Night")
+			T.eq(w.player.Character.root.Position.Z, 60, "구역 밖이면 그대로")
+			w.H.uninstall()
+		end
+	)
+
 	------------------------------------------------------------------
 	T.suite("서비스: BaseService 부화")
 

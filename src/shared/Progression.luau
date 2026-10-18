@@ -12,6 +12,7 @@ local Pets = require(Data.Pets)
 local Biomes = require(Data.Biomes)
 local Index = require(Data.Index)
 local Weapons = require(Data.Weapons)
+local Rarities = require(Data.Rarities)
 
 type Pet = Pets.Pet
 
@@ -86,6 +87,23 @@ function Progression.isIndexComplete(discovered: { [string]: boolean }): boolean
 		end
 	end
 	return true
+end
+
+-- 펫 하나를 "처음" 발견했을 때 받는 곰덫 수 (discovered 는 그 펫을 이미 넣은 뒤의 표)
+--   희귀(Rare) 이상이면 +TRAPS_PER_DISCOVERY, 그 발견으로 구역 펫이 전부 모이면 +TRAPS_PER_BIOME_COMPLETE
+function Progression.trapsForDiscovery(discovered: { [string]: boolean }, petId: string): number
+	local pet = Pets.get(petId)
+	if not pet or not discovered[petId] then
+		return 0
+	end
+	local traps = 0
+	if Rarities.order(pet.rarity) >= Rarities.order(Index.TRAPS_MIN_RARITY) then
+		traps += Index.TRAPS_PER_DISCOVERY
+	end
+	if Progression.isBiomeComplete(discovered, pet.biome) then
+		traps += Index.TRAPS_PER_BIOME_COMPLETE
+	end
+	return traps
 end
 
 -- 아직 안 받은 도감 보상 목록과 합계

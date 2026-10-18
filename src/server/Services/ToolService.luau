@@ -87,6 +87,17 @@ local function ownsWeapon(data: Types.PlayerData, weapon: Weapons.Weapon): boole
 	return weapon.biome == nil or table.find(data.weapons, weapon.id) ~= nil
 end
 
+-- 있으면 그 Tool, 없으면 새로 만들어 가방에 넣음
+local function ensureTool(player: Player, backpack: Instance, kind: string, tip: string): Tool
+	local existing = findTool(player, kind)
+	if existing then
+		return existing
+	end
+	local tool = makeTool(kind, tip)
+	tool.Parent = backpack
+	return tool
+end
+
 function ToolService.refreshTools(player: Player)
 	local _, data = Sessions.getLoaded(player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -94,28 +105,35 @@ function ToolService.refreshTools(player: Player)
 		return
 	end
 	for _, weapon in Weapons.list do
-		local tool = findTool(player, weapon.toolKind)
 		if ownsWeapon(data, weapon) then
-			if not tool then
-				tool = makeTool(weapon.toolKind, weapon.tip)
-				tool.Parent = backpack
-			end
+			local tool = ensureTool(player, backpack, weapon.toolKind, weapon.tip)
 			tool:SetAttribute("WeaponId", weapon.id)
 			tool:SetAttribute("Range", weapon.range)
-		elseif tool then
-			tool:Destroy()
+		else
+			local stale = findTool(player, weapon.toolKind)
+			if stale then
+				stale:Destroy()
+			end
 		end
 	end
 	local trapCount = data.tools.bearTrap or 0
-	local trapTool = findTool(player, ToolKinds.BearTrap)
 	if trapCount > 0 then
-		if not trapTool then
-			trapTool = makeTool(ToolKinds.BearTrap, "곰덫: 밟은 사람이 5초 동안 못 움직여요")
-			trapTool.Parent = backpack
-		end
+		local trapTool =
+			ensureTool(player, backpack, ToolKinds.BearTrap, "곰덫: 밟은 사람이 5초 동안 못 움직여요")
 		trapTool:SetAttribute("Count", trapCount)
-	elseif trapTool then
-		trapTool:Destroy()
+	else
+		local stale = findTool(player, ToolKinds.BearTrap)
+		if stale then
+			stale:Destroy()
+		end
+	end
+end
+
+-- 휘두르기/설치가 실제로 일어났을 때 Tool 에 표시 → 다른 사람 화면에서도 휘두르는 모습 (선임 WeaponController)
+local function markSwing(player: Player, kind: string)
+	local tool = toolIn(player.Character, kind)
+	if tool then
+		tool:SetAttribute("SwingTick", os.clock())
 	end
 end
 
@@ -143,6 +161,7 @@ local function useMelee(player: Player, weapon: Weapons.Weapon)
 		Net.notify(player, "error", "안전 구역에서는 도구를 쓸 수 없어요!")
 		return
 	end
+	markSwing(player, weapon.toolKind)
 	local look = root.CFrame.LookVector
 	local best: Player? = nil
 	local bestDistance = math.huge
@@ -217,6 +236,7 @@ local function placeTrap(player: Player)
 		return
 	end
 	data.tools.bearTrap -= 1
+	markSwing(player, ToolKinds.BearTrap)
 
 	local y = MapBuilder.groundY(root.Position, { character })
 	local part = Instance.new("Part")
@@ -232,13 +252,14 @@ local function placeTrap(player: Player)
 	part:SetAttribute("OwnerUserId", player.UserId)
 	CollectionService:AddTag(part, Tags.BearTrap)
 	part.Parent = MapBuilder.getFolder("Traps")
-	table.insert(traps, { part = part, owner = player, placedAt = now })
+	local trap: Trap = { part = part :: BasePart, owner = player, placedAt = now }
+	table.insert(traps, trap)
 
 	ToolService.refreshTools(player)
 	Snapshot.section(player, "tools")
 end
 
-local function trapTick()
+local function trapTick(): ...any
 	local now = os.clock()
 	for i = #traps, 1, -1 do
 		local trap = traps[i]
@@ -321,6 +342,10 @@ function ToolService.start()
 	end)
 	IndexService.weaponsChanged:connect(function(player: Player)
 		ToolService.refreshTools(player)
+	end)
+	IndexService.toolsChanged:connect(function(player: Player)
+		ToolService.refreshTools(player)
+		Snapshot.section(player, "tools")
 	end)
 	task.spawn(function()
 		while true do

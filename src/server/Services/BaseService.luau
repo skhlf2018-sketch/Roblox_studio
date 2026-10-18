@@ -9,6 +9,7 @@
 	오프라인 동안에도 알은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간).
 	안전 구역(베이스 반경 SAFE_ZONE_RADIUS): 경비가 안 쫓아오고, 도구 사용·피격 불가 (GuardianService/ToolService 에서 검사).
 	밤이 되면 알을 든 사람은 자기 베이스로 텔레포트 (알은 계속 듦 → 배달 가능).
+	알이 없어도 구역 안에 있던 사람은 같이 베이스로 (밤 벽에 13초 갇히지 않게). 베이스가 없으면 시작 광장(MainSpawn)으로.
 
 	2단계:
 	  - 선물 알(grantEgg): 제단·비밀 통로 합성·퀘스트 보상 알은 부화 슬롯에 바로 들어감.
@@ -22,9 +23,12 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
+local Biomes = require(Shared.Data.Biomes)
+local EggRules = require(Shared.EggRules)
 local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
@@ -72,7 +76,7 @@ local BaseService = {}
 -- 배달 패드에 알을 배달해 부화 슬롯에 들어감 (player, record: IncubatorRecord) → 퀘스트·사쿠라 크리스탈
 BaseService.delivered = Signal.new()
 
-local plotOwners: { [number]: Player } = {}
+local plotOwners: { [number]: Player? } = {}
 local visuals: { [Player]: { [string]: Visual } } = {}
 local carryTracks: { [Player]: CarryTrack } = {}
 
@@ -136,11 +140,9 @@ local function createVisual(player: Player, record: IncubatorRecord)
 	part.Parent = MapBuilder.getFolder("Incubating")
 	local label = Gui.billboard(part, visualText(record, 1), d * 1.25 + 1.5, 60)
 
-	if not perPlayer then
-		perPlayer = {}
-		visuals[player] = perPlayer
-	end
-	perPlayer[record.uid] = { part = part, label = label }
+	local list: { [string]: Visual } = perPlayer or {}
+	visuals[player] = list
+	list[record.uid] = { part = part, label = label }
 end
 
 local function destroyVisual(player: Player, uid: string)
@@ -216,6 +218,40 @@ function BaseService.teleportHome(player: Player)
 		character:PivotTo(CFrame.new(destination))
 		EggService.resetCarryOrigin(player, destination)
 		carryTracks[player] = nil
+	end
+end
+
+-- 위치가 어느 구역 안인가 (Zone 태그 직사각형)
+local function isInAnyZone(position: Vector3): boolean
+	for _, biome in Biomes.list do
+		local zone = MapBuilder.getZone(biome.id)
+		if zone and EggRules.isInsideZone(zone, position.X, position.Z) then
+			return true
+		end
+	end
+	return false
+end
+
+-- 내 베이스로, 베이스가 없으면(8번째 사람) 시작 광장(MainSpawn)으로
+function BaseService.teleportToSafety(player: Player)
+	local session = Sessions.get(player)
+	local character = player.Character
+	if not session or not character then
+		return
+	end
+	if session.plotIndex > 0 then
+		BaseService.teleportHome(player)
+		return
+	end
+	for _, inst in CollectionService:GetTagged(Tags.SpawnLocation) do
+		if inst:IsA("BasePart") and inst:IsDescendantOf(Workspace) then
+			local destination = inst.Position + Vector3.new(0, 4, 0)
+			Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
+			character:PivotTo(CFrame.new(destination))
+			EggService.resetCarryOrigin(player, destination)
+			carryTracks[player] = nil
+			return
+		end
 	end
 end
 
@@ -453,7 +489,7 @@ end
 ------------------------------------------------------------------
 
 -- 1초마다: 알 자라기
-local function growTick(dt: number)
+local function growTick(dt: number): ...any
 	local isNight = CycleService.isNight()
 	for player, session in Sessions.all() do
 		local data = session.data
@@ -503,7 +539,7 @@ local function checkCarryJump(player: Player, session: Sessions.Session, root: B
 end
 
 -- 0.2초마다: 배달 패드 확인, 안전 구역 표시, 알 든 사람 순간이동 검사
-local function baseTick()
+local function baseTick(): ...any
 	local carriers = EggService.carriers()
 	local now = os.clock()
 	for player in carryTracks do
@@ -582,16 +618,22 @@ function BaseService.start()
 		end
 	end)
 
-	-- 밤: 알 든 사람 → 자기 베이스로
+	-- 밤: 알 든 사람(베이스 밖) + 구역 안에 있는 사람(알 없어도, 밤 벽에 갇히지 않게) → 자기 베이스로
 	CycleService.changed:connect(function(phase: Types.Phase)
 		if phase ~= "Night" then
 			return
 		end
-		for player in EggService.carriers() do
+		local carriers = EggService.carriers()
+		for player, session in Sessions.all() do
 			local root = Character.getRoot(player)
-			local session = Sessions.get(player)
-			if root and session and not MapBuilder.isInPlot(session.plotIndex, root.Position) then
-				BaseService.teleportHome(player)
+			if root then
+				if carriers[player] then
+					if not MapBuilder.isInPlot(session.plotIndex, root.Position) then
+						BaseService.teleportToSafety(player)
+					end
+				elseif isInAnyZone(root.Position) then
+					BaseService.teleportToSafety(player)
+				end
 			end
 		end
 	end)

@@ -35,10 +35,10 @@ function Net.start()
 	started = true
 	local folder = Instance.new("Folder")
 	folder.Name = Remotes.FOLDER_NAME
-	for _, name in Remotes.ToClient do
+	for _, name in Remotes.ToClient :: { [string]: string } do
 		create(folder, name)
 	end
-	for _, name in Remotes.ToServer do
+	for _, name in Remotes.ToServer :: { [string]: string } do
 		create(folder, name)
 	end
 	folder.Parent = ReplicatedStorage
@@ -70,7 +70,7 @@ function Net.notify(player: Player, kind: string, text: string)
 	Net.fire(player, Remotes.ToClient.Notify, { kind = kind, text = text })
 end
 
-function Net.on(name: string, handler: (Player, ...unknown) -> ())
+function Net.on(name: string, handler: (Player, ...unknown) -> ...any)
 	local limit = Remotes.RateLimits[name]
 	assert(limit, "Net: 레이트 리밋 정의가 없음 " .. name)
 	get(name).OnServerEvent:Connect(function(player: Player, ...: unknown)

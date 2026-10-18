@@ -9,15 +9,20 @@
 	2) 실효 속도 = 모은 속도 × 트레일 배율 × (1 - 알 무게 감소)
 	   알을 들면 WalkSpeed 도 (1 - 감소) 만큼 줄어 "무겁다"는 느낌이 남.
 
-	3) 경비 추격 속도 (설계문서 1-2 "경비는 플레이어 속도와 자기 속도를 비교해서 쫓아옴"):
-	     ratio = clamp((경비 속도 / 실효 속도) ^ EXPONENT × MARGIN, MIN_RATIO, MAX_RATIO)
+	3) 경비 속도 = 추천 속도 × GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소 0.10)   (guardSpeedFor, Biomes.guardSpeed)
+	   → 표지판 추천 속도면 보통 알(-10%)을 들어도 안전, 큰 알일수록 더 필요 (requiredSpeed):
+	      보통 ×0.99 / 큼 ×1.11 / 거대 ×1.37 / 초거대 ×1.78 (GUARD_CHASE_MARGIN 0.99 기준)
+	4) 경비 추격 속도 (설계문서 1-2 "경비는 플레이어 속도와 자기 속도를 비교해서 쫓아옴"):
+	     ratio = clamp((경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN, MIN_RATIO, MAX_RATIO)
 	     추격 WalkSpeed = 플레이어 WalkSpeed × ratio
-	   → 실효 속도 ≥ 추천 속도(= 경비 속도)면 ratio < 1 → 절대 못 잡음
-	   → 모자랄수록 ratio 가 커져 빨리 잡힘 (절반이면 ≈1.94배 빠름)
+	   → ratio < 1 이면 절대 못 잡음, 모자랄수록 ratio 가 커져 빨리 잡힘
 	   경비가 집으로 돌아갈 때(평소) 속도는 같은 로그 곡선으로 변환한 toWalkSpeed(경비 속도).
 ]]
 
 local Config = require(script.Parent.Data.Config)
+local Sizes = require(script.Parent.Data.Sizes)
+
+local NORMAL_PENALTY = (Sizes.get(Sizes.DEFAULT) :: Sizes.Size).speedPenalty
 
 local SpeedMath = {}
 
@@ -79,9 +84,14 @@ function SpeedMath.canEscape(guardSpeed: number, carrierSpeed: number): boolean
 	return SpeedMath.guardChaseRatio(guardSpeed, carrierSpeed) < 1
 end
 
--- 알 크기(penalty)를 고려했을 때 안전하려면 필요한 속도 (UI 힌트용)
+-- 구역 추천 속도 → 경비 속도 (보통 알 무게 감소를 기준에 포함: 추천 속도면 보통 알은 안전)
+function SpeedMath.guardSpeedFor(recommendedSpeed: number): number
+	return math.max(0, recommendedSpeed) * Config.GUARD_SPEED_RATIO * (1 - NORMAL_PENALTY)
+end
+
+-- 이 크기(penalty) 알을 들고 경비를 따돌리려면 넘어야 하는 실효 속도 (UI 힌트용, 이 값보다 커야 안전)
 function SpeedMath.requiredSpeed(recommendedSpeed: number, penalty: number): number
-	return recommendedSpeed / (1 - math.clamp(penalty, 0, 0.95))
+	return SpeedMath.guardSpeedFor(recommendedSpeed) * Config.GUARD_CHASE_MARGIN / (1 - math.clamp(penalty, 0, 0.95))
 end
 
 return SpeedMath

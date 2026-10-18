@@ -50,7 +50,7 @@ local FusionRules = {}
 
 FusionRules.INPUT_COUNT = 3
 
-local ERROR_TEXT: { [FusionError]: string } = {
+local ERROR_TEXT: { [string]: string } = {
 	count = "같은 펫 3마리를 골라 주세요.",
 	duplicate = "같은 펫을 두 번 넣을 수 없어요.",
 	mismatch = "똑같은 종류의 펫 3마리만 합칠 수 있어요.",
@@ -58,7 +58,7 @@ local ERROR_TEXT: { [FusionError]: string } = {
 	weaker = "이 펫은 더 강해질 수 없어서 합칠 수 없어요.",
 }
 
-function FusionRules.errorText(err: FusionError): string
+function FusionRules.errorText(err: string): string
 	return ERROR_TEXT[err] or "합칠 수 없어요."
 end
 
@@ -188,7 +188,7 @@ end
 
 -- 합성 1번. 성공하면 (결과, nil), 실패하면 (nil, 오류)
 function FusionRules.fuse(inputs: { PetRecord }, rand: RandomFn): (FusionResult?, FusionError?)
-	local ok, err = FusionRules.validate(inputs)
+	local ok: boolean, err: FusionError? = FusionRules.validate(inputs)
 	if not ok then
 		return nil, err
 	end

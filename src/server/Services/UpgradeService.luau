@@ -107,7 +107,7 @@ function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
 	Snapshot.section(player, "upgrades")
 end
 
-local function treadmillTick()
+local function treadmillTick(): ...any
 	for player, session in Sessions.all() do
 		local data = session.data
 		if session.loaded and data and data.treadmillLevel >= 1 and session.plotIndex > 0 then

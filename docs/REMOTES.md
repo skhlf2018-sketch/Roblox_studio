@@ -34,7 +34,7 @@ end)
 | `Notify` | 성공/실패 안내 한 줄 | `{ kind: "info" \| "success" \| "error", text: string }` |
 | `Announce` | 서버 전체 공지 (채팅에도 표시됨) | `{ kind, text, ... }` — kind: `"reset"`("ALL EGG RESET!"), `"rareEgg"`(+ `biomeId, petId, rarity, eggUid, questOnly?`), `"night"`, `"day"` |
 | `PhaseChanged` | 낮/밤/대기 바뀔 때 | `{ phase: "Day"\|"Night"\|"Intermission", endsAt: number, duration: number, cycleNumber: number, heavenSide: "light"\|"dark"\|nil }` — `endsAt` 은 `workspace:GetServerTimeNow()` 기준 |
-| `RunAlert` | 내가 알을 든 순간 ("RUN!!") | `{ egg: EggInfo, guardName: string, guardSpeed: number, yourSpeed: number }` |
+| `RunAlert` | 내가 알을 든 순간 ("RUN!!") | `{ egg: EggInfo, guardName: string, guardSpeed: number, yourSpeed: number }` — `guardSpeed` = 추천 속도 × 0.9 (보통 알 무게 감소를 기준에 포함), `yourSpeed` = 알 무게까지 반영한 내 실효 속도. **따돌림 조건: `yourSpeed > guardSpeed × Config.GUARD_CHASE_MARGIN(0.99)`** (`SpeedMath.canEscape`) |
 | `ChaseEnded` | 나를 쫓던 경비가 포기/멈춤 | `{ biomeId: string }` |
 | `Caught` | 경비에게 잡힘 / 무기에 맞음 / 곰덫 밟음 | `{ cause: "guard"\|"player"\|"trap", by: string, eggOutcome: "ReturnToNest"\|"DropHere"\|"None", ragdollSeconds: number, knockback: Vector3?, stunSeconds: number? }` — 곰덫도 이제 알이 없었으면 `"None"` |
 | `EggDelivered` | 배달 패드에 알을 올려 부화 슬롯에 등록됨 | `IncubatorRecord` (`uid, petId, size, mutations, biomeId, slot, progress, required`) |
@@ -75,6 +75,8 @@ end)
 - **배달**도 Remote 없음: 알을 든 채 내 베이스 `DeliveryPad` 반경 안에 들어가면 서버가 자동 처리 (주운 곳에서 너무 빨리 왔으면 거부 → 알은 둥지로).
 - **러닝머신**도 Remote 없음: 내 베이스 `Treadmill` 패드 위에 서 있으면 서버가 1초마다 속도를 올림.
 - 도구: 서버가 Backpack 에 `Tool`(이름 = kind, `RequiresHandle = false`, Attribute `ToolKind`, 무기는 `WeaponId`·`Range`, 곰덫은 `Count`)을 넣어 줌. 기본 클라(`ToolController`)가 `Remotes.ToolKinds` 에 있는 이름의 Tool 이 `Activated` 될 때 `UseTool` 을 보냄 → **구역 무기도 따로 할 일 없이 동작**. 무기 모양(손잡이 메시)·휘두르기 애니메이션·소리는 선임 몫. 사거리·넉백·쿨다운 표는 `src/shared/Data/Weapons.luau`.
+  - **`SwingTick`** (Tool Attribute, number): 서버가 휘두르기(근접 무기) / 곰덫 설치를 실제로 처리할 때마다 `os.clock()` 값을 씀 → 다른 사람 화면에서 휘두르는 모습 재생용 (`GetAttributeChangedSignal("SwingTick")`). 쿨다운·안전 구역으로 거절된 요청에는 안 씀.
+  - 곰덫 얻기: 시작 3개 + **도감 보상** — 희귀(Rare) 이상 펫을 처음 발견할 때마다 +1, 한 구역 펫을 전부 발견하면 +5 (최대 `Config.BEAR_TRAP_MAX_OWNED` 99). 늘어나면 `Notify` + `DataUpdate("tools")` + Tool `Count` 갱신.
 
 ## 3. Attribute 로 복제되는 값 (자주 바뀌는 숫자)
 
@@ -205,4 +207,5 @@ petInventoryMax
 
 - 1초마다 `HumanoidRootPart` 수평 이동 거리 > `WalkSpeed × 1.5 + 30` (경과초 비례) → 마지막 정상 위치로 되돌림 + 경고, 5번이면 Kick (경고는 2분마다 1개씩 줄어듦, 저장 안 함). 래그돌·곰덫·서버 순간이동 직후는 검사 쉼.
 - 알을 든 사람: 0.2초에 `WalkSpeed × 0.2 × 1.5 + 8` 스터드보다 멀리 가면 알을 이전 위치에 떨어뜨림. 배달은 주운 곳 → 패드 거리 ÷ (`WalkSpeed × 1.3`) 보다 빨리 오면 거부(알은 둥지로).
+- 밤이 시작되면: 알 든 사람(베이스 밖) + **알이 없어도 구역 안에 있던 사람**은 서버가 자기 베이스로 순간이동 (베이스가 없으면 `MainSpawn`). 밤 벽에 갇히지 않게. 서버 순간이동이라 위치 검증에 안 걸림.
 - "근처여야 하는" 요청은 전부 서버가 거리 확인: 알 줍기(12), 크리스탈 줍기(12), 배달 패드(9), 러닝머신(5), 퓨전 머신(12), 사쿠라 인큐베이터(14), 제단(14), 비밀 통로(14). 무기 사거리·곰덫 설치 위치도 서버가 계산.

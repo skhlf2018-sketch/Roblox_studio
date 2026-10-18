@@ -72,7 +72,7 @@ function AltarRules.rollover(state: AltarState, cycle: number): { Offer }
 	end
 	local expired: { Offer } = {}
 	for _, side in AltarRules.SIDES do
-		for _, offer in state.queues[side] or {} do
+		for _, offer in (state.queues[side] or {}) :: { Offer } do
 			table.insert(expired, offer)
 		end
 		state.queues[side] = {}
@@ -83,7 +83,7 @@ end
 
 function AltarRules.findOffer(state: AltarState, userId: number): Offer?
 	for _, side in AltarRules.SIDES do
-		for _, offer in state.queues[side] or {} do
+		for _, offer in (state.queues[side] or {}) :: { Offer } do
 			if offer.userId == userId then
 				return offer
 			end

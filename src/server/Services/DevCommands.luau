@@ -4,6 +4,7 @@
 	  - Config.DEV_USER_IDS 가 비어 있으면: 스튜디오에서만, 누구나 (실서버에서는 아예 연결 안 됨)
 	  - DEV_USER_IDS 에 UserId 를 넣으면: 그 사람만 (스튜디오·실서버 둘 다)
 	주임·선임이 뒤 구역을 바로 시험해 볼 수 있게.
+	받는 길: Player.Chatted + TextChatService 의 TextChatCommand (새 채팅에서 Chatted 가 안 올 때 대비, 같은 메시지는 한 번만)
 
 	  /money 1e9        돈 더하기
 	  /speed 1e9        속도 더하기
@@ -36,6 +37,8 @@ local SakuraService = require(script.Parent.SakuraService)
 local QuestService = require(script.Parent.QuestService)
 
 local DevCommands = {}
+
+local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "quests" }
 
 local function isAllowed(player: Player): boolean
 	if #Config.DEV_USER_IDS > 0 then
@@ -91,20 +94,62 @@ local function handle(player: Player, message: string)
 	Net.notify(player, "info", "[개발] " .. message)
 end
 
+-- 같은 메시지가 두 경로(Player.Chatted 와 TextChatCommand)로 같이 오면 한 번만 처리
+local DEDUPE_SECONDS = 1
+type Recent = { message: string, source: string, time: number }
+local recent: { [Player]: Recent } = {}
+
+local function receive(player: Player, message: string, source: string)
+	local now = os.clock()
+	local last = recent[player]
+	if last and last.message == message and last.source ~= source and now - last.time < DEDUPE_SECONDS then
+		return
+	end
+	recent[player] = { message = message, source = source, time = now }
+	handle(player, message)
+end
+
+-- 새 채팅(TextChatService)용: TextChatCommand 로도 등록. 이 환경에 없으면 조용히 건너뜀 (Player.Chatted 는 그대로)
+local function registerTextChatCommands()
+	local ok, err = pcall(function(): ...any
+		local TextChatService = game:GetService("TextChatService")
+		local parent = TextChatService:FindFirstChild("TextChatCommands") or TextChatService
+		for _, name in COMMAND_NAMES do
+			local command = Instance.new("TextChatCommand")
+			command.Name = "Dev_" .. name
+			command.PrimaryAlias = "/" .. name
+			command.Triggered:Connect(function(source: TextSource, text: string)
+				local player = Players:GetPlayerByUserId(source.UserId)
+				if player then
+					receive(player, text, "textchat")
+				end
+			end)
+			command.Parent = parent
+		end
+	end)
+	if not ok then
+		warn("[DevCommands] TextChatCommand 등록 실패 (Player.Chatted 로만 받음): " .. tostring(err))
+	end
+end
+
 function DevCommands.start()
 	if #Config.DEV_USER_IDS == 0 and not RunService:IsStudio() then
 		return
 	end
 	local function hook(player: Player)
 		player.Chatted:Connect(function(message: string)
-			handle(player, message)
+			receive(player, message, "chatted")
 		end)
 	end
 	Players.PlayerAdded:Connect(hook)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		recent[player] = nil
+	end)
 	for _, player in Players:GetPlayers() do
 		hook(player)
 	end
-	print("[DevCommands] 개발 명령 켜짐: /money /speed /skip /grow /trap /crystal /pet /quests")
+	registerTextChatCommands()
+	print("[DevCommands] 개발 명령 켜짐: /" .. table.concat(COMMAND_NAMES, " /"))
 end
 
 return DevCommands

@@ -49,6 +49,13 @@ type Guard = {
 local GuardianService = {}
 
 local guards: { [string]: Guard } = {}
+local bornAt: { [string]: number } = {}
+local rapidDeaths: { [string]: number } = {}
+local retryAt: { [string]: number } = {}
+
+local RAPID_DEATH_SECONDS = 2 -- 이보다 빨리 죽으면 "생기자마자 죽음"
+local RAPID_DEATH_LIMIT = 3 -- 연달아 이만큼이면
+local RAPID_DEATH_BACKOFF = 5 -- 이 초 동안 다시 안 만듦
 
 local function rgb(c: { number }): Color3
 	return Color3.fromRGB(c[1], c[2], c[3])
@@ -80,6 +87,9 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 
 	local humanoid = Instance.new("Humanoid")
 	humanoid.RigType = Enum.HumanoidRigType.R15
+	-- 목 관절(Neck Motor6D) 없이 머리를 WeldConstraint 로 붙인 모델 → 이 두 줄이 없으면 생기자마자 죽을 수 있음
+	humanoid.RequiresNeck = false
+	humanoid.BreakJointsOnDeath = false
 	humanoid.HipHeight = 2.5
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.WalkSpeed = SpeedMath.guardBaseWalkSpeed(biome.guardSpeed)
@@ -127,8 +137,28 @@ local function ensureGuard(biome: Biomes.Biome): Guard?
 	if existing and existing.model.Parent ~= nil and existing.humanoid.Health > 0 then
 		return existing
 	end
+	local now = os.clock()
 	if existing then
 		existing.model:Destroy()
+		guards[biome.id] = nil
+		-- 태어나자마자 또 죽는 일이 반복되면(모델 문제) 0.1초마다 다시 만들지 않고 잠깐 쉼
+		if now - (bornAt[biome.id] or 0) < RAPID_DEATH_SECONDS then
+			rapidDeaths[biome.id] = (rapidDeaths[biome.id] or 0) + 1
+		else
+			rapidDeaths[biome.id] = 0
+		end
+		if (rapidDeaths[biome.id] or 0) >= RAPID_DEATH_LIMIT then
+			retryAt[biome.id] = now + RAPID_DEATH_BACKOFF
+			rapidDeaths[biome.id] = 0
+			warn(
+				"[GuardianService] "
+					.. biome.id
+					.. " 경비가 생기자마자 계속 죽음 — 잠시 뒤 다시 만듦"
+			)
+		end
+	end
+	if now < (retryAt[biome.id] or 0) then
+		return nil
 	end
 	local spawnPart = MapBuilder.getGuardSpawn(biome.id)
 	local zone = MapBuilder.getZone(biome.id)
@@ -141,6 +171,7 @@ local function ensureGuard(biome: Biomes.Biome): Guard?
 	end
 	local guard = buildGuard(biome, home)
 	guards[biome.id] = guard
+	bornAt[biome.id] = now
 	return guard
 end
 

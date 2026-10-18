@@ -35,6 +35,10 @@ local Index = {
 	MONEY_PER_INCOME = 100,
 	SPEED_BIOME_REFERENCE = 3600,
 	SPEED_BIOME_EXPONENT = 0.8,
+	-- 곰덫 보상 (설계문서 10장 "곰덫 — 도감 보상") [추정 수치: 본부장 지시]
+	TRAPS_MIN_RARITY = "rare", -- 이 희귀도 이상 펫을 처음 발견할 때마다
+	TRAPS_PER_DISCOVERY = 1,
+	TRAPS_PER_BIOME_COMPLETE = 5, -- 한 구역 펫을 전부 발견했을 때 (구역마다 한 번)
 	FULL_COMPLETION = {
 		speed = 1e12,
 		money = 1e15,

@@ -121,7 +121,7 @@ local function checkPlayer(player: Player, session: Sessions.Session, now: numbe
 	tracks[player] = current
 end
 
-local function tick()
+local function tick(): ...any
 	local now = os.clock()
 	for player, session in Sessions.all() do
 		if session.loaded and player.Parent ~= nil then

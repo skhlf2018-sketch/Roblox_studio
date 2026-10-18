@@ -2,7 +2,8 @@
 --[[
 	클라 진입점 (ReplicatedStorage.Client.Main — Script, RunContext = Client)
 	팀 표준: 진입점은 이것 하나. 나머지는 ModuleScript + start().
-	UI 는 선임이 Controllers 에 추가합니다 (State.onChanged / Net.on 사용, docs/REMOTES.md 참고).
+	화면(UI)·소리·조명·연출 컨트롤러는 선임 담당 (docs/UI.md 참고).
+	컨트롤러 하나가 오류가 나도 나머지는 계속 돌도록 각각 따로 시작합니다.
 ]]
 
 -- 처음 복제가 끝난 뒤에 시작 (ReplicatedStorage 모듈을 바로 인덱싱하므로)
@@ -11,22 +12,56 @@ if not game:IsLoaded() then
 end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Client = script.Parent
 local Net = require(Client.Net)
 local State = require(Client.State)
 local Controllers = Client.Controllers
-local DebugController = require(Controllers.DebugController)
-local AnnounceController = require(Controllers.AnnounceController)
-local RagdollController = require(Controllers.RagdollController)
-local ToolController = require(Controllers.ToolController)
+
+local function boot(name: string)
+	local module = Controllers:FindFirstChild(name)
+	if not module or not module:IsA("ModuleScript") then
+		warn("[Client] 컨트롤러 없음: " .. name)
+		return
+	end
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local controller = (require :: any)(module)
+			controller.start()
+		end)
+		if not ok then
+			warn("[Client] " .. name .. " 시작 실패: " .. tostring(err))
+		end
+	end)
+end
 
 State.start()
-DebugController.start()
-AnnounceController.start()
-RagdollController.start()
-task.spawn(ToolController.start)
+
+if RunService:IsStudio() then
+	boot("DebugController") -- 출력 창에 서버 이벤트 찍기 (스튜디오에서만)
+end
+boot("AnnounceController")
+boot("RagdollController")
+boot("ToolController")
+
+-- 선임: 화면·소리·연출 (순서: 구역 판정 → 소리 → 조명 → 화면들 → 월드 연출)
+boot("ZoneController")
+boot("SoundController")
+boot("LightingController")
+boot("HudController")
+boot("NotifyController")
+boot("ChaseController")
+boot("IncubatorController")
+boot("HatchController")
+boot("IndexController")
+boot("PetsController")
+boot("ShopController")
+boot("GiftController")
+boot("SettingsController")
+boot("HotbarController")
+boot("WorldFxController")
 
 -- 접속 직후 서버가 보낸 Snapshot 을 놓쳤을 수 있으니 한 번 요청
 Net.send(Remotes.ToServer.RequestSnapshot)

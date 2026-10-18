@@ -11,6 +11,8 @@ local Services = Server.Services
 
 local Net = require(Server.Net)
 local MapBuilder = require(Services.MapBuilder)
+local PetVisualService = require(Services.PetVisualService)
+local EggVisualService = require(Services.EggVisualService)
 local DataService = require(Services.DataService)
 local AntiCheatService = require(Services.AntiCheatService)
 local SpeedService = require(Services.SpeedService)
@@ -33,6 +35,8 @@ local PlayerLifecycle = require(Services.PlayerLifecycle)
 
 Net.start()
 MapBuilder.start()
+PetVisualService.start()
+EggVisualService.start()
 DataService.start()
 AntiCheatService.start()
 SpeedService.start()

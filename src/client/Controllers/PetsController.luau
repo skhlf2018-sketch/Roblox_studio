@@ -1,0 +1,222 @@
+--!strict
+--[[
+	PetsController — 펫 창 (보관함 · 장착 · Equip Best)
+	- 위: 장착 칸 "장착 3/7", "최고 펫 장착" 버튼(EquipBest), 쪽 넘기기
+	- 카드: 3D 펫, 이름(희귀도 색), 초당 수입(Economy.recordIncome), 크기/돌연변이, 장착/해제 버튼
+	- 장착한 펫이 먼저, 그다음 수입 높은 순. 한 쪽에 18마리.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage.Shared
+local Pets = require(Shared.Data.Pets)
+local Rarities = require(Shared.Data.Rarities)
+local Sizes = require(Shared.Data.Sizes)
+local Mutations = require(Shared.Data.Mutations)
+local Economy = require(Shared.Economy)
+local Format = require(Shared.Format)
+local Remotes = require(Shared.Remotes)
+local Types = require(Shared.Types)
+local Client = script.Parent.Parent
+local Net = require(Client.Net)
+local State = require(Client.State)
+local Theme = require(Client.UI.Theme)
+local Ui = require(Client.UI.Ui)
+local Windows = require(Client.UI.Windows)
+local PetViewport = require(Client.UI.PetViewport)
+
+local PetsController = {}
+
+local C = Theme.Colors
+local NAME = "Pets"
+local PAGE = 18
+
+local function detail(record: Types.PetRecord): string
+	local parts: { string } = {}
+	local size = Sizes.get(record.size)
+	if size then
+		table.insert(parts, size.name)
+	end
+	for _, id in record.mutations do
+		local m = Mutations.get(id)
+		if m then
+			table.insert(parts, m.name)
+		end
+	end
+	return table.concat(parts, " · ")
+end
+
+function PetsController.start()
+	local window = Ui.window(NAME, "펫", Theme.Menu.pets, Vector2.new(900, 570), function()
+		Windows.close(NAME)
+	end)
+	local content = window.content
+
+	local top: Frame = Ui.new("Frame", {
+		Name = "Top",
+		Size = UDim2.new(1, 0, 0, 60),
+		BackgroundColor3 = C.panelDark,
+		Parent = content,
+	})
+	Ui.corner(16).Parent = top
+	local slotsLabel = Ui.label("", UDim2.fromOffset(300, 60), 26, C.ink, {
+		Position = UDim2.fromOffset(16, 0),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = top,
+	})
+	Ui.button("최고 펫 장착", C.orange, UDim2.fromOffset(210, 50), function()
+		Net.send(Remotes.ToServer.EquipBest)
+	end, {
+		anchor = Vector2.new(0.5, 0.5),
+		position = UDim2.fromScale(0.5, 0.5),
+		textSize = 24,
+		parent = top,
+		sound = "Equip",
+	})
+	local pageLabel = Ui.label("1/1", UDim2.fromOffset(80, 60), 22, C.ink, {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -70, 0, 0),
+		Parent = top,
+	})
+	local page = 1
+	local render: () -> ()
+	Ui.button("<", C.blue, UDim2.fromOffset(50, 50), function()
+		page = math.max(1, page - 1)
+		render()
+	end, { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -152, 0.5, 0), textSize = 28, parent = top })
+	Ui.button(">", C.blue, UDim2.fromOffset(50, 50), function()
+		page += 1
+		render()
+	end, { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -10, 0.5, 0), textSize = 28, parent = top })
+
+	local grid = Ui.scroll(UDim2.new(1, 0, 1, -70), UDim2.fromOffset(0, 70), content)
+	Ui.grid(Vector2.new(140, 214), 10).Parent = grid
+	Ui.padding(6).Parent = grid
+	local empty = Ui.label(
+		"아직 펫이 없어요! 알을 훔쳐서 베이스에서 부화시켜요.",
+		UDim2.new(1, 0, 0, 60),
+		26,
+		C.ink,
+		{
+			Position = UDim2.fromOffset(0, 200),
+			Visible = false,
+			Parent = content,
+		}
+	)
+
+	render = function()
+		for _, child in grid:GetChildren() do
+			if child:IsA("Frame") then
+				child:Destroy()
+			end
+		end
+		local snap = State.get()
+		if not snap then
+			return
+		end
+		local equippedSet: { [string]: boolean } = {}
+		for _, uid in snap.equipped or {} do
+			equippedSet[uid] = true
+		end
+		local list = table.clone(snap.pets or {})
+		table.sort(list, function(a: Types.PetRecord, b: Types.PetRecord): boolean
+			local ea, eb = equippedSet[a.uid] == true, equippedSet[b.uid] == true
+			if ea ~= eb then
+				return ea
+			end
+			local ia, ib = Economy.recordIncome(a), Economy.recordIncome(b)
+			if ia ~= ib then
+				return ia > ib
+			end
+			return a.uid < b.uid
+		end)
+		local slots = snap.penSlots or 0
+		local equippedCount = #(snap.equipped or {})
+		local maxText = if typeof((snap :: any).petInventoryMax) == "number"
+			then "/" .. tostring((snap :: any).petInventoryMax)
+			else ""
+		slotsLabel.Text = string.format("장착 %d/%d  ·  보관함 %d%s", equippedCount, slots, #list, maxText)
+		local pages = math.max(1, math.ceil(#list / PAGE))
+		page = math.clamp(page, 1, pages)
+		pageLabel.Text = string.format("%d/%d", page, pages)
+		empty.Visible = #list == 0
+		for i = (page - 1) * PAGE + 1, math.min(#list, page * PAGE) do
+			local record = list[i]
+			local pet = Pets.get(record.petId)
+			local rarityId = if pet then pet.rarity else "common"
+			local rcolor = Theme.rarityColor(rarityId)
+			local isEquipped = equippedSet[record.uid] == true
+			local card = Ui.card(
+				UDim2.fromOffset(140, 214),
+				if isEquipped then Color3.fromRGB(255, 252, 225) else C.white,
+				if isEquipped then C.yellow else rcolor
+			)
+			card.LayoutOrder = i
+			card.Parent = grid
+			local stroke = card:FindFirstChildOfClass("UIStroke")
+			if stroke and isEquipped then
+				stroke.Thickness = 5
+			end
+			local view =
+				PetViewport.new(record.petId, { size = UDim2.new(1, -10, 0, 82), position = UDim2.fromOffset(5, 4) })
+			view.Parent = card
+			Ui.label(if pet then pet.name else record.petId, UDim2.new(1, -8, 0, 24), 19, rcolor, {
+				Position = UDim2.fromOffset(4, 86),
+				TextScaled = true,
+				Parent = card,
+			})
+			local rarity = Rarities.get(rarityId)
+			Ui.label(
+				(if rarity then rarity.name .. " · " else "") .. Format.money(Economy.recordIncome(record)) .. "/초",
+				UDim2.new(1, -8, 0, 20),
+				16,
+				C.money,
+				{ Position = UDim2.fromOffset(4, 110), TextScaled = true, Parent = card }
+			)
+			Ui.label(detail(record), UDim2.new(1, -8, 0, 18), 14, C.orange, {
+				Position = UDim2.fromOffset(4, 131),
+				TextScaled = true,
+				Parent = card,
+			})
+			local uid = record.uid
+			if isEquipped then
+				Ui.button(
+					"해제",
+					C.red,
+					UDim2.new(1, -14, 0, 52),
+					function()
+						Net.send(Remotes.ToServer.UnequipPet, uid)
+					end,
+					{ anchor = Vector2.new(0.5, 1), position = UDim2.new(0.5, 0, 1, -6), textSize = 22, parent = card }
+				)
+			else
+				local full = equippedCount >= slots
+				local b = Ui.button(
+					if full then "가득 참" else "장착",
+					if full then C.gray else C.green,
+					UDim2.new(1, -14, 0, 52),
+					function()
+						Net.send(Remotes.ToServer.EquipPet, uid)
+					end,
+					{
+						anchor = Vector2.new(0.5, 1),
+						position = UDim2.new(0.5, 0, 1, -6),
+						textSize = 22,
+						parent = card,
+						sound = "Equip",
+					}
+				)
+				b.Name = "Equip"
+			end
+		end
+	end
+
+	Windows.register(NAME, window, render)
+	State.onChanged(function(section: string)
+		if Windows.isOpen(NAME) and (section == "pets" or section == "snapshot" or section == "upgrades") then
+			render()
+		end
+	end)
+end
+
+return PetsController

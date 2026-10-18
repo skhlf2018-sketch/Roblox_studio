@@ -302,16 +302,16 @@ return function(T, Loader)
 			local w = eggWorld()
 			local egg = nestEgg(w.H, "forest")
 			pressE(w, egg)
-			w.H.teleport(w.player, 0, 3, 0) -- 숲 구역(x -225~-65, z 80~240) 밖
-			w.EggService.knockOut(w.player, w.H.vec(5, 3, 0), "guard", "닭")
+			w.H.teleport(w.player, 0, 3, -60) -- 숲 구역(z 0~240) 밖 = 허브
+			w.EggService.knockOut(w.player, w.H.vec(5, 3, -60), "guard", "닭")
 			T.eq(egg:GetAttribute("EggState"), "Dropped")
 			T.eq(egg.Position.X, 0)
-			T.eq(egg.Position.Z, 0)
+			T.eq(egg.Position.Z, -60)
 			T.eq(w.H.sent(w.player, "Caught")[1][1].eggOutcome, "DropHere")
 			-- 다른 사람이 주울 수 있음
 			local other = w.H.newPlayer(1002, "Other")
 			w.H.login(other)
-			w.H.spawn(other, 0, 3, 0)
+			w.H.spawn(other, 0, 3, -60)
 			egg:FindFirstChild("StealPrompt").Triggered:Fire(other)
 			T.eq(egg:GetAttribute("EggState"), "Carried")
 			T.eq(other.attrs.CarryingEgg, egg:GetAttribute("EggUid"))
@@ -381,8 +381,8 @@ return function(T, Loader)
 			w.H.teleport(w.player, cx, 3, cz)
 			w.H.advance(120)
 			T.eq(#eggParts(w.H), before, "구역 안에서는 다시 안 채움")
-			-- 구역 밖으로 → 0.2초 틱에서 예약 해제 → 30초 뒤 새 알
-			w.H.teleport(w.player, 0, 3, 0)
+			-- 구역 밖(z < 0 허브)으로 → 0.2초 틱에서 예약 해제 → 30초 뒤 새 알
+			w.H.teleport(w.player, 0, 3, -60)
 			w.H.advance(1)
 			w.H.advance(28)
 			T.eq(#eggParts(w.H), before, "예약 해제 후 30초가 안 지남")
@@ -408,7 +408,7 @@ return function(T, Loader)
 		local w = eggWorld()
 		local egg = nestEgg(w.H, "forest")
 		pressE(w, egg)
-		w.H.teleport(w.player, 0, 3, 0)
+		w.H.teleport(w.player, 0, 3, -60)
 		w.H.advance(1)
 		local count = #eggParts(w.H)
 		w.H.setPhase("Night")
@@ -471,6 +471,103 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
+	T.suite("서비스: EggService 2판 (DropEgg · 무게 · 유예 · z 범위 구역)")
+
+	T.test(
+		"알 무게: 들면 CarryWeightKg = 크기별 kg(보통 50 / 큼 120 / 거대 400 / 초거대 1200), 알 파트 WeightKg, RunAlert.weightKg, 놓으면 0",
+		function()
+			local w = eggWorld()
+			local expected = { normal = 50, big = 120, huge = 400, giant = 1200 }
+			for id, kg in expected do
+				T.eq(w.Sizes.get(id).carryKg, kg, id)
+			end
+			local egg = nestEgg(w.H, "forest")
+			local kg = expected[egg:GetAttribute("Size")]
+			T.eq(egg:GetAttribute("WeightKg"), kg)
+			pressE(w, egg)
+			T.eq(w.player.attrs.CarryWeightKg, kg)
+			T.eq(w.H.sent(w.player, "RunAlert")[1][1].weightKg, kg)
+			w.EggService.dropCarried(w.player, "guard")
+			T.eq(w.player.attrs.CarryWeightKg, 0)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"DropEgg: 알의 구역 안이어도 그 자리에 떨어짐(둥지로 안 감) + 안내, 알이 없으면 아무 일 없음, 레이트 리밋",
+		function()
+			local w = eggWorld()
+			local egg = nestEgg(w.H, "forest")
+			pressE(w, egg)
+			local x, z = w.H.zoneSpot("forest")
+			w.H.teleport(w.player, x + 7, 3, z)
+			w.H.client(w.player, "DropEgg")
+			T.eq(egg:GetAttribute("EggState"), "Dropped")
+			T.eq(egg.Position.X, x + 7, "그 자리")
+			T.eq(egg.Position.Z, z)
+			T.eq(w.player.attrs.CarryingEgg, "")
+			T.eq(w.player.attrs.CarryWeightKg, 0)
+			T.truthy(w.H.hasNotify(w.player, "info", "알을 내려놓았어요"))
+			local before = #w.H.notifications(w.player)
+			w.H.client(w.player, "DropEgg") -- 알 없음
+			T.eq(#w.H.notifications(w.player), before)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"경비 유예(1.5초)는 둥지에서 주울 때만 — 버린 알을 다시 주우면 유예 없음 (버렸다 줍기로 못 버팀)",
+		function()
+			local w = eggWorld()
+			local egg = nestEgg(w.H, "forest")
+			pressE(w, egg)
+			local carried = w.EggService.getCarried(w.player)
+			T.near(carried.graceUntil, carried.pickedAt + w.Config.GUARD_CATCH_GRACE_SECONDS, 1e-9, "둥지")
+			w.EggService.dropEgg(w.player)
+			w.H.advance(0.5)
+			pressE(w, egg)
+			carried = w.EggService.getCarried(w.player)
+			T.eq(carried.graceUntil, carried.pickedAt, "바닥 알은 유예 없음")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"구역 = z 범위: 호수 알을 들고 앞 구역(숲, z < 240)으로 넘어가면 둥지 예약이 풀리고, 거기서 잡히면 그 자리",
+		function()
+			local w = eggWorld()
+			local egg = nestEgg(w.H, "lake")
+			pressE(w, egg)
+			w.H.teleport(w.player, 0, 3, 240) -- 호수 시작선 = 아직 호수
+			w.H.advance(0.4)
+			local carried = w.EggService.getCarried(w.player)
+			T.eq(carried.nestBiome, "lake", "호수 안: 예약 유지")
+			T.eq(w.EggService.dropCarried(w.player, "guard"), "ReturnToNest")
+			pressE(w, egg)
+			w.H.teleport(w.player, 0, 3, 239.9) -- 숲
+			w.H.advance(0.4)
+			carried = w.EggService.getCarried(w.player)
+			T.eq(carried.nestBiome, nil, "숲으로 넘어가자 예약 해제")
+			T.eq(w.EggService.dropCarried(w.player, "guard"), "DropHere")
+			w.H.uninstall()
+		end
+	)
+
+	T.test("둥지 자리 = MapLayout.nestsFor (구역마다 8개, 그 구역 z 범위 안)", function()
+		local w = eggWorld()
+		local MapLayout = w.H.MapLayout
+		for _, b in MapLayout.biomes do
+			local positions = w.EggService.nestPositions(b.id)
+			T.eq(#positions, 8, b.id)
+			for i, p in positions do
+				T.eq(MapLayout.zoneAt(p.Z), b.id)
+				T.eq(p.X, MapLayout.nestsFor(b.id)[i].x)
+			end
+		end
+		w.H.uninstall()
+	end)
+
+	------------------------------------------------------------------
 	T.suite("서비스: GuardianService (경비 추격 판단·잡힘)")
 
 	local function guardWorld()
@@ -504,6 +601,15 @@ return function(T, Loader)
 		return model.PrimaryPart
 	end
 
+	local function humanoidOf(model)
+		for _, child in model.children do
+			if child.ClassName == "Humanoid" then
+				return child
+			end
+		end
+		return nil
+	end
+
 	-- 숲 알을 든 상태로 만들기: 속도·알 무게를 SpeedService 에 반영
 	local function carryForest(w, player, speed, penalty, extra)
 		local session = w.Sessions.get(player)
@@ -526,7 +632,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"시작하면 15구역에 경비가 1마리씩 서 있음 (집 = 구역 중심, 상태 Idle, 대상 없음)",
+		"시작하면 15구역에 경비가 1마리씩 자고 있음 (집 = MapLayout.guardHome 구역 가운데, 상태 Sleeping, 대상 없음)",
 		function()
 			local w = guardWorld()
 			local count = 0
@@ -534,12 +640,14 @@ return function(T, Loader)
 				local model = guardOf(w, biome.id)
 				T.truthy(model, biome.id)
 				count += 1
-				T.eq(model:GetAttribute("State"), "Idle")
+				T.eq(model:GetAttribute("State"), "Sleeping")
 				T.eq(model:GetAttribute("TargetUserId"), 0)
 				T.eq(model:GetAttribute("GuardName"), if biome.id == "angels_demons" then "천사" else biome.guardName)
 				local root = guardRoot(model)
-				T.eq(root.Position.X, w.H.map.zones[biome.id].centerX)
-				T.eq(root.Position.Z, w.H.map.zones[biome.id].centerZ)
+				local home = w.H.MapLayout.guardHome(biome.id)
+				T.eq(root.Position.X, home.x)
+				T.eq(root.Position.Z, home.z)
+				T.eq(w.H.MapLayout.zoneAt(root.Position.Z), biome.id)
 			end
 			T.eq(count, 15)
 			w.H.uninstall()
@@ -610,7 +718,7 @@ return function(T, Loader)
 			T.eq(#w.H.sent(w.player, "ChaseEnded"), 1)
 			_ = egg
 			-- 거리 경계
-			for _, case in { { 6.0, 3, true }, { 6.1, 3, false }, { 3, 14.7, true }, { 3, 15.0, false } } do
+			for _, case in { { 6.0, 3, true }, { 6.1, 3, false }, { 3, 14.6, true }, { 3, 14.7, false } } do
 				table.clear(w.H.eggs.knockouts)
 				carryForest(w, w.player, 5, 0.10)
 				if case[2] == 3 then
@@ -628,48 +736,98 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"추격 포기 반경: 구역 반경 80 × 2 × 끈질김(숲 1) = 160 밖으로 나가면 경비가 포기하고 집으로 (ChaseEnded)",
+		"2판 추격 포기 없음: 앞 구역을 지나 허브 경계 바로 앞(z = 0.1)까지 계속 쫓고, 허브(z < 0)에 들어가야 포기(reason safe) → 집으로 Return → 도착하면 Sleeping",
 		function()
 			local w = guardWorld()
-			local biome = w.Biomes.get("forest")
-			local leash = 80 * w.Config.GUARD_LEASH_FACTOR * biome.guardPersistence
-			T.near(leash, 160, 1e-9)
 			carryForest(w, w.player, 5, 0.10)
-			local model = guardOf(w, "forest")
+			local model = guardOf(w, "lake")
 			local home = guardRoot(model).Position
-			-- 경비가 집에서 30 떨어진 곳까지 나와 있다고 치고 (가짜 Humanoid 는 스스로 걷지 않음)
-			guardRoot(model).CFrame = { Position = w.H.vec(home.X + 30, home.Y, home.Z) }
-			place(w, w.player, leash - 0.1, 0)
-			w.H.advance(0.2)
-			T.eq(model:GetAttribute("State"), "Chase")
-			place(w, w.player, leash + 0.2, 0)
+			-- 호수 알을 들고 숲(앞 구역)을 지나 허브 경계까지
+			w.H.eggs.carried[w.player].biomeId = "lake"
+			for _, z in { 400, 200, 50, 0.1 } do
+				w.H.teleport(w.player, 30, 3, z)
+				w.H.advance(0.2)
+				T.eq(model:GetAttribute("State"), "Chase", "z = " .. z)
+				T.eq(model:GetAttribute("TargetUserId"), w.player.UserId)
+			end
+			T.eq(
+				guardOf(w, "forest"):GetAttribute("State"),
+				"Sleeping",
+				"지나가는 구역(숲) 경비는 안 깨어남"
+			)
+			-- 경비가 쫓아 나와 있다고 치고 (가짜 Humanoid 는 스스로 걷지 않음)
+			guardRoot(model).CFrame = { Position = w.H.vec(home.X + 30, home.Y, home.Z - 100) }
+			w.H.teleport(w.player, 30, 3, -0.1)
 			w.H.advance(0.2)
 			T.eq(model:GetAttribute("State"), "Return")
 			T.eq(model:GetAttribute("TargetUserId"), 0)
-			T.eq(#w.H.sent(w.player, "ChaseEnded"), 1)
-			local humanoid
-			for _, child in model.children do
-				if child.ClassName == "Humanoid" then
-					humanoid = child
-				end
-			end
+			local ended = w.H.sent(w.player, "ChaseEnded")
+			T.eq(#ended, 1)
+			T.eq(ended[1][1].biomeId, "lake")
+			T.eq(ended[1][1].reason, "safe")
+			local humanoid = humanoidOf(model)
 			T.eq(humanoid.moveTarget.X, home.X, "집 쪽으로 걸어감")
+			T.eq(humanoid.moveTarget.Z, home.Z)
 			T.near(
 				humanoid.WalkSpeed,
-				w.SpeedMath.guardBaseWalkSpeed(w.SpeedMath.guardSpeedFor(10)),
+				w.SpeedMath.guardBaseWalkSpeed(w.SpeedMath.guardSpeedFor(900)),
 				1e-9,
-				"돌아갈 때는 평소 속도 (숲 경비 속도 = 10 × 0.9)"
+				"돌아갈 때는 평소 속도"
 			)
-			-- 집에 도착하면 Idle
+			-- 집에 도착하면 다시 잠
 			guardRoot(model).CFrame = { Position = home }
 			w.H.advance(0.2)
-			T.eq(model:GetAttribute("State"), "Idle")
+			T.eq(model:GetAttribute("State"), "Sleeping")
+			w.H.uninstall()
+		end
+	)
+
+	T.test("추격 끝 이유(ChaseEnded.reason): 알을 놓음 dropped / 밤 night / 잡음 caught", function()
+		local w = guardWorld()
+		carryForest(w, w.player, 5, 0.10)
+		place(w, w.player, 30, 0)
+		w.H.advance(0.2)
+		w.H.eggs.carried[w.player] = nil -- DropEgg·배달
+		w.H.advance(0.2)
+		carryForest(w, w.player, 5, 0.10)
+		w.H.advance(0.2)
+		w.H.setPhase("Night")
+		w.H.advance(0.2)
+		local ended = w.H.sent(w.player, "ChaseEnded")
+		T.eq(ended[1][1].reason, "dropped")
+		T.eq(ended[2][1].reason, "night")
+		w.H.setPhase("Day")
+		place(w, w.player, 3, 0)
+		w.H.advance(0.2)
+		ended = w.H.sent(w.player, "ChaseEnded")
+		T.eq(ended[#ended][1].reason, "caught")
+		w.H.uninstall()
+	end)
+
+	T.test(
+		"경비끼리 겹치지 않게: 다른 경비가 30 안에 있으면 쫓는 목표를 옆으로 비킴 (CollisionGroup Guardians)",
+		function()
+			local w = guardWorld()
+			carryForest(w, w.player, 5, 0.10)
+			place(w, w.player, 40, 0)
+			local forest = guardOf(w, "forest")
+			local lake = guardOf(w, "lake")
+			T.eq(guardRoot(forest).CollisionGroup, w.Config.GUARD_COLLISION_GROUP)
+			w.H.advance(0.2)
+			local humanoid = humanoidOf(forest)
+			local target = w.player.Character.root.Position
+			T.eq(humanoid.moveTarget.X, target.X, "주변에 다른 경비가 없으면 그대로")
+			-- 호수 경비가 숲 경비 바로 옆(+x 10)에 있다고 치면 → 목표가 -x 쪽으로 20 비킴
+			local p = guardRoot(forest).Position
+			guardRoot(lake).CFrame = { Position = w.H.vec(p.X + 10, p.Y, p.Z) }
+			w.H.advance(2.1) -- MoveTo 다시 부르는 주기
+			T.near(humanoid.moveTarget.X, target.X - 20, 1e-9, "옆으로 비킴")
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"안 쫓는 경우: 밤·대기 / 안전 구역 / 기절 / 죽음 / 다른 구역 알 / 알 안 든 사람",
+		"안 쫓는 경우: 밤·대기 / 허브(안전 구역) / 기절 / 죽음 / 다른 구역 알 / 알 안 든 사람",
 		function()
 			local w = guardWorld()
 			carryForest(w, w.player, 5, 0.10)
@@ -682,10 +840,10 @@ return function(T, Loader)
 			w.H.advance(0.3)
 			T.eq(model:GetAttribute("TargetUserId"), 0, "대기")
 			w.H.setPhase("Day")
-			w.H.map.safeZone = true
+			w.H.teleport(w.player, 0, 3, -30)
 			w.H.advance(0.3)
-			T.eq(model:GetAttribute("TargetUserId"), 0, "안전 구역")
-			w.H.map.safeZone = false
+			T.eq(model:GetAttribute("TargetUserId"), 0, "허브")
+			place(w, w.player, 30, 0)
 			w.session.stunnedUntil = w.H.clock() + 5
 			w.H.advance(0.3)
 			T.eq(model:GetAttribute("TargetUserId"), 0, "기절")

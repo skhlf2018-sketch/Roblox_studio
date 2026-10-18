@@ -458,16 +458,21 @@ return function(T, Loader)
 	------------------------------------------------------------------
 	T.suite("경계: 구역 판정·낮밤")
 
-	T.test("구역 가장자리 ±0.001: 안/밖, 추격 포기 반경(구역 반쪽 × 2 × 끈질김)", function()
-		for _, b in Biomes.list do
-			local zone = { centerX = 145, centerZ = 160, halfX = 80, halfZ = 80 }
-			T.truthy(EggRules.isInsideZone(zone, 145 + 80, 160))
-			T.falsy(EggRules.isInsideZone(zone, 145 + 80.001, 160))
-			local r = EggRules.leashRadius(zone, Config.GUARD_LEASH_FACTOR, b.guardPersistence)
-			T.near(r, 160 * b.guardPersistence, 1e-9, b.id)
-			T.truthy(EggRules.withinLeash(zone, 145 + r - 0.01, 160, Config.GUARD_LEASH_FACTOR, b.guardPersistence))
-			T.falsy(EggRules.withinLeash(zone, 145 + r + 0.01, 160, Config.GUARD_LEASH_FACTOR, b.guardPersistence))
+	T.test("구역 경계 ±0.001 (2판 z 범위): 앞 구역/뒤 구역, 허브 경계 z = 0, 맵 끝", function()
+		local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
+		for i, b in Biomes.list do
+			local zMin = (i - 1) * MapLayout.BIOME_LENGTH
+			T.eq(MapLayout.zoneAt(zMin), b.id, b.id .. " 시작선은 이 구역")
+			T.eq(MapLayout.zoneAt(zMin + 0.001), b.id)
+			T.eq(MapLayout.zoneAt(zMin - 0.001), if i == 1 then "hub" else Biomes.list[i - 1].id, b.id .. " 바로 앞")
+			-- 잡힘 규칙: 경계 바로 앞(앞 구역)에서 잡히면 그 자리, 경계 안이면 둥지로
+			T.eq(EggRules.dropOutcome("guard", b.id, MapLayout.zoneAt(zMin)), "ReturnToNest")
+			T.eq(EggRules.dropOutcome("guard", b.id, MapLayout.zoneAt(zMin - 0.001)), "DropHere")
 		end
+		T.truthy(MapLayout.isInHub({ X = 0, Z = -0.001 }))
+		T.falsy(MapLayout.isInHub({ X = 0, Z = 0 }))
+		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z - 0.001), "haunted_castle")
+		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z), nil)
 	end)
 
 	T.test("낮 경계: 285초 딱 되면 밤, 295초 딱 되면 대기, 298초면 다음 낮", function()

@@ -136,6 +136,11 @@ local CFrame = {
 	Angles = function()
 		return setmetatable({}, CFrameMeta)
 	end,
+	-- 2판: 서버 순간이동이 바라보는 방향을 정할 때 (위치 + 방향만)
+	lookAt = function(position, target)
+		local d = target - position
+		return cframeOf(position, if d.Magnitude > 0 then d.Unit else vec(0, 0, -1))
+	end,
 }
 
 local function enumProxy()
@@ -564,38 +569,24 @@ function ServerHarness.install(Loader, T, options)
 	end
 	local Signal = H.server("Util/Signal")
 
-	-- 맵: 베이스 1번만 (배달 패드·러닝머신 패드)
-	local function part(x, y, z, sx, sy, sz)
-		return { Position = vec(x, y, z), Size = vec(sx or 4, sy or 1, sz or 4) }
-	end
+	-- 맵 (2판): 판정은 서비스가 진짜 shared/Data/MapLayout 으로 함 (허브 z < 0, 구역 z 범위, 베이스 7개 사각형).
+	--   여기 가짜 MapBuilder 는 폴더·바닥 높이·둥지 파트(MapLayout.nestsFor 자리)만 줌.
+	--   H.map.zones[biomeId] = { centerX, centerZ, halfX, halfZ } 는 테스트 편의용 (MapLayout 구역 사각형)
+	local MapLayout = H.shared("Data/MapLayout")
+	H.MapLayout = MapLayout
 	H.map = {
-		safeZone = false,
-		inPlot = true,
 		folders = {},
 		zones = {},
 		nests = {},
-		plots = {
-			[1] = {
-				index = 1,
-				floor = part(0, 0, 0, 90, 1, 90),
-				deliveryPad = part(0, 0.5, 20, 12, 0.5, 12),
-				treadmill = part(30, 0.5, 0, 8, 0.5, 8),
-				incubatorSlots = {},
-			},
-		},
+		plots = {},
+		groundY = 0.2,
 	}
 	Loader.mock(SERVER .. "Services/MapBuilder", {
 		getPlot = function(index)
 			return H.map.plots[index]
 		end,
 		plotCount = function()
-			return 7
-		end,
-		isInSafeZone = function()
-			return H.map.safeZone
-		end,
-		isInPlot = function()
-			return H.map.inPlot
+			return MapLayout.PLOT_COUNT
 		end,
 		getFolder = function(name)
 			local folder = H.map.folders[name]
@@ -605,9 +596,9 @@ function ServerHarness.install(Loader, T, options)
 			end
 			return folder
 		end,
-		setPlotOwner = function() end,
-		getZone = function(biomeId)
-			return H.map.zones[biomeId]
+		setPlotOwner = function(index, player)
+			H.map.owners = H.map.owners or {}
+			H.map.owners[index] = player
 		end,
 		getZonePart = function()
 			return nil
@@ -615,25 +606,21 @@ function ServerHarness.install(Loader, T, options)
 		getNests = function(biomeId)
 			return H.map.nests[biomeId] or {}
 		end,
-		getGuardSpawn = function()
-			return nil
-		end,
 		groundY = function()
-			return 0.2
+			return H.map.groundY
+		end,
+		setNightWalls = function(on)
+			H.map.nightWalls = on
 		end,
 	})
 
-	-- 기본 구역·둥지: 구역 15개를 길 양옆에 번갈아 (MapBuilder 와 같은 배치), 둥지 8개는 구역 중심에서 반지름 46
+	-- 구역·둥지: MapLayout 그대로 (구역 = 복도 폭 220 × 240, 둥지 8개 = nestsFor 자리, 둥지 파트 윗면 1.4)
 	do
-		local Biomes = H.shared("Data/Biomes")
-		for _, biome in Biomes.list do
-			local cx = if biome.order % 2 == 1 then -145 else 145
-			local cz = 160 + 120 * (biome.order - 1)
-			H.map.zones[biome.id] = { centerX = cx, centerZ = cz, halfX = 80, halfZ = 80 }
+		for _, b in MapLayout.biomes do
+			H.map.zones[b.id] = { centerX = 0, centerZ = b.centerZ, halfX = MapLayout.HALF_WIDTH, halfZ = 120 }
 			local nests = {}
-			for i = 1, biome.nests do
-				local a = (i - 1) / biome.nests * math.pi * 2
-				local position = vec(cx + math.cos(a) * 46, 0.8, cz + math.sin(a) * 46)
+			for i, spot in MapLayout.nestsFor(b.id) do
+				local position = vec(spot.x, 0.8, spot.z)
 				table.insert(nests, {
 					Name = "Nest" .. i,
 					Position = position,
@@ -646,8 +633,21 @@ function ServerHarness.install(Loader, T, options)
 					},
 				})
 			end
-			H.map.nests[biome.id] = nests
+			H.map.nests[b.id] = nests
 		end
+	end
+
+	-- 자주 쓰는 자리 (x, z): 허브 / 구역 가운데 / 베이스 안 / 러닝머신 / 판매 가게
+	function H.hubSpot()
+		return 0, -60
+	end
+	function H.zoneSpot(biomeId)
+		local b = MapLayout.biome(biomeId)
+		return 0, b.centerZ
+	end
+	function H.plotSpot(plotIndex)
+		local p = MapLayout.plot(plotIndex or 1)
+		return p.spawn.x, p.spawn.z
 	end
 
 	-- 주기: 낮/밤을 H.setPhase 로 바꿈
@@ -707,6 +707,19 @@ function ServerHarness.install(Loader, T, options)
 				table.insert(H.eggs.droppedAt, position)
 			end,
 			resetCarryOrigin = function() end,
+			nestPositions = function(biomeId)
+				local list = {}
+				for _, nest in H.map.nests[biomeId] or {} do
+					table.insert(list, vec(nest.Position.X, 1.4, nest.Position.Z))
+				end
+				return list
+			end,
+			dropEgg = function(player)
+				local had = H.eggs.carried[player]
+				H.eggs.carried[player] = nil
+				table.insert(H.eggs.dropped, { player = player, cause = "drop", hadEgg = had ~= nil })
+				return had ~= nil
+			end,
 			spawnSpecialEgg = function(biomeId, petId, specialOptions)
 				table.insert(H.eggs.specials, { biomeId = biomeId, petId = petId, options = specialOptions })
 				return "e-special"
@@ -736,6 +749,7 @@ function ServerHarness.install(Loader, T, options)
 		egg.pickedPosition = egg.pickedPosition or vec(0, 0, 100)
 		egg.originAt = egg.originAt or nowClock() - 1000 -- 한참 전에 주움 (너무 빠른 배달로 안 걸리게)
 		egg.pickedAt = egg.pickedAt or nowClock() - 1000 -- 경비 유예(1.5초)가 이미 지남
+		egg.graceUntil = egg.graceUntil or egg.pickedAt + 1.5 -- 둥지에서 주운 것처럼 (EggService 와 같은 규칙)
 		H.eggs.carried[player] = egg
 	end
 
@@ -886,7 +900,7 @@ function ServerHarness.install(Loader, T, options)
 		function character:PivotTo(cf)
 			local position = cf.Position or cf
 			root.Position = position
-			root.CFrame = cframeOf(position, root.CFrame.LookVector)
+			root.CFrame = cframeOf(position, cf.LookVector or root.CFrame.LookVector)
 		end
 		humanoid.Parent = character
 		player.Character = character

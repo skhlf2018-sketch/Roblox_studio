@@ -12,7 +12,7 @@
 	  구역 무기는 data.weapons(저장)에 있는 것만 지급·사용 가능 (IndexService.weaponsChanged 때 바로 지급).
 	- BearTrap(곰덫, 개수 제한 data.tools.bearTrap): 발밑에 설치, 다른 사람이 밟으면
 	  BEAR_TRAP_STUN_SECONDS(5초) 묶임 + 알 떨어뜨림. 한 사람당 동시에 BEAR_TRAP_MAX_ACTIVE 개.
-	- 안전 구역(아무 베이스 반경 안)에서는 쓰지도, 맞지도 않음.
+	- 안전 구역(2판: 허브 = MapLayout.isInHub, z < 0)에서는 쓰지도, 맞지도 않음.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -24,6 +24,7 @@ local Config = require(Shared.Data.Config)
 local Weapons = require(Shared.Data.Weapons)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
@@ -157,7 +158,7 @@ local function useMelee(player: Player, weapon: Weapons.Weapon)
 	if not Sessions.useCooldown(session, "melee", weapon.cooldown, now) then
 		return
 	end
-	if MapBuilder.isInSafeZone(root.Position) then
+	if MapLayout.isInHub(root.Position) then
 		Net.notify(player, "error", "안전 구역에서는 도구를 쓸 수 없어요!")
 		return
 	end
@@ -180,7 +181,7 @@ local function useMelee(player: Player, weapon: Weapons.Weapon)
 				if distance <= weapon.range and distance < bestDistance then
 					local flat = Vector3.new(offset.X, 0, offset.Z)
 					local facing = if flat.Magnitude > 0.01 then look:Dot(flat.Unit) else 1
-					if facing >= Config.BAT_FACING_DOT and not MapBuilder.isInSafeZone(otherRoot.Position) then
+					if facing >= Config.BAT_FACING_DOT and not MapLayout.isInHub(otherRoot.Position) then
 						best, bestDistance = other, distance
 					end
 				end
@@ -223,7 +224,7 @@ local function placeTrap(player: Player)
 	if (data.tools.bearTrap or 0) <= 0 then
 		return
 	end
-	if MapBuilder.isInSafeZone(root.Position) then
+	if MapLayout.isInHub(root.Position) then
 		Net.notify(player, "error", "안전 구역에서는 도구를 쓸 수 없어요!")
 		return
 	end
@@ -278,7 +279,7 @@ local function trapTick(): ...any
 						if
 							dx * dx + dz * dz <= Config.BEAR_TRAP_TRIGGER_RADIUS * Config.BEAR_TRAP_TRIGGER_RADIUS
 							and dy < 5
-							and not MapBuilder.isInSafeZone(root.Position)
+							and not MapLayout.isInHub(root.Position)
 						then
 							local outcome = EggService.dropCarried(other, "player")
 							SpeedService.freeze(other, Config.BEAR_TRAP_STUN_SECONDS)

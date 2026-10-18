@@ -31,6 +31,7 @@ local specs = {
 	require("./rules_boundary.spec"),
 	require("./save_data.spec"),
 	require("./crossrefs.spec"),
+	require("./maplayout.spec"),
 }
 
 for _, spec in specs do

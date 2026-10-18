@@ -28,6 +28,7 @@ local FusionRules = require(Shared.FusionRules)
 local EggRoll = require(Shared.EggRoll)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
@@ -35,7 +36,6 @@ local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Landmarks = require(Server.Util.Landmarks)
 local Validate = require(Server.Logic.Validate)
-local MapBuilder = require(script.Parent.MapBuilder)
 local CycleService = require(script.Parent.CycleService)
 local BaseService = require(script.Parent.BaseService)
 local PetService = require(script.Parent.PetService)
@@ -219,15 +219,14 @@ function AltarService.shrineFuse(player: Player, uidA: string, uidB: string)
 end
 
 local function ensurePlaces()
-	local zone = MapBuilder.getZonePart(AltarRules.BIOME)
-	local top = if zone then zone.Position + Vector3.new(0, zone.Size.Y / 2, 0) else Vector3.new(0, 0, 0)
-	local halfX = if zone then zone.Size.X / 2 else 80
-	local halfZ = if zone then zone.Size.Z / 2 else 80
+	-- 자리 = MapLayout.specials (선임이 같은 태그·Side 로 진짜 모델을 두면 임시 파트는 안 생김)
+	local S = MapLayout.specials
+	local floorY = MapLayout.FLOOR_Y
 	local light = Landmarks.ensure({
 		tag = Tags.Altar,
 		name = "AltarLight",
 		label = "천국 제단\n(천국 쪽 펫 바치기)",
-		position = top + Vector3.new(-25, 2, 0),
+		position = Vector3.new(S.altarLight.x, floorY + 2, S.altarLight.z),
 		size = Vector3.new(6, 4, 6),
 		color = Color3.fromRGB(255, 245, 200),
 		material = Enum.Material.Marble,
@@ -237,7 +236,7 @@ local function ensurePlaces()
 		tag = Tags.Altar,
 		name = "AltarDark",
 		label = "지옥 제단\n(지옥 쪽 펫 바치기)",
-		position = top + Vector3.new(25, 2, 0),
+		position = Vector3.new(S.altarDark.x, floorY + 2, S.altarDark.z),
 		size = Vector3.new(6, 4, 6),
 		color = Color3.fromRGB(120, 20, 20),
 		material = Enum.Material.Basalt,
@@ -254,7 +253,7 @@ local function ensurePlaces()
 		tag = Tags.Shrine,
 		name = "SecretShrine",
 		label = "비밀 통로 합성 제단",
-		position = top + Vector3.new(halfX - 14, 3, halfZ - 14),
+		position = Vector3.new(S.shrine.x, floorY + 3, S.shrine.z),
 		size = Vector3.new(6, 6, 6),
 		color = Color3.fromRGB(150, 120, 220),
 		material = Enum.Material.Glass,

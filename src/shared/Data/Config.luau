@@ -58,23 +58,27 @@ local Config = {
 	SPEED_MAX = 1e24,
 
 	------------------------------------------------------------------
-	-- 경비 동물 (GuardianService)
-	--   경비 속도 = 구역 추천 속도 × GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소 0.10)  (SpeedMath.guardSpeedFor)
-	--   추격 속도 = 알 든 플레이어의 WalkSpeed × 비율
-	--   비율 = clamp((경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN, MIN, MAX)
-	--   → 추천 속도면 보통 알은 안전 (필요 배율 보통 0.99 / 큼 1.11 / 거대 1.37 / 초거대 1.78)
+	-- 경비 동물 (GuardianService) — 2판: 추격 포기 거리 없음 (허브에 들어가거나·잡히거나·알을 놓을 때까지)
+	--   경비 속도(기준) = 구역 추천 속도 × GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소 0.10)  (SpeedMath.guardSpeedFor)
+	--   추격 WalkSpeed = 알 든 플레이어의 WalkSpeed × 비율   (SpeedMath.guardChaseSpeed)
+	--   비율 = clamp((경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN, MIN 0.85, MAX 3.0)
+	--          단, 1 이상(= 속도가 모자람)이면 최소 SLOW_MIN_RATIO (조금만 모자라도 확실히 따라잡게)
+	--   → 추천 속도 이상(보통 알)이면 0.85 ~ 0.99배라 절대 못 잡음, 모자라면 1.2 ~ 3배로 반드시 따라잡음
+	--     (필요 배율 보통 0.99 / 큼 1.11 / 거대 1.37 / 초거대 1.78 — SpeedMath.requiredSpeed)
 	------------------------------------------------------------------
 	GUARD_SPEED_RATIO = 1, -- 경비 속도 배율 (위 식의 첫 번째 곱)
 	GUARD_CHASE_EXPONENT = 1,
 	GUARD_CHASE_MARGIN = 0.99, -- 속도가 딱 같으면 경비가 1% 느림 (2단계 B4: 0.97 → 0.99)
-	GUARD_CHASE_MIN_RATIO = 0.5,
-	GUARD_CHASE_MAX_RATIO = 2.5,
+	GUARD_CHASE_MIN_RATIO = 0.85, -- 2판 (설계 2판 B: clamp 0.85 ~ 3.0)
+	GUARD_CHASE_MAX_RATIO = 3.0,
+	GUARD_CHASE_SLOW_MIN_RATIO = 1.2, -- [추정] 속도가 모자라면 경비는 최소 이 배율 (1.01배면 허브까지 못 따라잡음)
 	GUARD_MAX_WALKSPEED = 250,
-	GUARD_LEASH_FACTOR = 2, -- 구역 반경(halfSize) × 이 값 × biome.guardPersistence 를 넘어가면 추격 포기
 	GUARD_CATCH_DISTANCE = 6, -- 서버 거리 기준 잡힘 판정(스터드)
-	GUARD_CATCH_GRACE_SECONDS = 1.5, -- 줍자마자 바로 잡히지 않도록 주는 유예
+	GUARD_CATCH_GRACE_SECONDS = 1.5, -- 둥지에서 줍자마자 바로 잡히지 않도록 주는 유예 (바닥 알 다시 줍기는 유예 없음)
 	GUARD_TICK_SECONDS = 0.1,
-	GUARD_HOME_TOLERANCE = 4,
+	GUARD_HOME_TOLERANCE = 4, -- 집에서 이 거리 안이면 도착 → 다시 잠듦 (State "Sleeping")
+	GUARD_SEPARATION = 30, -- [추정] 경비끼리 이 거리보다 가까우면 옆으로 비켜 감 (거대 경비 겹침 방지)
+	GUARD_COLLISION_GROUP = "Guardians", -- 경비끼리는 안 부딪힘 (서로 끼어 멈추지 않게, 겹침은 위 비켜 가기로)
 
 	------------------------------------------------------------------
 	-- 잡힘 / 래그돌
@@ -85,19 +89,26 @@ local Config = {
 	KNOCKBACK_SECONDS = 0.2,
 
 	------------------------------------------------------------------
-	-- 베이스 / 안전 구역
+	-- 베이스 / 안전 구역 (2판: 맵 배치는 shared/Data/MapLayout)
+	--   안전 구역 = 허브 (z < MapLayout.SAFE_ZONE_Z): 경비 추격 끝, 도구 사용·피격 불가
+	--   배달 = 알을 든 채 자기 베이스 영역(MapLayout.isInPlot) 에 들어오면 자동
 	------------------------------------------------------------------
-	SAFE_ZONE_RADIUS = 48, -- 베이스 중심에서 이 반경 안 = 안전 구역 (도구 사용 불가, 알 못 뺏음)
-	DELIVERY_RADIUS = 9, -- 배달 패드 중심에서 이 반경 안에 알을 들고 오면 부화 슬롯에 등록
-	TREADMILL_RADIUS = 5, -- 러닝머신 패드 중심에서 이 반경 안에 서 있으면 속도 증가
+	SAFE_ZONE_RADIUS = 48, -- [1판 — 서버 로직은 안 씀. 선임 MapBuilder 교체가 끝나면 지움]
 	BASE_TICK_SECONDS = 0.2,
+	SELL_RADIUS = 14, -- 판매 가게(SellStall) 에서 이 거리 안이어야 SellPet
+	PET_SELL_SECONDS = 60, -- [추정] 펫 판매 가격 = 그 펫 초당 수입 × 이 초 (설계 2판 C)
+	-- 들고 있는 알 무게 표시(kg) = Sizes.carryKg (보통 50 / 큼 120 / 거대 400 / 초거대 1200 [추정])
 
 	------------------------------------------------------------------
 	-- 수입 / 러닝머신
 	------------------------------------------------------------------
 	INCOME_TICK_SECONDS = 1,
+	INCOME_POPUP_INTERVAL = 3, -- 펫마다 이 초에 한 번 IncomeTick(돈 팝업, 이 초만큼의 금액) — 돈은 1초마다 그대로 들어옴
 	TREADMILL_TICK_SECONDS = 1,
 	TREADMILL_STEPS_PER_SECOND = 1, -- 설계문서 9-2 "한 걸음 = 1초" [추정]
+	TREADMILL_PAD_MARGIN = 1, -- 러닝머신 벨트(MapLayout.TREADMILL_PAD) 가장자리에서 이만큼 바깥까지 "위에 있음"
+	TREADMILL_PIN_TOLERANCE = 1.5, -- 러닝머신 위에서 가운데서 이보다 밀리면 서버가 가운데로 되돌림
+	TREADMILL_MAX_HEIGHT = 8, -- 캐릭터 몸통(HumanoidRootPart)이 바닥에서 이보다 높으면 러닝머신 위가 아님 → 점프하면 서버도 내려 줌 (벨트 윗면은 바닥 + 2 이하로)
 	-- 러닝머신 배율: 걸음당 속도 × 이 값 (설계문서 14-1 은 G = 3). 밸런스 조정용으로 G 와 따로 둠.
 	-- tests/sim_progress.luau 로 확인 (2단계 수석: 결과는 docs/REMOTES.md 가 아니라 보고서에)
 	TREADMILL_MULTIPLIER = 3,
@@ -195,22 +206,7 @@ local Config = {
 	SESSION_LOCK_WAIT_ATTEMPTS = 3,
 	SESSION_LOCK_WAIT_SECONDS = 5,
 
-	------------------------------------------------------------------
-	-- 임시 맵 (MapBuilder) — 선임이 맵을 새로 만들면 이 값들은 무시됨
-	------------------------------------------------------------------
-	MAP = {
-		ZONE_SIZE = 170, -- 정사각형 구역 한 변
-		ZONE_FIRST_Z = 190, -- 1번 구역 중심 Z
-		ZONE_STEP_Z = 115, -- 구역 사이 Z 간격 (좌우 번갈아 배치)
-		ZONE_SIDE_X = 140, -- 길 중심에서 구역 중심까지 X 거리
-		NEST_RING_RADIUS = 45, -- 구역 중심에서 둥지까지 거리
-		NIGHT_WALL_HEIGHT = 40,
-		PLOT_SIZE = 90,
-		PLOT_SPACING = 110,
-		PLOT_Z = -70,
-		SPAWN_Z = 25,
-		ROAD_WIDTH = 100,
-	},
+	-- (1판 Config.MAP 임시 맵 숫자는 2판에서 shared/Data/MapLayout.luau 로 옮김)
 }
 
 return Config

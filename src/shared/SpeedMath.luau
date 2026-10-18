@@ -12,10 +12,13 @@
 	3) 경비 속도 = 추천 속도 × GUARD_SPEED_RATIO × (1 - 보통 알 무게 감소 0.10)   (guardSpeedFor, Biomes.guardSpeed)
 	   → 표지판 추천 속도면 보통 알(-10%)을 들어도 안전, 큰 알일수록 더 필요 (requiredSpeed):
 	      보통 ×0.99 / 큼 ×1.11 / 거대 ×1.37 / 초거대 ×1.78 (GUARD_CHASE_MARGIN 0.99 기준)
-	4) 경비 추격 속도 (설계문서 1-2 "경비는 플레이어 속도와 자기 속도를 비교해서 쫓아옴"):
-	     ratio = clamp((경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN, MIN_RATIO, MAX_RATIO)
-	     추격 WalkSpeed = 플레이어 WalkSpeed × ratio
-	   → ratio < 1 이면 절대 못 잡음, 모자랄수록 ratio 가 커져 빨리 잡힘
+
+	4) 경비 추격 속도 (설계 2판 B — 추격 포기 없음, 허브까지):
+	     raw   = (경비 속도 / 알 든 실효 속도) ^ EXPONENT × MARGIN(0.99)     ≈ 추천 속도 / 내 실효 속도
+	     ratio = raw ≥ 1 이면 max(raw, SLOW_MIN_RATIO 1.2)  (모자라면 확실히 따라잡음)
+	     ratio = clamp(ratio, MIN_RATIO 0.85, MAX_RATIO 3.0)
+	     추격 WalkSpeed = 플레이어 WalkSpeed × ratio                           (guardChaseSpeed)
+	   → ratio < 1 (추천 이상) 이면 0.85 ~ 0.99배라 절대 못 잡음, 모자랄수록 빨라짐 (최대 3배)
 	   경비가 집으로 돌아갈 때(평소) 속도는 같은 로그 곡선으로 변환한 toWalkSpeed(경비 속도).
 ]]
 
@@ -61,18 +64,27 @@ function SpeedMath.walkSpeedFor(effectiveSpeed: number, penalty: number): number
 	return SpeedMath.toWalkSpeed(effectiveSpeed)
 end
 
--- 경비 추격 배율 (플레이어 WalkSpeed 에 곱함)
+-- 경비 추격 배율 (플레이어 WalkSpeed 에 곱함). 1 미만 = 못 따라잡음
 function SpeedMath.guardChaseRatio(guardSpeed: number, carrierSpeed: number): number
 	local carrier = math.max(carrierSpeed, 1e-6)
-	local raw = (math.max(guardSpeed, 0) / carrier) ^ Config.GUARD_CHASE_EXPONENT
-	return math.clamp(raw * Config.GUARD_CHASE_MARGIN, Config.GUARD_CHASE_MIN_RATIO, Config.GUARD_CHASE_MAX_RATIO)
+	local raw = (math.max(guardSpeed, 0) / carrier) ^ Config.GUARD_CHASE_EXPONENT * Config.GUARD_CHASE_MARGIN
+	if raw ~= raw then -- NaN 방지 (속도 0 / 0)
+		raw = Config.GUARD_CHASE_MAX_RATIO
+	end
+	if raw >= 1 then
+		raw = math.max(raw, Config.GUARD_CHASE_SLOW_MIN_RATIO)
+	end
+	return math.clamp(raw, Config.GUARD_CHASE_MIN_RATIO, Config.GUARD_CHASE_MAX_RATIO)
 end
 
--- 경비 추격 WalkSpeed
-function SpeedMath.guardChaseWalkSpeed(guardSpeed: number, carrierSpeed: number, carrierWalkSpeed: number): number
+-- 경비 추격 WalkSpeed = 플레이어 WalkSpeed × guardChaseRatio (상한 GUARD_MAX_WALKSPEED)
+function SpeedMath.guardChaseSpeed(guardSpeed: number, carrierSpeed: number, carrierWalkSpeed: number): number
 	local ws = carrierWalkSpeed * SpeedMath.guardChaseRatio(guardSpeed, carrierSpeed)
 	return math.clamp(ws, 1, Config.GUARD_MAX_WALKSPEED)
 end
+
+-- (1판 이름, 같은 함수)
+SpeedMath.guardChaseWalkSpeed = SpeedMath.guardChaseSpeed
 
 -- 평소(집으로 돌아갈 때) 경비 WalkSpeed = 같은 로그 곡선
 function SpeedMath.guardBaseWalkSpeed(guardSpeed: number): number

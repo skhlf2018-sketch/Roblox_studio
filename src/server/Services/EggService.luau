@@ -23,6 +23,13 @@
 	    서버가 순간이동시키면 resetCarryOrigin 으로 기준점을 옮김.
 	  - confiscate: 치트 의심 배달은 알을 원래 둥지로 돌려보냄 (그 자리에 떨어뜨리면 다시 주워 배달 가능하므로)
 	  - 알 모양: Ball 파트 + SpecialMesh(Sphere, Y 1.25배) "EggShape" (선임 EggVisualService 가 모양을 바꾸면 지워도 됨)
+
+	2판:
+	  - 둥지 자리 = 맵의 Nest 태그 파트(MapBuilder.getNests) 윗면, 없으면 MapLayout.nestsFor 자리 바닥.
+	  - "구역 안" = MapLayout.zoneAt(z) == 알의 구역 (일자 복도라 z 범위만 봄).
+	  - DropEgg(): 스스로 알을 버림 → 항상 그 자리에 떨어짐 (경비 추격 끝). 다시 주우면 경비가 또 쫓음.
+	  - 경비 잡힘 유예(GUARD_CATCH_GRACE_SECONDS)는 둥지에서 주울 때만 (바닥 알 다시 줍기는 유예 없음 → 버렸다 줍기 반복으로 못 버팀)
+	  - 플레이어 Attr CarryWeightKg = 든 알 무게 (Sizes.carryKg, 표시용), 알 파트 Attr WeightKg 도 같음.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -40,6 +47,7 @@ local EggRules = require(Shared.EggRules)
 local Cycle = require(Shared.Cycle)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
@@ -74,6 +82,7 @@ export type Egg = {
 	nestIndex: number?,
 	carrier: Player?,
 	pickedAt: number,
+	graceUntil: number, -- 이 시각(os.clock)까지 경비가 못 잡음 (둥지에서 주울 때만 GUARD_CATCH_GRACE_SECONDS)
 	pickedPosition: Vector3?, -- 마지막으로 주운(또는 서버가 순간이동시킨) 위치
 	originAt: number, -- pickedPosition 을 기록한 시각 (os.clock)
 	droppedAt: number,
@@ -87,7 +96,7 @@ export type SpecialEggOptions = {
 type NestSlot = {
 	biomeId: string,
 	index: number,
-	part: BasePart,
+	position: Vector3, -- 알 바닥이 닿는 점 (둥지 윗면 가운데)
 	eggUid: string?,
 	respawnAt: number?,
 }
@@ -142,6 +151,12 @@ end
 local function eggDiameter(sizeId: string): number
 	local size = Sizes.get(sizeId)
 	return Config.EGG_BASE_DIAMETER * (if size then size.eggScale else 1)
+end
+
+-- 들고 있을 때 보이는 무게(kg, 표시용)
+local function carryKg(sizeId: string): number
+	local size = Sizes.get(sizeId)
+	return if size then size.carryKg else 0
 end
 
 -- 알 파트의 보이는 높이 (Ball 파트 지름 × 1.25)
@@ -224,6 +239,7 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	part:SetAttribute("Mutations", table.concat(egg.mutations, ","))
 	part:SetAttribute("Special", egg.special)
 	part:SetAttribute("QuestOnly", egg.questOnly)
+	part:SetAttribute("WeightKg", carryKg(egg.size))
 	part:SetAttribute("EggState", "Nest")
 	CollectionService:AddTag(part, Tags.Egg)
 
@@ -259,9 +275,9 @@ local function placeOnNest(egg: Egg, slot: NestSlot)
 	if weld then
 		weld:Destroy()
 	end
-	local p = slot.part.Position
+	local p = slot.position
 	egg.part.Anchored = true
-	egg.part.CFrame = CFrame.new(p.X, nestTop(slot.part) + eggHeight(egg.part) / 2, p.Z)
+	egg.part.CFrame = CFrame.new(p.X, p.Y + eggHeight(egg.part) / 2, p.Z)
 	egg.prompt.ActionText = "훔치기"
 	egg.prompt.Enabled = true
 	egg.carrier = nil
@@ -317,6 +333,7 @@ local function spawnEgg(
 		nestIndex = slot.index,
 		carrier = nil,
 		pickedAt = 0,
+		graceUntil = 0,
 		pickedPosition = nil,
 		originAt = 0,
 		droppedAt = 0,
@@ -514,6 +531,7 @@ local function clearCarry(player: Player)
 	end
 	player:SetAttribute(Attr.CarryingEgg, "")
 	player:SetAttribute(Attr.CarryingBiome, "")
+	player:SetAttribute(Attr.CarryWeightKg, 0)
 	SpeedService.refresh(player)
 end
 
@@ -559,9 +577,12 @@ function EggService.tryPickup(player: Player, uid: string)
 		return
 	end
 
+	local fromNest = egg.state == "Nest"
 	egg.prompt.Enabled = false
 	egg.carrier = player
 	egg.pickedAt = now
+	-- 경비 유예는 둥지에서 주울 때만 (바닥 알을 버렸다 다시 줍기로 유예를 계속 받지 못하게)
+	egg.graceUntil = if fromNest then now + Config.GUARD_CATCH_GRACE_SECONDS else now
 	egg.pickedPosition = root.Position
 	egg.originAt = now
 	setState(egg, "Carried")
@@ -572,6 +593,7 @@ function EggService.tryPickup(player: Player, uid: string)
 	session.carryPenalty = if size then size.speedPenalty else 0
 	player:SetAttribute(Attr.CarryingEgg, egg.uid)
 	player:SetAttribute(Attr.CarryingBiome, egg.biomeId)
+	player:SetAttribute(Attr.CarryWeightKg, carryKg(egg.size))
 	SpeedService.refresh(player)
 	data.stats.eggsStolen = (data.stats.eggsStolen or 0) + 1
 
@@ -581,6 +603,7 @@ function EggService.tryPickup(player: Player, uid: string)
 		guardName = if biome then Biomes.guardDisplayName(biome, CycleService.sideFor(egg.biomeId)) else "",
 		guardSpeed = if biome then biome.guardSpeed else 0,
 		yourSpeed = session.carrySpeed,
+		weightKg = carryKg(egg.size),
 	})
 end
 
@@ -654,7 +677,7 @@ function EggService.dropCarried(player: Player, cause: CatchCause): EggOutcome?
 	clearCarry(player)
 	ensurePart(egg)
 
-	local outcome = EggRules.dropOutcome(cause, MapBuilder.getZone(egg.biomeId), position.X, position.Z)
+	local outcome = EggRules.dropOutcome(cause, egg.biomeId, MapLayout.zoneAt(position.Z))
 	if outcome == "ReturnToNest" and returnToNest(egg) then
 		return "ReturnToNest"
 	end
@@ -750,9 +773,8 @@ local function tick(): ...any
 				EggService.dropCarried(carrier, "death")
 			elseif egg.nestBiome then
 				local root = Character.getRoot(carrier)
-				local zone = MapBuilder.getZone(egg.biomeId)
-				if root and zone and not EggRules.isInsideZone(zone, root.Position.X, root.Position.Z) then
-					releaseNest(egg)
+				if root and MapLayout.zoneAt(root.Position.Z) ~= egg.biomeId then
+					releaseNest(egg) -- 알의 구역(z 범위)을 벗어남 → 둥지 예약 풀림
 				end
 			end
 		elseif egg.state == "Dropped" then
@@ -791,14 +813,55 @@ function EggService.onPlayerLeaving(player: Player)
 	EggService.dropCarried(player, "leave")
 end
 
+-- 2판 DropEgg: 들고 있는 알을 스스로 그 자리에 떨어뜨림 (항상 그 자리, 경비 추격은 다음 틱에 끝남)
+function EggService.dropEgg(player: Player): boolean
+	local egg = EggService.getCarried(player)
+	if not egg then
+		return false
+	end
+	EggService.dropCarried(player, "drop")
+	Net.notify(player, "info", "알을 내려놓았어요.")
+	return true
+end
+
+-- 이 구역 둥지 자리 (알 바닥이 닿는 점) — 사쿠라 크리스탈 등
+function EggService.nestPositions(biomeId: string): { Vector3 }
+	local result: { Vector3 } = {}
+	local slots: { NestSlot } = nests[biomeId] or {}
+	for _, slot in slots do
+		table.insert(result, slot.position)
+	end
+	return result
+end
+
+-- 둥지 자리 만들기: 맵에 Nest 파트가 있으면 그 윗면, 없으면 MapLayout.nestsFor 자리 바닥
+local function buildNestSlots(biomeId: string): { NestSlot }
+	local slots: { NestSlot } = {}
+	local parts = MapBuilder.getNests(biomeId)
+	if #parts > 0 then
+		for i, part in parts do
+			local p = part.Position
+			local position = Vector3.new(p.X, nestTop(part), p.Z)
+			table.insert(slots, { biomeId = biomeId, index = i, position = position, eggUid = nil, respawnAt = nil })
+		end
+		return slots
+	end
+	for i, spot in MapLayout.nestsFor(biomeId) do
+		local y = MapBuilder.groundY(Vector3.new(spot.x, MapLayout.FLOOR_Y + 1, spot.z), {})
+		local position = Vector3.new(spot.x, y, spot.z)
+		table.insert(slots, { biomeId = biomeId, index = i, position = position, eggUid = nil, respawnAt = nil })
+	end
+	return slots
+end
+
 function EggService.start()
 	for _, biome in Biomes.list do
-		local slots: { NestSlot } = {}
-		for i, part in MapBuilder.getNests(biome.id) do
-			table.insert(slots, { biomeId = biome.id, index = i, part = part, eggUid = nil, respawnAt = nil })
-		end
-		nests[biome.id] = slots
+		nests[biome.id] = buildNestSlots(biome.id)
 	end
+
+	Net.on(Remotes.ToServer.DropEgg, function(player: Player)
+		EggService.dropEgg(player)
+	end)
 
 	CycleService.changed:connect(function(phase: Types.Phase, cycleNumber: number)
 		if phase == "Intermission" then

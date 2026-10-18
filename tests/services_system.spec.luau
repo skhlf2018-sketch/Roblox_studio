@@ -182,6 +182,26 @@ return function(T, Loader)
 		w.H.uninstall()
 	end)
 
+	T.test(
+		"/zone lake · /zone 15 · /zone hub: 구역 입구·허브로 서버 순간이동 (위치 검증 쉼), 없는 구역은 무시",
+		function()
+			local w = devWorld()
+			local MapLayout = w.H.shared("Data/MapLayout")
+			chat(w, "/zone lake")
+			T.eq(w.player.Character.root.Position.Z, MapLayout.biome("lake").zMin + 12)
+			T.eq(MapLayout.zoneAt(w.player.Character.root.Position.Z), "lake")
+			T.truthy(w.session.moveExemptUntil > w.H.clock(), "위치 검증 쉼")
+			chat(w, "/zone 15")
+			T.eq(MapLayout.zoneAt(w.player.Character.root.Position.Z), "haunted_castle")
+			chat(w, "/zone hub")
+			T.eq(w.player.Character.root.Position.Z, MapLayout.hubSpots.mainSpawn.z)
+			chat(w, "/zone 99")
+			chat(w, "/zone moon")
+			T.eq(w.player.Character.root.Position.Z, MapLayout.hubSpots.mainSpawn.z, "그대로")
+			w.H.uninstall()
+		end
+	)
+
 	T.test("/skip: 낮/밤 단계를 넘김 요청, /grow: 부화 슬롯 알을 다 자란 상태로", function()
 		local w = devWorld()
 		chat(w, "/skip")

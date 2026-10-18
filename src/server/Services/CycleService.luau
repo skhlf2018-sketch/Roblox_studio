@@ -5,10 +5,10 @@
 	- 상태는 ReplicatedStorage.GameState 폴더의 Attribute 로 복제:
 	    Phase, PhaseEndsAt(workspace:GetServerTimeNow() 기준), PhaseDuration, CycleNumber, HeavenSide
 	  + PhaseChanged Remote 로도 알림 (소리·연출용)
-	- 밤/대기에는 구역 입구 벽을 켭니다 (MapBuilder.setNightWalls).
+	- 밤/대기에는 밤 벽을 켭니다 (MapBuilder.setNightWalls). 2판: 허브 경계 z = 0 에 벽 1장 → 허브 밖으로 못 나감.
 	- 다른 서비스는 CycleService.changed:connect(function(phase, cycleNumber) ... end) 로 구독:
 	    EggService  → "Intermission" 에서 모든 둥지 알 재생성 + 공지 + 희귀 알 추첨
-	    BaseService → "Night" 에서 알 든 사람을 베이스로 텔레포트
+	    BaseService → "Night" 에서 알 든 사람·허브 밖에 있던 사람을 베이스로 텔레포트
 	- 서버 시작 직후 대기(Intermission)부터 시작 → 첫 알이 같은 경로로 놓임.
 
 	스튜디오 테스트: Workspace 에 숫자 Attribute "DebugDaySeconds" 를 넣으면 낮 길이를 바꿀 수 있음 (스튜디오에서만).
@@ -110,7 +110,7 @@ local function applyPhase(p: Phase): number
 	if p == "Night" then
 		Net.fireAll(Remotes.ToClient.Announce, {
 			kind = "night",
-			text = "밤이 됐어요! 구역 입구가 닫혔어요. 알이 30배 빨리 자라요!",
+			text = "밤이 됐어요! 안전 구역 밖으로 나갈 수 없어요. 알이 30배 빨리 자라요!",
 		})
 	elseif p == "Day" then
 		Net.fireAll(Remotes.ToClient.Announce, { kind = "day", text = "아침이에요! 알을 훔치러 가요!" })

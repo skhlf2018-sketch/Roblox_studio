@@ -5,6 +5,7 @@
 	실효 속도 = 모은 속도(data.speed) × 가진 트레일 중 최고 배율
 	WalkSpeed = SpeedMath.walkSpeedFor(실효 속도, 알 무게 감소)
 	곰덫에 걸리면(frozenUntil) WalkSpeed 0, 점프 0.
+	러닝머신 위(session.onTreadmill, 2판)면 WalkSpeed 0 (점프는 그대로 → 클라가 점프하면 TreadmillLeave).
 
 	주의: WalkSpeed 는 클라가 몰래 바꿀 수 있습니다(익스플로잇). 경비 잡힘 판정은
 	서버가 계산한 숫자(session.carrySpeed)로 하므로 규칙 자체는 안전합니다.
@@ -40,8 +41,8 @@ function SpeedService.refresh(player: Player)
 	local penalty = if session.carryingUid then session.carryPenalty else 0
 	local walkSpeed = SpeedMath.walkSpeedFor(effective, penalty)
 	local frozen = os.clock() < session.frozenUntil
-	if frozen then
-		walkSpeed = 0
+	if frozen or session.onTreadmill then
+		walkSpeed = 0 -- 곰덫: 못 움직임 / 러닝머신: 제자리에서 달림 (점프는 됨 → 점프하면 내림)
 	end
 
 	session.effectiveSpeed = effective

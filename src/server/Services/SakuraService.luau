@@ -25,6 +25,7 @@ local EggRoll = require(Shared.EggRoll)
 local SakuraRules = require(Shared.SakuraRules)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
@@ -211,7 +212,7 @@ end
 
 local function spawnCrystals()
 	clearCrystals()
-	local nests = MapBuilder.getNests(BIOME)
+	local nests = EggService.nestPositions(BIOME)
 	if #nests == 0 then
 		return
 	end
@@ -219,7 +220,7 @@ local function spawnCrystals()
 	for _, index in picks do
 		local nest = nests[index]
 		local angle = rand() * math.pi * 2
-		local around = nest.Position + Vector3.new(math.cos(angle), 0, math.sin(angle)) * (5 + rand() * 4)
+		local around = nest + Vector3.new(math.cos(angle), 0, math.sin(angle)) * (5 + rand() * 4)
 		local y = MapBuilder.groundY(around, {})
 		crystalCounter += 1
 		local uid = "c" .. tostring(crystalCounter)
@@ -257,13 +258,13 @@ end
 ------------------------------------------------------------------
 
 local function ensureIncubator()
-	local zone = MapBuilder.getZonePart(BIOME)
-	local center = if zone then zone.Position + Vector3.new(0, zone.Size.Y / 2, 0) else Vector3.new(0, 0, 0)
+	-- 자리 = MapLayout.specials.sakuraIncubator (선임이 같은 태그로 진짜 모델을 두면 임시 파트는 안 생김)
+	local spot = MapLayout.specials.sakuraIncubator
 	incubators = Landmarks.ensure({
 		tag = Tags.SakuraIncubator,
 		name = "SakuraIncubator",
 		label = "사쿠라 인큐베이터\n(학을 바쳐 열기)",
-		position = center + Vector3.new(0, 3, 22),
+		position = Vector3.new(spot.x, MapLayout.FLOOR_Y + 3, spot.z),
 		size = Vector3.new(8, 6, 8),
 		color = Color3.fromRGB(255, 170, 210),
 		material = Enum.Material.Glass,

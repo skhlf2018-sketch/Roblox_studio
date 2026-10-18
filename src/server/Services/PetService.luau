@@ -10,6 +10,8 @@
 	네트워크: 장착만 바뀔 때는 DataUpdate("pets") 에 pets 목록을 빼고 보냄 (Snapshot.equipment)
 
 	Remote: EquipPet(petUid), UnequipPet(petUid), EquipBest()
+	2판 Remote: SellPet(petUid) — 판매 가게(SellStall 태그 파트, 없으면 MapLayout.sellSpots 자리) SELL_RADIUS(14) 안에서만.
+	  장착 중이면 해제 후 판매. 가격 = 그 펫 초당 수입(Economy.recordIncome) × PET_SELL_SECONDS(60). 결과는 Notify.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -22,11 +24,14 @@ local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Types = require(Shared.Types)
+local MapLayout = require(Shared.Data.MapLayout)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Validate = require(Server.Logic.Validate)
+local Character = require(Server.Util.Character)
+local Landmarks = require(Server.Util.Landmarks)
 local Wallet = require(script.Parent.Wallet)
 
 type PetRecord = Types.PetRecord
@@ -202,6 +207,54 @@ function PetService.equipBest(player: Player)
 	Snapshot.equipment(player)
 end
 
+-- 판매 가게 근처인가: 맵의 SellStall 태그 파트 표면 또는 MapLayout 판매 자리(허브 + 베이스마다)에서 SELL_RADIUS 안
+function PetService.isNearSellStall(player: Player): boolean
+	local root = Character.getRoot(player)
+	if not root or not Character.isAlive(player) then
+		return false
+	end
+	if Landmarks.nearest(player, Landmarks.tagged(Tags.SellStall), Config.SELL_RADIUS) then
+		return true
+	end
+	local p = root.Position
+	for _, spot in MapLayout.sellSpots() do
+		local dx, dz = p.X - spot.x, p.Z - spot.z
+		if dx * dx + dz * dz <= Config.SELL_RADIUS * Config.SELL_RADIUS then
+			return true
+		end
+	end
+	return false
+end
+
+-- 펫 팔기 (장착 중이면 해제 후). 판 값 (못 팔면 nil)
+function PetService.sell(player: Player, uid: string): number?
+	local _, data = Sessions.getLoaded(player)
+	if not data then
+		return nil
+	end
+	if not PetService.isNearSellStall(player) then
+		Net.notify(player, "error", "판매 가게 가까이에서 팔 수 있어요!")
+		return nil
+	end
+	local record = PetService.findPet(player, uid)
+	if not record then
+		return nil
+	end
+	local price = Economy.recordIncome(record) * Config.PET_SELL_SECONDS
+	local removed = PetService.removePets(player, { uid })
+	if not removed then
+		return nil
+	end
+	Wallet.addMoney(player, price)
+	local pet = Pets.get(record.petId)
+	Net.notify(
+		player,
+		"success",
+		string.format("%s 을(를) %s 에 팔았어요!", if pet then pet.name else record.petId, Format.money(price))
+	)
+	return price
+end
+
 function PetService.onPlayerReady(player: Player)
 	PetService.recalc(player)
 end
@@ -221,6 +274,12 @@ function PetService.start()
 	end)
 	Net.on(Remotes.ToServer.EquipBest, function(player: Player)
 		PetService.equipBest(player)
+	end)
+	Net.on(Remotes.ToServer.SellPet, function(player: Player, uid: unknown)
+		local petUid = Validate.uid(uid)
+		if petUid then
+			PetService.sell(player, petUid)
+		end
 	end)
 end
 

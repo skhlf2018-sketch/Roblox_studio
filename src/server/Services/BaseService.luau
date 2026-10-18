@@ -1,21 +1,25 @@
 --!strict
 --[[
-	BaseService — 베이스 플롯 배정(서버 7명 = 7칸), 배달 패드, 부화 슬롯, 부화, 안전 구역, 밤 텔레포트
+	BaseService — 베이스 플롯 배정(서버 7명 = 7칸), 배달, 부화 슬롯, 부화, 구역 표시, 밤 텔레포트
 
-	흐름: 알을 들고 내 베이스 배달 패드(DELIVERY_RADIUS 안)에 오면
-	      → 빈 부화 슬롯에 등록 (data.incubators, 저장됨) → BaseService.delivered:fire(player, record)
-	      → 1초마다 자람: 진행 += 1 × 성장 속도(밤 30배, 게임패스 2배 플래그)
-	      → 다 자라면 클라가 HatchEgg(eggUid) 요청 → 서버 검증 후 펫 생성 (보관함 + 빈 칸이면 자동 장착)
+	2판 (맵 배치는 shared/Data/MapLayout):
+	  - 배달 = 알을 든 채 자기 베이스 영역(MapLayout.isInPlot, 울타리 안 전체)에 들어오면 자동. 배달 패드 없음.
+	      → 빈 부화 슬롯에 등록 (data.incubators, 저장됨) → EggDelivered + BaseService.delivered:fire(player, record)
+	  - 부화 중 알 파트(IncubatingEgg)는 우리(pen) 안 MapLayout.incubatorSpots(plotIndex)[slot] 자리에 놓임.
+	      Attribute Progress/Required/Ready 는 1초마다 갱신 (선임이 머리 위 "에그 1m 52s" 표시)
+	  - 1초마다 자람: 진행 += 1 × 성장 속도(밤 30배, 게임패스 2배 플래그)
+	  - 다 자라면 클라가 HatchEgg(eggUid) 요청 (우리 안 알 ProximityPrompt / Growing Eggs 패널) → 펫 생성
+	  - 0.2초마다 구역 표시: 플레이어 Attr CurrentZone(구역 id | "hub" | ""), InSafeZone(허브 안),
+	      새 구역에 들어가면 ZoneEntered { biomeId, name, nameEn } 1회 (허브는 안 보냄)
+	  - 밤이 되면: 알 든 사람(자기 베이스 밖) + 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 순간이동
+	      (허브 경계 밤 벽 1장에 막혀 못 돌아오지 않게). 베이스가 없으면 허브 기본 스폰.
 	오프라인 동안에도 알은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간).
-	안전 구역(베이스 반경 SAFE_ZONE_RADIUS): 경비가 안 쫓아오고, 도구 사용·피격 불가 (GuardianService/ToolService 에서 검사).
-	밤이 되면 알을 든 사람은 자기 베이스로 텔레포트 (알은 계속 듦 → 배달 가능).
-	알이 없어도 구역 안에 있던 사람은 같이 베이스로 (밤 벽에 13초 갇히지 않게). 베이스가 없으면 시작 광장(MainSpawn)으로.
 
-	2단계:
+	2단계 (그대로):
 	  - 선물 알(grantEgg): 제단·비밀 통로 합성·퀘스트 보상 알은 부화 슬롯에 바로 들어감.
 	    슬롯이 가득 차면 data.eggQueue(저장, 최대 EGG_QUEUE_MAX)에서 기다렸다가 부화로 슬롯이 비면 자동으로 들어감.
 	  - 순간이동 치트 방지:
-	      배달: 주운 곳 → 패드 거리 ÷ (WalkSpeed × 1.3) 보다 빨리 왔으면 거부, 알은 둥지로 (EggService.confiscate)
+	      배달: 주운 곳 → 배달한 곳 거리 ÷ (WalkSpeed × 1.3) 보다 빨리 왔으면 거부, 알은 둥지로 (EggService.confiscate)
 	      0.2초 틱: 알 든 사람이 WalkSpeed × 경과초 × 1.5 + 8 스터드보다 멀리 움직이면 알을 이전 위치에 떨어뜨림
 	      서버가 순간이동시킬 때(teleportHome)는 기준점을 옮기고 위치 검증을 잠깐 쉼
 	  - 베이스가 없는 사람(8번째 접속 등, plotIndex = 0)은 누가 나가서 베이스가 비면 바로 배정 + 집으로 이동
@@ -23,12 +27,10 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local Biomes = require(Shared.Data.Biomes)
-local EggRules = require(Shared.EggRules)
+local MapLayout = require(Shared.Data.MapLayout)
 local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
@@ -73,7 +75,7 @@ local Attr = Tags.PlayerAttributes
 
 local BaseService = {}
 
--- 배달 패드에 알을 배달해 부화 슬롯에 들어감 (player, record: IncubatorRecord) → 퀘스트·사쿠라 크리스탈
+-- 알을 베이스에 배달해 부화 슬롯에 들어감 (player, record: IncubatorRecord) → 퀘스트·사쿠라 크리스탈
 BaseService.delivered = Signal.new()
 
 local plotOwners: { [number]: Player? } = {}
@@ -93,6 +95,11 @@ local function visualText(record: IncubatorRecord, rate: number): string
 	return name .. "\n" .. Format.duration(Economy.remainingSeconds(record.progress, record.required, rate))
 end
 
+-- 바닥 높이 (아래로 레이캐스트: 선임이 IncubatorSlot 받침·스폰 판을 두었으면 그 윗면)
+local function floorAt(spot: MapLayout.XZ): number
+	return MapBuilder.groundY(Vector3.new(spot.x, MapLayout.FLOOR_Y + 1, spot.z), {})
+end
+
 local function createVisual(player: Player, record: IncubatorRecord)
 	local session = Sessions.get(player)
 	if not session or session.plotIndex == 0 then
@@ -102,9 +109,8 @@ local function createVisual(player: Player, record: IncubatorRecord)
 	if perPlayer and perPlayer[record.uid] then
 		return -- 이미 있음
 	end
-	local plot = MapBuilder.getPlot(session.plotIndex)
-	local slotPart = if plot then plot.incubatorSlots[record.slot] else nil
-	if not slotPart then
+	local spot = MapLayout.incubatorSpots(session.plotIndex)[record.slot]
+	if not spot then
 		return
 	end
 	local size = Sizes.get(record.size)
@@ -126,7 +132,7 @@ local function createVisual(player: Player, record: IncubatorRecord)
 	part.Color = if rarity
 		then Color3.fromRGB(rarity.color[1], rarity.color[2], rarity.color[3])
 		else Color3.new(1, 1, 1)
-	part.CFrame = CFrame.new(slotPart.Position + Vector3.new(0, slotPart.Size.Y / 2 + d * 1.25 / 2, 0))
+	part.CFrame = CFrame.new(spot.x, floorAt(spot) + d * 1.25 / 2, spot.z)
 	part:SetAttribute("EggUid", record.uid)
 	part:SetAttribute("OwnerUserId", player.UserId)
 	part:SetAttribute("PetId", record.petId)
@@ -191,8 +197,8 @@ function BaseService.assignPlot(player: Player): number
 	if session.plotIndex > 0 then
 		return session.plotIndex
 	end
-	for index = 1, MapBuilder.plotCount() do
-		if plotOwners[index] == nil and MapBuilder.getPlot(index) then
+	for index = 1, MapLayout.PLOT_COUNT do
+		if plotOwners[index] == nil then
 			plotOwners[index] = player
 			session.plotIndex = index
 			player:SetAttribute(Attr.PlotIndex, index)
@@ -204,55 +210,42 @@ function BaseService.assignPlot(player: Player): number
 	return 0
 end
 
-function BaseService.teleportHome(player: Player)
-	local session = Sessions.get(player)
+-- 서버 순간이동 (위치 검증 쉼 + 알 배달 기준점 옮김). look 방향을 바라봄
+local function serverTeleport(player: Player, session: Sessions.Session, spot: MapLayout.XZ, look: Vector3)
 	local character = player.Character
-	if not session or not character or session.plotIndex == 0 then
+	if not character then
 		return
 	end
-	local plot = MapBuilder.getPlot(session.plotIndex)
-	local target = if plot then (plot.spawn or plot.floor) else nil
-	if target then
-		local destination = target.Position + Vector3.new(0, 4, 0)
-		Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
-		character:PivotTo(CFrame.new(destination))
-		EggService.resetCarryOrigin(player, destination)
-		carryTracks[player] = nil
+	local destination = Vector3.new(spot.x, floorAt(spot) + 4, spot.z)
+	Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
+	character:PivotTo(CFrame.lookAt(destination, destination + look))
+	EggService.resetCarryOrigin(player, destination)
+	carryTracks[player] = nil
+end
+
+-- 내 베이스 앞마당 스폰 자리로 (복도 가운데를 바라봄)
+function BaseService.teleportHome(player: Player)
+	local session = Sessions.get(player)
+	if not session or not player.Character or session.plotIndex == 0 then
+		return
+	end
+	local plot = MapLayout.plot(session.plotIndex)
+	if plot then
+		serverTeleport(player, session, plot.spawn, Vector3.new(plot.facing, 0, 0))
 	end
 end
 
--- 위치가 어느 구역 안인가 (Zone 태그 직사각형)
-local function isInAnyZone(position: Vector3): boolean
-	for _, biome in Biomes.list do
-		local zone = MapBuilder.getZone(biome.id)
-		if zone and EggRules.isInsideZone(zone, position.X, position.Z) then
-			return true
-		end
-	end
-	return false
-end
-
--- 내 베이스로, 베이스가 없으면(8번째 사람) 시작 광장(MainSpawn)으로
+-- 내 베이스로, 베이스가 없으면(8번째 사람) 허브 기본 스폰(MapLayout.hubSpots.mainSpawn)으로
 function BaseService.teleportToSafety(player: Player)
 	local session = Sessions.get(player)
-	local character = player.Character
-	if not session or not character then
+	if not session or not player.Character then
 		return
 	end
 	if session.plotIndex > 0 then
 		BaseService.teleportHome(player)
 		return
 	end
-	for _, inst in CollectionService:GetTagged(Tags.SpawnLocation) do
-		if inst:IsA("BasePart") and inst:IsDescendantOf(Workspace) then
-			local destination = inst.Position + Vector3.new(0, 4, 0)
-			Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
-			character:PivotTo(CFrame.new(destination))
-			EggService.resetCarryOrigin(player, destination)
-			carryTracks[player] = nil
-			return
-		end
-	end
+	serverTeleport(player, session, MapLayout.hubSpots.mainSpawn, Vector3.new(0, 0, 1))
 end
 
 -- 늦게 베이스를 받은 사람: 부화 슬롯 겉모습 + 집으로 + 상태 다시 보내기
@@ -322,15 +315,15 @@ local function newRecord(
 	}
 end
 
--- 배달 직전 순간이동 검사: 주운 곳에서 패드까지 너무 빨리 왔나
-local function isTooFast(player: Player, padPosition: Vector3): boolean
+-- 배달 직전 순간이동 검사: 주운 곳에서 배달한 곳까지 너무 빨리 왔나
+local function isTooFast(player: Player, at: Vector3): boolean
 	local egg = EggService.getCarried(player)
 	local session = Sessions.get(player)
 	local origin = if egg then egg.pickedPosition else nil
 	if not egg or not session or not origin then
 		return false
 	end
-	local distance = MoveCheck.horizontalDistance(origin.X, origin.Z, padPosition.X, padPosition.Z)
+	local distance = MoveCheck.horizontalDistance(origin.X, origin.Z, at.X, at.Z)
 	local elapsed = os.clock() - egg.originAt
 	return MoveCheck.isTooFastDelivery(distance, elapsed, session.walkSpeed)
 end
@@ -351,9 +344,11 @@ function BaseService.deliver(player: Player)
 		end
 		return
 	end
-	local plot = MapBuilder.getPlot(session.plotIndex)
-	local pad = if plot then plot.deliveryPad else nil
-	if pad and isTooFast(player, pad.Position) then
+	-- 배달한 곳 = 지금 캐릭터 위치 (없으면 베이스 가운데)
+	local root = Character.getRoot(player)
+	local plot = MapLayout.plot(session.plotIndex)
+	local at = if root then root.Position elseif plot then Vector3.new(plot.center.x, 0, plot.center.z) else nil
+	if at and isTooFast(player, at) then
 		EggService.confiscate(player)
 		AntiCheatService.flag(player, "배달이 너무 빨라요 (순간이동 의심)")
 		return
@@ -538,7 +533,32 @@ local function checkCarryJump(player: Player, session: Sessions.Session, root: B
 	return false
 end
 
--- 0.2초마다: 배달 패드 확인, 안전 구역 표시, 알 든 사람 순간이동 검사
+-- 구역 표시: CurrentZone / InSafeZone Attribute, 새 구역(구역 id)에 들어가면 ZoneEntered 1회
+local function updateZone(player: Player, session: Sessions.Session, position: Vector3)
+	local zoneId = MapLayout.zoneAt(position.Z) or ""
+	if zoneId ~= session.currentZone then
+		session.currentZone = zoneId
+		player:SetAttribute(Attr.CurrentZone, zoneId)
+		local range = MapLayout.biome(zoneId)
+		if range then
+			Net.fire(player, Remotes.ToClient.ZoneEntered, {
+				biomeId = range.id,
+				name = range.name,
+				nameEn = range.nameEn,
+			})
+		end
+	end
+	local inSafe = MapLayout.isInHub(position)
+	if inSafe ~= session.inSafeZone then
+		session.inSafeZone = inSafe
+		player:SetAttribute(Attr.InSafeZone, inSafe)
+	end
+end
+
+-- 배달 높이 제한: 바닥에서 이보다 높이 떠 있으면(날아가는 중 등) 배달 안 함
+local DELIVERY_MAX_HEIGHT = 20
+
+-- 0.2초마다: 구역 표시, 알 든 사람 순간이동 검사, 베이스 영역에 들어오면 배달
 local function baseTick(): ...any
 	local carriers = EggService.carriers()
 	local now = os.clock()
@@ -550,21 +570,13 @@ local function baseTick(): ...any
 	for player, session in Sessions.all() do
 		local root = Character.getRoot(player)
 		if root then
-			local inSafe = MapBuilder.isInSafeZone(root.Position)
-			if inSafe ~= session.inSafeZone then
-				session.inSafeZone = inSafe
-				player:SetAttribute(Attr.InSafeZone, inSafe)
-			end
+			updateZone(player, session, root.Position)
 			if carriers[player] and not checkCarryJump(player, session, root, now) and session.plotIndex > 0 then
-				local plot = MapBuilder.getPlot(session.plotIndex)
-				local pad = if plot then plot.deliveryPad else nil
-				if pad then
-					local dx = root.Position.X - pad.Position.X
-					local dz = root.Position.Z - pad.Position.Z
-					local dy = math.abs(root.Position.Y - pad.Position.Y)
-					if dx * dx + dz * dz <= Config.DELIVERY_RADIUS * Config.DELIVERY_RADIUS and dy < 10 then
-						BaseService.deliver(player)
-					end
+				if
+					MapLayout.isInPlot(root.Position, session.plotIndex)
+					and root.Position.Y - MapLayout.FLOOR_Y < DELIVERY_MAX_HEIGHT
+				then
+					BaseService.deliver(player)
 				end
 			end
 		end
@@ -618,7 +630,8 @@ function BaseService.start()
 		end
 	end)
 
-	-- 밤: 알 든 사람(베이스 밖) + 구역 안에 있는 사람(알 없어도, 밤 벽에 갇히지 않게) → 자기 베이스로
+	-- 밤: 알 든 사람(자기 베이스 밖) + 허브 밖(z ≥ 0)에 있던 사람(알 없어도) → 자기 베이스로
+	--   (밤 벽이 허브 경계 z = 0 을 막으므로 밖에 갇히지 않게)
 	CycleService.changed:connect(function(phase: Types.Phase)
 		if phase ~= "Night" then
 			return
@@ -628,10 +641,10 @@ function BaseService.start()
 			local root = Character.getRoot(player)
 			if root then
 				if carriers[player] then
-					if not MapBuilder.isInPlot(session.plotIndex, root.Position) then
+					if not MapLayout.isInPlot(root.Position, session.plotIndex) then
 						BaseService.teleportToSafety(player)
 					end
-				elseif isInAnyZone(root.Position) then
+				elseif not MapLayout.isInHub(root.Position) then
 					BaseService.teleportToSafety(player)
 				end
 			end

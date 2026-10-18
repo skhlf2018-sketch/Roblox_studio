@@ -448,36 +448,193 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("러닝머신 패드 반경(5) 안에서만 속도가 오름 — 경계 포함", function()
+	------------------------------------------------------------------
+	T.suite("서비스: TreadmillService (2판 러닝머신: 올라서면 고정, 점프하면 내림)")
+
+	local function treadWorld(level)
 		local w = world()
-		local UpgradeService = w.H.server("Services/UpgradeService")
-		UpgradeService.start()
+		w.TreadmillService = w.H.server("Services/TreadmillService")
+		w.TreadmillService.start()
 		w.session.plotIndex = 1
-		w.data.treadmillLevel = 1 -- 걸음당 2 × 러닝머신 배율 3 = 초당 6
-		local startSpeed = w.data.speed
-		w.H.spawn(w.player, 35, 3, 0) -- 패드 중심(30)에서 정확히 5 → 안
-		w.H.advance(10)
-		T.near(w.data.speed - startSpeed, 60, 1e-9)
-		-- 반경을 살짝 벗어나면 안 오름
-		w.H.teleport(w.player, 35.01, 3, 0)
-		w.H.advance(10)
-		T.near(w.data.speed - startSpeed, 60, 1e-9)
-		-- 잠긴 러닝머신(0레벨)은 안 오름
-		w.H.teleport(w.player, 30, 3, 0)
-		w.data.treadmillLevel = 0
-		w.H.advance(10)
-		T.near(w.data.speed - startSpeed, 60, 1e-9)
-		-- 높이가 8 이상 차이나면(공중) 안 오름
-		w.data.treadmillLevel = 1
-		w.H.teleport(w.player, 30, 20, 0)
-		w.H.advance(5)
-		T.near(w.data.speed - startSpeed, 60, 1e-9)
-		-- 속도는 WalkSpeed 에도 반영
-		w.H.teleport(w.player, 30, 3, 0)
-		w.H.advance(1)
-		T.truthy(w.player.Character.humanoid.WalkSpeed > 16)
-		w.H.uninstall()
-	end)
+		w.data.treadmillLevel = level or 1 -- 1레벨: 걸음당 2 × 러닝머신 배율 3 = 걸음(1초)마다 6
+		w.plot = w.H.MapLayout.plot(1)
+		w.tx, w.tz = w.plot.treadmill.x, w.plot.treadmill.z
+		return w
+	end
+
+	T.test(
+		"벨트에 올라서면: OnTreadmill + WalkSpeed 0 + 벨트 가운데로 옮겨 복도 쪽을 봄 + 1초마다 속도 6 + TreadmillStep",
+		function()
+			local w = treadWorld(1)
+			local startSpeed = w.data.speed
+			w.H.spawn(w.player, w.tx + 3, 3, w.tz + 2) -- 벨트(12 × 8) 위, 가운데에서 조금 벗어남
+			w.H.advance(0.2)
+			local root = w.player.Character.root
+			T.eq(w.player.attrs.OnTreadmill, true)
+			T.eq(w.session.onTreadmill, true)
+			T.eq(w.player.Character.humanoid.WalkSpeed, 0, "WASD 무시")
+			T.eq(w.player.attrs.WalkSpeed, 0)
+			T.near(root.Position.X, w.tx, 1e-9, "가운데로")
+			T.near(root.Position.Z, w.tz, 1e-9)
+			T.eq(root.CFrame.LookVector.X, w.plot.facing, "복도 쪽을 봄")
+			T.truthy(w.session.moveExemptUntil > w.H.clock(), "서버 순간이동 → 위치 검증 쉼")
+			w.H.advance(10)
+			T.near(w.data.speed - startSpeed, 60, 1e-9, "10걸음 × 6")
+			local steps = w.H.sent(w.player, "TreadmillStep")
+			T.eq(#steps, 10)
+			T.eq(steps[1][1].amount, 6)
+			-- 물리로 밀려나도 가운데로 되돌림
+			w.H.teleport(w.player, w.tx + 2, 3, w.tz)
+			w.H.advance(0.2)
+			T.near(root.Position.X, w.tx, 1e-9, "다시 가운데")
+			T.eq(w.player.attrs.OnTreadmill, true)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"점프(TreadmillLeave)하면 벨트 앞(복도 쪽)으로 내려옴 → 밖으로 나갔다 와야 다시 탐 / 벨트를 벗어나면 자동으로 내림",
+		function()
+			local w = treadWorld(1)
+			w.H.spawn(w.player, w.tx, 3, w.tz)
+			w.H.advance(0.2)
+			T.eq(w.player.attrs.OnTreadmill, true)
+			w.H.client(w.player, "TreadmillLeave")
+			T.eq(w.player.attrs.OnTreadmill, false)
+			T.truthy(w.player.Character.humanoid.WalkSpeed > 16, "WalkSpeed 되돌림")
+			local root = w.player.Character.root
+			T.near(root.Position.X, w.tx + w.plot.facing * 9, 1e-9, "벨트 앞 (반 6 + 3)")
+			T.falsy(w.H.MapLayout.isOnTreadmill(root.Position, 1, w.Config.TREADMILL_PAD_MARGIN))
+			local speed = w.data.speed
+			w.H.advance(3)
+			T.eq(w.data.speed, speed, "내린 뒤에는 안 오름")
+			-- 서버만 내린 경우(제자리): 벨트 위에 그대로 서 있어도 바로 다시 타지 않음
+			w.H.teleport(w.player, w.tx, 3, w.tz)
+			w.H.advance(0.2)
+			T.eq(w.player.attrs.OnTreadmill, true, "밖에 나갔다 다시 올라오면 탐")
+			w.TreadmillService.leave(w.player, false)
+			w.H.advance(2)
+			T.eq(w.player.attrs.OnTreadmill, false, "착지해도 바로 다시 안 탐")
+			w.H.teleport(w.player, w.tx + 20, 3, w.tz)
+			w.H.advance(0.2)
+			w.H.teleport(w.player, w.tx, 3, w.tz)
+			w.H.advance(0.2)
+			T.eq(w.player.attrs.OnTreadmill, true)
+			-- 벨트 밖으로 밀려나거나(서버 확인) 높이 떠도 자동으로 내림
+			w.H.teleport(w.player, w.tx, 30, w.tz)
+			w.H.advance(0.2)
+			T.eq(w.player.attrs.OnTreadmill, false, "공중")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"안 타는 경우: 잠긴 러닝머신(0레벨, 5초에 한 번 안내) / 알을 든 사람 / 기절 / 다른 사람 베이스 러닝머신",
+		function()
+			local w = treadWorld(0)
+			local startSpeed = w.data.speed
+			w.H.spawn(w.player, w.tx, 3, w.tz)
+			w.H.advance(3)
+			T.falsy(w.player.attrs.OnTreadmill)
+			T.eq(w.data.speed, startSpeed)
+			local locked = 0
+			for _, n in w.H.notifications(w.player) do
+				if string.find(n.text, "러닝머신이 잠겨 있어요", 1, true) then
+					locked += 1
+				end
+			end
+			T.eq(locked, 1, "5초에 한 번")
+			w.data.treadmillLevel = 1
+			w.session.carryingUid = "e1"
+			w.H.advance(1)
+			T.falsy(w.player.attrs.OnTreadmill, "알을 든 사람")
+			w.session.carryingUid = nil
+			w.session.stunnedUntil = w.H.clock() + 3
+			w.H.advance(1)
+			T.falsy(w.player.attrs.OnTreadmill, "기절")
+			w.H.advance(2.5)
+			T.eq(w.player.attrs.OnTreadmill, true, "조건이 풀리면 탐")
+			-- 다른 사람 베이스(2번) 러닝머신
+			local other = w.H.MapLayout.plot(2).treadmill
+			w.H.teleport(w.player, other.x, 3, other.z)
+			w.H.advance(0.4)
+			T.eq(w.player.attrs.OnTreadmill, false, "내 러닝머신이 아님")
+			w.H.uninstall()
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite("서비스: IncomeTick · SellPet (2판)")
+
+	T.test(
+		"IncomeTick: 장착 펫마다 3초에 1번 { petUid, amount = 초당 수입 × 3 }, 펫끼리 엇갈려 보냄, 돈은 1초마다 그대로",
+		function()
+			local w = world()
+			w.H.server("Services/IncomeService").start()
+			local bear = addPet(w, "bear")
+			local chicken = addPet(w, "chicken")
+			local store = addPet(w, "dog")
+			-- 보관만(장착 안 함)인 펫은 팝업 없음
+			local PetService = w.H.server("Services/PetService")
+			PetService.unequip(w.player, store.uid)
+			w.H.advance(6)
+			local byPet = {}
+			local firstTick = {}
+			for i, args in w.H.sent(w.player, "IncomeTick") do
+				local p = args[1]
+				byPet[p.petUid] = (byPet[p.petUid] or 0) + 1
+				firstTick[p.petUid] = firstTick[p.petUid] or i
+				local record = if p.petUid == bear.uid then bear else chicken
+				T.near(p.amount, w.Economy.recordIncome(record) * 3, 1e-6, p.petUid)
+			end
+			T.eq(byPet[bear.uid], 2, "6초에 2번")
+			T.eq(byPet[chicken.uid], 2)
+			T.eq(byPet[store.uid], nil, "보관만 한 펫은 없음")
+			T.truthy(firstTick[chicken.uid] < firstTick[bear.uid], "엇갈려 보냄 (2번째 펫이 1초 먼저)")
+			local perSecond = w.Economy.recordIncome(bear) + w.Economy.recordIncome(chicken)
+			T.near(w.data.money, perSecond * 6, 1e-6, "돈은 1초마다 합계")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"SellPet: 판매 가게(허브·베이스) 14 안에서만, 장착 중이면 해제 후 판매, 가격 = 초당 수입 × 60",
+		function()
+			local w = world()
+			local PetService = w.H.server("Services/PetService")
+			PetService.start()
+			w.session.plotIndex = 1
+			local bear = addPet(w, "bear") -- 720/초, 자동 장착
+			local dog = addPet(w, "dog")
+			T.truthy(table.find(w.data.equipped, bear.uid))
+			-- 멀리서는 안 됨
+			w.H.spawn(w.player, 0, 3, 100)
+			w.H.client(w.player, "SellPet", bear.uid)
+			T.eq(#w.data.pets, 2)
+			T.truthy(w.H.hasNotify(w.player, "error", "판매 가게 가까이"))
+			-- 허브 판매 가게에서 13.9 → 팜
+			local stall = w.H.MapLayout.hubSpots.sellStall
+			w.H.teleport(w.player, stall.x + 13.9, 3, stall.z)
+			w.H.client(w.player, "SellPet", bear.uid)
+			T.eq(#w.data.pets, 1)
+			T.falsy(table.find(w.data.equipped, bear.uid), "장착 해제됨")
+			T.near(w.data.money, w.Economy.recordIncome(bear) * 60, 1e-6)
+			T.eq(w.player.attrs.IncomePerSecond, w.Economy.recordIncome(dog), "수입 다시 계산")
+			T.truthy(w.H.hasNotify(w.player, "success", "팔았어요"))
+			-- 14.1 은 안 됨, 베이스 판매대는 됨
+			w.H.teleport(w.player, stall.x + 14.1, 3, stall.z)
+			w.H.client(w.player, "SellPet", dog.uid)
+			T.eq(#w.data.pets, 1, "14.1 은 멀다")
+			local plotStall = w.H.MapLayout.plot(1).sellStall
+			w.H.teleport(w.player, plotStall.x, 3, plotStall.z)
+			w.H.client(w.player, "SellPet", "p999")
+			w.H.client(w.player, "SellPet", 12)
+			T.eq(#w.data.pets, 1, "없는 펫·이상한 인자")
+			w.H.client(w.player, "SellPet", dog.uid)
+			T.eq(#w.data.pets, 0, "베이스 판매대")
+			w.H.uninstall()
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("서비스: RewardService (오프라인 수입·무료 보상)")

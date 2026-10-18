@@ -174,29 +174,68 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("배달 패드 반경 9: 걸어 들어오면 자동 배달 (경계 포함), 밖이면 안 됨", function()
-		local w = world()
-		local B = w.BaseService
-		B.start()
-		-- 패드 중심 (0, 0.5, 20). 반경 9.01 밖
-		w.H.spawn(w.player, 0, 3, 20 + 9.01)
-		w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
-		w.H.advance(1)
-		T.eq(#w.data.incubators, 0, "반경 밖")
-		w.H.teleport(w.player, 0, 3, 20 + 9) -- 정확히 9 → 안
-		w.H.advance(0.5)
-		T.eq(#w.data.incubators, 1)
-		w.H.uninstall()
-	end)
+	T.test(
+		"2판 배달: 알을 든 채 내 베이스 영역(울타리 안)에 들어오면 자동 배달, 경계 포함 / 남의 베이스·복도는 안 됨",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local plot = w.H.MapLayout.plot(1) -- 왼쪽 베이스, 앞(복도 쪽) 가장자리 x = -40
+			-- 복도(베이스 앞) 0.01 밖
+			w.H.spawn(w.player, plot.rect.xMax + 0.01, 3, plot.center.z)
+			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+			w.H.advance(1)
+			T.eq(#w.data.incubators, 0, "베이스 밖")
+			-- 남의 베이스(2번) 안 (멀리 옮기는 건 순간이동 검사를 잠깐 쉬고)
+			local other = w.H.MapLayout.plot(2)
+			w.session.moveExemptUntil = w.H.clock() + 0.3
+			w.H.teleport(w.player, other.spawn.x, 3, other.spawn.z)
+			w.H.advance(1)
+			T.eq(#w.data.incubators, 0, "남의 베이스")
+			T.truthy(w.H.eggs.carried[w.player], "아직 들고 있음")
+			-- 내 베이스 가장자리 → 배달
+			w.session.moveExemptUntil = w.H.clock() + 0.3
+			w.H.teleport(w.player, plot.rect.xMax, 3, plot.center.z)
+			w.H.advance(0.4)
+			T.eq(#w.data.incubators, 1, "경계 포함")
+			T.eq(#w.H.sent(w.player, "EggDelivered"), 1)
+			w.H.uninstall()
+		end
+	)
 
-	T.test("공중(높이 10 이상 차이)에서는 배달 안 됨", function()
+	T.test("공중(바닥에서 20 이상)에서는 배달 안 됨", function()
 		local w = world()
 		local B = w.BaseService
 		B.start()
-		w.H.spawn(w.player, 0, 30, 20)
+		local x, z = w.H.plotSpot(1)
+		w.H.spawn(w.player, x, 30, z)
 		w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
 		w.H.advance(1)
 		T.eq(#w.data.incubators, 0)
+		w.H.teleport(w.player, x, 3, z)
+		w.H.advance(0.4)
+		T.eq(#w.data.incubators, 1, "내려오면 배달")
+		w.H.uninstall()
+	end)
+
+	T.test("배달된 알은 우리(pen) 안 MapLayout.incubatorSpots 자리에 놓임 (IncubatingEgg)", function()
+		local w = world()
+		local B = w.BaseService
+		w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+		B.deliver(w.player)
+		w.H.carry(w.player, { petId = "dog", biomeId = "forest" })
+		B.deliver(w.player)
+		local parts = w.H.map.folders.Incubating.children
+		T.eq(#parts, 2)
+		local spots = w.H.MapLayout.incubatorSpots(1)
+		for _, part in parts do
+			local slot = part:GetAttribute("SlotIndex")
+			T.eq(part.Position.X, spots[slot].x, "슬롯 " .. slot)
+			T.eq(part.Position.Z, spots[slot].z)
+			T.truthy(w.H.MapLayout.isInPen(part.Position, 1), "우리 안")
+			T.eq(part:GetAttribute("OwnerUserId"), w.player.UserId)
+			T.eq(part:GetAttribute("Ready"), false)
+		end
 		w.H.uninstall()
 	end)
 
@@ -206,54 +245,104 @@ return function(T, Loader)
 			local w = world()
 			local B = w.BaseService
 			B.start()
-			w.H.spawn(w.player, 0, 3, 100)
+			local x, z = w.H.plotSpot(1)
+			w.H.spawn(w.player, x + 80, 3, z) -- 베이스 앞 복도
 			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
 			w.H.advance(0.2) -- 위치 기록
-			w.H.teleport(w.player, 0, 3, 20) -- 80스터드 순간이동 (0.2초 허용은 약 13)
+			w.H.teleport(w.player, x, 3, z) -- 80스터드 순간이동 (0.2초 허용은 약 13)
 			w.H.advance(0.2)
 			T.eq(#w.data.incubators, 0, "배달 안 됨")
 			T.eq(#w.H.eggs.droppedAt, 1, "마지막 정상 위치에 떨어짐")
-			T.eq(w.H.eggs.droppedAt[1].Z, 100)
+			T.eq(w.H.eggs.droppedAt[1].X, x + 80)
 			T.eq(w.player.attrs.MoveWarnings, 1)
 			w.H.uninstall()
 		end
 	)
 
-	T.test("밤이 되면 알 든 사람이 베이스 밖에 있을 때만 집으로 텔레포트", function()
-		local w = world()
-		local B = w.BaseService
-		B.start()
-		w.H.spawn(w.player, 500, 3, 500)
-		w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
-		w.H.map.inPlot = false
-		w.H.setPhase("Night")
-		T.eq(w.player.Character.root.Position.X, 0, "베이스 바닥 위로 이동")
-		T.eq(w.player.Character.root.Position.Y, 4)
-		-- 베이스 안에 있으면 그대로
-		w.H.teleport(w.player, 7, 3, 7)
-		w.H.map.inPlot = true
-		w.H.setPhase("Night")
-		T.eq(w.player.Character.root.Position.X, 7)
-		w.H.uninstall()
-	end)
-
 	T.test(
-		"밤이 되면 알이 없어도 구역 안에 있던 사람은 집으로 (밤 벽에 안 갇힘), 길에 있으면 그대로",
+		"밤이 되면 알 든 사람이 자기 베이스 밖에 있을 때만 집으로 텔레포트 (허브 안이어도)",
 		function()
 			local w = world()
 			local B = w.BaseService
 			B.start()
-			local forest = w.H.map.zones.forest
-			w.H.spawn(w.player, forest.centerX + 10, 3, forest.centerZ)
-			w.H.map.inPlot = false
+			local hx, hz = w.H.hubSpot()
+			w.H.spawn(w.player, hx, 3, hz) -- 허브지만 내 베이스 밖
+			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
 			w.H.setPhase("Night")
-			T.eq(w.player.Character.root.Position.X, 0, "구역 안 → 베이스 바닥 위")
-			T.eq(w.player.Character.root.Position.Y, 4)
+			local spawn = w.H.MapLayout.plot(1).spawn
+			T.eq(w.player.Character.root.Position.X, spawn.x, "앞마당 스폰으로")
+			T.eq(w.player.Character.root.Position.Z, spawn.z)
+			T.near(w.player.Character.root.Position.Y, 4.2, 1e-9, "바닥(0.2) + 4")
+			T.eq(w.player.Character.root.CFrame.LookVector.X, 1, "복도 가운데를 봄")
+			-- 베이스 안에 있으면 그대로
+			w.H.teleport(w.player, spawn.x - 10, 3, spawn.z + 5)
+			w.H.setPhase("Night")
+			T.eq(w.player.Character.root.Position.X, spawn.x - 10)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"밤이 되면 알이 없어도 허브 밖(z ≥ 0)에 있던 사람은 집으로 (밤 벽에 안 갇힘), 허브 안이면 그대로",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local zx, zz = w.H.zoneSpot("lake")
+			w.H.spawn(w.player, zx + 10, 3, zz)
+			w.H.setPhase("Night")
+			local spawn = w.H.MapLayout.plot(1).spawn
+			T.eq(w.player.Character.root.Position.X, spawn.x, "구역 → 베이스 앞마당")
 			T.truthy(w.session.moveExemptUntil > w.H.clock(), "서버 순간이동 → 위치 검증 쉼")
-			w.H.teleport(w.player, 0, 3, 60) -- 길 (구역 밖)
+			w.H.teleport(w.player, 0, 3, 0) -- 허브 경계선 위 = 숲 쪽(z ≥ 0)
 			w.H.setPhase("Day")
 			w.H.setPhase("Night")
-			T.eq(w.player.Character.root.Position.Z, 60, "구역 밖이면 그대로")
+			T.eq(w.player.Character.root.Position.X, spawn.x, "경계선 위도 밖")
+			local hx, hz = w.H.hubSpot()
+			w.H.teleport(w.player, hx, 3, hz)
+			w.H.setPhase("Day")
+			w.H.setPhase("Night")
+			T.eq(w.player.Character.root.Position.Z, hz, "허브 안이면 그대로")
+			-- 베이스가 없는 사람(8번째) → 허브 기본 스폰
+			w.session.plotIndex = 0
+			w.H.teleport(w.player, zx, 3, zz)
+			w.H.setPhase("Day")
+			w.H.setPhase("Night")
+			T.eq(w.player.Character.root.Position.Z, w.H.MapLayout.hubSpots.mainSpawn.z, "허브 스폰")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"구역 표시: CurrentZone(구역 id / hub), InSafeZone(허브), 새 구역에 들어가면 ZoneEntered 1번씩",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local hx, hz = w.H.hubSpot()
+			w.H.spawn(w.player, hx, 3, hz)
+			w.H.advance(0.2)
+			T.eq(w.player.attrs.CurrentZone, "hub")
+			T.eq(w.player.attrs.InSafeZone, true)
+			T.eq(#w.H.sent(w.player, "ZoneEntered"), 0, "허브는 배너 없음")
+			w.H.teleport(w.player, 0, 3, 10)
+			w.H.advance(0.4)
+			T.eq(w.player.attrs.CurrentZone, "forest")
+			T.eq(w.player.attrs.InSafeZone, false)
+			w.H.teleport(w.player, 0, 3, 250)
+			w.H.advance(0.4)
+			w.H.teleport(w.player, 0, 3, 260)
+			w.H.advance(0.4)
+			local entered = w.H.sent(w.player, "ZoneEntered")
+			T.eq(#entered, 2, "숲 1번, 호수 1번 (같은 구역 안에서 움직이면 안 보냄)")
+			T.eq(entered[1][1].biomeId, "forest")
+			T.eq(entered[2][1].biomeId, "lake")
+			T.eq(entered[2][1].name, "호수")
+			T.eq(entered[2][1].nameEn, "Lake")
+			-- 맵 끝 너머는 ""
+			w.H.teleport(w.player, 0, 3, 5000)
+			w.H.advance(0.4)
+			T.eq(w.player.attrs.CurrentZone, "")
 			w.H.uninstall()
 		end
 	)
@@ -436,20 +525,32 @@ return function(T, Loader)
 	------------------------------------------------------------------
 	T.suite("서비스: BaseService 베이스 배정")
 
-	T.test("베이스가 없는 사람은 누가 나가면 그 자리를 받음", function()
-		local w = world()
-		local B = w.BaseService
-		w.session.plotIndex = 0
-		T.eq(B.assignPlot(w.player), 1)
-		T.eq(w.player.attrs.PlotIndex, 1)
-		local late, lateSession = playerWith(w, 1002, "Late")
-		lateSession.plotIndex = 0
-		T.eq(B.assignPlot(late), 0, "맵에 베이스가 1개뿐이라 자리 없음")
-		B.releasePlot(w.player)
-		T.eq(lateSession.plotIndex, 1, "빈 자리를 이어받음")
-		T.truthy(w.H.hasNotify(late, "success", "내 베이스를 받았어요"))
-		w.H.uninstall()
-	end)
+	T.test(
+		"베이스 7칸(MapLayout)을 순서대로 배정, 8번째는 0 → 누가 나가면 그 자리를 받고 집으로",
+		function()
+			local w = world()
+			local B = w.BaseService
+			w.session.plotIndex = 0
+			T.eq(B.assignPlot(w.player), 1)
+			T.eq(w.player.attrs.PlotIndex, 1)
+			for i = 2, 7 do
+				local p, s = playerWith(w, 1000 + i, "P" .. i)
+				s.plotIndex = 0
+				T.eq(B.assignPlot(p), i)
+				T.eq(w.H.map.owners[i], p, "표지판 주인")
+			end
+			local late, lateSession = playerWith(w, 1099, "Late")
+			lateSession.plotIndex = 0
+			w.H.spawn(late, 0, 3, 500)
+			T.eq(B.assignPlot(late), 0, "베이스 7개가 다 참")
+			B.releasePlot(w.player)
+			w.H.advance(0.1)
+			T.eq(lateSession.plotIndex, 1, "빈 자리를 이어받음")
+			T.truthy(w.H.hasNotify(late, "success", "내 베이스를 받았어요"))
+			T.eq(late.Character.root.Position.X, w.H.MapLayout.plot(1).spawn.x, "집(앞마당)으로")
+			w.H.uninstall()
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("서비스: FusionService (퓨전 머신)")
@@ -458,7 +559,8 @@ return function(T, Loader)
 		local w = world()
 		w.FusionService = w.H.server("Services/FusionService")
 		w.FusionService.start()
-		w.H.spawn(w.player, 0, 3, 0)
+		local x, z = w.H.plotSpot(1) -- 내 베이스 앞마당 (퓨전 머신 파트가 없으면 "내 베이스 안" 이면 됨)
+		w.H.spawn(w.player, x, 3, z)
 		return w
 	end
 
@@ -527,17 +629,17 @@ return function(T, Loader)
 	T.test("거부: 퓨전 머신(내 베이스)에서 멀면 / 캐릭터가 없으면", function()
 		local w = fuseWorld()
 		local a, b, c = addPet(w, "chicken"), addPet(w, "chicken"), addPet(w, "chicken")
-		w.H.map.inPlot = false
+		w.H.teleport(w.player, 0, 3, 0) -- 베이스 밖 (복도)
 		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
 		T.eq(#w.data.pets, 3)
 		T.truthy(w.H.hasNotify(w.player, "error", "퓨전 머신 가까이"))
 		w.H.advance(4)
-		w.H.map.inPlot = true
 		w.player.Character = nil
 		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
 		T.eq(#w.data.pets, 3)
 		w.H.advance(4)
-		w.H.spawn(w.player, 0, 3, 0)
+		local px, pz = w.H.plotSpot(1)
+		w.H.spawn(w.player, px, 3, pz)
 		w.session.plotIndex = 0 -- 베이스 없는 사람
 		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
 		T.eq(#w.data.pets, 3)
@@ -730,7 +832,8 @@ return function(T, Loader)
 		w.QuestService = w.H.server("Services/QuestService")
 		w.FusionService.start()
 		w.QuestService.start()
-		w.H.spawn(w.player, 0, 3, 0)
+		local x, z = w.H.plotSpot(1) -- 퓨전은 내 베이스에서
+		w.H.spawn(w.player, x, 3, z)
 		return w
 	end
 

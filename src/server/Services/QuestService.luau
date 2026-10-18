@@ -27,13 +27,13 @@ local Quests = require(Shared.Data.Quests)
 local QuestRules = require(Shared.QuestRules)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Landmarks = require(Server.Util.Landmarks)
-local MapBuilder = require(script.Parent.MapBuilder)
 local EggService = require(script.Parent.EggService)
 local BaseService = require(script.Parent.BaseService)
 local FusionService = require(script.Parent.FusionService)
@@ -153,14 +153,13 @@ end
 ------------------------------------------------------------------
 
 local function ensureGate()
-	local zone = MapBuilder.getZonePart(Quests.BIOME)
-	local top = if zone then zone.Position + Vector3.new(0, zone.Size.Y / 2, 0) else Vector3.new(0, 0, 0)
-	local halfZ = if zone then zone.Size.Z / 2 else 80
+	-- 자리 = MapLayout.specials.questGate (선임이 같은 태그로 진짜 문을 두면 임시 파트는 안 생김)
+	local spot = MapLayout.specials.questGate
 	gates = Landmarks.ensure({
 		tag = Tags.QuestGate,
 		name = "QuestGate",
 		label = "퀘스트 문\n(퀘스트 3개를 끝내면 열려요)",
-		position = top + Vector3.new(0, 6, halfZ - 18),
+		position = Vector3.new(spot.x, MapLayout.FLOOR_Y + 6, spot.z),
 		size = Vector3.new(14, 12, 2),
 		color = Color3.fromRGB(80, 220, 180),
 		material = Enum.Material.ForceField,

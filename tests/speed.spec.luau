@@ -65,6 +65,27 @@ return function(T, Loader)
 		T.eq(SpeedMath.guardChaseWalkSpeed(g, 1, 200), Config.GUARD_MAX_WALKSPEED)
 	end)
 
+	T.test(
+		"2판 추격 공식: 플레이어 WalkSpeed × clamp(추천/실효 × 0.99, 0.85, 3.0), 모자라면 최소 1.2배",
+		function()
+			T.eq(Config.GUARD_CHASE_MIN_RATIO, 0.85)
+			T.eq(Config.GUARD_CHASE_MAX_RATIO, 3.0)
+			local g = SpeedMath.guardSpeedFor(1e4) -- 9000 (보통 알 기준)
+			-- 추천 이상(보통 알 무게 포함 실효 9000 이상): 0.85 ~ 0.99배 → 못 잡음
+			T.near(SpeedMath.guardChaseRatio(g, 9e3), 0.99, 1e-9, "딱 추천")
+			T.near(SpeedMath.guardChaseRatio(g, 1e4), 0.891, 1e-9, "조금 빠름")
+			T.eq(SpeedMath.guardChaseRatio(g, 2e4), 0.85, "훨씬 빠름 → 하한 0.85")
+			-- 조금 모자람: 1.0 ~ 1.2 사이는 1.2 로 올림 (반드시 따라잡게)
+			T.eq(SpeedMath.guardChaseRatio(g, 8.9e3), Config.GUARD_CHASE_SLOW_MIN_RATIO)
+			T.eq(SpeedMath.guardChaseRatio(g, 8e3), Config.GUARD_CHASE_SLOW_MIN_RATIO)
+			-- 많이 모자람: 비율 그대로, 상한 3
+			T.near(SpeedMath.guardChaseRatio(g, 4.5e3), 1.98, 1e-9)
+			T.eq(SpeedMath.guardChaseRatio(g, 1e3), 3.0)
+			T.near(SpeedMath.guardChaseSpeed(g, 4.5e3, 40), 40 * 1.98, 1e-9, "WalkSpeed 곱")
+			T.eq(SpeedMath.guardChaseSpeed, SpeedMath.guardChaseWalkSpeed, "1판 이름도 같은 함수")
+		end
+	)
+
 	T.test("시작 속도로 숲에서 초거대 알을 들어도 닭은 못 잡음", function()
 		local forest = Biomes.get("forest")
 		local giant = Sizes.get("giant")

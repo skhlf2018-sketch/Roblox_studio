@@ -35,6 +35,10 @@ export type Session = {
 	cooldowns: { [string]: number },
 	moveExemptUntil: number, -- 이 시각(os.clock)까지 위치 검증 쉼 (서버 순간이동·래그돌)
 	busy: { [string]: boolean }, -- yield 하는 요청 중복 방지 (예: 무료 보상 그룹 확인)
+	-- 2판
+	currentZone: string, -- 지금 있는 곳 (MapLayout.zoneAt: 구역 id | "hub" | "")
+	onTreadmill: boolean, -- 러닝머신 위에 고정됨 (WalkSpeed 0, 서버가 위치 고정)
+	treadmillArmed: boolean, -- false = 방금 내림 → 러닝머신 밖으로 한 번 나가야 다시 탈 수 있음
 }
 
 local Sessions = {}
@@ -70,6 +74,9 @@ function Sessions.create(player: Player): Session
 		cooldowns = {},
 		moveExemptUntil = 0,
 		busy = {},
+		currentZone = "",
+		onTreadmill = false,
+		treadmillArmed = true,
 	}
 	sessions[player] = session
 	return session

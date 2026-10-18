@@ -14,6 +14,7 @@
 	  /crystal 5        사쿠라 크리스탈 더하기
 	  /pet crane 3      펫 바로 받기 (퓨전·제단·합성 시험용, 최대 20마리)
 	  /quests           마법의 숲 퀘스트 전부 끝내기
+	  /zone lake        (2판) 그 구역 입구로 순간이동 (구역 id 또는 번호 1~15, "hub" = 허브 기본 스폰) — 긴 복도 시험용
 ]]
 
 local RunService = game:GetService("RunService")
@@ -22,12 +23,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Data.Config)
 local Pets = require(ReplicatedStorage.Shared.Data.Pets)
+local MapLayout = require(ReplicatedStorage.Shared.Data.MapLayout)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Validate = require(Server.Logic.Validate)
 local DataSchema = require(Server.Logic.DataSchema)
 local Net = require(Server.Net)
+local Character = require(Server.Util.Character)
 local Wallet = require(script.Parent.Wallet)
 local CycleService = require(script.Parent.CycleService)
 local ToolService = require(script.Parent.ToolService)
@@ -35,16 +38,43 @@ local PetService = require(script.Parent.PetService)
 local IndexService = require(script.Parent.IndexService)
 local SakuraService = require(script.Parent.SakuraService)
 local QuestService = require(script.Parent.QuestService)
+local EggService = require(script.Parent.EggService)
 
 local DevCommands = {}
 
-local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "quests" }
+local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "quests", "zone" }
 
 local function isAllowed(player: Player): boolean
 	if #Config.DEV_USER_IDS > 0 then
 		return table.find(Config.DEV_USER_IDS, player.UserId) ~= nil
 	end
 	return RunService:IsStudio()
+end
+
+-- /zone: 구역 입구(구역 시작선 + 12) 또는 허브 기본 스폰으로 서버 순간이동 (위치 검증 쉼)
+local function zoneTarget(arg: string): MapLayout.XZ?
+	if arg == "hub" then
+		return MapLayout.hubSpots.mainSpawn
+	end
+	local index = tonumber(arg)
+	local range = if index then MapLayout.biomes[math.floor(index)] else MapLayout.biome(arg)
+	if not range then
+		return nil
+	end
+	return { x = 0, z = range.zMin + 12 }
+end
+
+local function teleportTo(player: Player, target: MapLayout.XZ): boolean
+	local session = Sessions.get(player)
+	local character = player.Character
+	if not session or not character or not Character.getRoot(player) then
+		return false
+	end
+	local position = Vector3.new(target.x, MapLayout.FLOOR_Y + 4, target.z)
+	Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
+	character:PivotTo(CFrame.new(position))
+	EggService.resetCarryOrigin(player, position)
+	return true
 end
 
 local function handle(player: Player, message: string)
@@ -88,6 +118,11 @@ local function handle(player: Player, message: string)
 		IndexService.discover(player, arg)
 	elseif command == "quests" then
 		QuestService.completeAll(player)
+	elseif command == "zone" then
+		local target = zoneTarget(arg or "")
+		if not target or not teleportTo(player, target) then
+			return
+		end
 	else
 		return
 	end

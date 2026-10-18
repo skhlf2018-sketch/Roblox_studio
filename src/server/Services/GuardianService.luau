@@ -2,30 +2,37 @@
 --[[
 	GuardianService — 구역마다 경비 NPC 1마리. 그 구역 알을 든 플레이어를 쫓아가 잡음 (서버 권한)
 
-	- 지금은 단순 모델(몸통 파트 + 머리 + Humanoid). 선임이 모양을 바꿀 때는
-	  "Guardian" 태그 모델 안의 HumanoidRootPart / Humanoid 이름만 유지하면 됩니다.
-	- 대상 고르기: 이 구역 알을 들고 있고, 살아 있고, 안전 구역 밖이고,
-	  구역 중심에서 halfSize × GUARD_LEASH_FACTOR × biome.guardPersistence 안에 있는 사람 중 가장 가까운 사람.
-	  → 그 반경을 벗어나면 추격 포기하고 집으로 돌아감 (서버 부하 + 설계문서 "계속 쫓아옴"의 절충, Config 값)
-	- 추격 속도: SpeedMath.guardChaseWalkSpeed (실효 속도 ≥ 추천 속도면 못 따라잡음)
-	- 잡힘 판정: 서버에서 경비 몸통과 플레이어 HumanoidRootPart 거리 ≤ GUARD_CATCH_DISTANCE
-	  (줍고 나서 GUARD_CATCH_GRACE_SECONDS 동안은 안 잡힘)
-	- 밤/대기에는 추격 안 함, 집으로 돌아감.
+	2판 (설계 2판 B — 원작 관찰):
+	  - 평소: 집(MapLayout.guardHome = 구역 중앙, 둥지들 사이)에서 잠잠 → State "Sleeping" (클라가 Z 표시)
+	  - 누가 이 구역 알을 들면 깨어나 쫓아감 → State "Chase", TargetUserId
+	  - 추격 포기 거리 없음: 알 든 사람이 허브(z < SAFE_ZONE_Z)에 들어가거나 / 잡히거나 / 알을 놓거나(DropEgg·배달) /
+	    밤이 될 때까지 계속 쫓음 → 끝나면 State "Return" 으로 집에 걸어가서 다시 "Sleeping"
+	  - 알의 구역 경비만 쫓음: 먼 구역 알을 들고 앞 구역들을 지나가도 그 구역 경비는 안 깨어남
+	  - 추격 속도: SpeedMath.guardChaseSpeed = 플레이어 WalkSpeed × clamp(경비 속도/알 든 실효 속도 × 0.99, 0.85, 3.0)
+	    (추천 속도 이상이면 0.85 ~ 0.99배라 못 잡음, 모자라면 최소 1.2배로 반드시 따라잡음)
+	  - 잡힘 판정: 서버에서 경비 몸통과 플레이어 HumanoidRootPart 수평 거리 ≤ GUARD_CATCH_DISTANCE(6), 높이 차 ≤ 10
+	    (둥지에서 줍고 GUARD_CATCH_GRACE_SECONDS 동안은 안 잡힘 — egg.graceUntil)
+	  - 경비끼리 겹치지 않게: 서로 안 부딪히는 CollisionGroup + 가까우면 옆으로 비켜 감 (Logic/GuardLogic)
+
+	모델: 단순 몸통 파트 + 머리 + Humanoid. 선임(PetVisualService)이 겉모습을 HumanoidRootPart 에 용접해 붙임.
+	"Guardian" 태그 모델 안의 HumanoidRootPart / Humanoid 이름만 유지하면 됩니다.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
+local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Biomes = require(Shared.Data.Biomes)
-local EggRules = require(Shared.EggRules)
+local MapLayout = require(Shared.Data.MapLayout)
 local SpeedMath = require(Shared.SpeedMath)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
+local GuardLogic = require(Server.Logic.GuardLogic)
 local Character = require(Server.Util.Character)
 local Gui = require(Server.Util.Gui)
 local MapBuilder = require(script.Parent.MapBuilder)
@@ -46,6 +53,8 @@ type Guard = {
 	lastMoveAt: number,
 }
 
+export type GuardState = "Sleeping" | "Chase" | "Return"
+
 local GuardianService = {}
 
 local guards: { [string]: Guard } = {}
@@ -56,9 +65,30 @@ local retryAt: { [string]: number } = {}
 local RAPID_DEATH_SECONDS = 2 -- 이보다 빨리 죽으면 "생기자마자 죽음"
 local RAPID_DEATH_LIMIT = 3 -- 연달아 이만큼이면
 local RAPID_DEATH_BACKOFF = 5 -- 이 초 동안 다시 안 만듦
+local ROOT_HEIGHT = 4.6 -- 바닥에서 HumanoidRootPart 가운데까지 (HipHeight 2.5 + 몸통 반 2 + 여유)
 
 local function rgb(c: { number }): Color3
 	return Color3.fromRGB(c[1], c[2], c[3])
+end
+
+-- 경비 집 (MapLayout.guardHome, 바닥 높이 FLOOR_Y)
+local function homeOf(biomeId: string): Vector3?
+	local spot = MapLayout.guardHome(biomeId)
+	if not spot then
+		return nil
+	end
+	return Vector3.new(spot.x, MapLayout.FLOOR_Y, spot.z)
+end
+
+local function setupCollisionGroup()
+	local group = Config.GUARD_COLLISION_GROUP
+	local ok, err = pcall(function()
+		PhysicsService:RegisterCollisionGroup(group)
+		PhysicsService:CollisionGroupSetCollidable(group, group, false)
+	end)
+	if not ok then
+		warn("[GuardianService] CollisionGroup 설정 실패: " .. tostring(err))
+	end
 end
 
 local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
@@ -71,7 +101,8 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 	root.Size = Vector3.new(4, 4, 3)
 	root.Color = color
 	root.Material = Enum.Material.SmoothPlastic
-	root.CFrame = CFrame.new(home + Vector3.new(0, 4.6, 0))
+	root.CFrame = CFrame.new(home + Vector3.new(0, ROOT_HEIGHT, 0))
+	root.CollisionGroup = Config.GUARD_COLLISION_GROUP
 	root.Parent = model
 
 	local head = Instance.new("Part")
@@ -79,6 +110,7 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 	head.Size = Vector3.new(3, 3, 3)
 	head.Color = color:Lerp(Color3.new(1, 1, 1), 0.2)
 	head.CFrame = root.CFrame * CFrame.new(0, 3.5, -0.5)
+	head.CollisionGroup = Config.GUARD_COLLISION_GROUP
 	head.Parent = model
 	local weld = Instance.new("WeldConstraint")
 	weld.Part0 = root
@@ -109,8 +141,16 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 	model.PrimaryPart = root
 	model:SetAttribute("BiomeId", biome.id)
 	model:SetAttribute("GuardName", biome.guardName)
-	model:SetAttribute("State", "Idle")
+	model:SetAttribute("State", "Sleeping")
 	model:SetAttribute("TargetUserId", 0)
+	-- 선임이 붙이는 겉모습 파트도 같은 CollisionGroup (경비끼리 끼어 멈추지 않게)
+	pcall(function()
+		model.DescendantAdded:Connect(function(descendant: Instance)
+			if descendant:IsA("BasePart") then
+				descendant.CollisionGroup = Config.GUARD_COLLISION_GROUP
+			end
+		end)
+	end)
 	CollectionService:AddTag(model, Tags.Guardian)
 	model.Parent = MapBuilder.getFolder("Guardians")
 	pcall(function()
@@ -160,12 +200,7 @@ local function ensureGuard(biome: Biomes.Biome): Guard?
 	if now < (retryAt[biome.id] or 0) then
 		return nil
 	end
-	local spawnPart = MapBuilder.getGuardSpawn(biome.id)
-	local zone = MapBuilder.getZone(biome.id)
-	local home = if spawnPart
-		then spawnPart.Position
-		elseif zone then Vector3.new(zone.centerX, 0.2, zone.centerZ)
-		else nil
+	local home = homeOf(biome.id)
 	if not home then
 		return nil
 	end
@@ -175,16 +210,23 @@ local function ensureGuard(biome: Biomes.Biome): Guard?
 	return guard
 end
 
-local function setTarget(guard: Guard, player: Player?)
+local function setState(guard: Guard, state: GuardState)
+	if guard.model:GetAttribute("State") ~= state then
+		guard.model:SetAttribute("State", state)
+	end
+end
+
+-- 대상 바꾸기. 놓친 사람에게는 ChaseEnded { biomeId, reason }
+local function setTarget(guard: Guard, player: Player?, reason: string?)
 	if guard.target == player then
 		return
 	end
 	local previous = guard.target
 	guard.target = player
 	guard.model:SetAttribute("TargetUserId", if player then player.UserId else 0)
-	guard.model:SetAttribute("State", if player then "Chase" else "Return")
+	setState(guard, if player then "Chase" else "Return")
 	if previous and previous.Parent then
-		Net.fire(previous, Remotes.ToClient.ChaseEnded, { biomeId = guard.biomeId })
+		Net.fire(previous, Remotes.ToClient.ChaseEnded, { biomeId = guard.biomeId, reason = reason or "other" })
 	end
 end
 
@@ -200,8 +242,25 @@ local function moveTo(guard: Guard, position: Vector3)
 	guard.humanoid:MoveTo(position)
 end
 
--- 이 플레이어를 이 경비가 쫓을 수 있나
-local function canChase(guard: Guard, player: Player, root: BasePart): boolean
+-- 다른 경비와 겹치지 않게 목표를 옆으로 비킴
+local function steer(guard: Guard, target: Vector3): Vector3
+	local others: { GuardLogic.Point } = {}
+	for _, other in guards do
+		if other ~= guard and other.model.Parent ~= nil then
+			local p = other.root.Position
+			table.insert(others, { x = p.X, z = p.Z })
+		end
+	end
+	local p = guard.root.Position
+	local ox, oz = GuardLogic.separationOffset(p.X, p.Z, others, Config.GUARD_SEPARATION)
+	if ox == 0 and oz == 0 then
+		return target
+	end
+	return target + Vector3.new(ox, 0, oz)
+end
+
+-- 이 플레이어를 이 경비가 쫓을 수 있나 (2판: 거리 제한 없음, 허브에 들어가면 끝)
+local function canChase(player: Player, root: BasePart): boolean
 	local session = Sessions.get(player)
 	if not session or Sessions.isStunned(session, os.clock()) then
 		return false
@@ -209,15 +268,7 @@ local function canChase(guard: Guard, player: Player, root: BasePart): boolean
 	if not Character.isAlive(player) then
 		return false
 	end
-	local pos = root.Position
-	if MapBuilder.isInSafeZone(pos) then
-		return false
-	end
-	local zone = MapBuilder.getZone(guard.biomeId)
-	if not zone then
-		return false
-	end
-	return EggRules.withinLeash(zone, pos.X, pos.Z, Config.GUARD_LEASH_FACTOR, guard.biome.guardPersistence)
+	return not MapLayout.isInHub(root.Position)
 end
 
 local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg }, isDay: boolean)
@@ -229,7 +280,7 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 		for player, egg in carriers do
 			if egg.biomeId == guard.biomeId then
 				local root = Character.getRoot(player)
-				if root and canChase(guard, player, root) then
+				if root and canChase(player, root) then
 					local d = (root.Position - guard.root.Position).Magnitude
 					if d < bestDistance then
 						best, bestRoot, bestDistance = player, root, d
@@ -238,45 +289,52 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 			end
 		end
 	end
-	setTarget(guard, best)
+	local previous = guard.target
+	if previous and previous ~= best then
+		local egg = carriers[previous]
+		local root = Character.getRoot(previous)
+		local reason = GuardLogic.endReason(
+			isDay,
+			egg ~= nil and egg.biomeId == guard.biomeId,
+			root ~= nil and MapLayout.isInHub(root.Position)
+		)
+		setTarget(guard, best, reason)
+	else
+		setTarget(guard, best)
+	end
 
 	if best and bestRoot then
-		local walkSpeed = SpeedMath.guardChaseWalkSpeed(
+		guard.humanoid.WalkSpeed = SpeedMath.guardChaseSpeed(
 			guard.biome.guardSpeed,
 			SpeedService.getCarrySpeed(best),
 			SpeedService.getWalkSpeed(best)
 		)
-		guard.humanoid.WalkSpeed = walkSpeed
-		moveTo(guard, bestRoot.Position)
+		moveTo(guard, steer(guard, bestRoot.Position))
 
 		local egg = carriers[best]
 		local flat =
 			Vector3.new(bestRoot.Position.X - guard.root.Position.X, 0, bestRoot.Position.Z - guard.root.Position.Z)
 		local dy = math.abs(bestRoot.Position.Y - guard.root.Position.Y)
-		if
-			egg
-			and now - egg.pickedAt >= Config.GUARD_CATCH_GRACE_SECONDS
-			and flat.Magnitude <= Config.GUARD_CATCH_DISTANCE
-			and dy <= 10
-		then
+		if egg and now >= egg.graceUntil and flat.Magnitude <= Config.GUARD_CATCH_DISTANCE and dy <= 10 then
 			local name = guard.model:GetAttribute("GuardName")
 			EggService.knockOut(best, guard.root.Position, "guard", if typeof(name) == "string" then name else "경비")
-			setTarget(guard, nil)
+			setTarget(guard, nil, "caught")
 		end
 	else
 		guard.humanoid.WalkSpeed = SpeedMath.guardBaseWalkSpeed(guard.biome.guardSpeed)
 		local away = Vector3.new(guard.root.Position.X - guard.home.X, 0, guard.root.Position.Z - guard.home.Z)
 		if away.Magnitude > Config.GUARD_HOME_TOLERANCE then
-			moveTo(guard, guard.home)
-		elseif guard.model:GetAttribute("State") ~= "Idle" then
-			guard.model:SetAttribute("State", "Idle")
+			setState(guard, "Return")
+			moveTo(guard, steer(guard, guard.home))
+		else
+			setState(guard, "Sleeping")
 		end
 	end
 
 	-- 맵 밖으로 떨어지면 집으로
 	if guard.root.Position.Y < -30 then
 		guard.root.AssemblyLinearVelocity = Vector3.zero
-		guard.model:PivotTo(CFrame.new(guard.home + Vector3.new(0, 5, 0)))
+		guard.model:PivotTo(CFrame.new(guard.home + Vector3.new(0, ROOT_HEIGHT, 0)))
 		guard.lastMoveTarget = nil
 	end
 end
@@ -295,7 +353,14 @@ function GuardianService.getGuardModel(biomeId: string): Model?
 	return if guard then guard.model else nil
 end
 
+-- 이 경비가 지금 쫓는 사람 (없으면 nil)
+function GuardianService.getTarget(biomeId: string): Player?
+	local guard = guards[biomeId]
+	return if guard then guard.target else nil
+end
+
 function GuardianService.start()
+	setupCollisionGroup()
 	for _, biome in Biomes.list do
 		ensureGuard(biome)
 	end

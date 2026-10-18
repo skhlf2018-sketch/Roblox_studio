@@ -35,6 +35,10 @@ local Remotes = {
 		ShrineResult = "ShrineResult",
 		QuestUpdate = "QuestUpdate",
 		PetsSold = "PetsSold",
+		-- 2판
+		ZoneEntered = "ZoneEntered", -- { biomeId, name, nameEn } 새 구역(z 범위)에 들어갈 때 1회
+		IncomeTick = "IncomeTick", -- { petUid, amount } 장착 펫마다 INCOME_POPUP_INTERVAL(3)초에 1번, 그만큼의 돈 (팝업용)
+		TreadmillStep = "TreadmillStep", -- { amount } 러닝머신 걸음(1초)마다 오른 속도
 	},
 
 	-- 클라 → 서버 (전부 서버에서 인자 검증 + 레이트 리밋)
@@ -54,6 +58,10 @@ local Remotes = {
 		SakuraApply = "SakuraApply",
 		AltarOffer = "AltarOffer",
 		ShrineFuse = "ShrineFuse",
+		-- 2판
+		DropEgg = "DropEgg", -- () 들고 있는 알을 그 자리에 떨어뜨림 (추격 끝)
+		SellPet = "SellPet", -- (petUid) 판매 가게 근처에서 펫 팔기
+		TreadmillLeave = "TreadmillLeave", -- () 러닝머신에서 내림 (클라가 점프할 때)
 	},
 
 	-- 클라 → 서버 레이트 리밋: burst = 한 번에 허용, perSecond = 초당 회복
@@ -72,6 +80,9 @@ local Remotes = {
 		SakuraApply = { burst = 5, perSecond = 2 },
 		AltarOffer = { burst = 3, perSecond = 1 },
 		ShrineFuse = { burst = 2, perSecond = 0.5 },
+		DropEgg = { burst = 2, perSecond = 1 },
+		SellPet = { burst = 10, perSecond = 4 },
+		TreadmillLeave = { burst = 3, perSecond = 2 },
 	} :: { [string]: { burst: number, perSecond: number } },
 
 	-- PurchaseUpgrade 의 kind

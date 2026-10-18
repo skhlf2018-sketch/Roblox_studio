@@ -5,6 +5,7 @@
 	- incomeMultiplier: 펫 수입 배율
 	- speedPenalty: 알을 들었을 때 속도 감소 비율 (0.10 = -10%)
 	- eggScale: 알 겉모습 크기 배율 (Config.EGG_BASE_DIAMETER 에 곱함)
+	- carryKg: 들고 있을 때 머리 위에 보이는 무게(kg) — 표시용 (플레이어 Attr CarryWeightKg) [추정]
 ]]
 
 export type SizeId = "normal" | "big" | "huge" | "giant"
@@ -18,6 +19,7 @@ export type Size = {
 	incomeMultiplier: number,
 	speedPenalty: number,
 	eggScale: number,
+	carryKg: number,
 }
 
 local list: { Size } = {
@@ -30,6 +32,7 @@ local list: { Size } = {
 		incomeMultiplier = 1,
 		speedPenalty = 0.10,
 		eggScale = 1,
+		carryKg = 50,
 	},
 	{
 		id = "big",
@@ -40,6 +43,7 @@ local list: { Size } = {
 		incomeMultiplier = 1.5,
 		speedPenalty = 0.20,
 		eggScale = 1.35,
+		carryKg = 120,
 	},
 	{
 		id = "huge",
@@ -50,6 +54,7 @@ local list: { Size } = {
 		incomeMultiplier = 3,
 		speedPenalty = 0.35,
 		eggScale = 1.8,
+		carryKg = 400,
 	},
 	{
 		id = "giant",
@@ -60,6 +65,7 @@ local list: { Size } = {
 		incomeMultiplier = 6,
 		speedPenalty = 0.50,
 		eggScale = 2.4,
+		carryKg = 1200,
 	},
 }
 

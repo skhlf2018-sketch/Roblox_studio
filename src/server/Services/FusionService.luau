@@ -18,6 +18,7 @@ local Pets = require(Shared.Data.Pets)
 local FusionRules = require(Shared.FusionRules)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
@@ -27,7 +28,6 @@ local Landmarks = require(Server.Util.Landmarks)
 local Signal = require(Server.Util.Signal)
 local Validate = require(Server.Logic.Validate)
 local DataSchema = require(Server.Logic.DataSchema)
-local MapBuilder = require(script.Parent.MapBuilder)
 local PetService = require(script.Parent.PetService)
 local IndexService = require(script.Parent.IndexService)
 
@@ -54,7 +54,7 @@ function FusionService.isNearMachine(player: Player): boolean
 		return Landmarks.isPlayerNear(player, machine, Config.FUSION_RADIUS)
 	end
 	local root = Character.getRoot(player)
-	return root ~= nil and Character.isAlive(player) and MapBuilder.isInPlot(session.plotIndex, root.Position)
+	return root ~= nil and Character.isAlive(player) and MapLayout.isInPlot(root.Position, session.plotIndex)
 end
 
 function FusionService.fuse(player: Player, uids: { string })

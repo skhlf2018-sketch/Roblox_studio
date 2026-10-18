@@ -1,20 +1,18 @@
 --!strict
 --[[
-	UpgradeService — 우리(Pen) / 러닝머신(Treadmill) / 트레일(Trail) 구매 + 러닝머신 속도 증가
+	UpgradeService — 우리(Pen) / 러닝머신(Treadmill) / 트레일(Trail) 구매
 
 	Remote: PurchaseUpgrade(kind: "Pen" | "Treadmill" | "Trail", trailId: string?)
 	  - 가격·효과는 shared/Data/Upgrades.luau (설계문서 9장 표)
 	  - 러닝머신 0레벨 = 잠김, 1레벨 구매($1K) = 해금
 	  - 트레일은 순서 상관없이 아무거나 살 수 있음, 가진 것 중 최고 배율 하나만 적용
 
-	러닝머신: 자기 베이스 러닝머신 패드(TREADMILL_RADIUS 안)에 서 있으면 1초마다
-	  속도 += 걸음당 속도 × GROWTH_MULTIPLIER × TREADMILL_STEPS_PER_SECOND
+	러닝머신 타기·걸음(속도 증가)은 2판부터 Services/TreadmillService.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
-local Config = require(Shared.Data.Config)
 local Upgrades = require(Shared.Data.Upgrades)
 local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
@@ -24,9 +22,7 @@ local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
-local Character = require(Server.Util.Character)
 local Validate = require(Server.Logic.Validate)
-local MapBuilder = require(script.Parent.MapBuilder)
 local Wallet = require(script.Parent.Wallet)
 local PetService = require(script.Parent.PetService)
 
@@ -107,26 +103,6 @@ function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
 	Snapshot.section(player, "upgrades")
 end
 
-local function treadmillTick(): ...any
-	for player, session in Sessions.all() do
-		local data = session.data
-		if session.loaded and data and data.treadmillLevel >= 1 and session.plotIndex > 0 then
-			local plot = MapBuilder.getPlot(session.plotIndex)
-			local pad = if plot then plot.treadmill else nil
-			local root = Character.getRoot(player)
-			if pad and root then
-				local dx = root.Position.X - pad.Position.X
-				local dz = root.Position.Z - pad.Position.Z
-				local dy = math.abs(root.Position.Y - pad.Position.Y)
-				local radius = math.max(Config.TREADMILL_RADIUS, math.max(pad.Size.X, pad.Size.Z) / 2)
-				if dx * dx + dz * dz <= radius * radius and dy < 8 then
-					Wallet.addSpeed(player, Economy.treadmillGainPerSecond(data.treadmillLevel))
-				end
-			end
-		end
-	end
-end
-
 function UpgradeService.start()
 	local trailIds: { [string]: boolean } = {}
 	for _, trail in Upgrades.Trails do
@@ -139,16 +115,6 @@ function UpgradeService.start()
 		end
 		local id = if k == Remotes.UpgradeKinds.Trail then Validate.idIn(trailId, trailIds) else nil
 		UpgradeService.purchase(player, k, id)
-	end)
-
-	task.spawn(function()
-		while true do
-			task.wait(Config.TREADMILL_TICK_SECONDS)
-			local ok, err = pcall(treadmillTick)
-			if not ok then
-				warn("[UpgradeService] treadmill 오류: " .. tostring(err))
-			end
-		end
 	end)
 end
 

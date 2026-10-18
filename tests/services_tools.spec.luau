@@ -11,6 +11,16 @@ return function(T, Loader)
 		local H = ServerHarness.install(Loader, T)
 		H.startNet()
 		local w = { H = H }
+		-- 2판: 허브(z < 0)는 안전 구역 → 이 파일의 좌표는 전부 숲 구역 안(z + OZ)으로 옮겨서 씀
+		local OZ = 100
+		w.OZ = OZ
+		local rawSpawn, rawTeleport = H.spawn, H.teleport
+		function H.spawn(p, x, y, z)
+			return rawSpawn(p, x, y, (z or 0) + OZ)
+		end
+		function H.teleport(p, x, y, z)
+			rawTeleport(p, x, y, z + OZ)
+		end
 		w.Config = H.shared("Data/Config")
 		w.Pets = H.shared("Data/Pets")
 		w.Weapons = H.shared("Data/Weapons")
@@ -121,7 +131,7 @@ return function(T, Loader)
 			T.eq(k.cause, "player")
 			T.eq(k.by, "Alice")
 			T.eq(k.power, 1, "방망이 넉백 배율")
-			T.eq(k.from.Z, 0, "때린 사람 위치에서 날아감")
+			T.eq(k.from.Z, w.OZ, "때린 사람 위치에서 날아감")
 			w.H.uninstall()
 		end
 	)
@@ -220,25 +230,26 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"안전 구역: 내가 안에 있으면 못 쓰고(안내), 맞는 사람이 안에 있으면 안 맞음",
+		"안전 구역(2판: 허브 z < 0): 내가 안에 있으면 못 쓰고(안내), 맞는 사람이 안에 있으면 안 맞음",
 		function()
 			local w = world()
 			w.H.equip(w.A, "Bat")
-			w.H.map.safeZone = true
+			w.H.teleport(w.A, 0, 3, -w.OZ - 20) -- 실제 z = -20 (허브)
+			w.H.teleport(w.B, 0, 3, -w.OZ - 25)
 			use(w, "Bat")
 			T.eq(hits(w), 0)
 			T.truthy(w.H.hasNotify(w.A, "error", "안전 구역에서는 도구를 쓸 수 없어요"))
-			-- 맞는 사람만 안전 구역: isInSafeZone 이 위치별로 답하게
-			w.H.map.safeZone = false
-			local Map = w.H.server("Services/MapBuilder")
-			local original = Map.isInSafeZone
-			Map.isInSafeZone = function(position)
-				return position.Z < -3
-			end
+			-- 나는 숲(z = 2), 맞는 사람만 허브(z = -3) — 5 앞이라 사거리 안
+			w.H.teleport(w.A, 0, 3, -w.OZ + 2)
+			w.H.teleport(w.B, 0, 3, -w.OZ - 3)
 			w.H.advance(2)
 			use(w, "Bat")
-			T.eq(hits(w), 0, "B 는 Z=-5 라 안전 구역")
-			Map.isInSafeZone = original
+			T.eq(hits(w), 0, "B 는 허브라 안전")
+			-- 둘 다 숲이면 맞음 (위 거부가 진짜 허브 때문이었는지 확인)
+			w.H.teleport(w.B, 0, 3, -w.OZ + 0.5)
+			w.H.advance(2)
+			use(w, "Bat")
+			T.eq(hits(w), 1)
 			w.H.uninstall()
 		end
 	)
@@ -343,20 +354,19 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"자기 덫은 자기가 안 밟힘, 안전 구역의 사람은 안 걸림, 90초 지나면 저절로 사라짐",
+		"자기 덫은 자기가 안 밟힘, 허브(안전 구역)의 사람은 안 걸림, 90초 지나면 저절로 사라짐",
 		function()
 			local w = trapWorld()
+			w.H.teleport(w.A, 0, 3, -w.OZ + 0.5) -- 허브 경계 바로 밖(숲 z = 0.5)에 설치
 			use(w, "BearTrap")
 			w.H.advance(2) -- A 는 덫 위에 서 있음
 			T.eq(#w.H.sent(w.A, "Caught"), 0)
-			w.H.map.safeZone = true
-			w.H.teleport(w.B, 0, 3, 1)
+			w.H.teleport(w.B, 0, 3, -w.OZ - 0.5) -- 덫에서 1 (반경 3 안) 이지만 허브 (z = -0.5)
 			w.H.advance(1)
 			T.eq(#w.H.sent(w.B, "Caught"), 0, "안전 구역")
-			w.H.map.safeZone = false
 			w.H.teleport(w.B, 30, 3, 30)
 			w.H.advance(91)
-			w.H.teleport(w.B, 0, 3, 1)
+			w.H.teleport(w.B, 0, 3, -w.OZ + 1)
 			w.H.advance(1)
 			T.eq(#w.H.sent(w.B, "Caught"), 0, "수명 90초가 지나 사라짐")
 			w.H.uninstall()
@@ -364,14 +374,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"안전 구역에서는 설치 불가(안내), 설치한 사람이 나가면 그 덫도 사라짐",
+		"허브(안전 구역)에서는 설치 불가(안내), 설치한 사람이 나가면 그 덫도 사라짐",
 		function()
 			local w = trapWorld()
-			w.H.map.safeZone = true
+			w.H.teleport(w.A, 0, 3, -w.OZ - 10) -- 허브
 			use(w, "BearTrap")
 			T.eq(w.da.tools.bearTrap, 10)
 			T.truthy(w.H.hasNotify(w.A, "error", "안전 구역에서는 도구를 쓸 수 없어요"))
-			w.H.map.safeZone = false
+			w.H.teleport(w.A, 0, 3, 0) -- 숲
 			w.H.advance(1.1)
 			use(w, "BearTrap")
 			T.eq(w.da.tools.bearTrap, 9)

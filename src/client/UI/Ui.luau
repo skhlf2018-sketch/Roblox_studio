@@ -10,10 +10,16 @@
 
 	크기는 기준 화면 픽셀(Offset)로 적고, 묶음(컨테이너)마다 Ui.scaled 로 화면 크기에 맞춤.
 	HUD 최소 배율 0.7 (폰 가로 844×390 에서 64px 버튼 → 45px). 창·팝업은 화면 안에 다 들어오게 맞춤.
+
+	반응형 HUD (왼쪽 메뉴·핫바): Ui.area() 화면 영역, Ui.isTouch() 터치 조작 중인지,
+	  Ui.onLayout(fn) 화면 크기·조작 방식이 바뀌면 fn 다시 부름, Ui.relayout() 지금 바로 다시 배치.
+	  자리 계산은 UI/Layout.luau (숫자만).
 ]]
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Theme = require(script.Parent.Theme)
@@ -42,6 +48,7 @@ local LAYER_ORDER: { [string]: number } = {
 local currentScale = 1
 type ScaleEntry = { scale: UIScale, fit: Vector2? }
 local scales: { ScaleEntry } = {}
+local layoutCallbacks: { () -> () } = {}
 
 local function viewport(): Vector2
 	local camera = Workspace.CurrentCamera
@@ -76,6 +83,29 @@ local function applyScale()
 			entry.scale.Scale = scaleFor(entry)
 		end
 	end
+	for _, fn in layoutCallbacks do
+		local ok, err = pcall(function(): string?
+			fn()
+			return nil
+		end)
+		if not ok then
+			warn("[Ui] 다시 배치 오류: " .. tostring(err))
+		end
+	end
+end
+
+-- 터치 조작 중인지: 터치 화면 + (마우스 없음 또는 마지막 입력이 터치) = 로블록스 조이스틱·점프 버튼이 보이는 상황
+local function touchMode(): boolean
+	if not UserInputService.TouchEnabled then
+		return false
+	end
+	if not UserInputService.MouseEnabled then
+		return true
+	end
+	local ok, last = pcall(function()
+		return UserInputService:GetLastInputType()
+	end)
+	return ok and last == Enum.UserInputType.Touch
 end
 
 function Ui.screen(): ScreenGui
@@ -91,6 +121,17 @@ function Ui.screen(): ScreenGui
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = player:WaitForChild("PlayerGui")
 	screen = gui
+
+	-- 화면 영역(인셋 제외) 크기가 바뀌거나, 조작 방식(터치 ↔ 마우스)이 바뀌면 다시 배치
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyScale)
+	local lastTouch = touchMode()
+	UserInputService.LastInputTypeChanged:Connect(function()
+		local now = touchMode()
+		if now ~= lastTouch then
+			lastTouch = now
+			applyScale()
+		end
+	end)
 
 	local function hookCamera()
 		local camera = Workspace.CurrentCamera
@@ -121,6 +162,46 @@ end
 
 function Ui.scale(): number
 	return currentScale
+end
+
+-- HUD 를 놓을 수 있는 화면 영역 크기 (위쪽 로블록스 메뉴 인셋 제외).
+-- ScreenGui.AbsoluteSize 가 정답, 아직 없으면(테스트 등) 카메라 화면 - GuiService 인셋
+function Ui.area(): Vector2
+	local gui = screen
+	if gui then
+		local ok, size = pcall(function(): Vector2
+			return gui.AbsoluteSize
+		end)
+		if ok and size.X > 1 and size.Y > 1 then
+			return size
+		end
+	end
+	local size = viewport()
+	local ok, topLeft, bottomRight = pcall(function(): (Vector2, Vector2)
+		return GuiService:GetGuiInset()
+	end)
+	if ok then
+		return Vector2.new(
+			math.max(1, size.X - topLeft.X - bottomRight.X),
+			math.max(1, size.Y - topLeft.Y - bottomRight.Y)
+		)
+	end
+	return size
+end
+
+-- 터치 조작 중인지 (로블록스 조이스틱·점프 버튼이 화면에 있는 상황)
+function Ui.isTouch(): boolean
+	return touchMode()
+end
+
+-- 화면 크기·조작 방식이 바뀔 때마다 fn 을 부름 (처음 한 번은 직접 부르세요)
+function Ui.onLayout(fn: () -> ())
+	table.insert(layoutCallbacks, fn)
+end
+
+-- 지금 바로 배율·배치 다시 계산 (테스트, 칸 수가 바뀔 때)
+function Ui.relayout()
+	applyScale()
 end
 
 -- 창·팝업(기준 크기 base)의 지금 화면 배율

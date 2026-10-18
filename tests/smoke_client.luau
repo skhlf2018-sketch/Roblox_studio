@@ -211,7 +211,22 @@ local fakeServices = {
 			return false
 		end,
 	},
-	UserInputService = { TouchEnabled = true, KeyboardEnabled = false, InputBegan = signal() },
+	UserInputService = {
+		TouchEnabled = true,
+		KeyboardEnabled = false,
+		MouseEnabled = false,
+		InputBegan = signal(),
+		LastInputTypeChanged = signal(),
+		GetLastInputType = function()
+			return roblox.Enum.UserInputType.Touch
+		end,
+	},
+	-- 새 로블록스 상단 메뉴 인셋 58px (스튜디오 에뮬레이터 측정: 381 - 323)
+	GuiService = {
+		GetGuiInset = function()
+			return roblox.Vector2.new(0, 58), roblox.Vector2.new(0, 0)
+		end,
+	},
 	StarterGui = { SetCoreGuiEnabled = function() end },
 	SoundService = game:GetService("SoundService"),
 	Lighting = game:GetService("Lighting"),
@@ -876,6 +891,183 @@ local function body()
 		table.insert(names, s.name)
 	end
 	print("  sent:", table.concat(names, ","))
+
+	------------------------------------------------------------------
+	-- 반응형 HUD: 왼쪽 메뉴 · 핫바 자리 (화면 영역 좌표 = 위 인셋 58px 아래부터 0)
+	------------------------------------------------------------------
+	print("[반응형 HUD (폰 750x381 · 844x390 · PC 1428x750)]")
+	local Layout = uiModule("Layout")
+	local Hud = ctrl("HudController")
+	local UIS = fakeServices.UserInputService
+	local INSET = 58
+	local hudLayer = screen:FindFirstChild("Hud")
+	local menu = hudLayer:FindFirstChild("LeftMenu")
+	local bar = hudLayer:FindFirstChild("Hotbar")
+	local questPanelNode = playerGui:FindFirstChild("QuestPanel", true)
+
+	-- 핫바 칸 채우기 (도구를 가방에)
+	local function setTools(kinds)
+		for _, child in backpack:GetChildren() do
+			if child:IsA("Tool") then
+				child.Parent = nil
+				sigOf(backpack, "ChildRemoved"):Fire(child)
+			end
+		end
+		for _, child in character:GetChildren() do
+			if child:IsA("Tool") then
+				child.Parent = nil
+				sigOf(character, "ChildRemoved"):Fire(child)
+			end
+		end
+		for _, kind in kinds do
+			local t = Instance.new("Tool")
+			t.Name = kind
+			t.Parent = backpack
+			sigOf(backpack, "ChildAdded"):Fire(t)
+		end
+	end
+
+	local function menuRects()
+		local s = menu:FindFirstChild("MenuScale").Scale
+		local list = {}
+		for _, b in menu:GetChildren() do
+			if b:IsA("TextButton") then
+				local size = b.Size.X.Offset * s
+				local cx = menu.Position.X.Offset + b.Position.X.Offset * s
+				local cy = menu.Position.Y.Offset + b.Position.Y.Offset * s
+				table.insert(list, {
+					name = b.Name,
+					order = b.LayoutOrder,
+					x = cx - size / 2,
+					y = cy - size / 2,
+					w = size,
+					h = b.Size.Y.Offset * s,
+					badgeTop = cy - size / 2 + 6 * s - 15 * s,
+				})
+			end
+		end
+		table.sort(list, function(a, b)
+			return a.order < b.order
+		end)
+		return list
+	end
+	local function hotbarRect(area)
+		local s = bar:FindFirstChild("HotbarScale").Scale
+		local w = bar.Size.X.Offset * s
+		local h = bar.Size.Y.Offset * s
+		return {
+			x = area.X + bar.Position.X.Offset - w,
+			y = area.Y + bar.Position.Y.Offset - h,
+			w = w,
+			h = h,
+			slot = Layout.SLOT * s,
+		}
+	end
+	local function fmt(r)
+		return string.format("(%d,%d %dx%d)", math.floor(r.x + 0.5), math.floor(r.y + 0.5), r.w, r.h)
+	end
+
+	local cases = {
+		{ w = 750, h = 381, touch = true, tools = { "Bat", "BearTrap", "Katana" } },
+		-- 무기 전부(9칸): 칸이 많아도 조이스틱·점프 버튼을 피하는지
+		{
+			w = 750,
+			h = 381,
+			touch = true,
+			tools = { "Bat", "BearTrap", "WaterBat", "Katana", "Axe", "AngelSpear", "Hammer", "CandyCane", "Scythe" },
+		},
+		{ w = 844, h = 390, touch = true, tools = { "Bat", "BearTrap", "Katana" } },
+		{ w = 1428, h = 750, touch = false, tools = { "Bat", "BearTrap", "Katana" } },
+		{ w = 1428, h = 750, touch = true, tools = { "Bat", "BearTrap", "Katana" } },
+	}
+	for _, case in cases do
+		UIS.TouchEnabled = case.touch
+		UIS.MouseEnabled = not case.touch
+		UIS.KeyboardEnabled = not case.touch
+		cam.ViewportSize = roblox.Vector2.new(case.w, case.h)
+		setTools(case.tools)
+		Ui.relayout()
+		local area = Ui.area()
+		local tag = string.format("%dx%d %s %d칸", case.w, case.h, if case.touch then "터치" else "PC", #case.tools)
+		check(area.X == case.w and area.Y == case.h - INSET, tag .. " 화면 영역 " .. area.X .. "x" .. area.Y)
+
+		local rects = menuRects()
+		local plan = Hud.menuPlan()
+		check(#rects == 6, tag .. " 메뉴 버튼 6개")
+		local joy = { x = 0, y = area.Y - 130, w = 130, h = 130 }
+		local inside, big, clearJoy, badgeOk = true, true, true, true
+		local parts = {}
+		for _, r in rects do
+			inside = inside and r.y >= 0 and r.y + r.h <= area.Y and r.x >= 0
+			big = big and r.w >= 44 and r.h >= 44
+			if case.touch and Layout.overlaps(r, joy) then
+				clearJoy = false
+			end
+			badgeOk = badgeOk and r.badgeTop >= 0
+			table.insert(parts, r.name .. fmt(r))
+		end
+		print("    메뉴 " .. tag .. ": " .. plan.cols .. "열 " .. plan.size .. "px  " .. table.concat(parts, " "))
+		check(inside, tag .. " 메뉴 버튼 전부 화면 안 (0 ≤ y, y+h ≤ " .. area.Y .. ")")
+		check(big, tag .. " 메뉴 버튼 44px 이상 (" .. plan.size .. "px)")
+		check(badgeOk, tag .. " 배지도 위로 안 잘림")
+		if case.touch then
+			check(clearJoy, tag .. " 메뉴가 왼쪽 아래 조이스틱(130x130)과 안 겹침")
+		end
+		-- 겹치는 버튼 없음
+		local overlap = false
+		for i = 1, #rects do
+			for j = i + 1, #rects do
+				if Layout.overlaps(rects[i], rects[j]) then
+					overlap = true
+				end
+			end
+		end
+		check(not overlap, tag .. " 메뉴 버튼끼리 안 겹침")
+		-- 위쪽 돈·속도 막대와 안 겹침
+		local topW = 760 * Ui.scale()
+		local topRect = { x = (area.X - topW) / 2, y = 6, w = topW, h = 64 * Ui.scale() }
+		local hitTop = false
+		for _, r in rects do
+			if Layout.overlaps(r, topRect) then
+				hitTop = true
+			end
+		end
+		check(not hitTop, tag .. " 메뉴가 위쪽 돈·속도 막대와 안 겹침")
+
+		local hb = hotbarRect(area)
+		print("    핫바 " .. tag .. ": " .. fmt(hb) .. string.format(" 칸 %.1fpx", hb.slot))
+		check(
+			#case.tools == 0 or (bar.Size.X.Offset == #case.tools * 88 + (#case.tools - 1) * 10),
+			tag .. " 핫바 너비 = 칸 수"
+		)
+		check(hb.x >= 0 and hb.y >= 0 and hb.x + hb.w <= area.X and hb.y + hb.h <= area.Y, tag .. " 핫바 화면 안")
+		check(hb.slot >= 44, string.format("%s 핫바 칸 %.1fpx (44 이상)", tag, hb.slot))
+		if case.touch then
+			local jumpCorner = { x = area.X - 100, y = area.Y - 100, w = 100, h = 100 }
+			check(
+				not Layout.overlaps(hb, jumpCorner),
+				tag .. " 핫바가 오른쪽 아래 점프 버튼 자리(100x100)와 안 겹침"
+			)
+			check(
+				not Layout.overlaps(hb, Layout.jumpZone(area)),
+				tag .. " 핫바가 점프 버튼 규칙 자리와 안 겹침"
+			)
+			check(not Layout.overlaps(hb, joy), tag .. " 핫바가 조이스틱과 안 겹침")
+		else
+			check(-bar.Position.X.Offset == 14, tag .. " PC 핫바는 오른쪽 아래 그대로 (14px)")
+		end
+		for _, r in rects do
+			check(not Layout.overlaps(r, hb), tag .. " 메뉴 " .. r.name .. " 와 핫바 안 겹침")
+		end
+		check(
+			questPanelNode and questPanelNode.Position.X.Offset >= Hud.menuRight(),
+			tag .. " 퀘스트 패널이 메뉴 오른쪽에서 시작"
+		)
+	end
+	-- 원래대로 (폰 가로)
+	UIS.TouchEnabled, UIS.MouseEnabled, UIS.KeyboardEnabled = true, false, false
+	cam.ViewportSize = roblox.Vector2.new(844, 390)
+	Ui.relayout()
 end
 
 local ok, err = pcall(body)

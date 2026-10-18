@@ -150,7 +150,8 @@ local function bloomPopup(spirit: boolean, targetName: string)
 	local holder: Frame = Ui.new("Frame", {
 		Name = "BloomPopup",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.42),
+		-- 화면 가운데보다 아래: 인큐베이터 위 이름표(캐릭터 머리 위쪽에 보임)와 안 겹치게
+		Position = UDim2.fromScale(0.5, 0.64),
 		Size = UDim2.fromOffset(420, 300),
 		BackgroundTransparency = 1,
 		Parent = Ui.layer("Popups"),
@@ -194,7 +195,7 @@ local function bloomPopup(spirit: boolean, targetName: string)
 		color,
 		{ Position = UDim2.fromScale(0, 0.66), Parent = holder }
 	)
-	Ui.label(targetName .. " 에 꽃이 피었어요", UDim2.new(1, 0, 0, 32), 24, C.white, {
+	Ui.label(targetName .. "에 꽃이 피었어요", UDim2.new(1, 0, 0, 32), 24, C.white, {
 		Position = UDim2.fromScale(0, 0.87),
 		Parent = holder,
 	})

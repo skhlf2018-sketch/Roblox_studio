@@ -5,6 +5,8 @@
 	- 상단 아래: 지금 있는 구역 / 안전 구역 표시
 	- 왼쪽 세로 버튼: 도감 · 선물 · 상점 · 펫 · 설정 (각 창을 엶, 받을 보상이 있으면 빨간 배지)
 	  + 다른 컨트롤러가 HudController.addMenuButton 으로 더하는 버튼 (6번 퀘스트 = QuestController)
+	  반응형: 화면 높이에 맞춰 버튼 크기(44px 이상)·열 수(1~3열), 터치 기기는 조이스틱(왼쪽 아래) 위까지만.
+	  규칙은 UI/Layout.luau, 화면이 바뀌면 Ui.onLayout 으로 다시 배치.
 ]]
 
 local Players = game:GetService("Players")
@@ -19,6 +21,7 @@ local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local State = require(Client.State)
 local Theme = require(Client.UI.Theme)
+local Layout = require(Client.UI.Layout)
 local Ui = require(Client.UI.Ui)
 local Windows = require(Client.UI.Windows)
 local ZoneController = require(script.Parent.ZoneController)
@@ -126,15 +129,16 @@ end
 
 local function menuButton(kind: string, caption: string, order: number, parent: Instance, onClick: () -> ()): TextButton
 	local color = (Theme.Menu :: { [string]: Color3 })[kind] or C.mint
-	-- 6칸: 72px × HUD 최소 배율 0.7 = 50px (폰에서도 44px 이상), 세로 합 472 → 폰 330px
+	-- 기준 72px. 실제 크기·자리는 layoutMenu 가 화면에 맞춰 정함 (Layout.menu: 44px 이상, 필요하면 2열)
 	local b = Ui.button(
 		"",
 		color,
-		UDim2.fromOffset(72, 72),
+		UDim2.fromOffset(Layout.MENU_BASE, Layout.MENU_BASE),
 		onClick,
-		{ layoutOrder = order, parent = parent, sound = "Click" }
+		{ layoutOrder = order, anchor = Vector2.new(0.5, 0.5), sound = "Click" }
 	)
 	b.Name = kind
+	b.Parent = parent
 	drawIcon(kind, b)
 	Ui.label(caption, UDim2.new(1, 0, 0, 22), 18, C.white, {
 		AnchorPoint = Vector2.new(0.5, 1),
@@ -146,8 +150,57 @@ end
 
 -- 다른 컨트롤러가 왼쪽 메뉴에 버튼을 더함 (퀘스트 등). HUD 가 아직 안 만들어졌으면 만들어질 때 붙임.
 type PendingButton = { kind: string, caption: string, order: number, onClick: () -> (), done: (TextButton) -> () }
+local TOP_PILLS_WIDTH = 270 + 220 + 250 + 2 * 10 -- 상단 돈·속도·타이머 알약 + 간격 (기준 픽셀)
 local menuFrame: Frame? = nil
+local menuScale: UIScale? = nil
+local menuPlan: Layout.MenuPlan? = nil
 local pendingButtons: { PendingButton } = {}
+
+-- 왼쪽 메뉴 다시 배치: 화면 높이에 맞춰 버튼 크기·열 수, 터치면 조이스틱(왼쪽 아래) 위까지만
+local function layoutMenu()
+	local menu = menuFrame
+	local scale = menuScale
+	if not menu or not scale then
+		return
+	end
+	local buttons: { TextButton } = {}
+	for _, child in menu:GetChildren() do
+		if child:IsA("TextButton") then
+			table.insert(buttons, child)
+		end
+	end
+	table.sort(buttons, function(a: TextButton, b: TextButton): boolean
+		return a.LayoutOrder < b.LayoutOrder
+	end)
+	local area = Ui.area()
+	-- 위쪽 막대(가운데 정렬, 알약 3개)의 왼쪽 끝보다 6px 왼쪽까지
+	local maxRight = math.floor((area.X - TOP_PILLS_WIDTH * Ui.scale()) / 2) - 6
+	local plan = Layout.menu(area, #buttons, Ui.scale(), Ui.isTouch(), maxRight)
+	local base = Layout.MENU_BASE
+	local gap = plan.gap / plan.scale -- 기준 단위 간격 (UIScale 이 곱해짐)
+	scale.Scale = plan.scale
+	menu.Position = UDim2.fromOffset(plan.x, plan.y)
+	menu.Size = UDim2.fromOffset(plan.cols * base + (plan.cols - 1) * gap, plan.rows * base + (plan.rows - 1) * gap)
+	for i, b in buttons do
+		local col, row = Layout.menuCell(plan, i - 1)
+		b.Position = UDim2.fromOffset(col * (base + gap) + base / 2, row * (base + gap) + base / 2)
+	end
+	menuPlan = plan
+end
+
+-- 지금 메뉴 배치 (테스트·다른 패널 자리 계산용)
+function HudController.menuPlan(): Layout.MenuPlan?
+	return menuPlan
+end
+
+-- 메뉴 오른쪽 끝 (화면 픽셀). 메뉴 옆에 붙는 패널(퀘스트 등)이 씀
+function HudController.menuRight(): number
+	local plan = menuPlan
+	if plan then
+		return plan.x + Layout.menuWidth(plan)
+	end
+	return Layout.SIDE + math.floor(Layout.MENU_BASE * Ui.scale())
+end
 
 function HudController.addMenuButton(
 	kind: string,
@@ -166,6 +219,7 @@ function HudController.addMenuButton(
 	local menu = menuFrame
 	if menu then
 		entry.done(menuButton(kind, caption, order, menu, onClick))
+		layoutMenu()
 	else
 		table.insert(pendingButtons, entry)
 	end
@@ -341,17 +395,18 @@ function HudController.start()
 	------------------------------------------------------------------
 	-- 왼쪽 메뉴
 	------------------------------------------------------------------
+	-- 자리·크기는 layoutMenu (화면 크기·조작 방식이 바뀔 때마다 다시)
 	local menu: Frame = Ui.new("Frame", {
 		Name = "LeftMenu",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 10, 0.5, 0),
-		Size = UDim2.fromOffset(80, 480),
+		Position = UDim2.fromOffset(Layout.SIDE, Layout.SAFE_TOP),
+		Size = UDim2.fromOffset(Layout.MENU_BASE, Layout.MENU_BASE),
 		BackgroundTransparency = 1,
 		Parent = hud,
 	})
-	Ui.scaled(menu)
-	Ui.list(Enum.FillDirection.Vertical, 8, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center).Parent =
-		menu
+	local scale = Instance.new("UIScale")
+	scale.Name = "MenuScale"
+	scale.Parent = menu
+	menuScale = scale
 
 	local indexButton = menuButton("index", "도감", 1, menu, function()
 		Windows.toggle("Index")
@@ -375,6 +430,8 @@ function HudController.start()
 		entry.done(menuButton(entry.kind, entry.caption, entry.order, menu, entry.onClick))
 	end
 	table.clear(pendingButtons)
+	layoutMenu()
+	Ui.onLayout(layoutMenu)
 
 	local function refreshBadges()
 		local snap = State.get()

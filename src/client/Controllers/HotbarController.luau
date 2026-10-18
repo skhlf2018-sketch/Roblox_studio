@@ -4,7 +4,8 @@
 	- 서버가 Backpack 에 넣어 준 Tool(이름 = Remotes.ToolKinds) 을 칸으로 보여 줌. 기본 Roblox 가방 UI 는 끔.
 	- 칸 누르기(또는 숫자키 1~9): 손에 들기 ↔ 내려놓기. 든 상태에서 한 번 더 누르면 사용(UseTool).
 	  손에 든 채 화면을 클릭/터치해도 ToolController 가 UseTool 을 보냄.
-	- 터치 기기에서는 점프 버튼과 안 겹치게 조금 위로.
+	- 터치 기기에서는 점프 버튼(오른쪽 아래) 왼쪽으로 비켜서, 조이스틱(왼쪽 아래)과도 안 겹치게.
+	  칸이 많아 자리가 모자라면 배율을 줄임(칸 44px 까지). 규칙은 UI/Layout.luau.
 ]]
 
 local Players = game:GetService("Players")
@@ -16,6 +17,7 @@ local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
+local Layout = require(Client.UI.Layout)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
 local WeaponController = require(script.Parent.WeaponController)
@@ -112,21 +114,84 @@ function HotbarController.start()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 	end)
 
-	local touch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local hud = Ui.layer("Hud")
 	local bar: Frame = Ui.new("Frame", {
 		Name = "Hotbar",
 		AnchorPoint = Vector2.new(1, 1),
-		Position = if touch then UDim2.new(1, -12, 1, -175) else UDim2.new(1, -14, 1, -14),
-		Size = UDim2.fromOffset(400, 96),
+		Position = UDim2.new(1, -Layout.HOTBAR_MARGIN, 1, -Layout.HOTBAR_MARGIN),
+		Size = UDim2.fromOffset(Layout.SLOT, Layout.HOTBAR_HEIGHT),
 		BackgroundTransparency = 1,
-		Parent = Ui.layer("Hud"),
+		Parent = hud,
 	})
-	Ui.scaled(bar)
-	Ui.list(Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Bottom).Parent =
+	local barScale = Instance.new("UIScale")
+	barScale.Name = "HotbarScale"
+	barScale.Parent = bar
+	Ui.list(
+		Enum.FillDirection.Horizontal,
+		Layout.SLOT_GAP,
+		Enum.HorizontalAlignment.Right,
+		Enum.VerticalAlignment.Bottom
+	).Parent =
 		bar
 
 	local slots: { [Tool]: TextButton } = {}
 	local order: { Tool } = {}
+	local touch = Ui.isTouch()
+
+	-- 실제 점프 버튼(PlayerGui.TouchGui, 로블록스 PlayerModule 이 만듦)이 보이면 그 자리, 아니면 규칙대로
+	local function realJump(): Layout.Rect?
+		local playerGui = player:FindFirstChildOfClass("PlayerGui")
+		local touchGui = playerGui and playerGui:FindFirstChild("TouchGui")
+		local jump = touchGui and touchGui:FindFirstChild("JumpButton", true)
+		if not (jump and jump:IsA("GuiObject") and jump.Visible) then
+			return nil
+		end
+		local size = jump.AbsoluteSize
+		if size.X < 1 then
+			return nil
+		end
+		local origin = hud.AbsolutePosition
+		return {
+			x = jump.AbsolutePosition.X - origin.X,
+			y = jump.AbsolutePosition.Y - origin.Y,
+			w = size.X,
+			h = size.Y,
+		}
+	end
+
+	local function layout()
+		touch = Ui.isTouch()
+		local area = Ui.area()
+		local jump: Layout.Rect? = nil
+		if touch then
+			local ok, found = pcall(realJump)
+			if ok and found then
+				-- 규칙 자리와 실제 자리 중 더 왼쪽까지 비움
+				local rule = Layout.jumpZone(area)
+				jump = if found.x < rule.x then found else rule
+			end
+		end
+		local plan = Layout.hotbar(area, #order, Ui.scale(), touch, 8, jump)
+		barScale.Scale = plan.scale
+		bar.Position = UDim2.new(1, -plan.right, 1, -plan.bottom)
+		bar.Size = UDim2.fromOffset(plan.baseWidth, Layout.HOTBAR_HEIGHT)
+		for _, slot in slots do
+			local key = slot:FindFirstChild("Key")
+			if key and key:IsA("GuiObject") then
+				key.Visible = not touch
+			end
+		end
+	end
+	Ui.onLayout(layout)
+	-- 로블록스 터치 조작 화면(TouchGui)이 늦게 생기면 그 점프 버튼 자리에 맞춰 다시
+	local playerGui = player:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui.ChildAdded:Connect(function(gui: Instance)
+			if gui.Name == "TouchGui" then
+				task.delay(0.5, layout) -- 점프 버튼 크기·자리가 정해진 뒤
+			end
+		end)
+	end
 
 	local function humanoid(): Humanoid?
 		local character = player.Character
@@ -182,9 +247,15 @@ function HotbarController.start()
 			local slot = slots[tool]
 			if not slot then
 				local t = tool
-				local made = Ui.button("", COLORS[t.Name] or C.gray, UDim2.fromOffset(88, 88), function()
-					press(t)
-				end, { parent = bar })
+				local made = Ui.button(
+					"",
+					COLORS[t.Name] or C.gray,
+					UDim2.fromOffset(Layout.SLOT, Layout.SLOT),
+					function()
+						press(t)
+					end,
+					{ parent = bar }
+				)
 				drawTool(t.Name, made)
 				Ui.label(NAMES[t.Name] or t.Name, UDim2.new(1, -6, 0, 24), 18, C.white, {
 					Name = "Caption",
@@ -220,6 +291,7 @@ function HotbarController.start()
 				stroke.Thickness = if equipped(tool) then 6 else 3
 			end
 		end
+		layout() -- 칸 수가 바뀌면 너비·배율 다시
 	end
 
 	local function watch(container: Instance?)

@@ -121,7 +121,7 @@ function QuestController.start()
 	local panel: Frame = Ui.new("Frame", {
 		Name = "QuestPanel",
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 100, 0.5, 0),
+		Position = UDim2.new(0, HudController.menuRight() + 8, 0.5, 0), -- 메뉴 옆 (메뉴가 2열이 되면 따라감)
 		Size = UDim2.fromOffset(340, 60),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = C.panel,
@@ -130,6 +130,9 @@ function QuestController.start()
 		Parent = Ui.layer("Panels"),
 	})
 	Ui.scaled(panel)
+	Ui.onLayout(function()
+		panel.Position = UDim2.new(0, HudController.menuRight() + 8, 0.5, 0)
+	end)
 	Ui.corner(20).Parent = panel
 	Ui.stroke(C.mint, 4).Parent = panel
 	Ui.padding(10).Parent = panel

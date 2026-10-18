@@ -39,6 +39,7 @@ Theme.Menu = {
 	shop = Theme.Colors.green,
 	pets = Theme.Colors.pink,
 	settings = Theme.Colors.purple,
+	quest = Theme.Colors.mint,
 }
 
 Theme.Tween = {

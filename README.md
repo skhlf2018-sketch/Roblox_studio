@@ -21,6 +21,8 @@ rojo serve                                                # 스튜디오 Rojo �
 selene src                                                # 린트
 stylua --check src tests                                  # 포맷 검사 (고치려면 stylua src tests)
 lune run tests/run.luau                                   # 순수 로직 테스트
+lune run tests/smoke_visuals.luau                         # (선택) 서버 겉모습 스모크: 맵·특수 장소 모델·펫·알 (docs/UI.md 8장)
+lune run tests/smoke_client.luau                          # (선택) 클라 화면 스모크: 창·고르기 창·연출·무기 모양
 lune run tests/sim_progress.luau                          # 밸런스 리포트 (구역별 추천 속도 도달 시간, 테스트 아님)
 lune run tests/sim_progress.luau sweep                    #   러닝머신 배율 바꿔 보기 / whatif = 도감 속도 보상 공식 바꿔 보기
 ```

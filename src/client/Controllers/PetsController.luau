@@ -30,6 +30,7 @@ local PetsController = {}
 local C = Theme.Colors
 local NAME = "Pets"
 local PAGE = 18
+local SIZE = Vector2.new(900, 570)
 
 local function detail(record: Types.PetRecord): string
 	local parts: { string } = {}
@@ -47,7 +48,7 @@ local function detail(record: Types.PetRecord): string
 end
 
 function PetsController.start()
-	local window = Ui.window(NAME, "펫", Theme.Menu.pets, Vector2.new(900, 570), function()
+	local window = Ui.window(NAME, "펫", Theme.Menu.pets, SIZE, function()
 		Windows.close(NAME)
 	end)
 	local content = window.content
@@ -64,7 +65,7 @@ function PetsController.start()
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = top,
 	})
-	Ui.button("최고 펫 장착", C.orange, UDim2.fromOffset(210, 50), function()
+	local bestButton = Ui.button("최고 펫 장착", C.orange, UDim2.fromOffset(210, 50), function()
 		Net.send(Remotes.ToServer.EquipBest)
 	end, {
 		anchor = Vector2.new(0.5, 0.5),
@@ -80,17 +81,18 @@ function PetsController.start()
 	})
 	local page = 1
 	local render: () -> ()
-	Ui.button("<", C.blue, UDim2.fromOffset(50, 50), function()
+	local prevButton = Ui.button("<", C.blue, UDim2.fromOffset(50, 50), function()
 		page = math.max(1, page - 1)
 		render()
 	end, { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -152, 0.5, 0), textSize = 28, parent = top })
-	Ui.button(">", C.blue, UDim2.fromOffset(50, 50), function()
+	local nextButton = Ui.button(">", C.blue, UDim2.fromOffset(50, 50), function()
 		page += 1
 		render()
 	end, { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -10, 0.5, 0), textSize = 28, parent = top })
 
 	local grid = Ui.scroll(UDim2.new(1, 0, 1, -70), UDim2.fromOffset(0, 70), content)
-	Ui.grid(Vector2.new(140, 214), 10).Parent = grid
+	local gridLayout = Ui.grid(Vector2.new(140, 214), 10)
+	gridLayout.Parent = grid
 	Ui.padding(6).Parent = grid
 	local empty = Ui.label(
 		"아직 펫이 없어요! 알을 훔쳐서 베이스에서 부화시켜요.",
@@ -130,6 +132,22 @@ function PetsController.start()
 			end
 			return a.uid < b.uid
 		end)
+		-- 장착 버튼: 폰에서도 46px 이상 (창 배율에 맞춰 키우고, 카드도 그만큼 길게)
+		local buttonH = Ui.touch(52, SIZE)
+		local cardH = 162 + buttonH
+		gridLayout.CellSize = UDim2.fromOffset(140, cardH)
+		-- 위 막대 버튼도 같은 기준
+		local topH = Ui.touch(50, SIZE)
+		top.Size = UDim2.new(1, 0, 0, topH + 10)
+		bestButton.Size = UDim2.fromOffset(210, topH)
+		prevButton.Size = UDim2.fromOffset(math.max(50, topH), topH)
+		nextButton.Size = UDim2.fromOffset(math.max(50, topH), topH)
+		prevButton.Position = UDim2.new(1, -(30 + math.max(50, topH) + 80), 0.5, 0)
+		slotsLabel.Size = UDim2.fromOffset(300, topH + 10)
+		pageLabel.Size = UDim2.fromOffset(80, topH + 10)
+		pageLabel.Position = UDim2.new(1, -(20 + math.max(50, topH)), 0, 0)
+		grid.Position = UDim2.fromOffset(0, topH + 20)
+		grid.Size = UDim2.new(1, 0, 1, -(topH + 20))
 		local slots = snap.penSlots or 0
 		local equippedCount = #(snap.equipped or {})
 		local maxText = if typeof((snap :: any).petInventoryMax) == "number"
@@ -147,7 +165,7 @@ function PetsController.start()
 			local rcolor = Theme.rarityColor(rarityId)
 			local isEquipped = equippedSet[record.uid] == true
 			local card = Ui.card(
-				UDim2.fromOffset(140, 214),
+				UDim2.fromOffset(140, cardH),
 				if isEquipped then Color3.fromRGB(255, 252, 225) else C.white,
 				if isEquipped then C.yellow else rcolor
 			)
@@ -183,7 +201,7 @@ function PetsController.start()
 				Ui.button(
 					"해제",
 					C.red,
-					UDim2.new(1, -14, 0, 52),
+					UDim2.new(1, -14, 0, buttonH),
 					function()
 						Net.send(Remotes.ToServer.UnequipPet, uid)
 					end,
@@ -194,7 +212,7 @@ function PetsController.start()
 				local b = Ui.button(
 					if full then "가득 참" else "장착",
 					if full then C.gray else C.green,
-					UDim2.new(1, -14, 0, 52),
+					UDim2.new(1, -14, 0, buttonH),
 					function()
 						Net.send(Remotes.ToServer.EquipPet, uid)
 					end,

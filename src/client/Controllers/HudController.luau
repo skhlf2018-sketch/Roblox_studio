@@ -4,6 +4,7 @@
 	- 상단: 돈($, K/M/B/T/Qa), 속도, 낮/밤 타이머 (GameState 기준 남은 초). 밤이면 빨갛게 + "밤! 알이 30배 빨리 자라요"
 	- 상단 아래: 지금 있는 구역 / 안전 구역 표시
 	- 왼쪽 세로 버튼: 도감 · 선물 · 상점 · 펫 · 설정 (각 창을 엶, 받을 보상이 있으면 빨간 배지)
+	  + 다른 컨트롤러가 HudController.addMenuButton 으로 더하는 버튼 (6번 퀘스트 = QuestController)
 ]]
 
 local Players = game:GetService("Players")
@@ -70,11 +71,14 @@ local function drawIcon(kind: string, parent: Instance)
 	local holder: Frame = Ui.new("Frame", {
 		Name = "Drawing",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 8),
+		Position = UDim2.new(0.5, 0, 0, 4),
 		Size = UDim2.fromOffset(44, 40),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
+	local shrink = Instance.new("UIScale")
+	shrink.Scale = 0.85
+	shrink.Parent = holder
 	local function box(pos: UDim2, size: UDim2, color: Color3, round: number?): Frame
 		local b: Frame = Ui.new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -100,6 +104,13 @@ local function drawIcon(kind: string, parent: Instance)
 	elseif kind == "shop" then
 		local coin = box(UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(36, 36), C.yellow, 1)
 		Ui.label("$", UDim2.fromScale(1, 1), 26, C.white, { Parent = coin })
+	elseif kind == "quest" then
+		-- 두루마리
+		box(UDim2.fromScale(0.5, 0.5), UDim2.fromOffset(28, 34), Color3.fromRGB(255, 240, 200), 4)
+		box(UDim2.fromScale(0.5, 0.12), UDim2.fromOffset(36, 8), Color3.fromRGB(190, 130, 70), 3)
+		box(UDim2.fromScale(0.5, 0.88), UDim2.fromOffset(36, 8), Color3.fromRGB(190, 130, 70), 3)
+		box(UDim2.fromScale(0.5, 0.42), UDim2.fromOffset(18, 3), C.mint, 1)
+		box(UDim2.fromScale(0.5, 0.6), UDim2.fromOffset(18, 3), C.mint, 1)
 	elseif kind == "pets" then
 		box(UDim2.fromScale(0.5, 0.65), UDim2.fromOffset(24, 20), C.pink, 1)
 		box(UDim2.fromScale(0.18, 0.35), UDim2.fromOffset(11, 13), C.pink, 1)
@@ -114,22 +125,50 @@ local function drawIcon(kind: string, parent: Instance)
 end
 
 local function menuButton(kind: string, caption: string, order: number, parent: Instance, onClick: () -> ()): TextButton
-	local color = Theme.Menu[kind] or C.blue
+	local color = (Theme.Menu :: { [string]: Color3 })[kind] or C.mint
+	-- 6칸: 72px × HUD 최소 배율 0.7 = 50px (폰에서도 44px 이상), 세로 합 472 → 폰 330px
 	local b = Ui.button(
 		"",
 		color,
-		UDim2.fromOffset(82, 82),
+		UDim2.fromOffset(72, 72),
 		onClick,
 		{ layoutOrder = order, parent = parent, sound = "Click" }
 	)
 	b.Name = kind
 	drawIcon(kind, b)
-	Ui.label(caption, UDim2.new(1, 0, 0, 24), 20, C.white, {
+	Ui.label(caption, UDim2.new(1, 0, 0, 22), 18, C.white, {
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -3),
+		Position = UDim2.new(0.5, 0, 1, -2),
 		Parent = b,
 	})
 	return b
+end
+
+-- 다른 컨트롤러가 왼쪽 메뉴에 버튼을 더함 (퀘스트 등). HUD 가 아직 안 만들어졌으면 만들어질 때 붙임.
+type PendingButton = { kind: string, caption: string, order: number, onClick: () -> (), done: (TextButton) -> () }
+local menuFrame: Frame? = nil
+local pendingButtons: { PendingButton } = {}
+
+function HudController.addMenuButton(
+	kind: string,
+	caption: string,
+	order: number,
+	onClick: () -> (),
+	done: ((TextButton) -> ())?
+)
+	local entry: PendingButton = {
+		kind = kind,
+		caption = caption,
+		order = order,
+		onClick = onClick,
+		done = done or function() end,
+	}
+	local menu = menuFrame
+	if menu then
+		entry.done(menuButton(kind, caption, order, menu, onClick))
+	else
+		table.insert(pendingButtons, entry)
+	end
 end
 
 local function clock(seconds: number): string
@@ -306,12 +345,12 @@ function HudController.start()
 		Name = "LeftMenu",
 		AnchorPoint = Vector2.new(0, 0.5),
 		Position = UDim2.new(0, 10, 0.5, 0),
-		Size = UDim2.fromOffset(90, 470),
+		Size = UDim2.fromOffset(80, 480),
 		BackgroundTransparency = 1,
 		Parent = hud,
 	})
 	Ui.scaled(menu)
-	Ui.list(Enum.FillDirection.Vertical, 10, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center).Parent =
+	Ui.list(Enum.FillDirection.Vertical, 8, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center).Parent =
 		menu
 
 	local indexButton = menuButton("index", "도감", 1, menu, function()
@@ -331,6 +370,11 @@ function HudController.start()
 	end)
 	local indexBadge = Ui.badge(indexButton)
 	local giftBadge = Ui.badge(giftButton)
+	menuFrame = menu
+	for _, entry in pendingButtons do
+		entry.done(menuButton(entry.kind, entry.caption, entry.order, menu, entry.onClick))
+	end
+	table.clear(pendingButtons)
 
 	local function refreshBadges()
 		local snap = State.get()

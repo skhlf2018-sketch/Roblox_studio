@@ -18,6 +18,7 @@ local Client = script.Parent.Parent
 local Net = require(Client.Net)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
+local WeaponController = require(script.Parent.WeaponController)
 
 local HotbarController = {}
 
@@ -143,6 +144,7 @@ function HotbarController.start()
 		end
 		if equipped(tool) then
 			Net.send(Remotes.ToServer.UseTool, tool.Name)
+			WeaponController.swing(tool.Name) -- 손 모양 휘두르기 (보기만)
 		else
 			hum:EquipTool(tool)
 		end

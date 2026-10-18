@@ -53,6 +53,17 @@ local Sounds: { [string]: SoundDef } = {
 	Offline = sfx(0.6, "오프라인 수입 팝업 (돈 쏟아지는 소리)"),
 	Equip = sfx(0.4, "펫 장착 (뾱)", 0.08),
 	Fusion = sfx(0.8, "퓨전 머신 (윙윙~ 펑!)"),
+	-- 2단계 (선임 2차)
+	Swing = sfx(0.6, "무기 휘두르기 (휙!)", 0.12),
+	FusionCharge = sfx(0.6, "퓨전 머신 빛 모으기 (우우웅~ 올라가는 소리)"),
+	Bloom = sfx(0.7, "사쿠라 블룸 (꽃잎 반짝 + 풍경 소리)"),
+	SpiritBloom = sfx(0.9, "스피릿 블룸 (신비로운 합창 + 반짝)"),
+	Unlock = sfx(0.7, "인큐베이터·문 열림 (철컥 + 반짝)"),
+	AltarOffer = sfx(0.6, "제단에 바치기 (낮은 종 '웅~')"),
+	AltarPaired = sfx(0.9, "제단 짝 성공 (천사 합창 + 쿵!)"),
+	Shrine = sfx(0.9, "비밀 합성 (마법진 '위잉~ 쾅!')"),
+	QuestStep = sfx(0.6, "퀘스트 하나 완료 (딩동!)"),
+	GateOpen = sfx(0.8, "퀘스트 문 열림 (큰 문 열리는 소리 + 반짝)"),
 
 	-- 음악 (반복)
 	Chase = music(0.45, "추격 긴장 음악 (알 들고 있는 동안)"),

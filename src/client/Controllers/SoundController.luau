@@ -211,7 +211,10 @@ function SoundController.start()
 	if fusionRemote then
 		task.spawn(function()
 			Net.on(fusionRemote, function()
-				SoundController.play("Fusion")
+				-- FusionController 의 빛 모으기(1.2초)가 끝나는 순간 "펑!"
+				task.delay(1.2, function()
+					SoundController.play("Fusion")
+				end)
 			end)
 		end)
 	end

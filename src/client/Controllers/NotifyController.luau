@@ -5,6 +5,7 @@
 	- Announce    → 상단 가운데 큰 배너 ("ALL EGG RESET!", "OO 구역에 OO 알 등장!", 밤/낮)
 	- EggDelivered → "배달 성공!" 토스트, IndexRewarded → 보상 토스트
 	- OfflineIncome → 접속 때 "자리 비운 동안 $X 벌었어요!" 팝업
+	- EggGranted / PetsSold 토스트 (사쿠라·제단·비밀 통로 결과 연출은 SakuraController / AltarController)
 	  NotifyController.toast(text, kind) 는 다른 컨트롤러도 씀.
 ]]
 
@@ -311,32 +312,7 @@ function NotifyController.start()
 			"info"
 		)
 	end)
-	onOptional(extra.SakuraResult, function(p)
-		if p.kind == "unlocked" then
-			NotifyController.banner("사쿠라 인큐베이터가 열렸어요!", Color3.fromRGB(255, 150, 200))
-		else
-			local spirit = p.mutation == "spirit_bloom"
-			NotifyController.toast(if spirit then "스피릿 블룸! (3배)" else "블룸! (1.5배)", "success")
-		end
-	end)
-	onOptional(extra.AltarUpdate, function(p)
-		if p.status == "pending" then
-			NotifyController.toast(
-				"제단에 " .. petName(p.petId) .. " 바침! 반대쪽 제단에 짝이 오길 기다려요",
-				"info"
-			)
-		elseif p.status == "paired" then
-			NotifyController.banner(
-				"제단 성공! " .. (if p.partner then tostring(p.partner) .. "와(과) " else "") .. "특별 알!",
-				C.yellow
-			)
-		elseif p.status == "expired" then
-			NotifyController.toast("제단 시간이 끝났어요. 펫이 돌아왔어요", "error")
-		end
-	end)
-	onOptional(extra.ShrineResult, function(p)
-		NotifyController.banner("비밀 합성 성공! " .. petName(p.resultPetId) .. " 알!", C.purple)
-	end)
+	-- SakuraResult / AltarUpdate / ShrineResult 연출은 SakuraController / AltarController 가 함 (2차)
 end
 
 return NotifyController

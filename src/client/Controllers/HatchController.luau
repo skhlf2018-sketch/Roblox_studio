@@ -3,6 +3,8 @@
 	HatchController — 부화 결과 팝업 (HatchResult)
 	펫 카드: 희귀도 색 테두리 + 빙글 도는 3D 펫 + 뒤에서 도는 빛살 + "NEW!" (도감 첫 발견) + 초당 수입.
 	잠깐 흔들리는 알 → 펑! 하고 카드가 나오는 순서 (기대감 → 보상).
+	FusionResult 도 같은 카드 (1.3초 뒤, "희귀도 UP!/크기 UP!" 리본 + 수입 3마리 합 → 결과 + 보너스 돌연변이).
+	HatchController.show(payload) 로 다른 컨트롤러도 씀 (제단 알 · 비밀 합성 알: title/ribbon/footer 지정).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -142,13 +144,40 @@ local function showNext()
 		end
 	end)
 
-	Ui.label(
-		if payload.fusion then "퓨전!" else "부화!",
-		UDim2.new(1, 0, 0, 50),
-		42,
-		if payload.fusion then C.purple else C.orange,
-		{ Position = UDim2.fromOffset(0, 10), Parent = card }
-	)
+	local titleText = if typeof(payload.title) == "string"
+		then payload.title
+		elseif payload.fusion then "퓨전!"
+		else "부화!"
+	local titleColor = if typeof(payload.titleColor) == "Color3"
+		then payload.titleColor
+		elseif payload.fusion then C.purple
+		else C.orange
+	Ui.label(titleText, UDim2.new(1, 0, 0, 50), 42, titleColor, { Position = UDim2.fromOffset(0, 10), Parent = card })
+	-- 왼쪽 위 리본: 퓨전 "희귀도 UP!" / "크기 UP!" / 직접 준 글
+	local ribbonText: string? = if typeof(payload.ribbon) == "string"
+		then payload.ribbon
+		elseif payload.fusion then (if payload.upgraded then "희귀도 UP!" else "크기 UP!")
+		else nil
+	if ribbonText then
+		local ribbon: TextLabel = Ui.new("TextLabel", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(46, 26),
+			Size = UDim2.fromOffset(130, 40),
+			Rotation = -12,
+			BackgroundColor3 = C.purple,
+			TextColor3 = C.white,
+			TextSize = 22,
+			Text = ribbonText,
+			ZIndex = 5,
+			Parent = card,
+		})
+		Ui.corner(14).Parent = ribbon
+		Ui.stroke(C.white, 3).Parent = ribbon
+		Ui.textStroke(2).Parent = ribbon
+		task.delay(0.3, function()
+			Ui.pop(ribbon, 1.5)
+		end)
+	end
 	local view = PetViewport.new(tostring(record.petId), {
 		size = UDim2.fromOffset(240, 200),
 		position = UDim2.new(0.5, 0, 0, 62),
@@ -173,23 +202,35 @@ local function showNext()
 	})
 	Ui.corner(1).Parent = rarityTag
 	local extra = describe(record)
-	Ui.label(
-		Format.money(tonumber(payload.income) or 0) .. "/초" .. (if extra ~= "" then "  ·  " .. extra else ""),
+	local incomeText = Format.money(tonumber(payload.income) or 0) .. "/초"
+	if payload.fusion and tonumber(payload.inputIncome) then
+		-- 퓨전: 3마리 합 → 결과
+		incomeText = Format.money(tonumber(payload.inputIncome) or 0) .. " → " .. incomeText
+	end
+	local incomeLabel = Ui.label(
+		incomeText .. (if extra ~= "" then "  ·  " .. extra else ""),
 		UDim2.new(1, -20, 0, 32),
 		24,
 		C.money,
-		{ Position = UDim2.fromOffset(10, 354), Parent = card }
+		{ Position = UDim2.fromOffset(10, 354), TextScaled = true, Parent = card }
 	)
-	Ui.label(
-		if payload.equipped then "우리에 들어갔어요!" else "보관함으로 갔어요",
-		UDim2.new(1, 0, 0, 24),
-		18,
-		C.ink,
-		{
-			Position = UDim2.fromOffset(0, 386),
-			Parent = card,
-		}
-	)
+	local limit = Instance.new("UITextSizeConstraint")
+	limit.MaxTextSize = 24
+	limit.Parent = incomeLabel
+	local footer = if typeof(payload.footer) == "string"
+		then payload.footer
+		elseif payload.sold then "보관함이 가득 차서 바로 팔렸어요"
+		elseif payload.equipped then "우리에 들어갔어요!"
+		else "보관함으로 갔어요"
+	if payload.fusion and typeof(payload.bonusMutation) == "string" then
+		local m = Mutations.get(payload.bonusMutation)
+		footer = "보너스 돌연변이: " .. (if m then m.name else payload.bonusMutation) .. "!  " .. footer
+	end
+	Ui.label(footer, UDim2.new(1, -20, 0, 24), 18, C.ink, {
+		Position = UDim2.fromOffset(10, 386),
+		TextScaled = true,
+		Parent = card,
+	})
 	if payload.isNew then
 		local new: TextLabel = Ui.new("TextLabel", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -233,26 +274,37 @@ local function showNext()
 	task.delay(8, close)
 end
 
+-- 다른 컨트롤러도 같은 카드를 띄울 수 있음 (제단 알·비밀 합성 알 등)
+--   payload = { pet = { petId, size, mutations }, income, title?, titleColor?, ribbon?, footer?, isNew?, delay? }
+function HatchController.show(payload: any)
+	if typeof(payload) ~= "table" or typeof(payload.pet) ~= "table" then
+		return
+	end
+	local wait = tonumber(payload.delay) or 0
+	local function push()
+		table.insert(queue, payload)
+		task.spawn(showNext)
+	end
+	if wait > 0 then
+		task.delay(wait, push)
+	else
+		push()
+	end
+end
+
 function HatchController.start()
 	Net.on(Remotes.ToClient.HatchResult, function(payload: any)
-		if typeof(payload) == "table" and typeof(payload.pet) == "table" then
-			table.insert(queue, payload)
-			task.spawn(showNext)
+		HatchController.show(payload)
+	end)
+	-- 퓨전 결과도 같은 카드로 (FusionResult 의 pet/income/isNew/equipped 가 HatchResult 와 같은 모양).
+	-- FusionController 가 머신에서 빛 모으기 연출을 하는 동안(1.3초) 기다렸다가 카드.
+	Net.on(Remotes.ToClient.FusionResult, function(payload: any)
+		if typeof(payload) == "table" then
+			payload.fusion = true
+			payload.delay = 1.3
+			HatchController.show(payload)
 		end
 	end)
-	-- 퓨전 결과도 같은 카드로 (2단계, FusionResult 의 pet/income/isNew/equipped 가 HatchResult 와 같은 모양)
-	local fusionRemote = (Remotes.ToClient :: { [string]: string }).FusionResult
-	if fusionRemote then
-		task.spawn(function()
-			Net.on(fusionRemote, function(payload: any)
-				if typeof(payload) == "table" and typeof(payload.pet) == "table" then
-					payload.fusion = true
-					table.insert(queue, payload)
-					task.spawn(showNext)
-				end
-			end)
-		end)
-	end
 end
 
 return HatchController

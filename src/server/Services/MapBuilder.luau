@@ -16,6 +16,10 @@
 	  (start() 끝에서 시작. 본부장이 나중에 Main.server.luau 에 정식 등록 예정).
 
 	태그·Attribute 이름은 shared/Tags.luau 그대로 (서버 로직이 읽음).
+
+	2단계 특수 장소 진짜 모델 (SPECIALS 표): 벚꽃 = 사쿠라 인큐베이터, 천사&악마 = 천국/지옥 제단 + 폭포 옆 비밀 통로,
+	마법의 숲 = 퀘스트 문 + 비밀 정원. 태그 파트가 맵에 있으므로 서버 Util/Landmarks 는 임시 파트를 안 만듦.
+	베이스 퓨전 머신도 진짜 모델(유리통 3개 Tube1~3 + Core). 클라 연출이 이 이름들을 찾음.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -1215,10 +1219,17 @@ end
 
 type Hole = { x: number, z: number, r: number }
 
-local function buildDecor(biome: Biomes.Biome, theme: BiomeTheme, center: Vector3, toward: number, parent: Instance)
+local function buildDecor(
+	biome: Biomes.Biome,
+	theme: BiomeTheme,
+	center: Vector3,
+	toward: number,
+	parent: Instance,
+	reserved: { Hole }?
+)
 	local rng = Random.new(biome.order * 7919)
 	local half = L.ZONE_SIZE / 2 - 4
-	local placed: { Hole } = {}
+	local placed: { Hole } = table.clone(reserved or {})
 	local function free(x: number, z: number, r: number): boolean
 		for _, h in placed do
 			local dx, dz = x - h.x, z - h.z
@@ -1414,6 +1425,609 @@ local function buildDecor(biome: Biomes.Biome, theme: BiomeTheme, center: Vector
 	end
 end
 
+------------------------------------------------------------------
+-- 2단계 특수 장소 진짜 모델 (선임 2차) — 서버 Landmarks 가 같은 태그 파트를 찾으면 임시 파트를 안 만듦
+--   태그는 "기준 파트" 하나에만 (서버 거리 판정 = 그 파트 상자 표면). 나머지는 같은 Model 안의 장식.
+--   돌려주는 Hole 목록 = 그 자리에 구역 장식이 안 놓이게 비워 둘 곳 (구역 중심 기준 x, z)
+------------------------------------------------------------------
+
+-- 두 점 사이 원기둥 (관·파이프)
+local function between(parent: Instance, a: Vector3, b: Vector3, d: number, color: Color3, mat: Enum.Material?): Part
+	local mid = (a + b) / 2
+	local length = (b - a).Magnitude
+	return P(
+		parent,
+		"Cyl",
+		Vector3.new(length, d, d),
+		CFrame.lookAt(mid, b) * CFrame.Angles(0, math.pi / 2, 0),
+		color,
+		mat
+	)
+end
+
+-- 세운 원기둥 기준 파트 (태그·Attribute 포함, 서버가 찾음)
+local function anchorCylinder(
+	name: string,
+	diameter: number,
+	height: number,
+	pos: Vector3,
+	parent: Instance,
+	color: Color3,
+	mat: Enum.Material,
+	tag: string,
+	attributes: { [string]: any }?
+): Part
+	return makePart({
+		name = name,
+		size = Vector3.new(height, diameter, diameter),
+		cframe = CFrame.new(pos) * CFrame.Angles(0, 0, math.pi / 2),
+		parent = parent,
+		color = color,
+		material = mat,
+		shape = Enum.PartType.Cylinder,
+		tag = tag,
+		attributes = attributes,
+	})
+end
+
+local function model(name: string, parent: Instance): Model
+	local m = Instance.new("Model")
+	m.Name = name
+	m.Parent = parent
+	return m
+end
+
+-- 퓨전 머신: 보라 기계 몸통(태그) + 위에 유리통 3개(Tube1~3, 빛나는 액체) + 관 → 가운데 유리 돔(Core) + 네온 띠
+local function buildFusionMachine(parent: Instance, pos: Vector3, plotIndex: number)
+	local m = model("FusionMachineModel", parent)
+	local purple = Color3.fromRGB(150, 90, 230)
+	local dark = Color3.fromRGB(70, 45, 110)
+	local metal = Color3.fromRGB(190, 190, 205)
+	local glow = Color3.fromRGB(255, 120, 255)
+	P(m, "VCyl", Vector3.new(11, 0.8, 0), CFrame.new(pos + Vector3.new(0, 0.4, 0)), dark, M.Metal, true)
+	P(m, "VCyl", Vector3.new(11.6, 0.3, 0), CFrame.new(pos + Vector3.new(0, 0.3, 0)), glow, M.Neon)
+	local body = makePart({
+		name = "FusionMachine",
+		size = Vector3.new(8, 4.5, 5),
+		cframe = CFrame.new(pos + Vector3.new(0, 3.05, -0.5)),
+		parent = m,
+		color = purple,
+		material = Enum.Material.SmoothPlastic,
+		tag = Tags.FusionMachine,
+		attributes = { PlotIndex = plotIndex },
+	})
+	m.PrimaryPart = body
+	P(m, "Block", Vector3.new(8.3, 0.35, 5.3), CFrame.new(pos + Vector3.new(0, 1.15, -0.5)), glow, M.Neon)
+	P(m, "Block", Vector3.new(8.6, 0.5, 5.6), CFrame.new(pos + Vector3.new(0, 5.5, -0.5)), dark, M.Metal, true)
+	-- 옆 환기구
+	for _, side in { -1, 1 } do
+		for k = 0, 2 do
+			P(
+				m,
+				"Block",
+				Vector3.new(0.2, 0.3, 3.4),
+				CFrame.new(pos + Vector3.new(side * 4.05, 2.4 + k * 0.8, -0.5)),
+				glow:Lerp(dark, 0.3),
+				M.Neon
+			)
+		end
+	end
+	-- 앞 윗면 버튼 3개
+	for i, c in { Color3.fromRGB(255, 80, 90), Color3.fromRGB(110, 255, 140), Color3.fromRGB(255, 220, 80) } do
+		P(m, "Ball", Vector3.new(0.6, 0, 0), CFrame.new(pos + Vector3.new(-1.6 + (i - 1) * 1.6, 5.8, 1.9)), c, M.Neon)
+	end
+	-- 유리통 3개 + 관
+	local corePos = pos + Vector3.new(0, 12.3, -0.8)
+	local liquids = { Color3.fromRGB(255, 120, 220), Color3.fromRGB(190, 120, 255), Color3.fromRGB(110, 220, 255) }
+	for i, dx in { -2.7, 0, 2.7 } do
+		local base = pos + Vector3.new(dx, 0, -0.8)
+		P(m, "VCyl", Vector3.new(2.3, 0.45, 0), CFrame.new(base + Vector3.new(0, 5.95, 0)), metal, M.Metal)
+		P(
+			m,
+			"VCyl",
+			Vector3.new(1.9, 3.4, 0),
+			CFrame.new(base + Vector3.new(0, 7.85, 0)),
+			Color3.fromRGB(220, 200, 255),
+			M.Glass,
+			false,
+			0.6
+		)
+		local liquid =
+			P(m, "VCyl", Vector3.new(1.4, 2.2, 0), CFrame.new(base + Vector3.new(0, 7.3, 0)), liquids[i], M.Neon)
+		liquid.Name = "Tube" .. i
+		P(m, "VCyl", Vector3.new(2.3, 0.45, 0), CFrame.new(base + Vector3.new(0, 9.75, 0)), metal, M.Metal)
+		between(m, base + Vector3.new(0, 9.9, 0), corePos, 0.45, metal, M.Metal)
+	end
+	P(m, "Ball", Vector3.new(4.4, 0, 0), CFrame.new(corePos), Color3.fromRGB(210, 170, 255), M.Glass, false, 0.45)
+	local core = P(m, "Ball", Vector3.new(1.9, 0, 0), CFrame.new(corePos), glow, M.Neon)
+	core.Name = "Core"
+	light(core, Color3.fromRGB(230, 130, 255), 16, 1.6)
+	Gui.sign(body, Enum.NormalId.Back, {
+		title = "퓨전 머신",
+		subtitle = "같은 펫 3마리 → 더 강한 펫!",
+		background = Color3.fromRGB(120, 60, 200),
+	})
+end
+
+-- 사쿠라 인큐베이터 (벚꽃 구역): 큰 벚나무 뿌리 위 분홍 알 받침(태그) + 유리 그릇 + 분홍 알 + 꽃잎 파티클
+local function buildSakura(center: Vector3, toward: number, parent: Instance): { Hole }
+	local m = model("SakuraIncubatorModel", parent)
+	local back = -toward
+	local lx = 26 -- 구역 중심에서 길 반대쪽(도리이 쪽)으로
+	local pos = Vector3.new(center.X + back * lx, FLOOR_TOP, center.Z)
+	local wood = Color3.fromRGB(95, 58, 45)
+	local pink = Color3.fromRGB(255, 175, 205)
+	-- 나무 (받침 뒤)
+	local trunkPos = pos + Vector3.new(back * 5.5, 0, 0)
+	P(m, "VCyl", Vector3.new(3.2, 10, 0), CFrame.new(trunkPos + Vector3.new(0, 5, 0)), wood, M.Wood, true)
+	P(
+		m,
+		"Ell",
+		Vector3.new(11, 2.2, 11),
+		CFrame.new(pos + Vector3.new(back * 2, 0.4, 0)),
+		wood:Lerp(Color3.new(0, 0, 0), 0.15),
+		M.Wood
+	)
+	for i = 1, 6 do
+		local a = i / 6 * math.pi * 2
+		local tipPos = trunkPos + Vector3.new(math.cos(a) * 6, 0.2, math.sin(a) * 6)
+		between(m, trunkPos + Vector3.new(0, 1.6, 0), tipPos, 1.1, wood, M.Wood)
+	end
+	for i = 1, 7 do
+		local a = i / 7 * math.pi * 2
+		P(
+			m,
+			"Ball",
+			Vector3.new(6 + (i % 3), 0, 0),
+			CFrame.new(trunkPos + Vector3.new(math.cos(a) * 3.6, 11 + (i % 2) * 1.5, math.sin(a) * 3.6)),
+			pink:Lerp(Color3.new(1, 1, 1), (i % 3) * 0.12),
+			M.SmoothPlastic
+		)
+	end
+	-- 받침 (태그 SakuraIncubator)
+	local pedestal = anchorCylinder(
+		"SakuraIncubator",
+		7,
+		1.6,
+		pos + Vector3.new(0, 1.4, 0),
+		m,
+		Color3.fromRGB(200, 90, 130),
+		Enum.Material.WoodPlanks,
+		Tags.SakuraIncubator
+	)
+	m.PrimaryPart = pedestal
+	P(
+		m,
+		"VCyl",
+		Vector3.new(7.6, 0.3, 0),
+		CFrame.new(pos + Vector3.new(0, 2.25, 0)),
+		Color3.fromRGB(255, 210, 90),
+		M.Foil
+	)
+	P(m, "Ell", Vector3.new(6.2, 2.2, 6.2), CFrame.new(pos + Vector3.new(0, 2.8, 0)), pink, M.Glass, false, 0.35)
+	local egg = P(
+		m,
+		"Ell",
+		Vector3.new(2.8, 3.6, 2.8),
+		CFrame.new(pos + Vector3.new(0, 4.4, 0)),
+		Color3.fromRGB(255, 150, 200),
+		M.SmoothPlastic
+	)
+	egg.Name = "SakuraEgg"
+	for i = 1, 4 do
+		local a = i * 1.57 + 0.5
+		P(
+			m,
+			"Ball",
+			Vector3.new(0.6, 0, 0),
+			CFrame.new(pos + Vector3.new(math.cos(a) * 1.15, 4.4 + (i % 2) * 0.8 - 0.4, math.sin(a) * 1.15)),
+			Color3.new(1, 1, 1),
+			M.Neon
+		)
+	end
+	light(egg, Color3.fromRGB(255, 140, 200), 18, 1.6)
+	-- 등불 4개
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + math.pi / 4
+		local lp = pos + Vector3.new(math.cos(a) * 6, 0, math.sin(a) * 6)
+		P(m, "VCyl", Vector3.new(0.4, 3, 0), CFrame.new(lp + Vector3.new(0, 1.5, 0)), wood, M.Wood)
+		P(
+			m,
+			"Ball",
+			Vector3.new(1.1, 0, 0),
+			CFrame.new(lp + Vector3.new(0, 3.3, 0)),
+			Color3.fromRGB(255, 170, 200),
+			M.Neon
+		)
+	end
+	-- 꽃잎 (모두에게, 적게)
+	local petalBox = P(
+		m,
+		"Block",
+		Vector3.new(12, 0.5, 12),
+		CFrame.new(trunkPos + Vector3.new(0, 12, 0)),
+		pink,
+		M.SmoothPlastic,
+		false,
+		1
+	)
+	petalBox.Name = "PetalEmitter"
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = SPARKLE_TEX
+	e.Rate = 8
+	e.Lifetime = NumberRange.new(4, 6)
+	e.Speed = NumberRange.new(0.5, 1.5)
+	e.EmissionDirection = Enum.NormalId.Bottom
+	e.Acceleration = Vector3.new(0.6, -1.2, 0.4)
+	e.RotSpeed = NumberRange.new(-90, 90)
+	e.Rotation = NumberRange.new(0, 360)
+	e.Color = ColorSequence.new(Color3.fromRGB(255, 170, 205))
+	e.Size = NumberSequence.new(0.5)
+	e.LightInfluence = 0.5
+	e.Parent = petalBox
+	Gui.billboard(pedestal, "사쿠라 인큐베이터", 12, 120).TextColor3 = Color3.fromRGB(255, 220, 235)
+	return { { x = back * lx, z = 0, r = 11 }, { x = back * (lx + 5.5), z = 0, r = 9 } }
+end
+
+-- 천국 제단 (흰 대리석 + 금, 빛기둥) / 지옥 제단 (검은 현무암 + 빨강 네온, 불꽃)
+local function buildAltar(side: string, pos: Vector3, parent: Instance)
+	local light_ = side == "light"
+	local m = model(if light_ then "AltarLightModel" else "AltarDarkModel", parent)
+	local stone = if light_ then Color3.fromRGB(250, 248, 240) else Color3.fromRGB(40, 30, 35)
+	local trim = if light_ then Color3.fromRGB(255, 205, 60) else Color3.fromRGB(230, 30, 30)
+	local mat = if light_ then M.Marble else M.Basalt
+	P(m, "VCyl", Vector3.new(13, 0.6, 0), CFrame.new(pos + Vector3.new(0, 0.3, 0)), stone, mat, true)
+	P(m, "VCyl", Vector3.new(13.4, 0.25, 0), CFrame.new(pos + Vector3.new(0, 0.25, 0)), trim, M.Neon)
+	P(m, "VCyl", Vector3.new(9.5, 0.6, 0), CFrame.new(pos + Vector3.new(0, 0.9, 0)), stone, mat, true)
+	local altar = makePart({
+		name = if light_ then "AltarLight" else "AltarDark",
+		size = Vector3.new(6, 3, 4),
+		cframe = CFrame.new(pos + Vector3.new(0, 2.7, 0)),
+		parent = m,
+		color = stone,
+		material = mat,
+		tag = Tags.Altar,
+		attributes = { Side = side, PendingCount = 0 },
+	})
+	m.PrimaryPart = altar
+	P(
+		m,
+		"Block",
+		Vector3.new(6.8, 0.45, 4.8),
+		CFrame.new(pos + Vector3.new(0, 4.4, 0)),
+		trim,
+		if light_ then M.Foil else M.Neon
+	)
+	for _, dz in { -2.05, 2.05 } do
+		P(m, "Block", Vector3.new(6.1, 0.3, 0.12), CFrame.new(pos + Vector3.new(0, 2.2, dz)), trim, M.Neon)
+	end
+	if light_ then
+		-- 금 기둥 2개 + 빛 구슬
+		for _, dx in { -4.6, 4.6 } do
+			P(m, "VCyl", Vector3.new(1.4, 8, 0), CFrame.new(pos + Vector3.new(dx, 5.2, 0)), stone, M.Marble, true)
+			P(m, "VCyl", Vector3.new(2, 0.5, 0), CFrame.new(pos + Vector3.new(dx, 9.3, 0)), trim, M.Foil)
+			local orb = P(
+				m,
+				"Ball",
+				Vector3.new(1.4, 0, 0),
+				CFrame.new(pos + Vector3.new(dx, 10.3, 0)),
+				Color3.fromRGB(255, 245, 190),
+				M.Neon
+			)
+			light(orb, Color3.fromRGB(255, 235, 170), 14, 1.2)
+		end
+		-- 떠 있는 후광
+		for i = 1, 10 do
+			local a = i / 10 * math.pi * 2
+			P(
+				m,
+				"Ball",
+				Vector3.new(0.5, 0, 0),
+				CFrame.new(pos + Vector3.new(math.cos(a) * 2.3, 8.5, math.sin(a) * 2.3)),
+				trim,
+				M.Neon
+			)
+		end
+		-- 하늘로 솟는 빛기둥 (Beam)
+		local a0 = Instance.new("Attachment")
+		a0.Name = "BeamBottom"
+		a0.Position = Vector3.new(0, 1.8, 0)
+		a0.Parent = altar
+		local a1 = Instance.new("Attachment")
+		a1.Name = "BeamTop"
+		a1.Position = Vector3.new(0, 70, 0)
+		a1.Parent = altar
+		local beam = Instance.new("Beam")
+		beam.Attachment0 = a0
+		beam.Attachment1 = a1
+		beam.Width0 = 3
+		beam.Width1 = 6
+		beam.FaceCamera = true
+		beam.LightEmission = 1
+		beam.LightInfluence = 0
+		beam.Color = ColorSequence.new(Color3.fromRGB(255, 245, 200))
+		beam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.35),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		beam.Parent = altar
+	else
+		-- 불 화로 2개 + 검은 가시
+		for _, dx in { -4.6, 4.6 } do
+			P(m, "VCyl", Vector3.new(2.2, 3.4, 0), CFrame.new(pos + Vector3.new(dx, 2.9, 0)), stone, M.Basalt, true)
+			local coal = P(
+				m,
+				"VCyl",
+				Vector3.new(1.8, 0.3, 0),
+				CFrame.new(pos + Vector3.new(dx, 4.7, 0)),
+				Color3.fromRGB(255, 70, 30),
+				M.Neon
+			)
+			local fire = Instance.new("Fire")
+			fire.Size = 4
+			fire.Heat = 10
+			fire.Color = Color3.fromRGB(255, 70, 30)
+			fire.SecondaryColor = Color3.fromRGB(255, 190, 60)
+			fire.Parent = coal
+			light(coal, Color3.fromRGB(255, 80, 40), 16, 2)
+		end
+		for i = 1, 4 do
+			local a = i / 4 * math.pi * 2 + math.pi / 4
+			local sp = pos + Vector3.new(math.cos(a) * 5.6, 0, math.sin(a) * 5.6)
+			P(
+				m,
+				"Ell",
+				Vector3.new(1.2, 4.5, 1.2),
+				CFrame.new(sp + Vector3.new(0, 2, 0)) * CFrame.Angles(math.cos(a) * 0.25, 0, -math.sin(a) * 0.25),
+				stone,
+				M.Basalt
+			)
+			P(m, "Ell", Vector3.new(0.5, 1.4, 0.5), CFrame.new(sp + Vector3.new(0, 3.9, 0)), trim, M.Neon)
+		end
+		local top = P(
+			m,
+			"VCyl",
+			Vector3.new(2.4, 0.2, 0),
+			CFrame.new(pos + Vector3.new(0, 4.7, 0)),
+			Color3.fromRGB(255, 60, 30),
+			M.Neon
+		)
+		local fire = Instance.new("Fire")
+		fire.Size = 6
+		fire.Heat = 12
+		fire.Color = Color3.fromRGB(220, 40, 30)
+		fire.SecondaryColor = Color3.fromRGB(255, 160, 40)
+		fire.Parent = top
+	end
+	Gui.billboard(altar, if light_ then "천국 제단" else "지옥 제단", 12, 120).TextColor3 = if light_
+		then Color3.fromRGB(255, 235, 150)
+		else Color3.fromRGB(255, 120, 110)
+end
+
+-- 비밀 통로 (천사&악마 구역 뒤쪽 가장자리): 바위 절벽 + 폭포 + 그 옆 동굴 입구 안의 합성 제단(태그 Shrine)
+local function buildShrine(center: Vector3, toward: number, parent: Instance): { Hole }
+	local m = model("SecretShrineModel", parent)
+	local back = -toward
+	local function at2(d: number, y: number, z: number): Vector3
+		return Vector3.new(center.X + back * d, FLOOR_TOP + y, center.Z + z)
+	end
+	local rock = Color3.fromRGB(120, 115, 125)
+	local rockDark = Color3.fromRGB(85, 80, 92)
+	-- 절벽 (가운데 z -5~5 는 입구)
+	P(m, "Block", Vector3.new(8, 22, 11), CFrame.new(at2(76, 11, -10.5)), rock, M.Slate, true)
+	P(m, "Block", Vector3.new(8, 22, 11), CFrame.new(at2(76, 11, 10.5)), rock, M.Slate, true)
+	P(m, "Block", Vector3.new(8, 12, 10), CFrame.new(at2(76, 16, 0)), rockDark, M.Slate, true)
+	P(m, "Block", Vector3.new(1, 10, 10), CFrame.new(at2(79.5, 5, 0)), Color3.fromRGB(45, 35, 60), M.Slate, true)
+	for i, z in { -15, -8, 9, 14 } do
+		P(m, "Ell", Vector3.new(5 + i % 2, 4, 5), CFrame.new(at2(71.5, 1.2, z)), rockDark, M.Slate)
+	end
+	-- 폭포 (오른쪽 바위 앞면) + 웅덩이 + 물보라
+	local fall = P(
+		m,
+		"Block",
+		Vector3.new(0.6, 21, 6),
+		CFrame.new(at2(71.6, 10.6, 10.5)),
+		Color3.fromRGB(130, 200, 255),
+		M.Glass,
+		false,
+		0.35
+	)
+	fall.Name = "Waterfall"
+	P(
+		m,
+		"Block",
+		Vector3.new(0.3, 21, 1),
+		CFrame.new(at2(71.2, 10.6, 9)),
+		Color3.fromRGB(230, 245, 255),
+		M.Neon,
+		false,
+		0.4
+	)
+	P(
+		m,
+		"Block",
+		Vector3.new(0.3, 21, 1),
+		CFrame.new(at2(71.2, 10.6, 12)),
+		Color3.fromRGB(230, 245, 255),
+		M.Neon,
+		false,
+		0.5
+	)
+	P(m, "VCyl", Vector3.new(13, 0.3, 0), CFrame.new(at2(66.5, 0.12, 10.5)), Color3.fromRGB(150, 145, 155), M.Slate)
+	local pool = P(
+		m,
+		"VCyl",
+		Vector3.new(11.5, 0.35, 0),
+		CFrame.new(at2(66.5, 0.2, 10.5)),
+		Color3.fromRGB(80, 170, 240),
+		M.Glass,
+		false,
+		0.2
+	)
+	local mist = Instance.new("ParticleEmitter")
+	mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	mist.Rate = 6
+	mist.Lifetime = NumberRange.new(1.5, 2.5)
+	mist.Speed = NumberRange.new(1, 3)
+	mist.EmissionDirection = Enum.NormalId.Top
+	mist.Size = NumberSequence.new(3)
+	mist.Transparency = NumberSequence.new(0.7, 1)
+	mist.Color = ColorSequence.new(Color3.new(1, 1, 1))
+	mist.Parent = pool
+	-- 합성 제단 (동굴 안, 왼쪽은 천국 흰색 / 오른쪽은 지옥 검정)
+	P(
+		m,
+		"VCyl",
+		Vector3.new(8, 0.12, 0),
+		CFrame.new(at2(74.5, 0.08, 0)),
+		Color3.fromRGB(180, 130, 255),
+		M.Neon,
+		false,
+		0.4
+	)
+	P(m, "Block", Vector3.new(5, 1, 5), CFrame.new(at2(76, 0.5, 0)), rockDark, M.Slate, true)
+	local shrine = makePart({
+		name = "SecretShrine",
+		size = Vector3.new(3.4, 3, 3.4),
+		cframe = CFrame.new(at2(76, 2.5, 0)),
+		parent = m,
+		color = Color3.fromRGB(205, 185, 255),
+		material = Enum.Material.Marble,
+		tag = Tags.Shrine,
+	})
+	m.PrimaryPart = shrine
+	P(m, "VCyl", Vector3.new(1.2, 6, 0), CFrame.new(at2(77, 3, -3.6)), Color3.fromRGB(250, 248, 240), M.Marble, true)
+	P(m, "VCyl", Vector3.new(1.2, 6, 0), CFrame.new(at2(77, 3, 3.6)), Color3.fromRGB(40, 30, 35), M.Basalt, true)
+	P(m, "Ball", Vector3.new(1, 0, 0), CFrame.new(at2(77, 6.4, -3.6)), Color3.fromRGB(255, 220, 90), M.Neon)
+	P(m, "Ball", Vector3.new(1, 0, 0), CFrame.new(at2(77, 6.4, 3.6)), Color3.fromRGB(230, 40, 40), M.Neon)
+	local gem = P(
+		m,
+		"Ell",
+		Vector3.new(1.3, 2.4, 1.3),
+		CFrame.new(at2(76, 5.4, 0)),
+		Color3.fromRGB(190, 130, 255),
+		M.Neon,
+		false,
+		0.1
+	)
+	light(gem, Color3.fromRGB(190, 140, 255), 18, 2)
+	Gui.billboard(shrine, "비밀 통로", 10, 100).TextColor3 = Color3.fromRGB(220, 200, 255)
+	return { { x = back * 72, z = 0, r = 17 }, { x = back * 66, z = 10.5, r = 8 } }
+end
+
+local function buildAngelsDemons(center: Vector3, toward: number, parent: Instance): { Hole }
+	local holes = buildShrine(center, toward, parent)
+	-- 천국 = -Z 쪽 절반, 지옥 = +Z 쪽 절반 (heavenhell 바닥과 같음)
+	buildAltar("light", Vector3.new(center.X, FLOOR_TOP, center.Z - 27), parent)
+	buildAltar("dark", Vector3.new(center.X, FLOOR_TOP, center.Z + 27), parent)
+	table.insert(holes, { x = 0, z = -27, r = 9 })
+	table.insert(holes, { x = 0, z = 27, r = 9 })
+	return holes
+end
+
+-- 퀘스트 문 (마법의 숲 뒤쪽): 덤불 울타리로 둘러싼 비밀 정원 + 문틀 + 문(태그 QuestGate) + 룬 돌 3개(Rune1~3)
+local function buildQuestGate(center: Vector3, toward: number, parent: Instance): { Hole }
+	local m = model("QuestGateModel", parent)
+	local back = -toward
+	local function at2(d: number, y: number, z: number): Vector3
+		return Vector3.new(center.X + back * d, FLOOR_TOP + y, center.Z + z)
+	end
+	local hedge = Color3.fromRGB(40, 110, 80)
+	local stone = Color3.fromRGB(95, 80, 130)
+	local glow = Color3.fromRGB(110, 255, 220)
+	-- 덤불 울타리 (높이 10: 점프로 못 넘음)
+	P(m, "Block", Vector3.new(2, 10, 28), CFrame.new(at2(79, 5, 0)), hedge, M.LeafyGrass, true)
+	for _, z in { -13, 13 } do
+		P(m, "Block", Vector3.new(19, 10, 2), CFrame.new(at2(69.5, 5, z)), hedge, M.LeafyGrass, true)
+	end
+	for _, z in { -9.5, 9.5 } do
+		P(m, "Block", Vector3.new(2, 10, 7), CFrame.new(at2(60, 5, z)), hedge, M.LeafyGrass, true)
+	end
+	-- 문틀
+	for _, z in { -6, 6 } do
+		P(m, "Block", Vector3.new(2.4, 13, 2), CFrame.new(at2(60, 6.5, z)), stone, M.Slate, true)
+		P(m, "Ball", Vector3.new(1.6, 0, 0), CFrame.new(at2(60, 13.6, z)), glow, M.Neon)
+	end
+	P(m, "Block", Vector3.new(2.6, 2, 14), CFrame.new(at2(60, 13.5, 0)), stone, M.Slate, true)
+	local crown = P(
+		m,
+		"Ell",
+		Vector3.new(1.6, 3, 1.6),
+		CFrame.new(at2(60, 15.8, 0)),
+		Color3.fromRGB(190, 110, 255),
+		M.Neon,
+		false,
+		0.1
+	)
+	light(crown, Color3.fromRGB(190, 120, 255), 16, 1.5)
+	-- 문 (태그 QuestGate, CanCollide true. 서버가 CollisionGroup 을 바꿈)
+	local door = makePart({
+		name = "Door",
+		size = Vector3.new(1, 12, 10),
+		cframe = CFrame.new(at2(60, 6, 0)),
+		parent = m,
+		color = Color3.fromRGB(80, 220, 180),
+		material = Enum.Material.ForceField,
+		transparency = 0.15,
+		canCollide = true,
+		tag = Tags.QuestGate,
+	})
+	m.PrimaryPart = door
+	Gui.billboard(door, "퀘스트 문\n(퀘스트 3개를 끝내면 열려요)", 9, 100).TextColor3 =
+		Color3.fromRGB(200, 255, 240)
+	-- 룬 돌 3개 (끝낸 퀘스트만큼 클라에서 빛남)
+	for i, z in { -4, 0, 4 } do
+		P(m, "Block", Vector3.new(1.6, 0.6, 1.6), CFrame.new(at2(55, 0.3, z)), stone, M.Slate, true)
+		local rune = P(
+			m,
+			"Block",
+			Vector3.new(0.6, 2.4, 1.4),
+			CFrame.new(at2(55, 1.8, z)),
+			Color3.fromRGB(70, 60, 90),
+			M.Slate,
+			true
+		)
+		rune.Name = "Rune" .. i
+	end
+	-- 정원 안: 요정 샘 + 크리스탈
+	P(m, "VCyl", Vector3.new(7, 1, 0), CFrame.new(at2(70, 0.5, 0)), stone, M.Slate, true)
+	local water = P(m, "VCyl", Vector3.new(5.8, 0.3, 0), CFrame.new(at2(70, 1.05, 0)), glow, M.Neon, false, 0.2)
+	light(water, glow, 20, 1.5)
+	P(m, "Ell", Vector3.new(1.4, 4, 1.4), CFrame.new(at2(70, 3, 0)), Color3.fromRGB(190, 120, 255), M.Neon, false, 0.15)
+	local sparkle = Instance.new("ParticleEmitter")
+	sparkle.Texture = SPARKLE_TEX
+	sparkle.Rate = 10
+	sparkle.Lifetime = NumberRange.new(1.5, 3)
+	sparkle.Speed = NumberRange.new(1, 3)
+	sparkle.SpreadAngle = Vector2.new(40, 40)
+	sparkle.EmissionDirection = Enum.NormalId.Top
+	sparkle.LightEmission = 1
+	sparkle.Color = ColorSequence.new(glow)
+	sparkle.Size = NumberSequence.new(0.4)
+	sparkle.Parent = water
+	for i, z in { -9, -5, 6, 9 } do
+		local h = 1.5 + (i % 2)
+		P(m, "VCyl", Vector3.new(0.6, h, 0), CFrame.new(at2(64 + i * 3, h / 2, z)), Color3.fromRGB(230, 230, 255))
+		P(
+			m,
+			"Ell",
+			Vector3.new(2.4, 1.1, 2.4),
+			CFrame.new(at2(64 + i * 3, h + 0.2, z)),
+			if i % 2 == 0 then glow else Color3.fromRGB(190, 110, 255),
+			M.Neon,
+			false,
+			0.1
+		)
+	end
+	return { { x = back * 68, z = 0, r = 17 }, { x = back * 55, z = 0, r = 6 } }
+end
+
+local SPECIALS: { [string]: (Vector3, number, Instance) -> { Hole } } = {
+	cherry_blossom = buildSakura,
+	angels_demons = buildAngelsDemons,
+	enchanted_forest = buildQuestGate,
+}
+
 local function buildZone(biome: Biomes.Biome, parent: Instance)
 	local zoneFolder = folder(biome.id, parent)
 	local theme = Visuals.biomes[biome.id]
@@ -1517,7 +2131,9 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 		})
 	end
 
-	buildDecor(biome, theme, center, toward, zoneFolder)
+	local builder = SPECIALS[biome.id]
+	local reserved = if builder then builder(center, toward, zoneFolder) else nil
+	buildDecor(biome, theme, center, toward, zoneFolder, reserved)
 	if theme.ambient then
 		ambientEmitter(theme.ambient, center, size - 10, zoneFolder, biome.id)
 	end
@@ -1772,52 +2388,8 @@ local function buildPlot(index: number, parent: Instance)
 		{ title = "러닝머신", subtitle = "위에 서 있으면 속도 UP!", background = plotColor }
 	)
 
-	-- 퓨전 머신
-	local fuPos = Vector3.new(c.X - 32, FLOOR_TOP, c.Z + 30)
-	local fusion = makePart({
-		name = "FusionMachine",
-		size = Vector3.new(7, 5, 7),
-		cframe = CFrame.new(fuPos.X, FLOOR_TOP + 2.5, fuPos.Z),
-		parent = plotFolder,
-		color = Color3.fromRGB(150, 90, 230),
-		material = Enum.Material.SmoothPlastic,
-		tag = Tags.FusionMachine,
-		attributes = attrs,
-	})
-	P(
-		plotFolder,
-		"Ball",
-		Vector3.new(6, 0, 0),
-		CFrame.new(fuPos + Vector3.new(0, 6, 0)),
-		Color3.fromRGB(200, 150, 255),
-		M.Glass,
-		false,
-		0.35
-	)
-	local core = P(
-		plotFolder,
-		"Ball",
-		Vector3.new(2.4, 0, 0),
-		CFrame.new(fuPos + Vector3.new(0, 6, 0)),
-		Color3.fromRGB(255, 120, 255),
-		M.Neon
-	)
-	light(core, Color3.fromRGB(230, 130, 255), 14, 1.5)
-	for _, dx in { -2.6, 0, 2.6 } do
-		P(
-			plotFolder,
-			"VCyl",
-			Vector3.new(1.6, 1.2, 0),
-			CFrame.new(fuPos + Vector3.new(dx, 5.6, 3.6)),
-			Color3.fromRGB(255, 220, 120),
-			M.Neon
-		)
-	end
-	Gui.sign(fusion, Enum.NormalId.Back, {
-		title = "퓨전 머신",
-		subtitle = "같은 펫 3마리 → 더 강한 펫!",
-		background = Color3.fromRGB(120, 60, 200),
-	})
+	-- 퓨전 머신 (기계 + 유리통 3개 + 네온, 태그는 몸통)
+	buildFusionMachine(plotFolder, Vector3.new(c.X - 32, FLOOR_TOP, c.Z + 30), index)
 
 	-- 도감 보드 (뒤쪽 왼편, +Z 를 바라봄)
 	local board = makePart({

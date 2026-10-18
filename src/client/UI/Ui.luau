@@ -123,6 +123,18 @@ function Ui.scale(): number
 	return currentScale
 end
 
+-- 창·팝업(기준 크기 base)의 지금 화면 배율
+function Ui.fitScale(base: Vector2): number
+	return fitScale(base)
+end
+
+-- 손가락 버튼 크기: 화면에서 최소 minPx(기본 46) 픽셀이 되도록 기준 크기(Offset)를 키움
+--   fit 을 주면 그 창 배율 기준, 없으면 HUD 배율 기준. 창을 열 때마다(render) 다시 계산하세요.
+function Ui.touch(basePx: number, fit: Vector2?, minPx: number?): number
+	local s = if fit then fitScale(fit) else computeScale()
+	return math.max(basePx, math.ceil((minPx or 46) / math.max(s, 0.01)))
+end
+
 -- 컨테이너에 화면 배율 UIScale 붙이기. fit(기준 크기)을 주면 그 상자가 화면 안에 다 들어오게 맞춤 (창·팝업용)
 function Ui.scaled<T>(obj: T, fit: Vector2?): T
 	local s = Instance.new("UIScale")

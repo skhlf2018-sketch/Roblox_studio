@@ -62,6 +62,12 @@ boot("GiftController")
 boot("SettingsController")
 boot("HotbarController")
 boot("WorldFxController")
+-- 선임 2차: 2단계 특수 장소 화면 (펫 고르기 창 공용 UI/PetPicker) + 무기 손 모양
+boot("FusionController")
+boot("SakuraController")
+boot("AltarController")
+boot("QuestController")
+boot("WeaponController")
 
 -- 접속 직후 서버가 보낸 Snapshot 을 놓쳤을 수 있으니 한 번 요청
 Net.send(Remotes.ToServer.RequestSnapshot)

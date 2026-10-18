@@ -30,9 +30,10 @@ local IndexController = {}
 
 local C = Theme.Colors
 local NAME = "Index"
+local SIZE = Vector2.new(880, 560)
 
 function IndexController.start()
-	local window = Ui.window(NAME, "도감", Theme.Menu.index, Vector2.new(880, 560), function()
+	local window = Ui.window(NAME, "도감", Theme.Menu.index, SIZE, function()
 		Windows.close(NAME)
 	end)
 	local content = window.content
@@ -52,7 +53,8 @@ function IndexController.start()
 		tabs
 
 	local grid = Ui.scroll(UDim2.new(1, 0, 1, -146), UDim2.fromOffset(0, 68), content)
-	Ui.grid(Vector2.new(146, 192), 10).Parent = grid
+	local gridLayout = Ui.grid(Vector2.new(146, 192), 10)
+	gridLayout.Parent = grid
 	Ui.padding(6).Parent = grid
 
 	local footer: Frame = Ui.new("Frame", {
@@ -92,11 +94,15 @@ function IndexController.start()
 		local discovered = if snap then snap.indexDiscovered or {} else {}
 		local claimed = if snap then snap.indexClaimed or {} else {}
 		local biome = Biomes.get(selected)
+		-- "받기!" 버튼: 폰에서도 46px 이상 (창 배율 기준으로 키우고 카드도 그만큼 길게)
+		local claimH = Ui.touch(40, SIZE)
+		local cardH = 152 + claimH
+		gridLayout.CellSize = UDim2.fromOffset(146, cardH)
 		for i, pet in Pets.inBiome(selected) do
 			local found = discovered[pet.id] == true
 			local rcolor = Theme.rarityColor(pet.rarity)
 			local card = Ui.card(
-				UDim2.fromOffset(146, 192),
+				UDim2.fromOffset(146, cardH),
 				if found then C.white else Color3.fromRGB(70, 65, 85),
 				if found then rcolor else C.gray
 			)
@@ -134,7 +140,7 @@ function IndexController.start()
 			if found and not claimed[pet.id] then
 				local reward = Index.reward(pet.rarity, pet.income, if biome then biome.recommendedSpeed else 0)
 				local petId = pet.id
-				local b = Ui.button("받기!", C.green, UDim2.new(1, -12, 0, 40), function()
+				local b = Ui.button("받기!", C.green, UDim2.new(1, -12, 0, claimH), function()
 					Net.send(Remotes.ToServer.ClaimIndexReward, petId)
 				end, {
 					anchor = Vector2.new(0.5, 1),

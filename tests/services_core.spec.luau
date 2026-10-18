@@ -422,17 +422,27 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"트레일: 가진 것 중 가장 높은 배율 하나만 적용, 중복 구매 불가, 모르는 id 무시",
+		"트레일: 사면 바로 장착 (장착한 것 하나만 적용), 중복 구매 불가, 모르는 id 무시",
 		function()
 			local w = world()
 			local UpgradeService = w.H.server("Services/UpgradeService")
 			UpgradeService.start()
 			w.data.money = 1e9
+			T.eq(w.data.equippedTrail, "none")
 			w.H.client(w.player, "PurchaseUpgrade", "Trail", "blue") -- ×2.5, $75K
+			T.eq(w.data.equippedTrail, "blue", "사면 장착")
 			T.eq(w.player.attrs.Speed, w.Config.STARTING_SPEED * 2.5)
-			w.H.client(w.player, "PurchaseUpgrade", "Trail", "grey") -- ×1.5 (낮은 배율을 나중에 사도 높은 게 유지)
-			T.eq(w.player.attrs.Speed, w.Config.STARTING_SPEED * 2.5)
+			T.eq(w.player.attrs.EquippedTrail, "blue")
+			w.H.client(w.player, "PurchaseUpgrade", "Trail", "grey") -- ×1.5: 낮은 배율이어도 산 것을 장착
+			T.eq(w.data.equippedTrail, "grey")
+			T.eq(w.player.attrs.Speed, w.Config.STARTING_SPEED * 1.5)
+			T.eq(w.player.attrs.TrailMultiplier, 1.5)
 			T.eq(#w.data.trails, 2)
+			local updates = w.H.sent(w.player, "DataUpdate")
+			local last = updates[#updates]
+			T.eq(last[1], "upgrades")
+			T.eq(last[2].equippedTrail, "grey")
+			T.eq(last[2].trailMultiplier, 1.5)
 			local moneyBefore = w.data.money
 			w.H.client(w.player, "PurchaseUpgrade", "Trail", "grey") -- 중복
 			T.eq(w.data.money, moneyBefore)
@@ -444,6 +454,61 @@ return function(T, Loader)
 			w.H.client(w.player, "PurchaseUpgrade", 7, "blue")
 			T.eq(w.data.money, moneyBefore)
 			T.eq(#w.data.trails, 2)
+			T.eq(w.data.equippedTrail, "grey")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		'EquipTrail: 가진 트레일만 장착, "none" 이면 해제, 안 가진 것·엉터리 인자는 무시 + Snapshot/DataUpdate 에 equippedTrail',
+		function()
+			local w = world()
+			local UpgradeService = w.H.server("Services/UpgradeService")
+			local Snapshot = w.H.server("Snapshot")
+			UpgradeService.start()
+			w.data.trails = { "grey", "blue" }
+			w.data.equippedTrail = "grey"
+			w.H.client(w.player, "EquipTrail", "blue")
+			T.eq(w.data.equippedTrail, "blue")
+			T.eq(w.player.attrs.Speed, w.Config.STARTING_SPEED * 2.5)
+			T.eq(w.player.attrs.TrailMultiplier, 2.5)
+			T.truthy(w.H.hasNotify(w.player, "success", "파랑 트레일 장착"))
+			local updates = w.H.sent(w.player, "DataUpdate")
+			T.eq(updates[#updates][1], "upgrades")
+			T.eq(updates[#updates][2].equippedTrail, "blue")
+			T.eq(updates[#updates][2].trailMultiplier, 2.5)
+			-- 안 가진 트레일
+			w.H.client(w.player, "EquipTrail", "moonbloom")
+			T.eq(w.data.equippedTrail, "blue")
+			T.truthy(w.H.hasNotify(w.player, "error", "없는 트레일"))
+			-- 해제
+			w.H.client(w.player, "EquipTrail", "none")
+			T.eq(w.data.equippedTrail, "none")
+			T.eq(w.player.attrs.Speed, w.Config.STARTING_SPEED)
+			T.eq(w.player.attrs.TrailMultiplier, 1)
+			T.eq(w.player.attrs.EquippedTrail, "none")
+			local snap = Snapshot.build(w.player)
+			T.eq(snap.equippedTrail, "none")
+			T.eq(snap.trailMultiplier, 1)
+			T.eq(#snap.trails, 2)
+			w.H.advance(5) -- 레이트 리밋(burst 5) 회복
+			-- 엉터리 인자: 아무 일 없음
+			local count = #w.H.sent(w.player, "DataUpdate")
+			for _, bad in { "가짜", 7, true, "", string.rep("a", 60) } do
+				w.H.client(w.player, "EquipTrail", bad)
+			end
+			w.H.client(w.player, "EquipTrail")
+			T.eq(w.data.equippedTrail, "none")
+			T.eq(#w.H.sent(w.player, "DataUpdate"), count)
+			-- 다시 장착 → Snapshot 에도 반영
+			w.H.advance(5)
+			w.H.client(w.player, "EquipTrail", "grey")
+			T.eq(Snapshot.build(w.player).equippedTrail, "grey")
+			T.eq(Snapshot.build(w.player).trailMultiplier, 1.5)
+			-- 이미 장착한 것을 또 보내면 조용히 무시
+			count = #w.H.sent(w.player, "DataUpdate")
+			w.H.client(w.player, "EquipTrail", "grey")
+			T.eq(#w.H.sent(w.player, "DataUpdate"), count)
 			w.H.uninstall()
 		end
 	)

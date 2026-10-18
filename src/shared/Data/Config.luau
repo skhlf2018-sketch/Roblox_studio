@@ -73,7 +73,10 @@ local Config = {
 	GUARD_CHASE_MAX_RATIO = 3.0,
 	GUARD_CHASE_SLOW_MIN_RATIO = 1.2, -- [추정] 속도가 모자라면 경비는 최소 이 배율 (1.01배면 허브까지 못 따라잡음)
 	GUARD_MAX_WALKSPEED = 250,
-	GUARD_CATCH_DISTANCE = 6, -- 서버 거리 기준 잡힘 판정(스터드)
+	GUARD_CATCH_DISTANCE = 6, -- 잡힘 판정 기본 거리(스터드). 실제 = 이 값 + 경비 키 × 아래 배율 (GuardLogic.catchDistance)
+	GUARD_CATCH_HEIGHT_FACTOR = 0.25, -- 거대 경비일수록 손이 길게: 키 1스터드당 +0.25
+	GUARD_CATCH_DISTANCE_MAX = 16, -- 잡힘 거리 상한
+	GUARD_DEFAULT_HEIGHT = 8, -- 경비 키를 모를 때 (겉모습 모델 Height Attribute → Visuals.guards[..].height → 이 값)
 	GUARD_CATCH_GRACE_SECONDS = 1.5, -- 둥지에서 줍자마자 바로 잡히지 않도록 주는 유예 (바닥 알 다시 줍기는 유예 없음)
 	GUARD_TICK_SECONDS = 0.1,
 	GUARD_HOME_TOLERANCE = 4, -- 집에서 이 거리 안이면 도착 → 다시 잠듦 (State "Sleeping")
@@ -198,7 +201,7 @@ local Config = {
 	------------------------------------------------------------------
 	DATASTORE_NAME = "StealAnEgg_PlayerData",
 	DATASTORE_KEY_PREFIX = "player_",
-	SCHEMA_VERSION = 2,
+	SCHEMA_VERSION = 3, -- 3 (2판 마무리): + equippedTrail
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

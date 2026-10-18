@@ -158,7 +158,7 @@ return function(T, Loader)
 				T.truthy(codeServer[name], "코드(Remotes.ToServer)에 없음: " .. name)
 			end
 			T.eq(#sorted(codeClient), 22) -- 2판 +3: ZoneEntered, IncomeTick, TreadmillStep
-			T.eq(#sorted(codeServer), 17) -- 2판 +3: DropEgg, SellPet, TreadmillLeave
+			T.eq(#sorted(codeServer), 18) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail
 		end
 	)
 
@@ -215,31 +215,64 @@ return function(T, Loader)
 		end
 	end)
 
+	-- 클라가 실제로 보내는 Remote: 주석이 아닌 코드에서 Net.send(...) / Net.trySend(...) 의 첫 인자
+	local function sentByClientCode()
+		return scanCode(CLIENT, "Net%.%a*[sS]end%(%s*Remotes%.ToServer%.([%w_]+)")
+	end
+
+	-- [2판 마무리 임시] 서버가 먼저 만들고 선임이 버튼을 붙이는 중인 Remote. 클라가 보내기 시작하면
+	-- 아래 두 번째 테스트가 실패해서 "이 목록에서 지우라"고 알려 줌 (목록이 저절로 남아 있지 않게).
+	--   EquipTrail: 트레일 상점 창 카드의 장착/장착 해제 버튼
+	local AWAITING_CLIENT = { EquipTrail = true }
+
 	T.test(
-		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (퓨전·사쿠라·제단·비밀 통로 화면 포함)",
+		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",
 		function()
-			-- [2판 임시] 선임이 UI 를 다시 만드는 중인 새 Remote: 아직 클라 코드가 없어도 통과 (붙이면 이 목록에서 지우세요)
-			local PENDING_UI = { DropEgg = true, SellPet = true, TreadmillLeave = true }
-			local sentByClient = scan(CLIENT, "Remotes%.ToServer%.([%w_]+)")
+			local sentByClient = sentByClientCode()
 			local missing = {}
-			local pending = {}
 			for name in Remotes.ToServer do
-				if not sentByClient[name] then
-					table.insert(if PENDING_UI[name] then pending else missing, name)
+				if not sentByClient[name] and not AWAITING_CLIENT[name] then
+					table.insert(missing, name)
 				end
 			end
 			table.sort(missing)
-			table.sort(pending)
-			if #pending > 0 then
-				print(
-					"      (2판 UI 대기 중 — 아직 클라가 안 보냄: " .. table.concat(pending, ", ") .. ")"
-				)
-			end
 			T.eq(
 				table.concat(missing, ","),
 				"",
 				"클라가 한 번도 안 보내는 Remote: " .. table.concat(missing, ", ")
 			)
+			-- 2판 UI (전에 임시 허용이던 것): 선임이 붙인 곳에서 진짜로 찾는지
+			for name, where in
+				{
+					DropEgg = "ChaseController",
+					SellPet = "PetsController",
+					TreadmillLeave = "TreadmillController",
+				}
+			do
+				local path = sentByClient[name]
+				T.truthy(path, name .. " 을 보내는 클라 코드")
+				T.truthy(path and string.find(path, where, 1, true), name .. " → " .. tostring(path))
+			end
+			-- 검사기 자체 확인: 주석 안의 이름은 안 셈
+			local fake =
+				{ ["src/client/X.luau"] = "-- Net.send(Remotes.ToServer.Fake)\nNet.trySend(Remotes.ToServer.Real, 1)" }
+			local found = scanCode(fake, "Net%.%a*[sS]end%(%s*Remotes%.ToServer%.([%w_]+)")
+			T.falsy(found.Fake, "주석은 안 셈")
+			T.truthy(found.Real)
+		end
+	)
+
+	T.test(
+		"임시 허용(AWAITING_CLIENT) 목록: 진짜 Remote 이고, 아직 클라가 안 보냄 (보내기 시작하면 목록에서 지우기)",
+		function()
+			local sentByClient = sentByClientCode()
+			for name in AWAITING_CLIENT do
+				T.truthy(Remotes.ToServer[name], name .. " 은 Remotes.ToServer 에 있어야 함")
+				T.falsy(
+					sentByClient[name],
+					name .. " 을 이제 클라가 보냄 → crossrefs.spec 의 AWAITING_CLIENT 에서 지우세요"
+				)
+			end
 		end
 	)
 

@@ -111,6 +111,9 @@ return function(T, Loader)
 			end
 			trails[id] = true
 		end
+		if d.equippedTrail ~= Upgrades.NO_TRAIL and not trails[d.equippedTrail] then
+			return "장착 트레일이 보관 목록에 없음 " .. tostring(d.equippedTrail)
+		end
 		for id in d.indexDiscovered do
 			if not Pets.get(id) then
 				return "도감 발견에 모르는 펫 " .. tostring(id)
@@ -281,7 +284,8 @@ return function(T, Loader)
 		"옛 데이터가 하나도 안 사라지고, 새 필드는 기본값, 호수 도감 완성이라 물 방망이가 자동 해금",
 		function()
 			local migrated = DataSchema.migrate(v1Save())
-			T.eq(migrated.version, 2)
+			T.eq(migrated.version, 3, "1 → 2 → 3 한 번에")
+			T.eq(migrated.equippedTrail, "blue", "2 → 3: 가진 것(grey·blue) 중 최고 배율 장착")
 			local d = DataSchema.reconcile(migrated, 1700001000)
 			T.eq(checkValid(d), nil)
 			T.eq(d.money, 123456)
@@ -295,6 +299,7 @@ return function(T, Loader)
 			T.eq(d.penLevel, 3)
 			T.eq(d.treadmillLevel, 2)
 			T.eq(#d.trails, 2)
+			T.eq(d.equippedTrail, "blue")
 			T.eq(d.indexClaimed.chicken, true)
 			T.eq(d.indexClaimed.frog, nil)
 			T.eq(d.tools.bearTrap, 7)
@@ -359,8 +364,8 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("더 새 버전(3, 4.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
-		for _, v in { 3, 4.5, 1e9 } do
+	T.test("더 새 버전(4, 4.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
+		for _, v in { 4, 4.5, 1e9 } do
 			T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
 			T.eq(DataSchema.migrate({ version = v, money = 1 }).version, v)
 		end
@@ -443,6 +448,7 @@ return function(T, Loader)
 				"shrineUsed",
 				"quests",
 				"eggQueue",
+				"equippedTrail",
 			}
 			local garbage = { 5, "x", true, false, NAN, math.huge, { "a", "b" }, { a = 1 }, { {} }, { [1] = NAN } }
 			for _, key in keys do
@@ -722,6 +728,9 @@ return function(T, Loader)
 					trails = maybe(listOf(function()
 						return pick({ "grey", "green", "blue", "moonbloom", "가짜" })
 					end)),
+					equippedTrail = maybe(function()
+						return pick({ "grey", "blue", "moonbloom", "none", "가짜", 7 })
+					end),
 					indexDiscovered = maybe(function()
 						local t = {}
 						for _ = 1, 6 do

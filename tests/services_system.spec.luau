@@ -322,7 +322,7 @@ return function(T, Loader)
 		local data, saveEnabled, newer = load(w, p)
 		T.truthy(saveEnabled)
 		T.falsy(newer)
-		T.eq(data.version, 2)
+		T.eq(data.version, 3)
 		T.eq(data.money, w.Config.STARTING_MONEY)
 		local stored = w.H.store.data["player_7"]
 		T.eq(stored._lock.jobId, "job-A")
@@ -420,11 +420,11 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"더 새 버전(3) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
+		"더 새 버전(4) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
 		function()
 			local w = dataWorld()
 			w.H.store.data["player_11"] = {
-				data = { version = 3, money = 999, futureField = "중요" },
+				data = { version = 4, money = 999, futureField = "중요" },
 			}
 			local p = w.H.newPlayer(11, "Future")
 			local data, saveEnabled, newer = load(w, p)
@@ -435,14 +435,14 @@ return function(T, Loader)
 			local stored = w.H.store.data["player_11"]
 			T.eq(stored._lock, nil)
 			T.eq(stored.data.futureField, "중요")
-			T.eq(stored.data.version, 3)
+			T.eq(stored.data.version, 4)
 			-- 이 세션의 저장은 막혀 있음
 			local session = openSession(w, p, data)
 			session.saveEnabled = saveEnabled
 			T.falsy(w.H.run(function()
 				return w.DataService.save(p, true)
 			end))
-			T.eq(w.H.store.data["player_11"].data.version, 3, "저장 안 됨")
+			T.eq(w.H.store.data["player_11"].data.version, 4, "저장 안 됨")
 			w.H.uninstall()
 		end
 	)

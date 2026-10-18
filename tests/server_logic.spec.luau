@@ -169,10 +169,10 @@ return function(T, Loader)
 		return discovered
 	end
 
-	T.test("버전 2 기본값", function()
-		T.eq(Config.SCHEMA_VERSION, 2)
+	T.test("버전 3 기본값 (2단계 필드 + 장착 트레일 none)", function()
+		T.eq(Config.SCHEMA_VERSION, 3)
 		local d = DataSchema.default(0)
-		T.eq(d.version, 2)
+		T.eq(d.version, 3)
 		T.eq(d.sakuraCrystals, 0)
 		T.falsy(d.sakuraUnlocked)
 		T.falsy(d.questsRewarded)
@@ -180,6 +180,7 @@ return function(T, Loader)
 		T.eq(#d.eggQueue, 0)
 		T.eq(next(d.shrineUsed), nil)
 		T.eq(next(d.quests), nil)
+		T.eq(d.equippedTrail, "none")
 	end)
 
 	T.test("마이그레이션 1 → 2: 도감 기록으로 무기 채움 (천사&악마 18종 규칙)", function()
@@ -189,23 +190,64 @@ return function(T, Loader)
 			indexDiscovered = discoverAll("angels_demons", { equinox = true, aetheron = true }),
 		}
 		local migrated = DataSchema.migrate(v1)
-		T.eq(migrated.version, 2)
+		T.eq(migrated.version, 3)
 		T.eq(migrated.weapons[1], "angel_spear")
 		local d = DataSchema.reconcile(migrated, 0)
-		T.eq(d.version, 2)
+		T.eq(d.version, 3)
 		T.eq(d.money, 500)
 		T.eq(d.weapons[1], "angel_spear")
 		T.eq(d.sakuraCrystals, 0)
 		-- version 이 없던 아주 옛 데이터도 1 로 보고 변환
-		T.eq(DataSchema.migrate({ money = 1 }).version, 2)
+		T.eq(DataSchema.migrate({ money = 1 }).version, 3)
 	end)
 
 	T.test("새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음", function()
-		T.truthy(DataSchema.isNewerVersion({ version = 3 }))
+		T.truthy(DataSchema.isNewerVersion({ version = 4 }))
+		T.falsy(DataSchema.isNewerVersion({ version = 3 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 2 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 1 }))
 		T.falsy(DataSchema.isNewerVersion(nil))
-		T.eq(DataSchema.migrate({ version = 3 }).version, 3)
+		T.eq(DataSchema.migrate({ version = 4 }).version, 4)
+		T.eq(DataSchema.migrate({ version = 4 }).equippedTrail, nil, "새 버전 데이터는 안 건드림")
+	end)
+
+	T.test(
+		"마이그레이션 2 → 3: 가진 트레일 중 가장 높은 배율을 장착 (전에 자동 적용되던 것 → 속도 그대로)",
+		function()
+			local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
+			local migrated = DataSchema.migrate({ version = 2, trails = { "grey", "purple", "blue", "가짜", 7 } })
+			T.eq(migrated.version, 3)
+			T.eq(migrated.equippedTrail, "purple")
+			local d = DataSchema.reconcile(migrated, 0)
+			T.eq(d.equippedTrail, "purple")
+			T.eq(Economy.trailMultiplier(d.equippedTrail), Economy.bestTrailMultiplier(d.trails))
+			-- 트레일이 없으면 none
+			T.eq(DataSchema.migrate({ version = 2 }).equippedTrail, "none")
+			T.eq(DataSchema.migrate({ version = 2, trails = "엉터리" }).equippedTrail, "none")
+			T.eq(DataSchema.reconcile(DataSchema.migrate({ version = 2, trails = {} }), 0).equippedTrail, "none")
+			-- 이미 3 이면 사용자가 고른 장착(해제 포함)을 바꾸지 않음
+			local keep = DataSchema.migrate({ version = 3, trails = { "grey", "red" }, equippedTrail = "grey" })
+			T.eq(keep.equippedTrail, "grey")
+			local off = DataSchema.migrate({ version = 3, trails = { "red" }, equippedTrail = "none" })
+			T.eq(DataSchema.reconcile(off, 0).equippedTrail, "none")
+		end
+	)
+
+	T.test("v3 equippedTrail 보정: 가진 트레일만, 아니면 none", function()
+		local function eq(raw)
+			return DataSchema.reconcile(raw, 0).equippedTrail
+		end
+		T.eq(eq({ version = 3, trails = { "grey", "red" }, equippedTrail = "red" }), "red")
+		T.eq(eq({ version = 3, trails = { "grey" }, equippedTrail = "red" }), "none", "안 가진 트레일")
+		T.eq(eq({ version = 3, trails = { "grey" }, equippedTrail = "가짜" }), "none")
+		T.eq(
+			eq({ version = 3, trails = { "가짜" }, equippedTrail = "가짜" }),
+			"none",
+			"모르는 트레일은 목록에서도 빠짐"
+		)
+		T.eq(eq({ version = 3, trails = { "grey" }, equippedTrail = 5 }), "none")
+		T.eq(eq({ version = 3, trails = { "grey" } }), "none")
+		T.eq(eq({ version = 3, trails = { "grey" }, equippedTrail = "none" }), "none")
 	end)
 
 	T.test("v2 필드 보정: 잘못된 값 버리기", function()

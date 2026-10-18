@@ -1,5 +1,7 @@
 # Remote 목록 (서버 ↔ 클라)
 
+> **[2판 마무리] 트레일 장착 (수석, 2026-10-18)** — 새 Remote `EquipTrail(trailId | "none")`. 트레일 배율은 이제 **장착한 트레일 하나만** (사면 바로 장착). `Snapshot`·`DataUpdate("upgrades")` 에 `equippedTrail`, Player Attribute `EquippedTrail`. 저장 스키마 3 (기존 사용자는 가진 것 중 최고 트레일이 장착된 상태로 변환 → 속도 그대로). 경비 잡힘 거리 = 6 + 경비 키 × 0.25 (최대 16), 경비 이름표는 겉모습 꼭대기 + 3.
+
 > **[2판] MapLayout 완료 (수석, 2026-10-18)** — `src/shared/Data/MapLayout.luau` (+ `tests/maplayout.spec.luau`). 선임은 `require(ReplicatedStorage.Shared.Data.MapLayout)` 로 맵을 지으세요. **달라진 숫자 1개: `HUB.zMin = -290`** (베이스 폭 60 × 4개가 한쪽에 들어가도록. `zMax = 0`·`SAFE_ZONE_Z = 0` 은 약속 그대로). 베이스 번호: 1 왼z-40 / 2 오른z-40 / 3 왼z-110 / 4 오른z-110 / 5 왼z-180 / 6 오른z-180 / 7 왼z-250, 오른쪽 z-250 자리는 허브 가게(`MapLayout.hubSpots`). 사용법은 0장과 파일 맨 위 주석.
 
 작성: 수석, 2026-10-18 (1단계) · 2단계 갱신 (퓨전·구역 무기·사쿠라·제단·퀘스트·치트 방지) · **2판 전면 갱신 2026-10-18 저녁** (일자 복도 맵·경비 무한 추격·알 버리기·자동 배달·러닝머신 고정·돈 팝업·판매). 선임이 맵·UI·소리·연출을 붙일 때 보는 문서입니다.
@@ -112,7 +114,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `EquipPet` | `petUid: string` | 내 펫인지, 이미 장착인지, 우리 칸 남았는지 | 10 / 5 |
 | `UnequipPet` | `petUid: string` | 장착돼 있는지 | 10 / 5 |
 | `EquipBest` | 없음 | 서버가 수입 순으로 칸 수만큼 고름 | 2 / 0.5 |
-| `PurchaseUpgrade` | `kind: "Pen"\|"Treadmill"\|"Trail"`, `trailId: string?` (Trail 일 때만) | 종류·id 허용 목록, 다음 레벨 있는지, 돈 충분한지 (상점 화면 버튼이라 거리 검사 없음) | 5 / 2 |
+| `PurchaseUpgrade` | `kind: "Pen"\|"Treadmill"\|"Trail"`, `trailId: string?` (Trail 일 때만) | 종류·id 허용 목록, 다음 레벨 있는지, 돈 충분한지 (상점 화면 버튼이라 거리 검사 없음). **트레일은 사면 바로 장착** (2판 마무리) | 5 / 2 |
 | `UseTool` | `kind`: `"Bat"\|"BearTrap"\|"WaterBat"\|"Katana"\|"Axe"\|"AngelSpear"\|"Hammer"\|"CandyCane"\|"Scythe"` (`Remotes.ToolKinds`) | 그 도구를 손에 들고 있는지, 구역 무기는 해금했는지, 근접 무기 공용 쿨다운, **허브(안전 구역)가 아닌지**, 곰덫 개수. 대상·위치는 서버가 찾음 | 4 / 2 |
 | `ClaimIndexReward` | `"all"` 또는 `petId` | 발견했고 아직 안 받았는지 | 5 / 1 |
 | `ClaimFreeReward` | 없음 | 계정당 1번 (그룹 ID 설정 시 가입 확인) | 2 / 0.2 |
@@ -124,6 +126,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`DropEgg`** (2판) | 없음 | 알을 들고 있는지. **알은 항상 그 자리에 떨어짐**(알의 구역 안이어도 둥지로 안 감) → 경비 추격 끝(`ChaseEnded` reason dropped), 2분 뒤 사라짐. 다시 주우면 경비가 또 쫓고 **유예 1.5초 없음** | 2 / 1 |
 | **`SellPet`** (2판) | `petUid: string` | **판매 가게 14스터드 안** (SellStall 태그 파트 표면 또는 `MapLayout.sellSpots()` 자리), 내 펫인지. 장착 중이면 해제 후 판매. 가격 = `Economy.recordIncome(pet) × Config.PET_SELL_SECONDS(60)`. 결과는 `Notify` | 10 / 4 |
 | **`TreadmillLeave`** (2판) | 없음 | 러닝머신 위인지. 내려서 벨트 앞(복도 쪽)으로 옮겨 줌. **클라가 러닝머신 위에서 점프할 때 보내세요** (`OnTreadmill` 이 true 일 때 Humanoid.Jumping / 점프 버튼). 안 보내도 점프로 몸이 바닥 + 8 위로 뜨면 서버가 그 자리에서 내려 줌 (벨트 윗면은 바닥 + 2 이하로 만들어 주세요) | 3 / 2 |
+| **`EquipTrail`** (2판 마무리) | `trailId: string` 또는 `"none"` (`Upgrades.NO_TRAIL`) | 허용 목록(트레일 id + `"none"`), **가진 트레일인지**. 바꾸면 `data.equippedTrail` 저장 + 속도 다시 계산 + `DataUpdate("upgrades")` + `Notify`. `"none"` = 해제(배율 1). 이미 장착한 것을 또 보내면 무시. 상점 창 버튼이라 거리 검사 없음 | 5 / 2 |
 
 - **알 줍기**는 Remote 가 아니라 서버가 만든 `ProximityPrompt`(E 키, 알 파트 안의 `StealPrompt`)로 합니다. 서버가 거리·낮인지·이미 들고 있는지·(퀘스트 전용 알이면) 퀘스트 완료했는지 확인합니다.
 - **사쿠라 크리스탈 줍기**도 `ProximityPrompt`(크리스탈 파트 안의 `CrystalPrompt`). 서버가 거리 확인.
@@ -145,7 +148,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `PlotIndex` | 내 베이스 번호 (1~7, 0 = 없음 → 누가 나가면 바로 배정되고 `Snapshot` 다시 옴). 위치는 `MapLayout.plot(PlotIndex)` |
 | `PenLevel`, `PenSlots` | 우리 레벨, 장착 칸 수 |
 | `TreadmillLevel` | 러닝머신 레벨 (0 = 잠김) |
-| `TrailMultiplier` | 적용 중인 트레일 배율 |
+| `TrailMultiplier` | 적용 중인 트레일 배율 = **장착한 트레일** 배율 (없으면 1) |
+| **`EquippedTrail`** (2판 마무리) | 장착한 트레일 id (`"none"` = 없음). 모든 플레이어에 있음 → 다른 사람 캐릭터 트레일 꾸밀 때 |
 | `CarryingEgg`, `CarryingBiome` | 든 알 uid / 구역 id (`""` = 없음) → "달리기!!" 배너·빨간 비네트·핫바 3번 알 칸·"드롭" 버튼 유지 조건 |
 | **`CarryWeightKg`** (2판) | 든 알 무게(kg, 표시용): 보통 50 / 큼 120 / 거대 400 / 초거대 1200 [추정]. 0 = 안 듦 (`Sizes.carryKg`) |
 | `Stunned` | 래그돌·곰덫 중 |
@@ -188,7 +192,7 @@ money, speed, effectiveSpeed, incomePerSecond,
 pets: { PetRecord },            -- PetRecord = { uid, petId, size, mutations }  (최대 petInventoryMax = 500)
 equipped: { uid },
 penLevel, penSlots, treadmillLevel,
-trails: { trailId }, trailMultiplier,
+trails: { trailId }, equippedTrail (trailId | "none"), trailMultiplier (= 장착한 트레일 배율),
 indexDiscovered: { [petId]: true }, indexClaimed: { [petId]: true }, indexCompleteClaimed,
 unlockedWeapons: { weaponId },
 tools: { bearTrap = n },
@@ -207,7 +211,7 @@ petInventoryMax
 | `"pets"` | `{ pets, equipped, penSlots, incomePerSecond }` — **장착만 바뀔 때는 `pets` 가 빠짐** (SellPet 은 pets 포함) |
 | `"incubators"` | `{ incubators, eggQueue }` (배달·부화·다 자람·선물 알·블룸 때) |
 | `"index"` | `{ indexDiscovered, indexClaimed, indexCompleteClaimed, unlockedWeapons }` |
-| `"upgrades"` | `{ penLevel, penSlots, treadmillLevel, trails, trailMultiplier }` |
+| `"upgrades"` | `{ penLevel, penSlots, treadmillLevel, trails, equippedTrail, trailMultiplier }` (트레일 구매·`EquipTrail` 때도) |
 | `"tools"` | `{ tools }` |
 | `"flags"` | `{ freeRewardClaimed }` |
 | `"special"` | `{ sakuraCrystals, sakuraUnlocked, shrineUsed }` |
@@ -237,7 +241,7 @@ petInventoryMax
 
 ## 7. 2판 규칙 요약 (자세한 건 코드 맨 위 주석)
 
-- **경비** (`GuardianService`, `SpeedMath`, `Logic/GuardLogic`): 평소 집(구역 가운데)에서 잠(`Sleeping`). 그 구역 알을 누가 들면 깨어나 쫓음. **추격 포기 거리 없음** — 허브(z < 0)에 들어가거나 / 잡히거나 / 알을 놓거나(DropEgg·배달) / 밤이 될 때까지. 먼 구역 알을 들고 앞 구역들을 지나가도 **그 구역 경비는 안 깨어남**. 추격 속도 = 플레이어 WalkSpeed × clamp(경비 속도 / 알 든 실효 속도 × 0.99, 0.85, 3.0), 1 이상이면 최소 1.2 → 추천 속도 이상(보통 알)이면 못 잡고, 모자라면 반드시 따라잡음. 잡힘 = 수평 6 + 높이 10 이내, 둥지에서 주운 뒤 1.5초 유예(바닥 알 다시 줍기는 유예 없음). 경비끼리 30 안이면 옆으로 비켜 감.
+- **경비** (`GuardianService`, `SpeedMath`, `Logic/GuardLogic`): 평소 집(구역 가운데)에서 잠(`Sleeping`). 그 구역 알을 누가 들면 깨어나 쫓음. **추격 포기 거리 없음** — 허브(z < 0)에 들어가거나 / 잡히거나 / 알을 놓거나(DropEgg·배달) / 밤이 될 때까지. 먼 구역 알을 들고 앞 구역들을 지나가도 **그 구역 경비는 안 깨어남**. 추격 속도 = 플레이어 WalkSpeed × clamp(경비 속도 / 알 든 실효 속도 × 0.99, 0.85, 3.0), 1 이상이면 최소 1.2 → 추천 속도 이상(보통 알)이면 못 잡고, 모자라면 반드시 따라잡음. 잡힘 = 수평 (6 + 경비 키 × 0.25, 최대 16 — 키는 겉모습 모델 `Height` Attribute → `Visuals.guards.height` → 8, 경비 모델 Attribute `CatchDistance` 에 적힘) + 높이 10 이내, 둥지에서 주운 뒤 1.5초 유예(바닥 알 다시 줍기는 유예 없음). 경비끼리 30 안이면 옆으로 비켜 감.
 - **잡힘 → 알**: 알의 구역(z 범위) 안에서 경비에게 잡히면 둥지로, 앞 구역·허브에서 잡히면 그 자리 (`EggRules.dropOutcome`). 플레이어 무기·곰덫·DropEgg 는 항상 그 자리.
 - **배달**: 내 베이스 영역에 들어오면 자동 (높이 20 이상 공중이면 안 됨). 순간이동 의심 검사는 그대로.
 - **러닝머신** (`TreadmillService`): 내 베이스 벨트에 올라서면 고정(WalkSpeed 0, 가운데로, 복도 쪽을 봄). 1초마다 속도 += 걸음당 속도 × 3 + `TreadmillStep`. 점프(`TreadmillLeave`)·벨트 이탈·알 듦·기절이면 내림. 내린 뒤엔 벨트 밖으로 한 번 나가야 다시 탐. 0레벨이면 안 타고 5초에 한 번 안내.
@@ -256,7 +260,8 @@ petInventoryMax
 - [ ] 판매 가게 창 → `SellPet(uid)`
 - [ ] 경비 `State == "Sleeping"` 이면 Z 표시
 - [ ] `DeliveryPad` 태그를 쓰는 코드 지우기 (WorldFxController, MapBuilder) → 그 뒤 수석이 Tags 에서 지움
-- [ ] `tests/crossrefs.spec.luau` 의 `PENDING_UI`(DropEgg·SellPet·TreadmillLeave) — UI 를 붙이면 목록에서 지우기
+- [x] ~~`tests/crossrefs.spec.luau` 의 `PENDING_UI`(DropEgg·SellPet·TreadmillLeave)~~ — 지움 (2판 마무리, 클라가 셋 다 보냄)
+- [ ] **트레일 창 장착/장착 해제 버튼 → `EquipTrail(id)` / `EquipTrail("none")`** (2판 마무리). 버튼 글자는 `snap.equippedTrail == id` 이면 "장착 해제", 가졌으면 "장착", 아니면 가격. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `EquipTrail` 지우기 (안 지우면 테스트가 알려 줌)
 
 **서버가 계속 부르는 MapBuilder 공개 함수 (이름·모양 유지 부탁):** `start()`, `getFolder(name)` ("Eggs"/"Guardians"/"Traps"/"Incubating"), `getNests(biomeId): {BasePart}` (없으면 빈 표 → 서버가 `nestsFor` 자리 바닥에 놓음), `groundY(position, ignore): number`, `setNightWalls(on)`, `setPlotOwner(index, player?)`, `plotCount()`, `getPlot(index)` (서버는 이제 안 씀). **더 이상 안 부름:** `isInSafeZone`, `isInPlot`, `findBiomeAt`, `getZone`, `getZonePart`, `getGuardSpawn`.
 

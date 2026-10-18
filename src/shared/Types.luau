@@ -33,7 +33,7 @@ export type QueuedEgg = {
 	source: string, -- "altar" | "shrine" | "quest"
 }
 
--- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 2)
+-- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 3)
 export type PlayerData = {
 	version: number,
 	money: number,
@@ -60,6 +60,8 @@ export type PlayerData = {
 	quests: { [string]: number }, -- 마법의 숲 퀘스트 진행도 (quest id → 숫자)
 	questsRewarded: boolean, -- 퀘스트 3개 완료 보상(문 열림 + 지터버그 알)을 받았나
 	eggQueue: { QueuedEgg },
+	-- 버전 3 (2판 마무리)
+	equippedTrail: string, -- 장착한 트레일 id (trails 안에 있는 것만), "none" = 장착 안 함
 }
 
 -- 알 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)
@@ -94,7 +96,8 @@ export type Snapshot = {
 	penSlots: number,
 	treadmillLevel: number,
 	trails: { string },
-	trailMultiplier: number,
+	equippedTrail: string, -- "none" = 장착 안 함
+	trailMultiplier: number, -- 장착한 트레일 배율 (없으면 1)
 	indexDiscovered: { [string]: boolean },
 	indexClaimed: { [string]: boolean },
 	indexCompleteClaimed: boolean,

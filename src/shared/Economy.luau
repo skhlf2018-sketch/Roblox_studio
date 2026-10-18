@@ -221,6 +221,24 @@ function Economy.bestTrailMultiplier(ownedTrailIds: { string }): number
 	return best
 end
 
+-- 가진 트레일 중 배율이 가장 높은 것의 id (없으면 Upgrades.NO_TRAIL). 스키마 2 → 3 마이그레이션용
+function Economy.bestTrailId(ownedTrailIds: { string }): string
+	local bestId, best = Upgrades.NO_TRAIL, 1
+	for _, id in ownedTrailIds do
+		local trail = Upgrades.getTrail(id)
+		if trail and trail.multiplier > best then
+			bestId, best = trail.id, trail.multiplier
+		end
+	end
+	return bestId
+end
+
+-- 장착한 트레일의 배율 (2판 마무리: 장착한 것만 적용). "none"·모르는 id 면 1
+function Economy.trailMultiplier(equippedTrailId: string?): number
+	local trail = if equippedTrailId then Upgrades.getTrail(equippedTrailId) else nil
+	return if trail then math.max(1, trail.multiplier) else 1
+end
+
 ------------------------------------------------------------------
 -- 오프라인 수입
 ------------------------------------------------------------------

@@ -2,7 +2,7 @@
 --[[
 	SpeedService — 플레이어 속도 숫자 → 실제 WalkSpeed (서버가 정함)
 
-	실효 속도 = 모은 속도(data.speed) × 가진 트레일 중 최고 배율
+	실효 속도 = 모은 속도(data.speed) × 장착한 트레일 배율 (data.equippedTrail, 없으면 1)
 	WalkSpeed = SpeedMath.walkSpeedFor(실효 속도, 알 무게 감소)
 	곰덫에 걸리면(frozenUntil) WalkSpeed 0, 점프 0.
 	러닝머신 위(session.onTreadmill, 2판)면 WalkSpeed 0 (점프는 그대로 → 클라가 점프하면 TreadmillLeave).
@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Economy = require(Shared.Economy)
+local Upgrades = require(Shared.Data.Upgrades)
 local SpeedMath = require(Shared.SpeedMath)
 local Tags = require(Shared.Tags)
 local Server = script.Parent.Parent
@@ -36,7 +37,7 @@ function SpeedService.refresh(player: Player)
 	end
 	local data = session.data
 	local baseSpeed = if data then data.speed else 0
-	local trailMultiplier = if data then Economy.bestTrailMultiplier(data.trails) else 1
+	local trailMultiplier = if data then Economy.trailMultiplier(data.equippedTrail) else 1
 	local effective = SpeedMath.effectiveSpeed(baseSpeed, trailMultiplier)
 	local penalty = if session.carryingUid then session.carryPenalty else 0
 	local walkSpeed = SpeedMath.walkSpeedFor(effective, penalty)
@@ -52,6 +53,7 @@ function SpeedService.refresh(player: Player)
 	player:SetAttribute(Attr.Speed, effective)
 	player:SetAttribute(Attr.BaseSpeed, baseSpeed)
 	player:SetAttribute(Attr.TrailMultiplier, trailMultiplier)
+	player:SetAttribute(Attr.EquippedTrail, if data then data.equippedTrail else Upgrades.NO_TRAIL)
 	player:SetAttribute(Attr.WalkSpeed, walkSpeed)
 
 	local humanoid = Character.getHumanoid(player)

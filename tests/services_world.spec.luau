@@ -701,7 +701,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"잡힘 판정: 수평 6 이내 + 높이 10 이내 + 줍고 1.5초 지난 뒤 — 경계 포함, 잡히면 knockOut(guard) + 대상 해제",
+		"잡힘 판정: 수평 6 + 경비 키 × 0.25 이내(숲 닭 키 28 → 13) + 높이 10 이내 + 줍고 1.5초 지난 뒤 — 경계 포함, 잡히면 knockOut(guard) + 대상 해제",
 		function()
 			local w = guardWorld()
 			local egg = carryForest(w, w.player, 5, 0.10, { pickedAt = w.H.clock() })
@@ -717,8 +717,9 @@ return function(T, Loader)
 			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), 0)
 			T.eq(#w.H.sent(w.player, "ChaseEnded"), 1)
 			_ = egg
-			-- 거리 경계
-			for _, case in { { 6.0, 3, true }, { 6.1, 3, false }, { 3, 14.6, true }, { 3, 14.7, false } } do
+			-- 거리 경계 (겉모습 Height 가 없으면 Visuals.guards.forest.height = 28 → 6 + 7 = 13)
+			T.eq(guardOf(w, "forest"):GetAttribute("CatchDistance"), 13)
+			for _, case in { { 13.0, 3, true }, { 13.1, 3, false }, { 3, 14.6, true }, { 3, 14.7, false } } do
 				table.clear(w.H.eggs.knockouts)
 				carryForest(w, w.player, 5, 0.10)
 				if case[2] == 3 then
@@ -731,6 +732,81 @@ return function(T, Loader)
 				w.H.eggs.carried[w.player] = nil
 				w.H.advance(0.3)
 			end
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"거대 경비 계산(GuardLogic): 잡힘 거리 6 + 키 × 0.25 (최대 16) · 이름표 = 겉모습 꼭대기 + 3",
+		function()
+			local GuardLogic = Loader.require("ServerScriptService/Server/Logic/GuardLogic")
+			local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
+			local function reach(h)
+				return GuardLogic.catchDistance(
+					h,
+					Config.GUARD_CATCH_DISTANCE,
+					Config.GUARD_CATCH_HEIGHT_FACTOR,
+					Config.GUARD_CATCH_DISTANCE_MAX
+				)
+			end
+			T.eq(Config.GUARD_CATCH_DISTANCE, 6)
+			T.eq(reach(0), 6)
+			T.eq(reach(8), 8, "기본 키 8")
+			T.eq(reach(28), 13)
+			T.eq(reach(40), 16, "딱 상한")
+			T.eq(reach(100), 16, "상한 16")
+			T.eq(reach(-5), 6, "음수 키는 0")
+			T.eq(reach(0 / 0), 6, "NaN 키는 0")
+			T.eq(reach(math.huge), 16)
+			-- 이름표: 머리 가운데(바닥 + 8.1) 기준, 꼭대기 + 3
+			T.near(GuardLogic.labelOffset(28, 8.1, 3), 22.9, 1e-9)
+			T.eq(GuardLogic.labelOffset(8, 8.1, 3), 3, "작은 경비는 머리 위 3")
+			T.eq(GuardLogic.labelOffset(0 / 0, 8.1, 3), 3)
+			T.eq(GuardLogic.labelOffset(-10, 8.1, 3), 3)
+		end
+	)
+
+	T.test(
+		"경비 키 = 겉모습 모델(선임) Height Attribute → 없으면 Visuals.guards.height → 잡힘 거리(CatchDistance)가 따라 바뀜",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			w.H.advance(0.2)
+			T.eq(model:GetAttribute("CatchDistance"), 13, "Visuals 키 28")
+			-- 선임 PetVisualService 처럼 겉모습 모델(이름 = Visuals.guards.forest.model "chicken")에 Height 40
+			local height = 40
+			local visual = {
+				Name = "chicken",
+				IsA = function(_, className)
+					return className == "Model"
+				end,
+				GetAttribute = function(_, key)
+					return if key == "Height" then height else nil
+				end,
+			}
+			table.insert(model.children, visual)
+			w.H.advance(0.2)
+			T.eq(model:GetAttribute("CatchDistance"), 16, "키 40 → 6 + 10 = 16")
+			-- 15 떨어져도 잡힘 (키 28 이면 13 이라 안 잡힘)
+			carryForest(w, w.player, 5, 0.10)
+			place(w, w.player, 15, 0)
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 1, "거대 경비는 15 에서도 잡음")
+			w.H.eggs.carried[w.player] = nil
+			w.H.advance(0.3)
+			-- 겉모습이 작으면 (키 8) 8 까지만
+			height = 8
+			w.H.advance(0.2)
+			T.eq(model:GetAttribute("CatchDistance"), 8)
+			table.clear(w.H.eggs.knockouts)
+			carryForest(w, w.player, 5, 0.10)
+			place(w, w.player, 9, 0)
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 0, "키 8 경비는 9 에서 못 잡음")
+			-- 이상한 Height 는 무시 → Visuals 키
+			height = 0 / 0
+			w.H.advance(0.2)
+			T.eq(model:GetAttribute("CatchDistance"), 13)
 			w.H.uninstall()
 		end
 	)

@@ -62,6 +62,7 @@ local Remotes = {
 		DropEgg = "DropEgg", -- () 들고 있는 알을 그 자리에 떨어뜨림 (추격 끝)
 		SellPet = "SellPet", -- (petUid) 판매 가게 근처에서 펫 팔기
 		TreadmillLeave = "TreadmillLeave", -- () 러닝머신에서 내림 (클라가 점프할 때)
+		EquipTrail = "EquipTrail", -- (trailId | "none") 가진 트레일 장착 / "none" 이면 해제
 	},
 
 	-- 클라 → 서버 레이트 리밋: burst = 한 번에 허용, perSecond = 초당 회복
@@ -83,6 +84,7 @@ local Remotes = {
 		DropEgg = { burst = 2, perSecond = 1 },
 		SellPet = { burst = 10, perSecond = 4 },
 		TreadmillLeave = { burst = 3, perSecond = 2 },
+		EquipTrail = { burst = 5, perSecond = 2 },
 	} :: { [string]: { burst: number, perSecond: number } },
 
 	-- PurchaseUpgrade 의 kind

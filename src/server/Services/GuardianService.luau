@@ -10,12 +10,14 @@
 	  - 알의 구역 경비만 쫓음: 먼 구역 알을 들고 앞 구역들을 지나가도 그 구역 경비는 안 깨어남
 	  - 추격 속도: SpeedMath.guardChaseSpeed = 플레이어 WalkSpeed × clamp(경비 속도/알 든 실효 속도 × 0.99, 0.85, 3.0)
 	    (추천 속도 이상이면 0.85 ~ 0.99배라 못 잡음, 모자라면 최소 1.2배로 반드시 따라잡음)
-	  - 잡힘 판정: 서버에서 경비 몸통과 플레이어 HumanoidRootPart 수평 거리 ≤ GUARD_CATCH_DISTANCE(6), 높이 차 ≤ 10
+	  - 잡힘 판정: 서버에서 경비 몸통과 플레이어 HumanoidRootPart 수평 거리 ≤ 6 + 경비 키 × 0.25 (최대 16), 높이 차 ≤ 10
+	    (GUARD_CATCH_DISTANCE · GUARD_CATCH_HEIGHT_FACTOR · GUARD_CATCH_DISTANCE_MAX, 모델 Attribute "CatchDistance" 에 적어 둠)
 	    (둥지에서 줍고 GUARD_CATCH_GRACE_SECONDS 동안은 안 잡힘 — egg.graceUntil)
 	  - 경비끼리 겹치지 않게: 서로 안 부딪히는 CollisionGroup + 가까우면 옆으로 비켜 감 (Logic/GuardLogic)
 
 	모델: 단순 몸통 파트 + 머리 + Humanoid. 선임(PetVisualService)이 겉모습을 HumanoidRootPart 에 용접해 붙임.
 	"Guardian" 태그 모델 안의 HumanoidRootPart / Humanoid 이름만 유지하면 됩니다.
+	머리 위 이름표(BillboardGui)는 겉모습 키(겉모습 모델 Height Attribute → Visuals.guards.height → 8)의 꼭대기 + 3 높이.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -25,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Biomes = require(Shared.Data.Biomes)
+local Visuals = require(Shared.Data.Visuals)
 local MapLayout = require(Shared.Data.MapLayout)
 local SpeedMath = require(Shared.SpeedMath)
 local Remotes = require(Shared.Remotes)
@@ -47,6 +50,8 @@ type Guard = {
 	root: BasePart,
 	humanoid: Humanoid,
 	label: TextLabel,
+	height: number, -- 겉모습 키 (guardHeight, 틱마다 갱신)
+	labelOffset: number, -- 지금 이름표 StudsOffsetWorldSpace.Y
 	home: Vector3,
 	target: Player?,
 	lastMoveTarget: Vector3?,
@@ -66,6 +71,8 @@ local RAPID_DEATH_SECONDS = 2 -- 이보다 빨리 죽으면 "생기자마자 죽
 local RAPID_DEATH_LIMIT = 3 -- 연달아 이만큼이면
 local RAPID_DEATH_BACKOFF = 5 -- 이 초 동안 다시 안 만듦
 local ROOT_HEIGHT = 4.6 -- 바닥에서 HumanoidRootPart 가운데까지 (HipHeight 2.5 + 몸통 반 2 + 여유)
+local HEAD_OFFSET = 3.5 -- 루트 가운데 → 머리 가운데
+local LABEL_MARGIN = 3 -- 이름표 = 겉모습 꼭대기 + 이만큼 (작은 경비는 머리 위 이만큼)
 
 local function rgb(c: { number }): Color3
 	return Color3.fromRGB(c[1], c[2], c[3])
@@ -109,7 +116,7 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 	head.Name = "Head"
 	head.Size = Vector3.new(3, 3, 3)
 	head.Color = color:Lerp(Color3.new(1, 1, 1), 0.2)
-	head.CFrame = root.CFrame * CFrame.new(0, 3.5, -0.5)
+	head.CFrame = root.CFrame * CFrame.new(0, HEAD_OFFSET, -0.5)
 	head.CollisionGroup = Config.GUARD_COLLISION_GROUP
 	head.Parent = model
 	local weld = Instance.new("WeldConstraint")
@@ -157,7 +164,7 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 		root:SetNetworkOwner(nil) -- 서버가 물리 담당 (클라가 경비를 조작 못 하게)
 	end)
 
-	local label = Gui.billboard(head, biome.guardName, 3, 120)
+	local label = Gui.billboard(head, biome.guardName, LABEL_MARGIN, 120)
 	return {
 		biomeId = biome.id,
 		biome = biome,
@@ -165,6 +172,8 @@ local function buildGuard(biome: Biomes.Biome, home: Vector3): Guard
 		root = root,
 		humanoid = humanoid,
 		label = label,
+		height = 0, -- 첫 틱에 refreshHeight 가 채움
+		labelOffset = LABEL_MARGIN,
 		home = home,
 		target = nil,
 		lastMoveTarget = nil,
@@ -208,6 +217,58 @@ local function ensureGuard(biome: Biomes.Biome): Guard?
 	guards[biome.id] = guard
 	bornAt[biome.id] = now
 	return guard
+end
+
+-- 키 height 인 경비의 잡힘 판정 거리 (수평): GUARD_CATCH_DISTANCE(6) + 키 × 0.25, 최대 16
+function GuardianService.catchDistance(height: number): number
+	return GuardLogic.catchDistance(
+		height,
+		Config.GUARD_CATCH_DISTANCE,
+		Config.GUARD_CATCH_HEIGHT_FACTOR,
+		Config.GUARD_CATCH_DISTANCE_MAX
+	)
+end
+
+-- 경비 겉모습 키 (스터드): 선임 PetVisualService 가 경비 모델 안에 붙인 겉모습 모델(이름 = Visuals.guards 의
+-- model / darkModel)의 "Height" Attribute → 없으면 Visuals.guards[구역].height → 없으면 Config.GUARD_DEFAULT_HEIGHT
+local function guardHeight(guard: Guard): number
+	local spec = Visuals.guards[guard.biomeId]
+	if spec then
+		local names = { spec.model }
+		if spec.darkModel then
+			table.insert(names, spec.darkModel)
+		end
+		for _, name in names do
+			local visual = guard.model:FindFirstChild(name)
+			if visual and visual:IsA("Model") then
+				local h = visual:GetAttribute("Height")
+				if typeof(h) == "number" and h == h and h > 0 then
+					return h
+				end
+			end
+		end
+		local h = spec.height
+		if h and h > 0 then
+			return h
+		end
+	end
+	return Config.GUARD_DEFAULT_HEIGHT
+end
+
+-- 키가 바뀌면(겉모습이 늦게 붙거나 천사↔악마로 바뀜) 이름표 높이·잡힘 거리 다시 계산
+local function refreshHeight(guard: Guard)
+	local h = guardHeight(guard)
+	if h == guard.height then
+		return
+	end
+	guard.height = h
+	guard.model:SetAttribute("CatchDistance", GuardianService.catchDistance(h))
+	local offset = GuardLogic.labelOffset(h, ROOT_HEIGHT + HEAD_OFFSET, LABEL_MARGIN)
+	guard.labelOffset = offset
+	local gui = guard.label.Parent
+	if gui and gui:IsA("BillboardGui") then
+		gui.StudsOffsetWorldSpace = Vector3.new(0, offset, 0)
+	end
 end
 
 local function setState(guard: Guard, state: GuardState)
@@ -272,6 +333,7 @@ local function canChase(player: Player, root: BasePart): boolean
 end
 
 local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg }, isDay: boolean)
+	refreshHeight(guard)
 	local now = os.clock()
 	local best: Player? = nil
 	local bestRoot: BasePart? = nil
@@ -315,7 +377,8 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 		local flat =
 			Vector3.new(bestRoot.Position.X - guard.root.Position.X, 0, bestRoot.Position.Z - guard.root.Position.Z)
 		local dy = math.abs(bestRoot.Position.Y - guard.root.Position.Y)
-		if egg and now >= egg.graceUntil and flat.Magnitude <= Config.GUARD_CATCH_DISTANCE and dy <= 10 then
+		local reach = GuardianService.catchDistance(guard.height)
+		if egg and now >= egg.graceUntil and flat.Magnitude <= reach and dy <= 10 then
 			local name = guard.model:GetAttribute("GuardName")
 			EggService.knockOut(best, guard.root.Position, "guard", if typeof(name) == "string" then name else "경비")
 			setTarget(guard, nil, "caught")

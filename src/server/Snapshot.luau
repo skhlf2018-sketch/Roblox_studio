@@ -41,7 +41,8 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		penSlots = Economy.penSlots(data.penLevel),
 		treadmillLevel = data.treadmillLevel,
 		trails = data.trails,
-		trailMultiplier = Economy.bestTrailMultiplier(data.trails),
+		equippedTrail = data.equippedTrail,
+		trailMultiplier = Economy.trailMultiplier(data.equippedTrail),
 		indexDiscovered = data.indexDiscovered,
 		indexClaimed = data.indexClaimed,
 		indexCompleteClaimed = data.indexCompleteClaimed,
@@ -96,7 +97,8 @@ function Snapshot.section(player: Player, section: Section)
 			penSlots = Economy.penSlots(data.penLevel),
 			treadmillLevel = data.treadmillLevel,
 			trails = data.trails,
-			trailMultiplier = Economy.bestTrailMultiplier(data.trails),
+			equippedTrail = data.equippedTrail,
+			trailMultiplier = Economy.trailMultiplier(data.equippedTrail),
 		}
 	elseif section == "tools" then
 		payload = { tools = data.tools }

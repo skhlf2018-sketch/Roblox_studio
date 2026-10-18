@@ -5,7 +5,8 @@
 	- Pen: 우리 레벨 → 장착 칸 수. level 1 은 무료(시작 상태)
 	- Treadmill: 러닝머신 레벨 → 한 걸음당 속도(원본). level 0 = 잠김, level 1 구매 = 해금($1K)
 	  실제 증가량은 Economy.treadmillGainPerSecond (× GROWTH_MULTIPLIER)
-	- Trails: 속도 배율. 중첩 아님 — 가진 것 중 가장 높은 배율 하나만 적용 [추정]
+	- Trails: 속도 배율. 중첩 아님 — **장착한 트레일 하나**만 적용 (원작 장착/장착 해제 버튼).
+	  사면 바로 장착. NO_TRAIL("none") = 장착 안 함 (배율 1)
 ]]
 
 export type PenLevel = { level: number, cost: number, slots: number }
@@ -159,6 +160,7 @@ local Upgrades = {
 	trailById = trailById,
 	PEN_MAX_LEVEL = #Pen,
 	TREADMILL_MAX_LEVEL = #Treadmill,
+	NO_TRAIL = "none", -- 트레일 장착 안 함 (저장 데이터 equippedTrail / EquipTrail Remote 인자)
 }
 
 function Upgrades.getTrail(id: string): Trail?

@@ -56,7 +56,8 @@ Tags.PlayerAttributes = {
 	PenLevel = "PenLevel",
 	PenSlots = "PenSlots",
 	TreadmillLevel = "TreadmillLevel",
-	TrailMultiplier = "TrailMultiplier",
+	TrailMultiplier = "TrailMultiplier", -- 장착한 트레일 배율 (없으면 1)
+	EquippedTrail = "EquippedTrail", -- 장착한 트레일 id ("none" = 없음) — 다른 사람 캐릭터 트레일 꾸밀 때
 	CarryingEgg = "CarryingEgg", -- 든 알 uid ("" = 없음)
 	CarryingBiome = "CarryingBiome",
 	Stunned = "Stunned", -- 래그돌/곰덫 중

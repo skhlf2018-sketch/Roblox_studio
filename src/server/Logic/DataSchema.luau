@@ -2,13 +2,15 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 2. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 3. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 펫 id, 잘못된 숫자, 중복 uid, 칸 수 초과 장착 등은 고치거나 버림)
 
 	버전 기록:
 	  1 (1단계) 돈·속도·펫·장착·업그레이드·도감·도구·부화 슬롯·통계
 	  2 (2단계) + weapons(해금 무기), sakuraCrystals, sakuraUnlocked, shrineUsed, quests, questsRewarded, eggQueue
 	     1 → 2: weapons 를 도감 발견 기록으로 채움 (나머지는 기본값)
+	  3 (2판 마무리) + equippedTrail (장착한 트레일, "none" = 해제). 배율은 장착한 트레일만 적용
+	     2 → 3: 가진 트레일 중 가장 높은 배율을 장착 (전에는 그게 자동 적용이었음 → 속도 그대로)
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
 	  (DataSchema.isNewerVersion)
 	경고 카운트(치트 방지)는 저장하지 않음.
@@ -66,6 +68,7 @@ function DataSchema.default(_now: number): PlayerData
 		quests = {},
 		questsRewarded = false,
 		eggQueue = {},
+		equippedTrail = Upgrades.NO_TRAIL,
 	}
 end
 
@@ -269,6 +272,10 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 			end
 		end
 	end
+	-- 장착 트레일 (버전 3): 가진 것만, 아니면 해제
+	if typeof(src.equippedTrail) == "string" and table.find(data.trails, src.equippedTrail :: string) then
+		data.equippedTrail = src.equippedTrail :: string
+	end
 
 	-- 도감
 	data.indexDiscovered = cleanDiscovered(src.indexDiscovered)
@@ -429,6 +436,19 @@ function DataSchema.migrate(raw: unknown): unknown
 		src.questsRewarded = false
 		src.eggQueue = {}
 		version = 2
+	end
+	if version < 3 then
+		-- 2 → 3: 전에는 가진 것 중 최고 배율이 자동 적용 → 그 트레일을 장착한 상태로 (속도가 안 바뀜)
+		local owned: { string } = {}
+		if typeof(src.trails) == "table" then
+			for _, id in src.trails :: { unknown } do
+				if typeof(id) == "string" then
+					table.insert(owned, id :: string)
+				end
+			end
+		end
+		src.equippedTrail = Economy.bestTrailId(owned)
+		version = 3
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

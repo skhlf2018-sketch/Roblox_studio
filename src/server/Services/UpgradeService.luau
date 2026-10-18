@@ -5,7 +5,9 @@
 	Remote: PurchaseUpgrade(kind: "Pen" | "Treadmill" | "Trail", trailId: string?)
 	  - 가격·효과는 shared/Data/Upgrades.luau (설계문서 9장 표)
 	  - 러닝머신 0레벨 = 잠김, 1레벨 구매($1K) = 해금
-	  - 트레일은 순서 상관없이 아무거나 살 수 있음, 가진 것 중 최고 배율 하나만 적용
+	  - 트레일은 순서 상관없이 아무거나 살 수 있음, **장착한 트레일 하나**만 적용 (사면 바로 장착)
+
+	Remote: EquipTrail(trailId | "none") — 가진 트레일로 바꿔 끼기, "none" 이면 해제 (data.equippedTrail)
 
 	러닝머신 타기·걸음(속도 증가)은 2판부터 Services/TreadmillService.
 ]]
@@ -91,15 +93,43 @@ function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
 			return
 		end
 		table.insert(data.trails, trail.id)
+		data.equippedTrail = trail.id -- 사면 바로 장착
 		Wallet.syncSpeed(player)
 		Net.notify(
 			player,
 			"success",
-			string.format("%s 트레일! 속도 ×%s", trail.name, tostring(trail.multiplier))
+			string.format("%s 트레일 장착! 속도 ×%s", trail.name, tostring(trail.multiplier))
 		)
 	else
 		return
 	end
+	Snapshot.section(player, "upgrades")
+end
+
+-- 트레일 장착 (가진 것만) / Upgrades.NO_TRAIL("none") 이면 해제
+function UpgradeService.equipTrail(player: Player, trailId: string)
+	local _, data = Sessions.getLoaded(player)
+	if not data then
+		return
+	end
+	if trailId == data.equippedTrail then
+		return
+	end
+	local message: string
+	if trailId == Upgrades.NO_TRAIL then
+		data.equippedTrail = Upgrades.NO_TRAIL
+		message = "트레일을 뺐어요."
+	else
+		local trail = Upgrades.getTrail(trailId)
+		if not trail or not table.find(data.trails, trail.id) then
+			Net.notify(player, "error", "아직 없는 트레일이에요.")
+			return
+		end
+		data.equippedTrail = trail.id
+		message = string.format("%s 트레일 장착! 속도 ×%s", trail.name, tostring(trail.multiplier))
+	end
+	Wallet.syncSpeed(player)
+	Net.notify(player, "success", message)
 	Snapshot.section(player, "upgrades")
 end
 
@@ -115,6 +145,14 @@ function UpgradeService.start()
 		end
 		local id = if k == Remotes.UpgradeKinds.Trail then Validate.idIn(trailId, trailIds) else nil
 		UpgradeService.purchase(player, k, id)
+	end)
+	local equipIds: { [string]: boolean } = table.clone(trailIds)
+	equipIds[Upgrades.NO_TRAIL] = true
+	Net.on(Remotes.ToServer.EquipTrail, function(player: Player, trailId: unknown)
+		local id = Validate.idIn(trailId, equipIds)
+		if id then
+			UpgradeService.equipTrail(player, id)
+		end
 	end)
 end
 

@@ -182,24 +182,25 @@ function HotbarController.start()
 			local slot = slots[tool]
 			if not slot then
 				local t = tool
-				slot = Ui.button("", COLORS[t.Name] or C.gray, UDim2.fromOffset(88, 88), function()
+				local made = Ui.button("", COLORS[t.Name] or C.gray, UDim2.fromOffset(88, 88), function()
 					press(t)
 				end, { parent = bar })
-				drawTool(t.Name, slot)
+				drawTool(t.Name, made)
 				Ui.label(NAMES[t.Name] or t.Name, UDim2.new(1, -6, 0, 24), 18, C.white, {
 					Name = "Caption",
 					AnchorPoint = Vector2.new(0.5, 1),
 					Position = UDim2.new(0.5, 0, 1, -2),
 					TextScaled = true,
-					Parent = slot,
+					Parent = made,
 				})
 				Ui.label(tostring(i), UDim2.fromOffset(24, 24), 18, C.white, {
 					Name = "Key",
 					Position = UDim2.fromOffset(4, 2),
 					Visible = not touch,
-					Parent = slot,
+					Parent = made,
 				})
-				slots[t] = slot
+				slots[t] = made
+				slot = made
 			end
 			local s = slot :: TextButton
 			s.LayoutOrder = i

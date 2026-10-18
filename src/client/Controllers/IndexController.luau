@@ -220,8 +220,23 @@ function IndexController.start()
 		end
 	end
 
+	-- 탭·"모두 받기"도 폰에서 46px 이상 (창 배율 기준, 열 때마다 다시)
+	local function layout()
+		local tabH = Ui.touch(50, SIZE)
+		local footH = Ui.touch(56, SIZE)
+		tabs.Size = UDim2.new(1, 0, 0, tabH + 12)
+		footer.Size = UDim2.new(1, 0, 0, footH + 14)
+		claimAll.Size = UDim2.fromOffset(230, footH)
+		grid.Position = UDim2.fromOffset(0, tabH + 18)
+		grid.Size = UDim2.new(1, 0, 1, -(tabH + 18 + footH + 22))
+		for _, button in tabButtons do
+			button.Size = UDim2.fromOffset(140, tabH)
+		end
+	end
+
 	local function render()
 		renderTabs()
+		layout()
 		renderCards()
 	end
 

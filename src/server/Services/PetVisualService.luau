@@ -2094,7 +2094,10 @@ function PetVisualService.start()
 	local function onSpot(inst: Instance)
 		if inst:IsA("BasePart") then
 			task.defer(function()
-				local ok, err = pcall(buildParent, inst)
+				local ok, err = pcall(function(): ...any
+					buildParent(inst)
+					return
+				end)
 				if not ok then
 					warn("[PetVisualService] 부모 동물 실패: " .. tostring(err))
 				end
@@ -2127,7 +2130,10 @@ function PetVisualService.start()
 	task.spawn(function()
 		while true do
 			task.wait(1)
-			local ok, err = pcall(refreshPens)
+			local ok, err = pcall(function(): ...any
+				refreshPens()
+				return
+			end)
 			if not ok then
 				warn("[PetVisualService] 우리 갱신 오류: " .. tostring(err))
 			end

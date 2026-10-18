@@ -117,7 +117,7 @@ function PetsController.start()
 			return
 		end
 		local equippedSet: { [string]: boolean } = {}
-		for _, uid in snap.equipped or {} do
+		for _, uid in (snap.equipped or {}) :: { string } do
 			equippedSet[uid] = true
 		end
 		local list = table.clone(snap.pets or {})

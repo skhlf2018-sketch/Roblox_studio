@@ -286,7 +286,10 @@ local function safe(fn: (BasePart) -> (), inst: Instance)
 		if inst.Parent == nil then
 			return
 		end
-		local ok, err = pcall(fn, inst)
+		local ok, err = pcall(function(): ...any
+			fn(inst)
+			return
+		end)
 		if not ok then
 			warn("[EggVisualService] " .. tostring(err))
 		end

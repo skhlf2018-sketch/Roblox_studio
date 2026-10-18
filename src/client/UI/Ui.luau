@@ -300,7 +300,7 @@ export type ButtonOptions = {
 	textColor: Color3?,
 	sound: string?,
 	layoutOrder: number?,
-	parent: Instance?,
+	parent: any, -- Instance (Frame 등). 새 타입 검사기가 하위 클래스를 Instance? 칸에 못 넣어서 any
 	position: UDim2?,
 	anchor: Vector2?,
 }
@@ -400,9 +400,12 @@ function Ui.window(name: string, title: string, color: Color3, size: Vector2, on
 	})
 	Ui.corner(26).Parent = panel
 	Ui.stroke(C.white, 5).Parent = panel
+	-- 닫기 X 는 폰에서도 46px 이상 (창 배율 기준) → 머리 높이도 그만큼
+	local closeH = Ui.touch(66, size)
+	local headerH = math.max(76, closeH + 8)
 	local header: Frame = Ui.new("Frame", {
 		Name = "Header",
-		Size = UDim2.new(1, 0, 0, 76),
+		Size = UDim2.new(1, 0, 0, headerH),
 		BackgroundColor3 = color,
 		Parent = panel,
 	})
@@ -417,14 +420,14 @@ function Ui.window(name: string, title: string, color: Color3, size: Vector2, on
 		BackgroundColor3 = color,
 		Parent = header,
 	})
-	local titleLabel = Ui.label(title, UDim2.new(1, -140, 1, 0), 36, C.white, {
+	local titleLabel = Ui.label(title, UDim2.new(1, -(closeH + 74), 1, 0), 36, C.white, {
 		Name = "Title",
 		Position = UDim2.fromOffset(24, 0),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 2,
 		Parent = header,
 	})
-	local close = Ui.button("X", C.red, UDim2.fromOffset(66, 66), onClose, {
+	local close = Ui.button("X", C.red, UDim2.fromOffset(closeH, closeH), onClose, {
 		anchor = Vector2.new(1, 0.5),
 		position = UDim2.new(1, -8, 0.5, 0),
 		textSize = 30,
@@ -434,8 +437,8 @@ function Ui.window(name: string, title: string, color: Color3, size: Vector2, on
 	close.ZIndex = 3
 	local content: Frame = Ui.new("Frame", {
 		Name = "Content",
-		Position = UDim2.fromOffset(0, 76),
-		Size = UDim2.new(1, 0, 1, -76),
+		Position = UDim2.fromOffset(0, headerH),
+		Size = UDim2.new(1, 0, 1, -headerH),
 		BackgroundTransparency = 1,
 		Parent = panel,
 	})

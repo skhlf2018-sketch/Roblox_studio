@@ -26,10 +26,11 @@ local ShopController = {}
 
 local C = Theme.Colors
 local NAME = "Shop"
+local SIZE = Vector2.new(820, 560)
 
 function ShopController.start()
 	local player = Players.LocalPlayer
-	local window = Ui.window(NAME, "상점", Theme.Menu.shop, Vector2.new(820, 560), function()
+	local window = Ui.window(NAME, "상점", Theme.Menu.shop, SIZE, function()
 		Windows.close(NAME)
 	end)
 	local content = window.content
@@ -74,6 +75,7 @@ function ShopController.start()
 		size: UDim2?
 	): TextButton
 		local affordable = cost ~= nil and money() >= cost
+		local h = Ui.touch(64, SIZE)
 		local text = if cost == nil
 			then "최대 레벨!"
 			elseif cost == 0 then "무료"
@@ -81,7 +83,7 @@ function ShopController.start()
 		local b = Ui.button(
 			text,
 			if cost == nil then C.gray elseif affordable then C.green else Color3.fromRGB(150, 150, 160),
-			size or UDim2.fromOffset(260, 64),
+			size or UDim2.fromOffset(260, h),
 			function()
 				if cost ~= nil then
 					onBuy()
@@ -93,7 +95,7 @@ function ShopController.start()
 	end
 
 	local function bigCard(title: string, lines: { string }, color: Color3): Frame
-		local card = Ui.card(UDim2.new(1, -40, 0, 270), C.white, color)
+		local card = Ui.card(UDim2.new(1, -40, 0, 208 + Ui.touch(64, SIZE)), C.white, color)
 		card.AnchorPoint = Vector2.new(0.5, 0)
 		card.Position = UDim2.new(0.5, 0, 0, 10)
 		card.Parent = body
@@ -111,7 +113,15 @@ function ShopController.start()
 		for _, child in body:GetChildren() do
 			child:Destroy()
 		end
+		-- 폰에서도 버튼 46px 이상 (창 배율 기준)
+		local tabH = Ui.touch(52, SIZE)
+		local buyH = Ui.touch(64, SIZE)
+		local rowH = Ui.touch(52, SIZE)
+		tabBar.Size = UDim2.new(1, 0, 0, tabH + 6)
+		body.Position = UDim2.fromOffset(0, tabH + 14)
+		body.Size = UDim2.new(1, 0, 1, -(tabH + 14))
 		for id, b in tabButtons do
+			b.Size = UDim2.fromOffset(200, tabH)
 			Ui.setButton(b, nil, if id == tab then C.orange else C.blue)
 		end
 		local snap = State.get()
@@ -134,7 +144,7 @@ function ShopController.start()
 			local card = bigCard("우리 (펫 칸)", lines, C.green)
 			buyButton(card, cost, function()
 				Net.send(Remotes.ToServer.PurchaseUpgrade, Remotes.UpgradeKinds.Pen)
-			end, UDim2.new(0.5, 0, 1, -76))
+			end, UDim2.new(0.5, 0, 1, -(buyH + 12)))
 		elseif tab == "Treadmill" then
 			local level = snap.treadmillLevel or 0
 			local cost = Economy.nextTreadmillCost(level)
@@ -168,10 +178,10 @@ function ShopController.start()
 			local card = bigCard("러닝머신 (속도)", lines, C.blue)
 			buyButton(card, cost, function()
 				Net.send(Remotes.ToServer.PurchaseUpgrade, Remotes.UpgradeKinds.Treadmill)
-			end, UDim2.new(0.5, 0, 1, -76))
+			end, UDim2.new(0.5, 0, 1, -(buyH + 12)))
 		else
 			local owned: { [string]: boolean } = {}
-			for _, id in snap.trails or {} do
+			for _, id in (snap.trails or {}) :: { string } do
 				owned[id] = true
 			end
 			local best = Economy.bestTrailMultiplier(snap.trails or {})
@@ -180,7 +190,7 @@ function ShopController.start()
 			Ui.padding(6).Parent = list
 			for _, trail in Upgrades.Trails do
 				local color = Color3.fromRGB(trail.color[1], trail.color[2], trail.color[3])
-				local row = Ui.card(UDim2.new(1, -20, 0, 70), C.white, color)
+				local row = Ui.card(UDim2.new(1, -20, 0, rowH + 18), C.white, color)
 				row.LayoutOrder = trail.order
 				row.Parent = list
 				local swatch: Frame = Ui.new("Frame", {
@@ -208,7 +218,7 @@ function ShopController.start()
 					local tagLabel: TextLabel = Ui.new("TextLabel", {
 						AnchorPoint = Vector2.new(1, 0.5),
 						Position = UDim2.new(1, -10, 0.5, 0),
-						Size = UDim2.fromOffset(240, 52),
+						Size = UDim2.fromOffset(240, rowH),
 						BackgroundColor3 = if active then C.yellow else C.gray,
 						TextColor3 = C.white,
 						TextSize = 24,
@@ -223,7 +233,7 @@ function ShopController.start()
 					Ui.button(
 						"사기  " .. Format.money(trail.cost),
 						if affordable then C.green else Color3.fromRGB(150, 150, 160),
-						UDim2.fromOffset(240, 52),
+						UDim2.fromOffset(240, rowH),
 						function()
 							Net.send(Remotes.ToServer.PurchaseUpgrade, Remotes.UpgradeKinds.Trail, id)
 						end,

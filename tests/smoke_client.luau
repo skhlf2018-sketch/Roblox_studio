@@ -658,6 +658,33 @@ local function body()
 	local claimButton = playerGui:FindFirstChild("Claim", true)
 	check(claimButton and claimButton.Size.Y.Offset == claimH, "도감 받기! 버튼 높이 = " .. claimH)
 
+	-- 창 닫기 X · 도감 탭/모두 받기 · 상점 버튼 (2차 수정)
+	local screen = playerGui:FindFirstChild("StealAnEggUI")
+	local windowsLayer = screen and screen:FindFirstChild("Windows")
+	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "PetPicker" } do
+		local holder = windowsLayer and windowsLayer:FindFirstChild(w)
+		local header = holder and holder:FindFirstChild("Header", true)
+		local x = header and header:FindFirstChild("Button")
+		if holder then
+			local s = Ui.fitScale(roblox.Vector2.new(holder.Size.X.Offset, holder.Size.Y.Offset))
+			check(
+				x and x.Size.Y.Offset * s >= 45.9,
+				string.format("%s 창 닫기 X %.1fpx", w, (x and x.Size.Y.Offset or 0) * s)
+			)
+		end
+	end
+	Windows.open("Index")
+	local indexScale2 = Ui.fitScale(roblox.Vector2.new(880, 560))
+	local tab1 = findButton("1. 숲")
+	check(tab1 and tab1.Size.Y.Offset * indexScale2 >= 45.9, "도감 구역 탭 46px 이상")
+	local all = findButton("받기 (") or findButton("받을 보상")
+	check(all and all.Size.Y.Offset * indexScale2 >= 45.9, "도감 모두 받기 46px 이상")
+	Windows.open("Shop")
+	local shopScale = Ui.fitScale(roblox.Vector2.new(820, 560))
+	local buy = findButton("사기") or findButton("최대 레벨")
+	check(buy and buy.Size.Y.Offset * shopScale >= 45.9, "상점 사기 버튼 46px 이상")
+	local shopTab = findButton("러닝머신")
+	check(shopTab and shopTab.Size.Y.Offset * shopScale >= 45.9, "상점 탭 46px 이상")
 	print("[퓨전 머신]")
 	local fusionPrompt = promptOf(machine, "FusionPrompt")
 	check(fusionPrompt ~= nil and fusionPrompt.Enabled == true, "내 퓨전 머신에 프롬프트(켜짐)")

@@ -111,7 +111,7 @@ local function openPicker(machine: BasePart)
 				return 0.999
 			end)
 			if err then
-				return false, FusionRules.errorText(err)
+				return false, FusionRules.errorText(err :: FusionRules.FusionError)
 			end
 			return true, nil
 		end,

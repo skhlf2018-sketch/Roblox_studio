@@ -19,6 +19,7 @@ local Config = require(Shared.Data.Config)
 local Pets = require(Shared.Data.Pets)
 local SakuraRules = require(Shared.SakuraRules)
 local Remotes = require(Shared.Remotes)
+local Types = require(Shared.Types)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
@@ -205,13 +206,13 @@ end
 local function nameOfTarget(uid: string): string
 	local snap = State.get()
 	if snap then
-		for _, record in snap.incubators or {} do
+		for _, record in (snap.incubators or {}) :: { Types.IncubatorRecord } do
 			if record.uid == uid then
 				local pet = Pets.get(record.petId)
 				return (if pet then pet.name else record.petId) .. " 알"
 			end
 		end
-		for _, record in snap.pets or {} do
+		for _, record in (snap.pets or {}) :: { Types.PetRecord } do
 			if record.uid == uid then
 				local pet = Pets.get(record.petId)
 				return if pet then pet.name else record.petId

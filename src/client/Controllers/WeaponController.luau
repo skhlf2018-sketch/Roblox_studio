@@ -362,7 +362,7 @@ local function attach(character: Model, tool: Tool)
 		trail = t
 	end
 	model.Parent = character
-	attached[character] = { model = model, weld = weld, trail = trail, style = style, swinging = false }
+	attached[character] = { model = model, weld = weld, trail = trail, style = style :: Style, swinging = false }
 end
 
 local function playSwing(character: Model)

@@ -46,12 +46,10 @@ local function describe(record: any): string
 	return table.concat(parts, " · ")
 end
 
-local function showNext()
-	if showing or #queue == 0 then
-		return
-	end
-	showing = true
-	local payload = table.remove(queue, 1)
+local showNext: () -> ()
+
+-- 카드 한 장 만들기 (오류가 나도 showNext 의 pcall 이 받아서 다음 카드가 막히지 않음)
+local function buildCard(payload: any, track: (Frame) -> ())
 	local record = payload.pet
 	local pet = Pets.get(tostring(record.petId))
 	local rarityId = if pet then pet.rarity else "common"
@@ -68,6 +66,7 @@ local function showNext()
 		Parent = layer,
 	})
 	Ui.scaled(holder, Vector2.new(440, 520))
+	track(holder)
 
 	-- 1) 알이 흔들림
 	local eggColor = Visuals.petColor(tostring(record.petId), 1)
@@ -256,10 +255,12 @@ local function showNext()
 			return
 		end
 		done = true
-		local pop = card:FindFirstChild("Pop")
-		if pop and pop:IsA("UIScale") then
-			Ui.tween(pop, Theme.Tween.close, { Scale = 0 }).Completed:Wait()
-		end
+		pcall(function()
+			local pop = card:FindFirstChild("Pop")
+			if pop and pop:IsA("UIScale") then
+				Ui.tween(pop, Theme.Tween.close, { Scale = 0 }).Completed:Wait()
+			end
+		end)
 		holder:Destroy()
 		showing = false
 		showNext()
@@ -272,6 +273,28 @@ local function showNext()
 	})
 	Ui.pop(card, 0.3)
 	task.delay(8, close)
+end
+
+showNext = function()
+	if showing or #queue == 0 then
+		return
+	end
+	showing = true
+	local payload = table.remove(queue, 1)
+	local holder: Frame? = nil
+	local ok, err = pcall(buildCard, payload, function(frame: Frame)
+		holder = frame
+	end)
+	if not ok then
+		-- 카드 하나가 망가져도 다음 카드는 뜨게
+		warn("[HatchController] 카드 만들기 실패: " .. tostring(err))
+		local h = holder
+		if h then
+			h:Destroy()
+		end
+		showing = false
+		task.defer(showNext)
+	end
 end
 
 -- 다른 컨트롤러도 같은 카드를 띄울 수 있음 (제단 알·비밀 합성 알 등)

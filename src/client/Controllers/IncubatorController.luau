@@ -20,6 +20,7 @@ local Format = require(Shared.Format)
 local Pets = require(Shared.Data.Pets)
 local Visuals = require(Shared.Data.Visuals)
 local Remotes = require(Shared.Remotes)
+local Types = require(Shared.Types)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
@@ -82,7 +83,12 @@ function IncubatorController.start()
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	Ui.list(Enum.FillDirection.Vertical, 6).Parent = list
 
+	-- 폰에서는 접힌 채 시작하지만, 다 자란 알이 새로 생기면 저절로 펼침 + 제목에 "부화 가능 N" 배지
 	local collapsed = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+	local readyBadge = Ui.badge(header)
+	readyBadge.Position = UDim2.new(1, -8, 0, 8)
+	readyBadge.Size = UDim2.fromOffset(40, 40)
+	readyBadge.TextSize = 22
 	local rows: { [string]: Row } = {}
 
 	local function sendHatch(uid: string)
@@ -152,7 +158,7 @@ function IncubatorController.start()
 
 	local function rebuild()
 		local snap = State.get()
-		local incubators = if snap then snap.incubators or {} else {}
+		local incubators: { Types.IncubatorRecord } = if snap then snap.incubators or {} else {}
 		local seen: { [string]: boolean } = {}
 		for i, record in incubators do
 			local uid = tostring(record.uid)
@@ -189,7 +195,7 @@ function IncubatorController.start()
 			return
 		end
 		task.spawn(function()
-			for _, record in snap.incubators or {} do
+			for _, record in (snap.incubators or {}) :: { Types.IncubatorRecord } do
 				local row = rows[tostring(record.uid)]
 				if row and row.hatch.Visible then
 					sendHatch(tostring(record.uid))
@@ -217,7 +223,7 @@ function IncubatorController.start()
 				local phase = if stateFolder then stateFolder:GetAttribute(Tags.StateAttributes.Phase) else "Day"
 				local rate = Economy.growthRate(phase == "Night", false)
 				local ready = 0
-				for _, record in snap.incubators or {} do
+				for _, record in (snap.incubators or {}) :: { Types.IncubatorRecord } do
 					local uid = tostring(record.uid)
 					local row = rows[uid]
 					if row then
@@ -250,8 +256,15 @@ function IncubatorController.start()
 					end
 				end
 				hatchAll.Visible = ready >= 2
+				readyBadge.Visible = ready > 0
+				readyBadge.Text = tostring(ready)
 				if ready > lastReady then
 					Ui.pop(header, 1.15)
+					Ui.pop(readyBadge, 1.4)
+					if collapsed then
+						collapsed = false
+						rebuild()
+					end
 				end
 				lastReady = ready
 			end

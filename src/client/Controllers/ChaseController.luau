@@ -15,6 +15,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
+local SpeedMath = require(Shared.SpeedMath)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
@@ -103,7 +104,8 @@ function ChaseController.start()
 		guardName = tostring(payload.guardName or "경비")
 		local yours = tonumber(payload.yourSpeed) or 0
 		local guard = tonumber(payload.guardSpeed) or 0
-		slow = yours < guard
+		-- 서버 경비 추격과 같은 판정 (SpeedMath.guardChaseRatio: 지수·0.97 마진·상하한 포함)
+		slow = guard > 0 and not SpeedMath.canEscape(guard, yours)
 		info.Text = guardName .. "이(가) 쫓아와요! 내 베이스로 달려요!"
 		info.TextColor3 = C.white
 		holder.Visible = true
@@ -184,21 +186,21 @@ function ChaseController.start()
 	local edges: { Frame } = {}
 	for _, spec in
 		{
-			{ UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.25), 90 },
-			{ UDim2.fromScale(0, 0.75), UDim2.fromScale(1, 0.25), -90 },
-			{ UDim2.fromScale(0, 0), UDim2.fromScale(0.2, 1), 0 },
-			{ UDim2.fromScale(0.8, 0), UDim2.fromScale(0.2, 1), 180 },
+			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.25), rotation = 90 },
+			{ position = UDim2.fromScale(0, 0.75), size = UDim2.fromScale(1, 0.25), rotation = -90 },
+			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.2, 1), rotation = 0 },
+			{ position = UDim2.fromScale(0.8, 0), size = UDim2.fromScale(0.2, 1), rotation = 180 },
 		}
 	do
 		local e: Frame = Ui.new("Frame", {
-			Position = spec[1],
-			Size = spec[2],
+			Position = spec.position,
+			Size = spec.size,
 			BackgroundColor3 = Color3.fromRGB(255, 20, 40),
 			BackgroundTransparency = 0,
 			Parent = vignette,
 		})
 		local g = Instance.new("UIGradient")
-		g.Rotation = spec[3]
+		g.Rotation = spec.rotation
 		g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
 		g.Parent = e
 		table.insert(edges, e)

@@ -57,7 +57,7 @@ local function bounce(inst: Instance, amplitudeFactor: number, period: number)
 			tween:Cancel()
 		end)
 		model.AncestryChanged:Connect(function()
-			if model.Parent == nil then
+			if not model.Parent then
 				tween:Cancel()
 			end
 		end)

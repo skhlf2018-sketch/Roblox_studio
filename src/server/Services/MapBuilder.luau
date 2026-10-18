@@ -69,6 +69,9 @@ local L = {
 	MAP_HALF_X = 400,
 	MAP_MIN_Z = -175,
 	MAX_PART = 2000, -- 2048 한계보다 조금 작게
+	GUARD_CLEAR_RADIUS = 62, -- 이 반경 안(경비 집·둥지·부모 동물)에는 구역 장식을 안 놓음 (B12)
+	ENTRANCE_CLEAR_HALF = 20, -- 입구 → 가운데 통로 반폭 (장식 안 놓음)
+	ALTAR_Z = 68, -- 천국/지옥 제단: 구역 중심에서 ±Z
 }
 
 local MapBuilder = {}
@@ -1244,9 +1247,12 @@ local function buildDecor(
 			local x = rng:NextNumber(-half + radius, half - radius)
 			local z = rng:NextNumber(-half + radius, half - radius)
 			local r = math.sqrt(x * x + z * z)
-			local okRing = (r > 20 + radius and r < 33 - radius) or r > 66 + radius
+			-- 경비 길 비우기 (B12: 경비는 MoveTo 직선 이동이라 장식에 걸림):
+			--   경비 집(중심) ↔ 둥지(반지름 46) ↔ 부모 동물(56) 안쪽 원 전체는 비우고, 그 바깥 테두리에만 놓음
+			local okRing = r > L.GUARD_CLEAR_RADIUS + radius
 			-- 입구(길 쪽 가장자리 가운데)는 비워 둠
-			local entrance = x * toward > half - 22 and math.abs(z) < 16
+			-- 구역 입구(길 쪽 가장자리 가운데) → 둥지로 가는 통로도 비움
+			local entrance = x * toward > 0 and math.abs(z) < L.ENTRANCE_CLEAR_HALF + radius
 			local sideOk = sideZ == nil or z * sideZ > 4
 			if okRing and not entrance and sideOk and free(x, z, radius) then
 				table.insert(placed, { x = x, z = z, r = radius })
@@ -1414,7 +1420,7 @@ local function buildDecor(
 				elseif kind == "firepit" or kind == "darkspike" then
 					sideZ = 1
 				end
-				for _ = 1, spec.count do
+				for _ = 1, math.max(0, math.floor(spec.count * Visuals.decorScale + 0.5)) do
 					local pos = tryPlace(radius, sideZ)
 					if pos then
 						fn(decorFolder, pos, rng, theme)
@@ -1553,8 +1559,9 @@ end
 local function buildSakura(center: Vector3, toward: number, parent: Instance): { Hole }
 	local m = model("SakuraIncubatorModel", parent)
 	local back = -toward
-	local lx = 26 -- 구역 중심에서 길 반대쪽(도리이 쪽)으로
-	local pos = Vector3.new(center.X + back * lx, FLOOR_TOP, center.Z)
+	-- 경비 길(중심~부모 동물 원) 밖, 길 반대쪽 모서리 (도리이 옆)
+	local lx, lz = 64, 46
+	local pos = Vector3.new(center.X + back * lx, FLOOR_TOP, center.Z + lz)
 	local wood = Color3.fromRGB(95, 58, 45)
 	local pink = Color3.fromRGB(255, 175, 205)
 	-- 나무 (받침 뒤)
@@ -1666,7 +1673,7 @@ local function buildSakura(center: Vector3, toward: number, parent: Instance): {
 	e.LightInfluence = 0.5
 	e.Parent = petalBox
 	Gui.billboard(pedestal, "사쿠라 인큐베이터", 12, 120).TextColor3 = Color3.fromRGB(255, 220, 235)
-	return { { x = back * lx, z = 0, r = 11 }, { x = back * (lx + 5.5), z = 0, r = 9 } }
+	return { { x = back * lx, z = lz, r = 11 }, { x = back * (lx + 5.5), z = lz, r = 9 } }
 end
 
 -- 천국 제단 (흰 대리석 + 금, 빛기둥) / 지옥 제단 (검은 현무암 + 빨강 네온, 불꽃)
@@ -1918,10 +1925,11 @@ end
 local function buildAngelsDemons(center: Vector3, toward: number, parent: Instance): { Hole }
 	local holes = buildShrine(center, toward, parent)
 	-- 천국 = -Z 쪽 절반, 지옥 = +Z 쪽 절반 (heavenhell 바닥과 같음)
-	buildAltar("light", Vector3.new(center.X, FLOOR_TOP, center.Z - 27), parent)
-	buildAltar("dark", Vector3.new(center.X, FLOOR_TOP, center.Z + 27), parent)
-	table.insert(holes, { x = 0, z = -27, r = 9 })
-	table.insert(holes, { x = 0, z = 27, r = 9 })
+	-- 경비 길(중심~부모 동물 원 56) 밖 가장자리 쪽
+	buildAltar("light", Vector3.new(center.X, FLOOR_TOP, center.Z - L.ALTAR_Z), parent)
+	buildAltar("dark", Vector3.new(center.X, FLOOR_TOP, center.Z + L.ALTAR_Z), parent)
+	table.insert(holes, { x = 0, z = -L.ALTAR_Z, r = 9 })
+	table.insert(holes, { x = 0, z = L.ALTAR_Z, r = 9 })
 	return holes
 end
 
@@ -2687,10 +2695,12 @@ local function buildMap(): Folder
 	local zonesFolder = folder("Zones", map)
 	for _, biome in Biomes.list do
 		buildZone(biome, zonesFolder)
+		task.wait() -- 구역마다 한 프레임 쉬기 (서버 시작 때 한 번에 수천 개를 만들어 멈추지 않게)
 	end
 	local plotsFolder = folder("Plots", map)
 	for i = 1, Config.PLOT_COUNT do
 		buildPlot(i, plotsFolder)
+		task.wait()
 	end
 
 	map.Parent = Workspace
@@ -2819,11 +2829,11 @@ local function ownerText(userId: number): string
 end
 
 local function signLabels(index: number): { TextLabel }
-	local labels = plotSignLabels[index]
-	if labels then
-		return labels
+	local existing = plotSignLabels[index]
+	if existing then
+		return existing
 	end
-	labels = {}
+	local labels: { TextLabel } = {}
 	local plot = plots[index]
 	local sign = if plot then plot.sign else nil
 	if sign then

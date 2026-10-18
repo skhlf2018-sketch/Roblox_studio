@@ -31,6 +31,7 @@ local Mutations = require(Shared.Data.Mutations)
 local Visuals = require(Shared.Data.Visuals)
 local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
+local Types = require(Shared.Types)
 local Client = script.Parent.Parent
 local State = require(Client.State)
 local Theme = require(script.Parent.Theme)
@@ -93,10 +94,10 @@ function PetPicker.myPets(): { Item }
 		return list
 	end
 	local equipped: { [string]: boolean } = {}
-	for _, uid in snap.equipped or {} do
+	for _, uid in (snap.equipped or {}) :: { string } do
 		equipped[uid] = true
 	end
-	for _, record in snap.pets or {} do
+	for _, record in (snap.pets or {}) :: { Types.PetRecord } do
 		table.insert(list, {
 			uid = record.uid,
 			petId = record.petId,
@@ -116,7 +117,7 @@ function PetPicker.myEggs(): { Item }
 	if not snap then
 		return list
 	end
-	for _, record in snap.incubators or {} do
+	for _, record in (snap.incubators or {}) :: { Types.IncubatorRecord } do
 		table.insert(list, {
 			uid = record.uid,
 			petId = record.petId,
@@ -521,7 +522,7 @@ function PetPicker.open(opts: Options)
 		window = window,
 		alive = true,
 	}
-	for _, filter in opts.filters or {} do
+	for _, filter in (opts.filters or {}) :: { Filter } do
 		s.filterOn[filter.id] = filter.default ~= false
 	end
 
@@ -553,7 +554,7 @@ function PetPicker.open(opts: Options)
 		local visible: { Item } = {}
 		for _, item in s.items do
 			local show = true
-			for _, filter in opts.filters or {} do
+			for _, filter in (opts.filters or {}) :: { Filter } do
 				if s.filterOn[filter.id] and not filter.test(item, s.selected) then
 					show = false
 					break
@@ -624,7 +625,7 @@ function PetPicker.open(opts: Options)
 	end
 	s.render = render
 
-	for i, filter in opts.filters or {} do
+	for i, filter in (opts.filters or {}) :: { Filter } do
 		local id = filter.id
 		local b = Ui.button(filter.label, C.blue, UDim2.fromOffset(156, btnH), function()
 			s.filterOn[id] = not s.filterOn[id]

@@ -389,6 +389,10 @@ Visuals.plotColors = {
 -- 구역 테마 (설계문서 4장 순서)
 ------------------------------------------------------------------
 
+-- 구역 장식 개수 배율 (한 곳에서 조절). 폰이 끊기면 0.5 처럼 줄이면 모든 구역 장식(decor count)이 같이 줄어듦.
+-- (heavenhell·chocoriver·castlewall·torii 같은 고정 구조물과 2단계 특수 장소 모델은 배율과 상관없이 그대로)
+Visuals.decorScale = 1
+
 local function decor(list: { { any } }): { DecorSpec }
 	local result: { DecorSpec } = {}
 	for _, item in list do

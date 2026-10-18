@@ -35,6 +35,13 @@ export type BiomeTheme = {
 	ambient: string?, -- 구역 위 떠다니는 파티클 종류
 	atmosphere: { color: Color, decay: Color, density: number, haze: number }?,
 	music: string, -- Sounds 이름
+	-- 2판 복도 (원작 스터드 체크무늬): 바닥 둘째 색(없으면 floor 를 조금 어둡게), 양옆 담장 색, 담장 위 잔디 띠, 담장 네온 줄
+	floor2: Color?,
+	wall: Color,
+	wallCap: Color?,
+	wallGlow: Color?,
+	rightSide: { floor: Color, floor2: Color, wall: Color, wallGlow: Color? }?, -- 오른쪽(x > 0) 절반만 다른 색 (천사&악마)
+	label: string, -- 구역 배너 이모지 (원작 "Jungle 😬")
 }
 
 -- 팔레트
@@ -87,6 +94,7 @@ Visuals.Tags = {
 	RarityHighlight = "RarityHighlight", -- 희귀도 테두리 Highlight (클라가 가까운 것만 켬, 31개 한계)
 	EggShell = "EggShell", -- 알 껍데기 비주얼 파트 (레인보우 색 순환)
 	Ambient = "AmbientEmitter", -- 구역 분위기 파티클
+	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 클라가 "업그레이드" 프롬프트
 }
 
 ------------------------------------------------------------------
@@ -318,37 +326,40 @@ function Visuals.petColor(id: string, index: number?): Color
 end
 
 ------------------------------------------------------------------
--- 경비 모양 (구역 id → 펫/extra id, 크기 배율)
+-- 경비 모양 (구역 id → 펫/extra id, 키)
+--   원작처럼 거대함 (캐릭터 5~10배). height = 겉모습 키(스터드, 25~40) — PetVisualService 가 모델 키에 맞춰
+--   크기 배율을 자동 계산. scale = 대략의 배율 (height 를 쓰므로 참고용)
 ------------------------------------------------------------------
 
 Visuals.guards = {
-	forest = { model = "chicken", scale = 2.4 },
-	lake = { model = "swan", scale = 2.4 },
-	desert = { model = "scorpion", scale = 2.6 },
-	jungle = { model = "tiger", scale = 2.4 },
-	snow = { model = "yeti", scale = 2.3 },
-	volcano = { model = "cerberus", scale = 2.4 },
-	abyss_ocean = { model = "beluga_whale", scale = 2.0 },
-	prehistoric = { model = "t_rex", scale = 2.3 },
-	cosmic = { model = "cosmic_skeleton_boss", scale = 2.3 },
-	cherry_blossom = { model = "oni_tiger", scale = 2.4 },
-	titan_temple = { model = "gorilla_king", scale = 2.4 },
-	angels_demons = { model = "angel", darkModel = "demon", scale = 2.3 },
-	enchanted_forest = { model = "spirit", scale = 2.3 },
-	candy_kingdom = { model = "gingerbread_giant", scale = 2.5 },
-	haunted_castle = { model = "grim_reaper", scale = 2.5 },
-} :: { [string]: { model: string, darkModel: string?, scale: number } }
+	forest = { model = "chicken", scale = 10, height = 28 },
+	lake = { model = "swan", scale = 8.3, height = 30 },
+	desert = { model = "scorpion", scale = 18.5, height = 25 },
+	jungle = { model = "tiger", scale = 11.2, height = 30 },
+	snow = { model = "yeti", scale = 10.9, height = 36 },
+	volcano = { model = "cerberus", scale = 12, height = 32 },
+	abyss_ocean = { model = "beluga_whale", scale = 11.3, height = 26 },
+	prehistoric = { model = "t_rex", scale = 11.8, height = 40 },
+	cosmic = { model = "cosmic_skeleton_boss", scale = 11.5, height = 38 },
+	cherry_blossom = { model = "oni_tiger", scale = 12, height = 32 },
+	titan_temple = { model = "gorilla_king", scale = 11.5, height = 38 },
+	angels_demons = { model = "angel", darkModel = "demon", scale = 10.9, height = 36 },
+	enchanted_forest = { model = "spirit", scale = 11.2, height = 32 },
+	candy_kingdom = { model = "gingerbread_giant", scale = 10.9, height = 36 },
+	haunted_castle = { model = "grim_reaper", scale = 13.3, height = 38 },
+} :: { [string]: { model: string, darkModel: string?, scale: number, height: number? } }
 
 ------------------------------------------------------------------
 -- 희귀도 효과 / 돌연변이 효과
 ------------------------------------------------------------------
 
 Visuals.rarityEffects = {
-	legendary = { highlight = C.gold },
-	mythic = { highlight = C.red },
-	cosmic = { highlight = C.violet, particle = "sparkle", particleColor = C.violet },
+	-- 전설 이상: 외곽 빛(Highlight) + 반짝이 파티클. 알 껍데기도 이 표를 보고 빛남(light 없으면 highlight 색)
+	legendary = { highlight = C.gold, particle = "sparkle", particleColor = C.gold },
+	mythic = { highlight = C.red, particle = "sparkle", particleColor = C.red },
+	cosmic = { highlight = C.violet, particle = "sparkle", particleColor = C.violet, light = C.violet },
 	secret = { highlight = C.black, particle = "smoke", particleColor = C.black },
-	eternal = { highlight = C.cyan, light = C.cyan },
+	eternal = { highlight = C.cyan, particle = "sparkle", particleColor = C.cyan, light = C.cyan },
 	divine = { highlight = C.white, particle = "rainbow", light = C.pink },
 } :: { [string]: { highlight: Color?, particle: string?, particleColor: Color?, light: Color? } }
 
@@ -372,17 +383,17 @@ Visuals.specialEggs = {
 } :: { [string]: { text: string, color: Color, textColor: Color } }
 
 ------------------------------------------------------------------
--- 베이스 색 (1~7번)
+-- 베이스 색 (1~7번) = 우리 울타리 가로대·X 보강재 색 (원작: 나무 갈색 / 흰색 / 노랑 …, 기둥은 모두 검정)
 ------------------------------------------------------------------
 
 Visuals.plotColors = {
-	{ 255, 110, 110 },
-	{ 255, 170, 60 },
-	{ 255, 220, 70 },
-	{ 110, 210, 110 },
-	{ 90, 180, 255 },
-	{ 170, 120, 255 },
-	{ 255, 130, 210 },
+	{ 196, 104, 48 }, -- 나무 갈색
+	{ 238, 238, 242 }, -- 흰색
+	{ 246, 190, 58 }, -- 노랑
+	{ 120, 190, 255 }, -- 하늘
+	{ 255, 150, 190 }, -- 분홍
+	{ 150, 220, 90 }, -- 연두
+	{ 175, 125, 235 }, -- 보라
 } :: { Color }
 
 ------------------------------------------------------------------
@@ -403,126 +414,205 @@ end
 
 Visuals.biomes = {
 	forest = {
-		floor = { 105, 190, 85 },
-		floorMaterial = "Grass",
+		floor = { 75, 190, 55 },
+		floor2 = { 66, 174, 48 },
+		floorMaterial = "Plastic",
+		wall = { 214, 150, 92 },
+		wallCap = { 85, 185, 55 },
 		trim = { 150, 105, 60 },
-		accent = { 60, 150, 60 },
+		accent = { 60, 165, 55 },
 		accent2 = { 255, 120, 120 },
-		decor = decor({ { "tree", 10 }, { "bush", 8 }, { "mushroom", 5 }, { "flowers", 6 }, { "rock", 3 } }),
+		decor = decor({
+			{ "blockytree", 12 },
+			{ "bushblock", 8 },
+			{ "chick", 5 },
+			{ "duck", 3 },
+			{ "flowers", 6 },
+			{ "rock", 3 },
+		}),
 		ambient = "leaves",
 		music = "Bgm_forest",
+		label = "🙂",
 	},
 	lake = {
-		floor = { 120, 200, 110 },
-		floorMaterial = "Grass",
+		floor = { 80, 185, 70 },
+		floor2 = { 70, 168, 62 },
+		floorMaterial = "Plastic",
+		wall = { 206, 146, 90 },
+		wallCap = { 80, 180, 60 },
 		trim = { 230, 215, 160 },
 		accent = { 70, 160, 230 },
 		accent2 = { 255, 255, 255 },
-		decor = decor({ { "pond", 3 }, { "reeds", 8 }, { "lilypad", 6 }, { "tree", 5 }, { "rock", 4 } }),
+		decor = decor({
+			{ "lakewater", 1 },
+			{ "reeds", 10 },
+			{ "swan", 4 },
+			{ "duck", 4 },
+			{ "blockytree", 6 },
+			{ "rock", 4 },
+		}),
 		ambient = "bubbles",
 		music = "Bgm_lake",
+		label = "😐",
 	},
 	desert = {
-		floor = { 235, 205, 135 },
-		floorMaterial = "Sand",
+		floor = { 234, 202, 112 },
+		floor2 = { 222, 188, 100 },
+		floorMaterial = "Plastic",
+		wall = { 222, 186, 105 },
+		wallCap = { 120, 190, 70 },
 		trim = { 200, 160, 95 },
 		accent = { 90, 170, 80 },
 		accent2 = { 210, 120, 70 },
-		decor = decor({ { "cactus", 10 }, { "pyramid", 2 }, { "rock", 6 }, { "bones", 2 } }),
+		decor = decor({ { "cactusblock", 12 }, { "pyramid", 2 }, { "rock", 6 }, { "bones", 3 } }),
 		ambient = "dust",
-		atmosphere = { color = { 255, 230, 180 }, decay = { 230, 190, 130 }, density = 0.32, haze = 1.5 },
+		atmosphere = { color = { 255, 230, 180 }, decay = { 230, 190, 130 }, density = 0.22, haze = 1 },
 		music = "Bgm_desert",
+		label = "😕",
 	},
 	jungle = {
-		floor = { 60, 140, 55 },
-		floorMaterial = "LeafyGrass",
+		floor = { 42, 168, 45 },
+		floor2 = { 36, 152, 40 },
+		floorMaterial = "Plastic",
+		wall = { 205, 140, 85 },
+		wallCap = { 45, 160, 50 },
 		trim = { 95, 65, 40 },
-		accent = { 30, 110, 40 },
+		accent = { 30, 120, 40 },
 		accent2 = { 255, 90, 160 },
-		decor = decor({ { "palm", 9 }, { "jungletree", 6 }, { "bush", 8 }, { "flowers", 5 } }),
+		decor = decor({ { "blockypalm", 10 }, { "jungletree", 5 }, { "bushblock", 8 }, { "flowers", 5 } }),
 		ambient = "fireflies",
-		atmosphere = { color = { 200, 240, 200 }, decay = { 90, 140, 90 }, density = 0.35, haze = 1.2 },
+		atmosphere = { color = { 200, 240, 200 }, decay = { 90, 140, 90 }, density = 0.22, haze = 0.8 },
 		music = "Bgm_jungle",
+		label = "😬",
 	},
 	snow = {
-		floor = { 240, 248, 255 },
-		floorMaterial = "Snow",
+		floor = { 238, 242, 248 },
+		floor2 = { 222, 230, 240 },
+		floorMaterial = "Plastic",
+		wall = { 200, 140, 85 },
+		wallCap = { 240, 246, 255 },
 		trim = { 170, 210, 240 },
 		accent = { 150, 210, 255 },
 		accent2 = { 255, 140, 40 },
-		decor = decor({ { "pine", 10 }, { "snowman", 4 }, { "icespike", 6 }, { "rock", 3 } }),
+		decor = decor({ { "icecrystal", 10 }, { "pine", 8 }, { "snowman", 3 }, { "rock", 3 } }),
 		ambient = "snow",
-		atmosphere = { color = { 230, 240, 255 }, decay = { 200, 220, 245 }, density = 0.38, haze = 1.8 },
+		atmosphere = { color = { 230, 240, 255 }, decay = { 200, 220, 245 }, density = 0.25, haze = 1.2 },
 		music = "Bgm_snow",
+		label = "😨",
 	},
 	volcano = {
-		floor = { 70, 45, 45 },
-		floorMaterial = "Basalt",
+		floor = { 52, 50, 56 },
+		floor2 = { 44, 42, 48 },
+		floorMaterial = "Plastic",
+		wall = { 30, 28, 34 },
+		wallGlow = { 255, 110, 30 },
 		trim = { 255, 110, 30 },
 		accent = { 255, 100, 20 },
 		accent2 = { 40, 30, 30 },
-		decor = decor({ { "lavapool", 6 }, { "lavarock", 8 }, { "volcanocone", 2 }, { "deadtree", 3 } }),
+		decor = decor({
+			{ "lavawall", 1 },
+			{ "lavapool", 6 },
+			{ "lavarock", 8 },
+			{ "volcanocone", 2 },
+			{ "deadtree", 3 },
+		}),
 		ambient = "embers",
-		atmosphere = { color = { 255, 170, 120 }, decay = { 170, 70, 40 }, density = 0.42, haze = 2.2 },
+		atmosphere = { color = { 255, 170, 120 }, decay = { 170, 70, 40 }, density = 0.28, haze = 1.5 },
 		music = "Bgm_volcano",
+		label = "😰",
 	},
 	abyss_ocean = {
-		floor = { 40, 80, 150 },
-		floorMaterial = "Sand",
+		floor = { 36, 72, 212 },
+		floor2 = { 30, 62, 192 },
+		floorMaterial = "Plastic",
+		wall = { 40, 72, 140 },
 		trim = { 30, 50, 110 },
 		accent = { 255, 120, 160 },
 		accent2 = { 60, 200, 160 },
-		decor = decor({ { "coral", 10 }, { "seaweed", 10 }, { "shell", 5 }, { "rock", 3 } }),
+		decor = decor({
+			{ "sandedge", 1 },
+			{ "coralblock", 8 },
+			{ "coral", 6 },
+			{ "seaweed", 10 },
+			{ "shell", 5 },
+		}),
 		ambient = "bubbles",
-		atmosphere = { color = { 120, 180, 255 }, decay = { 30, 70, 150 }, density = 0.5, haze = 2.5 },
+		atmosphere = { color = { 120, 180, 255 }, decay = { 30, 70, 150 }, density = 0.3, haze = 1.5 },
 		music = "Bgm_abyss_ocean",
+		label = "😱",
 	},
 	prehistoric = {
-		floor = { 150, 130, 75 },
-		floorMaterial = "Ground",
+		floor = { 224, 190, 100 },
+		floor2 = { 212, 176, 90 },
+		floorMaterial = "Plastic",
+		wall = { 150, 105, 60 },
+		wallCap = { 90, 160, 60 },
 		trim = { 110, 80, 50 },
 		accent = { 80, 140, 60 },
 		accent2 = { 240, 235, 215 },
-		decor = decor({ { "fern", 10 }, { "dinobones", 4 }, { "rock", 6 }, { "volcanocone", 1 } }),
+		decor = decor({ { "fern", 10 }, { "bigbone", 4 }, { "dinobones", 3 }, { "rock", 6 }, { "volcanocone", 1 } }),
 		ambient = "dust",
-		atmosphere = { color = { 240, 220, 170 }, decay = { 170, 140, 90 }, density = 0.3, haze = 1.4 },
+		atmosphere = { color = { 240, 220, 170 }, decay = { 170, 140, 90 }, density = 0.2, haze = 1 },
 		music = "Bgm_prehistoric",
+		label = "🤯",
 	},
 	cosmic = {
-		floor = { 45, 25, 85 },
-		floorMaterial = "Neon",
+		floor = { 38, 42, 58 },
+		floor2 = { 32, 36, 50 },
+		floorMaterial = "Plastic",
+		wall = { 20, 22, 34 },
+		wallGlow = { 255, 255, 255 },
 		trim = { 160, 90, 255 },
 		accent = { 190, 120, 255 },
 		accent2 = { 255, 255, 180 },
-		decor = decor({ { "stars", 30 }, { "planet", 3 }, { "spacerock", 8 }, { "crystal", 5 } }),
+		decor = decor({ { "wallstars", 1 }, { "planet", 3 }, { "spacerock", 8 }, { "crystal", 5 }, { "stars", 20 } }),
 		ambient = "stars",
-		atmosphere = { color = { 140, 100, 220 }, decay = { 40, 20, 90 }, density = 0.45, haze = 2 },
+		atmosphere = { color = { 140, 100, 220 }, decay = { 40, 20, 90 }, density = 0.28, haze = 1.5 },
 		music = "Bgm_cosmic",
+		label = "😵",
 	},
 	cherry_blossom = {
-		floor = { 150, 205, 120 },
-		floorMaterial = "Grass",
+		floor = { 255, 184, 210 },
+		floor2 = { 248, 170, 200 },
+		floorMaterial = "Plastic",
+		wall = { 245, 215, 225 },
+		wallCap = { 255, 150, 190 },
 		trim = { 200, 60, 60 },
 		accent = { 255, 175, 205 },
 		accent2 = { 220, 50, 50 },
 		decor = decor({ { "cherrytree", 10 }, { "lantern", 6 }, { "torii", 1 }, { "rock", 3 } }),
 		ambient = "petals",
-		atmosphere = { color = { 255, 220, 235 }, decay = { 255, 190, 215 }, density = 0.3, haze = 1.5 },
+		atmosphere = { color = { 255, 220, 235 }, decay = { 255, 190, 215 }, density = 0.2, haze = 1 },
 		music = "Bgm_cherry_blossom",
+		label = "🌸",
 	},
 	titan_temple = {
-		floor = { 175, 165, 135 },
-		floorMaterial = "Cobblestone",
+		floor = { 180, 172, 150 },
+		floor2 = { 166, 158, 138 },
+		floorMaterial = "Plastic",
+		wall = { 150, 140, 120 },
+		wallCap = { 205, 170, 70 },
 		trim = { 205, 170, 70 },
 		accent = { 205, 195, 165 },
 		accent2 = { 210, 170, 60 },
 		decor = decor({ { "pillar", 12 }, { "brokenpillar", 5 }, { "statue", 3 }, { "jungletree", 3 } }),
 		ambient = "dust",
 		music = "Bgm_titan_temple",
+		label = "💀",
 	},
 	angels_demons = {
-		floor = { 250, 245, 225 },
-		floorMaterial = "Marble",
+		floor = { 250, 246, 232 },
+		floor2 = { 238, 232, 214 },
+		floorMaterial = "Plastic",
+		wall = { 250, 246, 236 },
+		wallGlow = { 255, 205, 60 },
+		-- 오른쪽(x > 0) 절반 = 지옥 (검붉은 바닥·담장)
+		rightSide = {
+			floor = { 52, 24, 30 },
+			floor2 = { 42, 20, 26 },
+			wall = { 45, 20, 26 },
+			wallGlow = { 230, 40, 30 },
+		},
 		trim = { 255, 205, 60 },
 		accent = { 255, 255, 255 },
 		accent2 = { 200, 30, 30 },
@@ -535,21 +625,29 @@ Visuals.biomes = {
 		}),
 		ambient = "sparkle",
 		music = "Bgm_angels_demons",
+		label = "😇",
 	},
 	enchanted_forest = {
-		floor = { 60, 120, 110 },
-		floorMaterial = "Grass",
+		floor = { 62, 142, 116 },
+		floor2 = { 54, 128, 104 },
+		floorMaterial = "Plastic",
+		wall = { 82, 56, 126 },
+		wallGlow = { 150, 255, 220 },
 		trim = { 160, 90, 255 },
 		accent = { 190, 110, 255 },
 		accent2 = { 90, 255, 220 },
 		decor = decor({ { "glowshroom", 12 }, { "magictree", 6 }, { "crystal", 6 }, { "fairylights", 8 } }),
 		ambient = "fireflies",
-		atmosphere = { color = { 180, 140, 255 }, decay = { 80, 60, 140 }, density = 0.4, haze = 1.8 },
+		atmosphere = { color = { 180, 140, 255 }, decay = { 80, 60, 140 }, density = 0.25, haze = 1.2 },
 		music = "Bgm_enchanted_forest",
+		label = "🔮",
 	},
 	candy_kingdom = {
-		floor = { 255, 190, 220 },
-		floorMaterial = "SmoothPlastic",
+		floor = { 255, 186, 220 },
+		floor2 = { 248, 170, 208 },
+		floorMaterial = "Plastic",
+		wall = { 160, 215, 255 },
+		wallCap = { 255, 255, 255 },
 		trim = { 140, 210, 255 },
 		accent = { 150, 215, 255 },
 		accent2 = { 255, 110, 180 },
@@ -561,12 +659,16 @@ Visuals.biomes = {
 			{ "gingerhouse", 2 },
 		}),
 		ambient = "sprinkles",
-		atmosphere = { color = { 255, 220, 240 }, decay = { 200, 230, 255 }, density = 0.28, haze = 1 },
+		atmosphere = { color = { 255, 220, 240 }, decay = { 200, 230, 255 }, density = 0.2, haze = 0.8 },
 		music = "Bgm_candy_kingdom",
+		label = "🍭",
 	},
 	haunted_castle = {
-		floor = { 70, 60, 80 },
-		floorMaterial = "Slate",
+		floor = { 74, 64, 88 },
+		floor2 = { 64, 55, 78 },
+		floorMaterial = "Plastic",
+		wall = { 48, 42, 58 },
+		wallGlow = { 255, 140, 30 },
 		trim = { 120, 70, 160 },
 		accent = { 130, 120, 140 },
 		accent2 = { 255, 140, 30 },
@@ -577,8 +679,9 @@ Visuals.biomes = {
 			{ "jackolantern", 6 },
 		}),
 		ambient = "mist",
-		atmosphere = { color = { 150, 110, 200 }, decay = { 70, 40, 100 }, density = 0.6, haze = 3 },
+		atmosphere = { color = { 150, 110, 200 }, decay = { 70, 40, 100 }, density = 0.32, haze = 2 },
 		music = "Bgm_haunted_castle",
+		label = "👻",
 	},
 } :: { [string]: BiomeTheme }
 

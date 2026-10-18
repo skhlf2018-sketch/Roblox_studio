@@ -57,7 +57,7 @@ function GiftController.start()
 			.. " 을 줘요!",
 		UDim2.new(1, -20, 0, 70),
 		24,
-		C.ink,
+		C.white,
 		{ Position = UDim2.fromOffset(10, 150), Parent = content }
 	)
 	local claim = Ui.button("받기!", C.green, UDim2.fromOffset(240, 66), function()

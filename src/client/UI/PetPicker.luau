@@ -422,7 +422,7 @@ function PetPicker.open(opts: Options)
 
 	-- 안내 줄
 	local topH = btnH -- 위 줄(안내 + 쪽 넘기기)도 손가락 크기
-	local hint = Ui.label(opts.hint or "", UDim2.new(1, -(topH * 2 + 96), 0, topH), 22, C.ink, {
+	local hint = Ui.label(opts.hint or "", UDim2.new(1, -(topH * 2 + 96), 0, topH), 22, C.white, {
 		Name = "Hint",
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextScaled = true,
@@ -431,7 +431,7 @@ function PetPicker.open(opts: Options)
 	local limit = Instance.new("UITextSizeConstraint")
 	limit.MaxTextSize = 24
 	limit.Parent = hint
-	local pageLabel = Ui.label("1/1", UDim2.fromOffset(70, topH), 20, C.ink, {
+	local pageLabel = Ui.label("1/1", UDim2.fromOffset(70, topH), 20, C.white, {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -(topH + 6), 0, 0),
 		Parent = content,
@@ -441,7 +441,7 @@ function PetPicker.open(opts: Options)
 	Ui.grid(CARD, 10).Parent = grid
 	Ui.padding(6).Parent = grid
 	local emptyLabel =
-		Ui.label(opts.empty or "고를 수 있는 펫이 없어요!", UDim2.new(1, -40, 0, 70), 26, C.ink, {
+		Ui.label(opts.empty or "고를 수 있는 펫이 없어요!", UDim2.new(1, -40, 0, 70), 26, C.white, {
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.45),
 			Visible = false,
@@ -621,7 +621,7 @@ function PetPicker.open(opts: Options)
 		local statusFn = opts.status
 		local statusText = if statusFn then statusFn(s.selected) else nil
 		hint.Text = why or statusText or opts.hint or ""
-		hint.TextColor3 = if why then C.red else C.ink
+		hint.TextColor3 = if why then C.red else C.white
 	end
 	s.render = render
 

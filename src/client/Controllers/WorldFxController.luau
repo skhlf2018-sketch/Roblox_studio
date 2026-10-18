@@ -6,7 +6,7 @@
 	- 머리 위에 든 알 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 희귀도 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
-	- 배달 성공: 내 배달 패드에서 반짝 / 부화: 반짝 / 잡힘: 머리 위 "퍽!" + 별
+	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 펫 돈 팝업 "+$34K"(IncomeTick) / 자는 경비 Z 둥실둥실 / 부화: 반짝 / 잡힘: 머리 위 "퍽!" + 별
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -17,6 +17,7 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
+local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Visuals = require(Shared.Data.Visuals)
@@ -25,6 +26,7 @@ local Net = require(Client.Net)
 local ZoneController = require(script.Parent.ZoneController)
 
 local WorldFxController = {}
+WorldFxController.popMoney = nil :: ((Model, number) -> ())?
 
 local VT = Visuals.Tags
 local SPARKLE_TEX = "rbxasset://textures/particles/sparkles_main.dds"
@@ -138,15 +140,61 @@ local function popText(adornee: BasePart, text: string, color: Color3)
 	end)
 end
 
+-- 2판: 배달 패드가 없어서 내 베이스 스폰 자리(앞마당 가운데)에서 반짝
 local function myPad(): BasePart?
 	local index = Players.LocalPlayer:GetAttribute(Tags.PlayerAttributes.PlotIndex)
-	for _, inst in CollectionService:GetTagged(Tags.DeliveryPad) do
+	for _, inst in CollectionService:GetTagged(Tags.PlotSpawn) do
 		if inst:IsA("BasePart") and inst:GetAttribute("PlotIndex") == index then
 			return inst
 		end
 	end
 	return nil
 end
+
+-- 펫 머리 위 돈 팝업 "+$34K" (원작: 큰 초록 글씨가 떠오름)
+local penPets: { [string]: Model } = {}
+local function popMoney(model: Model, amount: number)
+	local root = model.PrimaryPart
+	if not root then
+		return
+	end
+	local h = model:GetAttribute("Height")
+	local height = if typeof(h) == "number" then h else 3
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "MoneyPop"
+	gui.Size = UDim2.fromScale(9, 2.6)
+	gui.LightInfluence = 0
+	gui.MaxDistance = 90
+	local start = Vector3.new(rng:NextNumber(-1, 1), height + 2.5, 0)
+	gui.StudsOffsetWorldSpace = start
+	gui.Adornee = root
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = "+" .. Format.money(amount)
+	label.TextColor3 = Color3.fromRGB(80, 245, 60)
+	label.Parent = gui
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(14, 15, 22)
+	stroke.Thickness = 3
+	stroke.Parent = label
+	gui.Parent = root
+	TweenService:Create(gui, TweenInfo.new(1.4, Enum.EasingStyle.Quad), {
+		StudsOffsetWorldSpace = start + Vector3.new(0, 5, 0),
+	}):Play()
+	TweenService
+		:Create(label, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
+		:Play()
+	TweenService
+		:Create(stroke, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 })
+		:Play()
+	task.delay(1.5, function()
+		gui:Destroy()
+	end)
+end
+WorldFxController.popMoney = popMoney
 
 ------------------------------------------------------------------
 -- 시작
@@ -155,6 +203,49 @@ end
 function WorldFxController.start()
 	watchTag(VT.PenPet, function(inst)
 		bounce(inst, 0.14, 0.32)
+		local uid = inst:GetAttribute("PetUid")
+		if inst:IsA("Model") and typeof(uid) == "string" then
+			penPets[uid] = inst
+		end
+	end)
+	-- 장착 펫이 돈을 벌 때마다 "+$34K" (서버 IncomeTick: 내 펫만 옴)
+	Net.onLater(Remotes.ToClient.IncomeTick, function(payload: any)
+		if typeof(payload) ~= "table" then
+			return
+		end
+		local model = penPets[tostring(payload.petUid)]
+		local amount = tonumber(payload.amount)
+		if model and model.Parent and amount and amount > 0 then
+			popMoney(model, amount)
+		end
+	end)
+	-- 자는 경비 머리 위 Z 둥실둥실 (서버 PetVisualService 의 SleepZ 빌보드)
+	local zLabels: { { label: TextLabel, base: UDim2, phase: number } } = {}
+	local function watchZ(guard: Instance)
+		task.delay(1, function()
+			local gui = guard:FindFirstChild("SleepZ", true)
+			if gui and gui:IsA("BillboardGui") then
+				for i, child in gui:GetChildren() do
+					if child:IsA("TextLabel") then
+						table.insert(zLabels, { label = child, base = child.Position, phase = i * 0.9 })
+					end
+				end
+			end
+		end)
+	end
+	watchTag(Tags.Guardian, watchZ)
+	RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		for i = #zLabels, 1, -1 do
+			local z = zLabels[i]
+			if z.label.Parent == nil then
+				table.remove(zLabels, i)
+			else
+				local k = (now * 0.6 + z.phase) % 1
+				z.label.Position = z.base + UDim2.fromScale(0.04 * math.sin(k * math.pi * 2), -0.12 * k)
+				z.label.TextTransparency = math.max(0, (k - 0.7) / 0.3)
+			end
+		end
 	end)
 	watchTag(VT.ParentAnimal, function(inst)
 		bounce(inst, 0.035, 1.3)

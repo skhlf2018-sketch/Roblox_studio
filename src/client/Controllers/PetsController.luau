@@ -4,12 +4,18 @@
 	- 위: 장착 칸 "장착 3/7", "최고 펫 장착" 버튼(EquipBest), 쪽 넘기기
 	- 카드: 3D 펫, 이름(희귀도 색), 초당 수입(Economy.recordIncome), 크기/돌연변이, 장착/해제 버튼
 	- 장착한 펫이 먼저, 그다음 수입 높은 순. 한 쪽에 18마리.
+	- 2판: 판매 가게(태그 SellStall: 허브 1곳 + 베이스마다) 근처(Config.SELL_RADIUS)면 카드마다 "판매 $가격" 버튼 → SellPet(uid)
+	  (가격 = 초당 수입 × Config.PET_SELL_SECONDS, 서버가 다시 계산·검사). 판매 가게 프롬프트 "펫 팔기" 로 이 창이 열림.
 ]]
 
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Pets = require(Shared.Data.Pets)
+local Config = require(Shared.Data.Config)
+local Tags = require(Shared.Tags)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
@@ -24,6 +30,7 @@ local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
 local Windows = require(Client.UI.Windows)
 local PetViewport = require(Client.UI.PetViewport)
+local WorldPrompt = require(Client.UI.WorldPrompt)
 
 local PetsController = {}
 
@@ -31,6 +38,22 @@ local C = Theme.Colors
 local NAME = "Pets"
 local PAGE = 18
 local SIZE = Vector2.new(900, 570)
+
+-- 판매 가게 근처인가 (보기용 — 서버가 다시 검사)
+local function nearSellStall(): boolean
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not root or not root:IsA("BasePart") then
+		return false
+	end
+	for _, inst in CollectionService:GetTagged(Tags.SellStall) do
+		if inst:IsA("BasePart") and WorldPrompt.distanceTo(inst, root.Position) <= Config.SELL_RADIUS then
+			return true
+		end
+	end
+	return false
+end
+PetsController.nearSellStall = nearSellStall
 
 local function detail(record: Types.PetRecord): string
 	local parts: { string } = {}
@@ -56,11 +79,11 @@ function PetsController.start()
 	local top: Frame = Ui.new("Frame", {
 		Name = "Top",
 		Size = UDim2.new(1, 0, 0, 60),
-		BackgroundColor3 = C.panelDark,
+		BackgroundColor3 = C.winDark,
 		Parent = content,
 	})
 	Ui.corner(16).Parent = top
-	local slotsLabel = Ui.label("", UDim2.fromOffset(300, 60), 26, C.ink, {
+	local slotsLabel = Ui.label("", UDim2.fromOffset(300, 60), 26, C.white, {
 		Position = UDim2.fromOffset(16, 0),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = top,
@@ -74,7 +97,7 @@ function PetsController.start()
 		parent = top,
 		sound = "Equip",
 	})
-	local pageLabel = Ui.label("1/1", UDim2.fromOffset(80, 60), 22, C.ink, {
+	local pageLabel = Ui.label("1/1", UDim2.fromOffset(80, 60), 22, C.white, {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -70, 0, 0),
 		Parent = top,
@@ -98,7 +121,7 @@ function PetsController.start()
 		"아직 펫이 없어요! 알을 훔쳐서 베이스에서 부화시켜요.",
 		UDim2.new(1, 0, 0, 60),
 		26,
-		C.ink,
+		C.white,
 		{
 			Position = UDim2.fromOffset(0, 200),
 			Visible = false,
@@ -134,7 +157,8 @@ function PetsController.start()
 		end)
 		-- 장착 버튼: 폰에서도 46px 이상 (창 배율에 맞춰 키우고, 카드도 그만큼 길게)
 		local buttonH = Ui.touch(52, SIZE)
-		local cardH = 162 + buttonH
+		local sellNear = nearSellStall()
+		local cardH = 162 + buttonH + (if sellNear then buttonH + 6 else 0)
 		gridLayout.CellSize = UDim2.fromOffset(140, cardH)
 		-- 위 막대 버튼도 같은 기준
 		local topH = Ui.touch(50, SIZE)
@@ -166,7 +190,7 @@ function PetsController.start()
 			local isEquipped = equippedSet[record.uid] == true
 			local card = Ui.card(
 				UDim2.fromOffset(140, cardH),
-				if isEquipped then Color3.fromRGB(255, 252, 225) else C.white,
+				if isEquipped then Color3.fromRGB(78, 70, 34) else Color3.fromRGB(62, 64, 78),
 				if isEquipped then C.yellow else rcolor
 			)
 			card.LayoutOrder = i
@@ -226,8 +250,51 @@ function PetsController.start()
 				)
 				b.Name = "Equip"
 			end
+			if sellNear then
+				local price = Economy.recordIncome(record) * Config.PET_SELL_SECONDS
+				local sell = Ui.button(
+					"판매 " .. Format.money(price),
+					C.eggRed,
+					UDim2.new(1, -14, 0, buttonH),
+					function()
+						Net.trySend(Remotes.ToServer.SellPet, uid)
+					end,
+					{
+						anchor = Vector2.new(0.5, 1),
+						position = UDim2.new(0.5, 0, 1, -(buttonH + 12)),
+						textSize = 20,
+						parent = card,
+						sound = "Sell",
+					}
+				)
+				sell.Name = "Sell"
+			end
 		end
 	end
+
+	-- 판매 가게 프롬프트 "펫 팔기" → 이 창 (판매 버튼이 보임)
+	WorldPrompt.attach({
+		tag = Tags.SellStall,
+		name = "SellPrompt",
+		action = "펫 팔기",
+		object = "판매",
+		distance = Config.SELL_RADIUS - 2,
+		onTrigger = function()
+			Windows.open(NAME)
+		end,
+	})
+	-- 창이 열린 채 판매 가게에 가까워지거나 멀어지면 판매 버튼을 다시 그림
+	task.spawn(function()
+		local last = false
+		while true do
+			task.wait(1)
+			local near = nearSellStall()
+			if near ~= last and Windows.isOpen(NAME) then
+				render()
+			end
+			last = near
+		end
+	end)
 
 	Windows.register(NAME, window, render)
 	State.onChanged(function(section: string)

@@ -45,10 +45,10 @@ Layout.SMALL_SCREEN = 500 -- 짧은 변이 이 이하면 폰 (PlayerModule 과 �
 Layout.COMPACT_HEIGHT = 480
 Layout.BADGE_OVERHANG = 9 -- Ui.badge 가 버튼 위로 튀어나오는 기준 픽셀 (중심 6, 반지름 15)
 
-Layout.SLOT = 88 -- 핫바 칸 기준 크기
-Layout.SLOT_GAP = 10
-Layout.HOTBAR_HEIGHT = 96
-Layout.HOTBAR_MARGIN = 14
+Layout.SLOT = 64 -- 핫바 칸 기준 크기 (2판: 원작처럼 작은 칸)
+Layout.SLOT_GAP = 8
+Layout.HOTBAR_HEIGHT = 70
+Layout.HOTBAR_MARGIN = 10
 
 local function small(area: Vector2): boolean
 	return math.min(area.X, area.Y) <= Layout.SMALL_SCREEN
@@ -77,18 +77,30 @@ function Layout.overlaps(a: Rect, b: Rect): boolean
 end
 
 -- maxRight: 메뉴 오른쪽 끝 한계 (위쪽 돈·속도 막대의 왼쪽 끝). 2열이 막대 밑으로 파고들지 않게
-function Layout.menu(area: Vector2, count: number, hudScale: number, touch: boolean, maxRight: number?): MenuPlan
+function Layout.menu(
+	area: Vector2,
+	count: number,
+	hudScale: number,
+	touch: boolean,
+	maxRight: number?,
+	topLimit: number?,
+	bottomOverride: number?
+): MenuPlan
 	local n = math.max(count, 1)
 	local normal = math.floor(Layout.MENU_BASE * hudScale)
 	local compact = area.Y < Layout.COMPACT_HEIGHT
 	local gap = if compact then 4 else math.max(4, math.floor(Layout.MENU_GAP * hudScale))
 	local bottomLimit = if touch then area.Y - Layout.joystickSize(area) - 4 else area.Y - 8
+	if bottomOverride then
+		bottomLimit = math.min(bottomLimit, bottomOverride)
+	end
+	local minTop = topLimit or 0
 
 	local function plan(cols: number, size: number): MenuPlan
 		local rows = math.ceil(n / cols)
 		-- 살짝 올림: UIScale 은 float32 라 44/72 가 43.999px 로 줄어드는 것 방지
 		local scale = math.ceil(size / Layout.MENU_BASE * 10000) / 10000
-		local top = math.max(Layout.SAFE_TOP, math.ceil(Layout.BADGE_OVERHANG * scale) + 2)
+		local top = math.max(Layout.SAFE_TOP, minTop, math.ceil(Layout.BADGE_OVERHANG * scale) + 2)
 		local height = rows * size + (rows - 1) * gap
 		local y = top + math.max(0, math.floor((bottomLimit - top - height) / 2))
 		return { x = Layout.SIDE, y = y, size = size, gap = gap, cols = cols, rows = rows, scale = scale }
@@ -97,7 +109,7 @@ function Layout.menu(area: Vector2, count: number, hudScale: number, touch: bool
 	for cols = 1, 3 do
 		local rows = math.ceil(n / cols)
 		-- 배지 여백은 버튼 크기에 따라 조금 다름 → 보수적으로 HUD 크기 기준
-		local top = math.max(Layout.SAFE_TOP, math.ceil(Layout.BADGE_OVERHANG * normal / Layout.MENU_BASE) + 2)
+		local top = math.max(Layout.SAFE_TOP, minTop, math.ceil(Layout.BADGE_OVERHANG * normal / Layout.MENU_BASE) + 2)
 		local fit = math.floor(((bottomLimit - top) - (rows - 1) * gap) / rows)
 		local size = math.min(normal, fit)
 		if maxRight and cols > 1 then

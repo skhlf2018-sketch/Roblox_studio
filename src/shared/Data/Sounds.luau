@@ -52,6 +52,11 @@ local Sounds: { [string]: SoundDef } = {
 	RareEgg = sfx(0.8, "희귀 알 공지 (빠밤! 팡파레)"),
 	Offline = sfx(0.6, "오프라인 수입 팝업 (돈 쏟아지는 소리)"),
 	Equip = sfx(0.4, "펫 장착 (뾱)", 0.08),
+	-- 2판
+	Drop = sfx(0.5, "알 내려놓기 (툭)"),
+	ZoneEnter = sfx(0.5, "새 구역 들어감 (휙 + 짠)"),
+	TreadmillStep = sfx(0.25, "러닝머신 걸음 (탁, 작게)", 0.1),
+	Sell = sfx(0.6, "펫 판매 (짤랑짤랑)"),
 	Fusion = sfx(0.8, "퓨전 머신 (윙윙~ 펑!)"),
 	-- 2단계 (선임 2차)
 	Swing = sfx(0.6, "무기 휘두르기 (휙!)", 0.12),

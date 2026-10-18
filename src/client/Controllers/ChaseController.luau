@@ -1,13 +1,13 @@
 --!strict
 --[[
-	ChaseController — 알을 들었을 때 화면
-	- RunAlert: 가운데 위쪽 큰 빨간 "RUN!!" (덜덜 흔들림) + 경비까지 거리 (ChaseEnded 까지)
-	  알을 내려놓으면(배달/놓침, CarryingEgg = "") 사라짐
-	- Caught: "잡혔다!" + 화면 흔들림 + 빨간 테두리(비네트) + 알이 어떻게 됐는지
-	거리 = TargetUserId 가 나인 경비(Guardian 태그) HumanoidRootPart 와 내 캐릭터 거리 (보기용)
+	ChaseController — 알을 들었을 때 화면 (2판: 원작 그대로)
+	- 알을 들면(플레이어 Attribute CarryingEgg ≠ ""): 위 가운데 빨간 "달리기!!" 배너 + 화면 가장자리 빨간 비네트(맥박)
+	  + 아래 가운데 빨간 "드롭" 버튼(쓰레기통) → DropEgg (그 자리에 알을 내려놓고 추격 끝)
+	- RunAlert: 속도가 모자라면 배너 아래 작은 경고 ("속도가 부족해요!")
+	- 허브(안전 구역)에 들어오면 배너 글자 "베이스로!" (배달 = 내 베이스 영역에 들어가면 자동)
+	- Caught: "잡혔다!" + 화면 흔들림 + 빨간 번쩍 + 알이 어떻게 됐는지
 ]]
 
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -20,6 +20,7 @@ local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
 local Theme = require(Client.UI.Theme)
+local Icons = require(Client.UI.Icons)
 local Ui = require(Client.UI.Ui)
 
 local ChaseController = {}
@@ -27,147 +28,171 @@ local ChaseController = {}
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
 
-local function myRoot(): BasePart?
-	local character = Players.LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	return if root and root:IsA("BasePart") then root else nil
+local function carrying(): boolean
+	local v = Players.LocalPlayer:GetAttribute(Attr.CarryingEgg)
+	return typeof(v) == "string" and v ~= ""
 end
 
-local function chasingGuard(): BasePart?
-	local me = Players.LocalPlayer.UserId
-	for _, guard in CollectionService:GetTagged(Tags.Guardian) do
-		if guard:GetAttribute("TargetUserId") == me then
-			local root = guard:FindFirstChild("HumanoidRootPart")
-			if root and root:IsA("BasePart") then
-				return root
-			end
-		end
+-- 화면 가장자리 빨간 비네트 (4면 그라데이션)
+local function makeVignette(parent: Instance, name: string): (Frame, { Frame })
+	local vignette: Frame = Ui.new("Frame", {
+		Name = name,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = parent,
+	})
+	local edges: { Frame } = {}
+	for _, spec in
+		{
+			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.22), rotation = 90 },
+			{ position = UDim2.fromScale(0, 0.78), size = UDim2.fromScale(1, 0.22), rotation = -90 },
+			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.16, 1), rotation = 0 },
+			{ position = UDim2.fromScale(0.84, 0), size = UDim2.fromScale(0.16, 1), rotation = 180 },
+		}
+	do
+		local e: Frame = Ui.new("Frame", {
+			Position = spec.position,
+			Size = spec.size,
+			BackgroundColor3 = Color3.fromRGB(255, 30, 40),
+			BackgroundTransparency = 0,
+			Parent = vignette,
+		})
+		local g = Instance.new("UIGradient")
+		g.Rotation = spec.rotation
+		g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+		g.Parent = e
+		table.insert(edges, e)
 	end
-	return nil
+	return vignette, edges
 end
 
 function ChaseController.start()
 	local player = Players.LocalPlayer
 	local layer = Ui.layer("Alerts")
 
-	local holder: Frame = Ui.new("Frame", {
-		Name = "Run",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.3),
-		Size = UDim2.fromOffset(620, 220),
-		BackgroundTransparency = 1,
+	------------------------------------------------------------------
+	-- "달리기!!" 배너 + 비네트 + 드롭 버튼
+	------------------------------------------------------------------
+	local banner: TextLabel = Ui.new("TextLabel", {
+		Name = "RunBanner",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 14),
+		Size = UDim2.fromOffset(300, 70),
+		BackgroundColor3 = C.runRed,
+		Text = "달리기!!",
+		TextSize = 50,
+		TextColor3 = C.white,
 		Visible = false,
 		Parent = layer,
 	})
-	Ui.scaled(holder)
-	local run: TextLabel = Ui.new("TextLabel", {
-		Name = "RunText",
+	Ui.scaled(banner)
+	Ui.corner(12).Parent = banner
+	Ui.stroke(Color3.fromRGB(255, 70, 80), 4).Parent = banner
+	Ui.gradient(Color3.fromRGB(170, 10, 20), Color3.fromRGB(110, 0, 10)).Parent = banner
+	Ui.textStroke(3, Color3.fromRGB(60, 0, 0)).Parent = banner
+	local warnLabel = Ui.label("", UDim2.fromOffset(520, 34), 26, C.yellow, {
+		Name = "SpeedWarning",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0),
-		Size = UDim2.fromOffset(560, 120),
+		Position = UDim2.new(0.5, 0, 1, 8),
+		Parent = banner,
+	})
+
+	local runVignette, runEdges = makeVignette(Ui.layer("World"), "RunVignette")
+
+	local dropHolder: Frame = Ui.new("Frame", {
+		Name = "DropHolder",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -110),
+		Size = UDim2.fromOffset(240, 66),
 		BackgroundTransparency = 1,
-		Text = "RUN!!",
-		TextSize = 110,
-		TextColor3 = C.red,
-		Parent = holder,
+		Visible = false,
+		Parent = Ui.layer("Hud"),
 	})
-	local runStroke = Ui.textStroke(6, C.white)
-	runStroke.Parent = run
-	local info = Ui.label("", UDim2.fromOffset(620, 40), 28, C.white, {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 118),
-		Parent = holder,
-	})
-	local distance = Ui.label("", UDim2.fromOffset(620, 40), 30, C.yellow, {
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 160),
-		Parent = holder,
-	})
-
-	local carrying = false
-	local chased = false
-	local guardName = "경비"
-	local slow = false
-	local shakeTime = 0
-
-	local function hideRun()
-		carrying = false
-		holder.Visible = false
+	Ui.scaled(dropHolder)
+	local drop = Ui.button("     드롭", C.runRed, UDim2.fromOffset(240, 66), function()
+		Net.trySend(Remotes.ToServer.DropEgg)
+	end, { parent = dropHolder, textSize = 32, sound = "Drop" })
+	drop.Name = "DropButton"
+	local dropStroke = drop:FindFirstChildOfClass("UIStroke")
+	if dropStroke then
+		dropStroke.Color = Color3.fromRGB(90, 0, 0)
+		dropStroke.Thickness = 4
 	end
+	Icons.draw("trash", drop, 40, UDim2.new(0, 50, 0.5, 0))
+
+	local guardSlow = false
+	local function refresh()
+		local on = carrying()
+		banner.Visible = on
+		runVignette.Visible = on
+		dropHolder.Visible = on
+		if not on then
+			guardSlow = false
+			warnLabel.Text = ""
+		end
+	end
+	player:GetAttributeChangedSignal(Attr.CarryingEgg):Connect(function()
+		local was = banner.Visible
+		refresh()
+		if banner.Visible and not was then
+			Ui.pop(banner, 1.4)
+			Ui.pop(drop, 1.2)
+		end
+	end)
+	refresh()
 
 	Net.on(Remotes.ToClient.RunAlert, function(payload: any)
 		if typeof(payload) ~= "table" then
 			return
 		end
-		carrying = true
-		chased = true
-		guardName = tostring(payload.guardName or "경비")
 		local yours = tonumber(payload.yourSpeed) or 0
 		local guard = tonumber(payload.guardSpeed) or 0
-		-- 서버 경비 추격과 같은 판정 (SpeedMath.guardChaseRatio: 지수·0.97 마진·상하한 포함)
-		slow = guard > 0 and not SpeedMath.canEscape(guard, yours)
-		info.Text = guardName .. "이(가) 쫓아와요! 내 베이스로 달려요!"
-		info.TextColor3 = C.white
-		holder.Visible = true
-		Ui.pop(run, 1.6)
-		if slow then
-			distance.Text = string.format(
-				"속도가 부족해요! (내 %s / 경비 %s)",
+		guardSlow = guard > 0 and not SpeedMath.canEscape(guard, yours)
+		warnLabel.Text = if guardSlow
+			then string.format(
+				"속도가 부족해요! (내 %s / 추천 %s)",
 				Format.number(yours),
 				Format.number(guard)
 			)
-			distance.TextColor3 = C.red
-		else
-			distance.Text = ""
-		end
+			else ""
+		banner.Visible = true
+		runVignette.Visible = true
+		dropHolder.Visible = true
+		Ui.pop(banner, 1.4)
 	end)
-	Net.on(Remotes.ToClient.ChaseEnded, function()
-		chased = false
-		if carrying then
-			distance.Text = "경비를 따돌렸어요! 베이스로 가져가요!"
-			distance.TextColor3 = C.money
-		end
-	end)
-	player:GetAttributeChangedSignal(Attr.CarryingEgg):Connect(function()
-		local v = player:GetAttribute(Attr.CarryingEgg)
-		if v == nil or v == "" then
-			hideRun()
+	Net.on(Remotes.ToClient.ChaseEnded, function(payload: any)
+		local reason = if typeof(payload) == "table" then payload.reason else nil
+		if banner.Visible then
+			warnLabel.Text = if reason == "safe"
+				then "안전 구역! 이제 내 베이스로 가져가요!"
+				elseif reason == "night" then "밤이 됐어요! 베이스로!"
+				else "경비가 멈췄어요! 베이스로 가져가요!"
+			warnLabel.TextColor3 = C.moneyGreen
 		end
 	end)
 
-	-- 흔들림 + 거리
+	-- 배너 흔들림 + 비네트 맥박 + 허브 안내
+	local t = 0
 	RunService.RenderStepped:Connect(function(dt: number)
-		if holder.Visible then
-			shakeTime += dt
-			run.Rotation = math.sin(shakeTime * 30) * 4
-			run.Position = UDim2.new(0.5, math.sin(shakeTime * 47) * 4, 0, math.cos(shakeTime * 39) * 3)
+		if not banner.Visible then
+			return
+		end
+		t += dt
+		banner.Rotation = math.sin(t * 18) * 2
+		local pulse = 0.25 + (math.sin(t * 6) + 1) * 0.12
+		for _, e in runEdges do
+			e.BackgroundTransparency = pulse
 		end
 	end)
 	task.spawn(function()
 		while true do
-			task.wait(0.15)
-			if carrying then
+			task.wait(0.2)
+			if banner.Visible then
 				local inSafe = player:GetAttribute(Attr.InSafeZone) == true
-				if inSafe then
-					run.Text = "거의 다 왔어요!"
-					run.TextSize = 70
-					info.Text = "초록색 배달 패드에 올라가요!"
-					distance.Text = ""
-				else
-					run.Text = "RUN!!"
-					run.TextSize = 110
-					if chased then
-						local guard = chasingGuard()
-						local root = myRoot()
-						if guard and root then
-							local d = (guard.Position - root.Position).Magnitude
-							distance.Text = string.format("%s까지 %dm", guardName, math.floor(d))
-							distance.TextColor3 = if d < 15 then C.red elseif d < 40 then C.orange else C.yellow
-						elseif not slow then
-							distance.Text = guardName .. "이(가) 오고 있어요..."
-							distance.TextColor3 = C.yellow
-						end
-					end
+				banner.Text = if inSafe then "베이스로!" else "달리기!!"
+				if not guardSlow and warnLabel.TextColor3 ~= C.moneyGreen then
+					warnLabel.TextColor3 = C.yellow
 				end
 			end
 		end
@@ -176,35 +201,7 @@ function ChaseController.start()
 	------------------------------------------------------------------
 	-- 잡힘
 	------------------------------------------------------------------
-	local vignette: Frame = Ui.new("Frame", {
-		Name = "Vignette",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Visible = false,
-		Parent = Ui.layer("World"),
-	})
-	local edges: { Frame } = {}
-	for _, spec in
-		{
-			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(1, 0.25), rotation = 90 },
-			{ position = UDim2.fromScale(0, 0.75), size = UDim2.fromScale(1, 0.25), rotation = -90 },
-			{ position = UDim2.fromScale(0, 0), size = UDim2.fromScale(0.2, 1), rotation = 0 },
-			{ position = UDim2.fromScale(0.8, 0), size = UDim2.fromScale(0.2, 1), rotation = 180 },
-		}
-	do
-		local e: Frame = Ui.new("Frame", {
-			Position = spec.position,
-			Size = spec.size,
-			BackgroundColor3 = Color3.fromRGB(255, 20, 40),
-			BackgroundTransparency = 0,
-			Parent = vignette,
-		})
-		local g = Instance.new("UIGradient")
-		g.Rotation = spec.rotation
-		g.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
-		g.Parent = e
-		table.insert(edges, e)
-	end
+	local vignette, edges = makeVignette(Ui.layer("World"), "Vignette")
 
 	local caughtHolder: Frame = Ui.new("Frame", {
 		Name = "Caught",
@@ -240,15 +237,15 @@ function ChaseController.start()
 		local t0 = os.clock()
 		local connection: RBXScriptConnection? = nil
 		connection = RunService.RenderStepped:Connect(function()
-			local t = os.clock() - t0
-			if t > seconds or hum.Parent == nil then
+			local elapsed = os.clock() - t0
+			if elapsed > seconds or hum.Parent == nil then
 				hum.CameraOffset = Vector3.zero
 				if connection then
 					connection:Disconnect()
 				end
 				return
 			end
-			local k = (1 - t / seconds) * 0.8
+			local k = (1 - elapsed / seconds) * 0.8
 			hum.CameraOffset = Vector3.new(math.random() - 0.5, math.random() - 0.5, 0) * k
 		end)
 	end
@@ -257,7 +254,6 @@ function ChaseController.start()
 		if typeof(payload) ~= "table" then
 			return
 		end
-		hideRun()
 		local cause = payload.cause
 		caughtText.Text = if cause == "trap"
 			then "덫에 걸렸다!"

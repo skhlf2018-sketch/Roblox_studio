@@ -318,6 +318,26 @@ function Ui.grid(cell: Vector2, gap: number?): UIGridLayout
 	return g
 end
 
+-- 원작 창 제목 띠 같은 비스듬한 줄무늬 (UIGradient 색을 끊어서)
+function Ui.stripes(color: Color3, light: number?): UIGradient
+	local a = Theme.lighter(color, light or 0.16)
+	local keys: { ColorSequenceKeypoint } = { ColorSequenceKeypoint.new(0, color) }
+	local stripes = 4
+	for i = 1, stripes do
+		local t0 = (i - 0.7) / (stripes + 0.3)
+		local t1 = t0 + 0.6 / (stripes + 0.3) * 0.45
+		table.insert(keys, ColorSequenceKeypoint.new(t0, color))
+		table.insert(keys, ColorSequenceKeypoint.new(t0 + 0.002, a))
+		table.insert(keys, ColorSequenceKeypoint.new(t1, a))
+		table.insert(keys, ColorSequenceKeypoint.new(t1 + 0.002, color))
+	end
+	table.insert(keys, ColorSequenceKeypoint.new(1, color))
+	local g = Instance.new("UIGradient")
+	g.Color = ColorSequence.new(keys)
+	g.Rotation = 20
+	return g
+end
+
 function Ui.gradient(top: Color3, bottom: Color3, rotation: number?): UIGradient
 	local g = Instance.new("UIGradient")
 	g.Color = ColorSequence.new(top, bottom)
@@ -401,8 +421,8 @@ function Ui.button(text: string, color: Color3, size: UDim2, onClick: (() -> ())
 		TextWrapped = true,
 		LayoutOrder = o.layoutOrder or 0,
 	})
-	Ui.corner(14).Parent = button
-	Ui.stroke(Theme.darker(color, 0.35), 3).Parent = button
+	Ui.corner(10).Parent = button
+	Ui.stroke(Theme.darker(color, 0.5), 3).Parent = button
 	Ui.gradient(Theme.lighter(color, 0.25), color).Parent = button
 	Ui.textStroke(2).Parent = button
 	local press = popScale(button)
@@ -435,7 +455,7 @@ function Ui.setButton(button: TextButton, text: string?, color: Color3?, enabled
 		button.BackgroundColor3 = color
 		local stroke = button:FindFirstChildOfClass("UIStroke")
 		if stroke and stroke.ApplyStrokeMode == Enum.ApplyStrokeMode.Border then
-			stroke.Color = Theme.darker(color, 0.35)
+			stroke.Color = Theme.darker(color, 0.5)
 		end
 		local gradient = button:FindFirstChildOfClass("UIGradient")
 		if gradient then
@@ -473,48 +493,56 @@ function Ui.window(name: string, title: string, color: Color3, size: Vector2, on
 		Parent = Ui.layer("Windows"),
 	})
 	Ui.scaled(holder, size)
+	-- 2판 원작 스타일: 진한 창 + 두꺼운 검은 테두리 + 줄무늬 제목 띠 + 빨간 네모 X
 	local panel: Frame = Ui.new("Frame", {
 		Name = "Panel",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = C.panel,
+		BackgroundColor3 = C.win,
 		Parent = holder,
 	})
-	Ui.corner(26).Parent = panel
-	Ui.stroke(C.white, 5).Parent = panel
+	Ui.corner(16).Parent = panel
+	Ui.stroke(C.winEdge, 6).Parent = panel
+	Ui.gradient(Theme.lighter(C.win, 0.06), C.win).Parent = panel
 	-- 닫기 X 는 폰에서도 46px 이상 (창 배율 기준) → 머리 높이도 그만큼
-	local closeH = Ui.touch(66, size)
-	local headerH = math.max(76, closeH + 8)
+	local closeH = Ui.touch(58, size)
+	local headerH = math.max(70, closeH + 12)
 	local header: Frame = Ui.new("Frame", {
 		Name = "Header",
-		Size = UDim2.new(1, 0, 0, headerH),
+		Position = UDim2.fromOffset(6, 6),
+		Size = UDim2.new(1, -12, 0, headerH - 6),
 		BackgroundColor3 = color,
 		Parent = panel,
 	})
-	Ui.corner(24).Parent = header
-	Ui.gradient(Theme.lighter(color, 0.3), color).Parent = header
-	-- 헤더 아래쪽 둥근 모서리 가리기
-	Ui.new("Frame", {
-		Name = "HeaderFill",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromScale(0, 1),
-		Size = UDim2.new(1, 0, 0, 24),
-		BackgroundColor3 = color,
-		Parent = header,
-	})
-	local titleLabel = Ui.label(title, UDim2.new(1, -(closeH + 74), 1, 0), 36, C.white, {
+	Ui.corner(10).Parent = header
+	Ui.stripes(color).Parent = header
+	local titleLabel = Ui.label(title, UDim2.new(1, -(closeH + 60), 1, 0), 34, C.white, {
 		Name = "Title",
-		Position = UDim2.fromOffset(24, 0),
+		Position = UDim2.fromOffset(18, 0),
 		TextXAlignment = Enum.TextXAlignment.Left,
 		ZIndex = 2,
 		Parent = header,
 	})
-	local close = Ui.button("X", C.red, UDim2.fromOffset(closeH, closeH), onClose, {
+	local titleStroke = titleLabel:FindFirstChildOfClass("UIStroke")
+	if titleStroke then
+		titleStroke.Color = C.winEdge
+		titleStroke.Thickness = 3
+	end
+	local close = Ui.button("X", C.eggRed, UDim2.fromOffset(closeH, closeH), onClose, {
 		anchor = Vector2.new(1, 0.5),
 		position = UDim2.new(1, -8, 0.5, 0),
-		textSize = 30,
+		textSize = 32,
 		sound = "Close",
 		parent = header,
 	})
+	local closeStroke = close:FindFirstChildOfClass("UIStroke")
+	if closeStroke then
+		closeStroke.Color = C.winEdge
+		closeStroke.Thickness = 4
+	end
+	local closeCorner = close:FindFirstChildOfClass("UICorner")
+	if closeCorner then
+		closeCorner.CornerRadius = UDim.new(0, 6)
+	end
 	close.ZIndex = 3
 	local content: Frame = Ui.new("Frame", {
 		Name = "Content",

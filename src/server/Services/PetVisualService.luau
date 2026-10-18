@@ -2,13 +2,16 @@
 --[[
 	PetVisualService — 동물 생김새 (서버가 만들어서 모두가 같은 모양을 봄). 선임 담당.
 
-	- 모든 모양은 기본 도형(Block/Ball/Cylinder/Wedge + SpecialMesh 타원체)을 코드로 조합.
+	- 원작처럼 "스터드 박힌 각진 블록(복셀) 덩어리": 큰 몸통·머리는 모서리 깎인 블록(직육면체 3개),
+	  작은 것은 블록 하나, 표면 스터드, 눈은 검은 네모 + 흰 하이라이트. 펫 하나 약 30~75 파트.
 	- petId → shared/Data/Visuals.luau 의 체형 템플릿 + 색 3개 + 장식(features).
 	- 만드는 것:
 	    1) ReplicatedStorage.PetModels   134종 + 경비 전용 모양 (크기 1, 효과 없음) → 클라 UI 의 ViewportFrame 이 복제해서 씀
-	    2) 둥지 옆 부모 동물 (ParentAnimalSpot 태그 자리, 큰 크기 + 희귀도 빛 + 이름표)
-	    3) 우리(PenArea)에 장착 펫 진열 (최대 18마리, 원형 2줄, 머리 위 이름·초당 수입·크기/돌연변이)
-	    4) 경비(Guardian 태그) 겉모습 — HumanoidRootPart 에 용접 (Humanoid·HumanoidRootPart 이름은 그대로)
+	    2) 둥지 근처 부모 동물 (ParentAnimalSpot 태그 자리, 크기 1.8 + 희귀도 빛 + 작은 이름표)
+	    3) 우리(PenArea)에 장착 펫 진열 (최대 18마리, 우리 뒤쪽 2/3 에 격자, 모두 PenArea LookVector 쪽을 봄)
+	       머리 위 BillboardGui "PetTag": TextLabel "Rarity"(희귀도 색) / "PetName"(흰) / "Income"($수입/s, 초록) / "Extra"(크기·돌연변이, 있을 때)
+	    4) 경비(Guardian 태그) 겉모습 — 키 25~40 스터드, HumanoidRootPart 에 Weld "GuardPose" (Humanoid·HumanoidRootPart 이름은 그대로)
+	       State Idle/Sleeping → 자는 자세 + BillboardGui "SleepZ"(TextLabel Z1~Z3), Chase → 일어섬 + Highlight "GuardGlow"
 	- 통통 튀는 애니메이션·희귀도 Highlight 개수 제한(31개)은 클라 WorldFxController 가 처리.
 
 	모델 좌표: Root 파트가 "바닥 한가운데", 앞 = -Z (LookVector), 위 = +Y. 크기 1 일 때 키 약 2~3.5 스터드.
@@ -32,7 +35,6 @@ local Tags = require(Shared.Tags)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
-local Gui = require(Server.Util.Gui)
 
 type Color = Visuals.Color
 
@@ -108,9 +110,11 @@ local function at(x: number, y: number, z: number, rx: number?, ry: number?, rz:
 	return CFrame.new(x, y, z) * CFrame.Angles(rad(rx or 0), rad(ry or 0), rad(rz or 0))
 end
 
+local PLASTIC = Enum.Material.Plastic
+
 local function materialOf(name: string?): Enum.Material
 	if not name then
-		return Enum.Material.SmoothPlastic
+		return PLASTIC
 	end
 	local ok, value = pcall(function(): any
 		return (Enum.Material :: any)[name]
@@ -118,10 +122,56 @@ local function materialOf(name: string?): Enum.Material
 	if ok and typeof(value) == "EnumItem" then
 		return value :: any
 	end
-	return Enum.Material.SmoothPlastic
+	return PLASTIC
 end
 
--- 파트 하나 추가 (크기·위치는 크기 1 기준으로 받아서 ctx.s 배 함)
+--[[
+	복셀(블록) 스타일 — 원작처럼 "스터드 박힌 각진 블록 덩어리".
+	  · 큰 "Ell"/"Ball"/"Cyl"/"Block" → 모서리가 깎인 블록 = 서로 교차하는 직육면체 3개
+	    (각 축으로 한 개씩 길고 나머지 두 축은 bevel 만큼 짧음. 겹치는 면은 셋째 블록이 덮어서 깜빡임 없음)
+	  · 작은 것(눈·이빨·점 등) → 직육면체 하나
+	  · 표면: 스터드 (큰 면만), 재질 Plastic
+	  · 납작한 원판(Cyl, 두께 < 지름 × 0.4: 모자 챙·고리·사탕) 은 둥근 원기둥 그대로
+]]
+local CHAMFER_MIN = 0.4 -- (크기 1 기준) 가장 짧은 변이 이 이상이면 모서리 깎기
+local STUD_MIN = 0.55 -- (실제 크기) 가장 짧은 변이 이 이상이면 스터드 표면
+local STUDS = Enum.SurfaceType.Studs
+local SMOOTH = Enum.SurfaceType.Smooth
+
+local function minOf(v: Vector3): number
+	return math.min(v.X, v.Y, v.Z)
+end
+
+local function rawPart(ctx: Ctx, size: Vector3, world: CFrame, color: Color3, mat: Enum.Material, tr: number): Part
+	local p = Instance.new("Part")
+	p.Name = "Piece"
+	p.Anchored = false
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Massless = true
+	p.CastShadow = false
+	local surface = if minOf(size) >= STUD_MIN and mat ~= NEON then STUDS else SMOOTH
+	p.TopSurface = surface
+	p.BottomSurface = surface
+	p.LeftSurface = surface
+	p.RightSurface = surface
+	p.FrontSurface = surface
+	p.BackSurface = surface
+	p.Color = color
+	p.Material = mat
+	p.Transparency = tr
+	p.Size = Vector3.new(math.max(0.05, size.X), math.max(0.05, size.Y), math.max(0.05, size.Z))
+	p.CFrame = world
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = ctx.root
+	weld.Part1 = p
+	weld.Parent = p
+	p.Parent = ctx.model
+	return p
+end
+
+-- 파트 추가 (크기·위치는 크기 1 기준으로 받아서 ctx.s 배 함). 반환: 가운데(가장 큰) 파트
 local function add(
 	ctx: Ctx,
 	kind: string,
@@ -132,44 +182,34 @@ local function add(
 	transparency: number?
 ): BasePart
 	local s = ctx.s
-	local p = Instance.new("Part")
-	p.Name = "Piece"
-	p.Anchored = false
-	p.CanCollide = false
-	p.CanTouch = false
-	p.CanQuery = false
-	p.Massless = true
-	p.CastShadow = false
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.Color = color
-	p.Material = mat or ctx.mat
-	p.Transparency = transparency or 0
-	local scaled = size * s
+	local m = mat or ctx.mat
+	local tr = transparency or 0
+	local world = ctx.root.CFrame * CFrame.new(cf.Position * s) * cf.Rotation
 	if kind == "Ball" then
-		p.Shape = Enum.PartType.Ball
-		p.Size = Vector3.one * math.max(0.05, scaled.X)
-	elseif kind == "Cyl" then
-		p.Shape = Enum.PartType.Cylinder
-		p.Size = scaled
-	elseif kind == "Wedge" then
-		p.Shape = Enum.PartType.Wedge
-		p.Size = scaled
-	elseif kind == "Ell" then
-		p.Size = scaled
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.Sphere
-		mesh.Parent = p
-	else
-		p.Size = scaled
+		size = Vector3.one * size.X
 	end
-	p.CFrame = ctx.root.CFrame * CFrame.new(cf.Position * s) * cf.Rotation
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = ctx.root
-	weld.Part1 = p
-	weld.Parent = p
-	p.Parent = ctx.model
-	return p
+	if kind == "Cyl" and size.X < math.min(size.Y, size.Z) * 0.4 then
+		-- 납작한 원판은 둥글게
+		local p = rawPart(ctx, size * s, world, color, m, tr)
+		p.Shape = Enum.PartType.Cylinder
+		return p
+	end
+	if kind == "Wedge" then
+		local p = rawPart(ctx, size * s, world, color, m, tr)
+		p.Shape = Enum.PartType.Wedge
+		return p
+	end
+	if minOf(size) < CHAMFER_MIN then
+		return rawPart(ctx, size * s, world, color, m, tr)
+	end
+	-- 모서리 깎인 블록 (3개)
+	local b = minOf(size) * 0.2 * 2
+	local x, y, z = size.X * s, size.Y * s, size.Z * s
+	local bs = b * s
+	local core = rawPart(ctx, Vector3.new(x, y - bs, z - bs), world, color, m, tr)
+	rawPart(ctx, Vector3.new(x - bs, y, z - bs), world, color, m, tr)
+	rawPart(ctx, Vector3.new(x - bs, y - bs, z), world, color, m, tr)
+	return core
 end
 
 local function ell(
@@ -225,25 +265,22 @@ local function hf(a: Anchors, x: number, y: number, z: number): CFrame
 	return a.head * CFrame.new(x * hs.X, y * hs.Y, z * hs.Z)
 end
 
-local function eyesAt(ctx: Ctx, head: CFrame, hs: Vector3)
-	local e = math.max(0.12, math.min(hs.X, hs.Y) * 0.22)
-	local glow = ctx.has.eyes_glow == true
-	for _, side in SIDES do
-		local pos = head * CFrame.new(side * hs.X * 0.23, hs.Y * 0.1, -hs.Z * 0.42)
-		if glow then
-			ball(ctx, e * 1.05, pos, ctx.c3, NEON)
-		else
-			ball(ctx, e, pos, BLACK)
-			ball(ctx, e * 0.38, pos * CFrame.new(side * e * 0.12, e * 0.18, -e * 0.38), WHITE)
-		end
+-- 네모 눈 한 쌍 (검은 네모 + 흰 하이라이트 네모). pos = 눈 가운데, 앞 = -Z
+local function squareEye(ctx: Ctx, pos: CFrame, e: number, side: number)
+	if ctx.has.eyes_glow then
+		blk(ctx, e * 1.05, e * 1.05, 0.08, pos, ctx.c3, NEON)
+		return
 	end
+	blk(ctx, e, e * 1.15, 0.08, pos, BLACK, PLASTIC)
+	blk(ctx, e * 0.4, e * 0.4, 0.06, pos * CFrame.new(side * e * 0.18, e * 0.25, -0.03), WHITE, PLASTIC)
 end
 
-local function eyeColor(ctx: Ctx): (Color3, Enum.Material)
-	if ctx.has.eyes_glow then
-		return ctx.c3, NEON
+-- 머리(블록) 앞면에 눈 + 얼굴 아래쪽에 작은 입 선
+local function eyesAt(ctx: Ctx, head: CFrame, hs: Vector3)
+	local e = math.max(0.14, math.min(hs.X, hs.Y) * 0.22)
+	for _, side in SIDES do
+		squareEye(ctx, head * CFrame.new(side * hs.X * 0.24, hs.Y * 0.1, -hs.Z * 0.5), e, side)
 	end
-	return BLACK, Enum.Material.SmoothPlastic
 end
 
 ------------------------------------------------------------------
@@ -252,17 +289,33 @@ end
 
 local TEMPLATES: { [string]: (Ctx) -> Anchors } = {}
 
+-- 네발 다리 하나: 굵은 다리 블록 + 발(둘째 색)
+local function limb(ctx: Ctx, x: number, z: number, len: number, w: number, color: Color3, foot: Color3)
+	ell(ctx, w, len, w, at(x, len / 2 + 0.12, z), color)
+	blk(ctx, w * 1.12, 0.24, w * 1.3, at(x, 0.12, z - w * 0.12), foot)
+end
+
+-- 주둥이 (머리 앞면 아래쪽): 주둥이 블록 + 검은 코 + 입 선
+local function muzzle(ctx: Ctx, head: CFrame, hs: Vector3, color: Color3)
+	local m = head * CFrame.new(0, -hs.Y * 0.27, -hs.Z * 0.5 - 0.12)
+	blk(ctx, hs.X * 0.55, hs.Y * 0.36, 0.3, m, color)
+	blk(ctx, hs.X * 0.2, hs.Y * 0.12, 0.08, m * CFrame.new(0, hs.Y * 0.1, -0.16), BLACK, PLASTIC)
+	blk(ctx, hs.X * 0.3, 0.05, 0.06, m * CFrame.new(0, -hs.Y * 0.09, -0.15), DARK, PLASTIC)
+end
+
 TEMPLATES.quad = function(ctx: Ctx): Anchors
 	local has = ctx.has
 	local k = if has.trunk then 1.25 else 1
 	local bodyCF = at(0, 1.4 * k, 0)
 	local bs = Vector3.new(1.6, 1.2, 2.2) * k
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, bs.X * 0.75, bs.Y * 0.65, bs.Z * 0.78, bodyCF * CFrame.new(0, -bs.Y * 0.2, -0.05), ctx.c2)
+	-- 배·가슴(둘째 색) + 등 줄(조금 어둡게)
+	blk(ctx, bs.X * 0.78, 0.3, bs.Z * 0.75, bodyCF * CFrame.new(0, -bs.Y / 2 + 0.1, -0.05), ctx.c2)
+	blk(ctx, bs.X * 0.6, bs.Y * 0.6, 0.3, bodyCF * CFrame.new(0, -bs.Y * 0.1, -bs.Z / 2 + 0.05), ctx.c2)
+	blk(ctx, bs.X * 0.4, 0.2, bs.Z * 0.7, bodyCF * CFrame.new(0, bs.Y / 2, 0.05), ctx.c1:Lerp(BLACK, 0.12))
 	for _, x in SIDES do
 		for _, z in SIDES do
-			vcyl(ctx, 1.0 * k, 0.45 * k, at(x * 0.5 * k, 0.5 * k, z * 0.7 * k), ctx.c1)
-			ell(ctx, 0.5 * k, 0.25 * k, 0.6 * k, at(x * 0.5 * k, 0.1, z * 0.7 * k - 0.08), ctx.c2)
+			limb(ctx, x * 0.5 * k, z * 0.72 * k, 0.95 * k, 0.45 * k, ctx.c1, ctx.c2)
 		end
 	end
 	local head: CFrame
@@ -270,29 +323,32 @@ TEMPLATES.quad = function(ctx: Ctx): Anchors
 	if has.torso then
 		ell(ctx, 0.9, 1.2, 0.7, at(0, 2.35, -0.95), ctx.c2)
 		for _, side in SIDES do
-			ell(ctx, 0.3, 1.0, 0.3, at(side * 0.6, 2.3, -0.95, 0, 0, side * 12), ctx.c2)
+			blk(ctx, 0.3, 1.0, 0.3, at(side * 0.6, 2.3, -0.95, 0, 0, side * 12), ctx.c2)
+			blk(ctx, 0.3, 0.3, 0.3, at(side * 0.7, 1.75, -0.95), PEACH)
 		end
 		head = at(0, 3.3, -0.95)
 		hs = Vector3.new(0.8, 0.8, 0.8)
-		ball(ctx, 0.8, head, PEACH)
-		ell(ctx, 0.86, 0.45, 0.86, head * CFrame.new(0, 0.25, 0.08), ctx.c3)
+		ell(ctx, hs.X, hs.Y, hs.Z, head, PEACH)
+		ell(ctx, 0.86, 0.4, 0.86, head * CFrame.new(0, 0.25, 0.08), ctx.c3)
 	elseif has.long_neck then
 		ell(ctx, 0.55 * k, 1.7 * k, 0.55 * k, at(0, 2.4 * k, -1.15 * k, -28, 0, 0), ctx.c1)
 		head = at(0, 3.25 * k, -1.6 * k)
 		hs = Vector3.new(0.85, 0.8, 1.0) * k
 		ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
 	else
+		ell(ctx, 0.75 * k, 0.7 * k, 0.6 * k, at(0, 1.85 * k, -1.05 * k), ctx.c1)
 		head = at(0, 2.15 * k, -1.3 * k)
 		hs = Vector3.new(1.15, 1.05, 1.05) * k
 		ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
 	end
 	if not has.torso then
-		ell(ctx, hs.X * 0.55, hs.Y * 0.45, hs.Z * 0.5, head * CFrame.new(0, -hs.Y * 0.2, -hs.Z * 0.42), ctx.c2)
-		ball(ctx, hs.X * 0.18, head * CFrame.new(0, -hs.Y * 0.05, -hs.Z * 0.68), BLACK)
+		muzzle(ctx, head, hs, ctx.c2)
 	end
 	local tail = at(0, 1.75 * k, 1.1 * k)
 	if not (has.tail_fluffy or has.nine_tails or has.club) then
-		ell(ctx, 0.22, 0.22, 0.9, tail * CFrame.Angles(rad(-40), 0, 0) * CFrame.new(0, 0, 0.4), ctx.c1)
+		local t = tail * CFrame.Angles(rad(-40), 0, 0)
+		blk(ctx, 0.25, 0.25, 0.55, t * CFrame.new(0, 0, 0.25), ctx.c1)
+		blk(ctx, 0.2, 0.2, 0.45, t * CFrame.new(0, -0.05, 0.68) * CFrame.Angles(rad(-15), 0, 0), ctx.c2)
 	end
 	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = tail, top = head.Position.Y + hs.Y / 2 }
 end
@@ -302,11 +358,11 @@ TEMPLATES.bird = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 1.3, 0)
 	local bs = Vector3.new(1.4, 1.5, 1.6)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.05, 1.1, 0.9, at(0, 1.15, -0.4), ctx.c2)
+	ell(ctx, 1.05, 1.1, 0.5, at(0, 1.15, -0.62), ctx.c2)
 	local head: CFrame
 	local hs: Vector3
 	if has.long_neck then
-		ell(ctx, 0.36, 1.6, 0.36, at(0, 2.4, -0.55, -10, 0, 0), ctx.c1)
+		blk(ctx, 0.36, 1.6, 0.36, at(0, 2.4, -0.55, -10, 0, 0), ctx.c1)
 		head = at(0, 3.25, -0.75)
 		hs = Vector3.new(0.75, 0.7, 0.8)
 	else
@@ -315,55 +371,77 @@ TEMPLATES.bird = function(ctx: Ctx): Anchors
 	end
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
 	if not has.beak_big then
-		ell(ctx, hs.X * 0.32, hs.Y * 0.22, hs.Z * 0.5, head * CFrame.new(0, -hs.Y * 0.1, -hs.Z * 0.55), ctx.c3)
+		local b = head * CFrame.new(0, -hs.Y * 0.12, -hs.Z * 0.5 - 0.16)
+		blk(ctx, hs.X * 0.36, hs.Y * 0.16, 0.36, b, ctx.c3)
+		blk(ctx, hs.X * 0.28, hs.Y * 0.1, 0.26, b * CFrame.new(0, -hs.Y * 0.13, 0.03), ctx.c3:Lerp(BLACK, 0.2))
 	end
 	if not has.bat_wings then
+		local wing = ctx.c1:Lerp(BLACK, 0.12)
 		for _, side in SIDES do
-			ell(ctx, 0.25, 0.95, 1.15, at(side * 0.72, 1.4, 0.1, 0, 0, -side * 12), ctx.c1:Lerp(BLACK, 0.12))
+			local w = at(side * (bs.X / 2 + 0.06), 1.4, 0.1) * CFrame.Angles(0, 0, rad(-side * 8))
+			blk(ctx, 0.22, 0.9, 1.15, w, wing)
+			blk(ctx, 0.2, 0.5, 0.45, w * CFrame.new(0, -0.3, 0.68), wing:Lerp(BLACK, 0.15))
+			blk(ctx, 0.18, 0.3, 0.35, w * CFrame.new(0, -0.55, 0.95), ctx.c2)
 		end
 	end
 	for _, side in SIDES do
-		vcyl(ctx, 0.55, 0.14, at(side * 0.32, 0.33, 0.05), ctx.c3)
-		ell(ctx, 0.35, 0.12, 0.45, at(side * 0.32, 0.06, -0.08), ctx.c3)
+		blk(ctx, 0.14, 0.55, 0.14, at(side * 0.32, 0.33, 0.05), ctx.c3)
+		blk(ctx, 0.36, 0.1, 0.22, at(side * 0.32, 0.05, -0.05), ctx.c3)
+		for _, t in SIDES do
+			blk(ctx, 0.08, 0.08, 0.22, at(side * 0.32 + t * 0.12, 0.04, -0.22), ctx.c3:Lerp(BLACK, 0.15))
+		end
 	end
 	local tail = at(0, 1.35, 0.85)
 	if not has.peacock_tail then
-		ell(ctx, 0.7, 0.18, 0.8, tail * CFrame.Angles(rad(-25), 0, 0) * CFrame.new(0, 0, 0.25), ctx.c1)
+		for i = -1, 1 do
+			blk(
+				ctx,
+				0.28,
+				0.14,
+				0.75,
+				tail * CFrame.Angles(rad(-25), rad(i * 22), 0) * CFrame.new(0, 0, 0.3),
+				if i == 0 then ctx.c1 else ctx.c1:Lerp(BLACK, 0.15)
+			)
+		end
 	end
 	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = tail, top = head.Position.Y + hs.Y / 2 }
 end
 
 TEMPLATES.fish = function(ctx: Ctx): Anchors
 	local has = ctx.has
-	local bodyCF = at(0, 1.5, 0)
-	local bs = Vector3.new(0.9, 1.3, 2.2)
+	local bodyCF = at(0, 1.5, 0.05)
+	local bs = Vector3.new(0.9, 1.3, 2.0)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 0.72, 0.8, 1.7, at(0, 1.25, -0.1), ctx.c2)
-	ell(ctx, 0.12, 0.9, 0.75, at(0, 1.78, 1.35, -35, 0, 0), ctx.c3, ctx.accentMat)
-	ell(ctx, 0.12, 0.9, 0.75, at(0, 1.22, 1.35, 35, 0, 0), ctx.c3, ctx.accentMat)
+	ell(ctx, 0.8, 1.1, 0.5, at(0, 1.5, -1.15), ctx.c1)
+	blk(ctx, 0.92, 0.35, 1.7, at(0, 1.0, 0), ctx.c2)
+	ell(ctx, 0.6, 0.85, 0.6, at(0, 1.5, 1.25), ctx.c1)
+	blk(ctx, 0.3, 0.15, 1.4, at(0, 2.15, 0.05), ctx.c1:Lerp(BLACK, 0.15))
+	blk(ctx, 0.94, 0.75, 0.06, at(0, 1.5, -0.9), ctx.c1:Lerp(BLACK, 0.25))
+	for i, z in { -0.45, 0.15, 0.7 } do
+		blk(ctx, 0.94, 1.05 - i * 0.12, 0.14, at(0, 1.55, z), ctx.c2:Lerp(ctx.c1, 0.4))
+	end
+	blk(ctx, 0.12, 0.9, 0.7, at(0, 1.85, 1.75, -35, 0, 0), ctx.c3, ctx.accentMat)
+	blk(ctx, 0.12, 0.9, 0.7, at(0, 1.15, 1.75, 35, 0, 0), ctx.c3, ctx.accentMat)
 	if not has.fin_big then
-		ell(ctx, 0.12, 0.6, 0.8, at(0, 2.15, 0.1, 20, 0, 0), ctx.c3, ctx.accentMat)
+		blk(ctx, 0.12, 0.55, 0.8, at(0, 2.3, 0.1, 20, 0, 0), ctx.c3, ctx.accentMat)
+		blk(ctx, 0.12, 0.3, 0.4, at(0, 2.55, 0.35, 20, 0, 0), ctx.c3, ctx.accentMat)
 	end
 	for _, side in SIDES do
-		ell(ctx, 0.45, 0.08, 0.4, at(side * 0.5, 1.25, -0.25, 0, 0, -side * 25), ctx.c3, ctx.accentMat)
-	end
-	local head = at(0, 1.6, -0.75)
-	local hs = Vector3.new(0.9, 1.0, 0.8)
-	local ec, em = eyeColor(ctx)
-	for _, side in SIDES do
-		local p = at(side * 0.38, 1.7, -0.62)
-		ball(ctx, 0.26, p, ec, em)
-		if not has.eyes_glow then
-			ball(ctx, 0.1, p * CFrame.new(side * 0.08, 0.05, -0.06), WHITE)
+		blk(ctx, 0.45, 0.08, 0.4, at(side * 0.55, 1.2, -0.3, 0, 0, -side * 25), ctx.c3, ctx.accentMat)
+		blk(ctx, 0.3, 0.08, 0.3, at(side * 0.3, 0.8, 0.4, 0, 0, -side * 40), ctx.c3, ctx.accentMat)
+		squareEye(ctx, at(side * 0.41, 1.75, -1.15, 0, -side * 90, 0), 0.26, side)
+		for _, z in { -0.15, 0.45 } do
+			blk(ctx, 0.06, 0.22, 0.22, at(side * 0.46, 1.85, z), ctx.c1:Lerp(WHITE, 0.25))
 		end
 	end
+	blk(ctx, 0.45, 0.18, 0.15, at(0, 1.25, -1.45), ctx.c3)
 	return {
-		head = head,
-		headSize = hs,
+		head = at(0, 1.6, -0.9),
+		headSize = Vector3.new(0.85, 1.0, 0.8),
 		body = bodyCF,
 		bodySize = bs,
-		tail = at(0, 1.5, 1.1),
-		top = 2.4,
+		tail = at(0, 1.5, 1.2),
+		top = 2.45,
 		skipEyes = true,
 	}
 end
@@ -386,7 +464,17 @@ TEMPLATES.snake = function(ctx: Ctx): Anchors
 	local head = at(0, 1.45, -0.95)
 	local hs = Vector3.new(0.85, 0.6, 1.0)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
-	blk(ctx, 0.06, 0.03, 0.45, head * CFrame.new(0, -0.15, -0.65), RED)
+	blk(ctx, 0.06, 0.03, 0.4, head * CFrame.new(0, -0.15, -0.65), RED)
+	for _, side in SIDES do
+		blk(
+			ctx,
+			0.05,
+			0.03,
+			0.15,
+			head * CFrame.new(side * 0.04, -0.15, -0.9) * CFrame.Angles(0, rad(side * 25), 0),
+			RED
+		)
+	end
 	return {
 		head = head,
 		headSize = hs,
@@ -399,24 +487,36 @@ TEMPLATES.snake = function(ctx: Ctx): Anchors
 end
 
 TEMPLATES.bug = function(ctx: Ctx): Anchors
-	local bodyCF = at(0, 0.8, 0.25)
-	local bs = Vector3.new(1.3, 0.8, 1.8)
+	local bodyCF = at(0, 0.8, 0.35)
+	local bs = Vector3.new(1.3, 0.8, 1.7)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
 	for _, side in SIDES do
-		ell(ctx, 0.68, 0.5, 1.6, at(side * 0.32, 0.95, 0.3), ctx.c2)
+		ell(ctx, 0.66, 0.45, 1.6, at(side * 0.33, 1.05, 0.4), ctx.c2)
 	end
-	local head = at(0, 0.8, -0.8)
-	local hs = Vector3.new(0.75, 0.65, 0.7)
+	blk(ctx, 0.06, 0.1, 1.5, at(0, 1.29, 0.4), ctx.c1:Lerp(BLACK, 0.4))
+	ell(ctx, 0.9, 0.6, 0.5, at(0, 0.85, -0.6), ctx.c1:Lerp(BLACK, 0.1))
+	local head = at(0, 0.85, -1.0)
+	local hs = Vector3.new(0.75, 0.65, 0.6)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1:Lerp(BLACK, 0.2))
+	local legColor = ctx.c1:Lerp(BLACK, 0.3)
 	for _, side in SIDES do
-		for _, z in { -0.35, 0.25, 0.85 } do
-			blk(ctx, 0.9, 0.1, 0.1, at(side * 0.8, 0.45, z, 0, 0, -side * 30), ctx.c1:Lerp(BLACK, 0.3))
+		for _, z in { -0.55, 0.05, 0.65 } do
+			blk(ctx, 0.6, 0.1, 0.1, at(side * 0.75, 0.6, z, 0, 0, -side * 25), legColor)
+			blk(ctx, 0.1, 0.55, 0.1, at(side * 1.02, 0.3, z), legColor)
 		end
-		local ant = head * CFrame.new(side * 0.18, 0.3, -0.25) * CFrame.Angles(rad(35), side * 0.3, 0)
+		local ant = head * CFrame.new(side * 0.18, 0.3, -0.2) * CFrame.Angles(rad(35), side * 0.3, 0)
 		blk(ctx, 0.06, 0.06, 0.7, ant * CFrame.new(0, 0, -0.35), BLACK)
-		ball(ctx, 0.14, ant * CFrame.new(0, 0, -0.7), ctx.c3, ctx.accentMat)
+		blk(ctx, 0.14, 0.14, 0.14, ant * CFrame.new(0, 0, -0.7), ctx.c3, ctx.accentMat)
+		blk(
+			ctx,
+			0.1,
+			0.08,
+			0.25,
+			head * CFrame.new(side * 0.15, -0.22, -0.38) * CFrame.Angles(0, rad(-side * 20), 0),
+			BLACK
+		)
 	end
-	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.8, 1.1), top = 1.3 }
+	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.8, 1.15), top = 1.35 }
 end
 
 TEMPLATES.spider = function(ctx: Ctx): Anchors
@@ -424,6 +524,7 @@ TEMPLATES.spider = function(ctx: Ctx): Anchors
 	ctx.body = ball(ctx, 1.35, abdomen, ctx.c1)
 	if not ctx.has.pumpkin then
 		ball(ctx, 0.55, at(0, 1.72, 0.62), ctx.c2)
+		blk(ctx, 0.2, 0.08, 0.9, at(0, 1.79, 0.6), ctx.c2)
 	end
 	local ceph = at(0, 0.95, -0.35)
 	ball(ctx, 0.85, ceph, ctx.c1:Lerp(BLACK, 0.1))
@@ -434,25 +535,23 @@ TEMPLATES.spider = function(ctx: Ctx): Anchors
 			blk(
 				ctx,
 				1.2,
-				0.12,
-				0.12,
+				0.14,
+				0.14,
 				at(0, 1.0, z) * yaw * CFrame.new(side * 0.75, 0.2, 0) * CFrame.Angles(0, 0, rad(side * 25)),
 				legColor
 			)
 			blk(
 				ctx,
 				1.3,
-				0.12,
-				0.12,
+				0.14,
+				0.14,
 				at(0, 1.0, z) * yaw * CFrame.new(side * 1.55, -0.3, 0) * CFrame.Angles(0, 0, rad(-side * 60)),
 				legColor
 			)
 		end
-	end
-	local ec, em = eyeColor(ctx)
-	for _, side in SIDES do
-		ball(ctx, 0.22, ceph * CFrame.new(side * 0.15, 0.12, -0.36), ec, em)
-		ball(ctx, 0.13, ceph * CFrame.new(side * 0.3, 0.24, -0.28), ec, em)
+		squareEye(ctx, ceph * CFrame.new(side * 0.16, 0.12, -0.43), 0.2, side)
+		blk(ctx, 0.12, 0.12, 0.06, ceph * CFrame.new(side * 0.3, 0.27, -0.42), BLACK)
+		blk(ctx, 0.1, 0.25, 0.1, ceph * CFrame.new(side * 0.1, -0.3, -0.42), ctx.c3)
 	end
 	return {
 		head = ceph,
@@ -469,29 +568,39 @@ TEMPLATES.dragon = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 1.6, 0.1)
 	local bs = Vector3.new(1.6, 1.4, 2.4)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.15, 1.0, 2.0, at(0, 1.35, 0), ctx.c2)
+	blk(ctx, 1.2, 0.3, 2.0, at(0, 0.95, 0), ctx.c2)
 	ell(ctx, 0.65, 1.2, 0.65, at(0, 2.45, -1.0, -35, 0, 0), ctx.c1)
 	local head = at(0, 3.0, -1.55)
-	local hs = Vector3.new(0.95, 0.8, 1.3)
+	local hs = Vector3.new(0.95, 0.8, 1.0)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
-	ell(ctx, 0.7, 0.45, 0.7, head * CFrame.new(0, -0.12, -0.55), ctx.c2)
+	ell(ctx, 0.7, 0.45, 0.6, head * CFrame.new(0, -0.15, -0.7), ctx.c1)
+	blk(ctx, 0.6, 0.15, 0.55, head * CFrame.new(0, -0.38, -0.65), ctx.c2)
 	for _, side in SIDES do
-		ball(ctx, 0.1, head * CFrame.new(side * 0.15, -0.02, -0.9), BLACK)
+		blk(ctx, 0.1, 0.08, 0.06, head * CFrame.new(side * 0.15, 0.03, -1.02), BLACK)
 	end
 	for _, x in SIDES do
 		for _, z in SIDES do
-			vcyl(ctx, 1.0, 0.5, at(x * 0.6, 0.5, z * 0.8), ctx.c1)
-			ell(ctx, 0.55, 0.22, 0.65, at(x * 0.6, 0.1, z * 0.8 - 0.1), ctx.c3, ctx.accentMat)
+			limb(ctx, x * 0.6, z * 0.8, 1.0, 0.5, ctx.c1, ctx.c3)
 		end
 	end
 	ell(ctx, 0.8, 0.7, 1.4, at(0, 1.4, 1.55, -10, 0, 0), ctx.c1)
 	ell(ctx, 0.55, 0.5, 1.2, at(0, 1.15, 2.35), ctx.c1)
-	ell(ctx, 0.35, 0.35, 1.0, at(0, 0.95, 3.05), ctx.c1)
-	ell(ctx, 0.55, 0.12, 0.65, at(0, 0.95, 3.6), ctx.c3, ctx.accentMat)
+	blk(ctx, 0.35, 0.35, 1.0, at(0, 0.95, 3.05), ctx.c1)
+	blk(ctx, 0.55, 0.12, 0.65, at(0, 0.95, 3.6), ctx.c3, ctx.accentMat)
 	for _, side in SIDES do
 		local root = at(side * 0.6, 2.2, 0.1) * CFrame.Angles(0, 0, rad(side * 25))
 		blk(ctx, 2.2, 0.08, 1.5, root * CFrame.new(side * 1.1, 0, 0.1), ctx.c3, ctx.accentMat, 0.05)
-		add(ctx, "Cyl", Vector3.new(2.3, 0.16, 0.16), root * CFrame.new(side * 1.1, 0.04, -0.65), ctx.c1)
+		blk(ctx, 2.3, 0.18, 0.18, root * CFrame.new(side * 1.1, 0.04, -0.65), ctx.c1)
+		for f = 1, 2 do
+			blk(
+				ctx,
+				0.12,
+				0.1,
+				1.3,
+				root * CFrame.new(side * (0.7 * f), 0.05, 0.05) * CFrame.Angles(0, rad(side * 10 * f), 0),
+				ctx.c1
+			)
+		end
 	end
 	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.95, 3.0), top = 3.4 }
 end
@@ -499,18 +608,21 @@ end
 TEMPLATES.ghost = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 2.0, 0)
 	ctx.body = ball(ctx, 1.7, bodyCF, ctx.c1)
-	vcyl(ctx, 1.0, 1.7, at(0, 1.35, 0), ctx.c1)
+	ell(ctx, 1.3, 0.35, 1.3, at(0, 2.95, 0), ctx.c1)
+	ell(ctx, 1.7, 0.9, 1.7, at(0, 1.3, 0), ctx.c1)
 	for i = 1, 6 do
 		local t = i / 6 * math.pi * 2
-		ball(ctx, 0.55, at(math.cos(t) * 0.62, 0.85, math.sin(t) * 0.62), ctx.c1)
+		blk(ctx, 0.5, 0.45, 0.5, at(math.cos(t) * 0.6, 0.72, math.sin(t) * 0.6, 0, -math.deg(t), 0), ctx.c1)
 	end
 	for _, side in SIDES do
-		ell(ctx, 0.4, 0.75, 0.4, at(side * 0.95, 1.8, -0.1, 0, 0, side * 40), ctx.c1)
-		ball(ctx, 0.25, at(side * 0.42, 1.85, -0.76), PINK)
+		ell(ctx, 0.4, 0.75, 0.4, at(side * 1.0, 1.8, -0.1, 0, 0, side * 40), ctx.c1)
+		blk(ctx, 0.3, 0.3, 0.3, at(side * 1.25, 1.45, -0.1), ctx.c1:Lerp(WHITE, 0.2))
+		blk(ctx, 0.3, 0.15, 0.08, at(side * 0.45, 1.8, -0.86), PINK)
 	end
+	blk(ctx, 0.35, 0.2, 0.08, at(0, 1.75, -0.86), DARK, PLASTIC)
 	return {
 		head = bodyCF,
-		headSize = Vector3.new(1.55, 1.55, 1.55),
+		headSize = Vector3.new(1.7, 1.7, 1.7),
 		body = bodyCF,
 		bodySize = Vector3.new(1.7, 1.7, 1.7),
 		tail = at(0, 1.2, 0.8),
@@ -521,21 +633,22 @@ end
 
 TEMPLATES.humanoid = function(ctx: Ctx): Anchors
 	for _, side in SIDES do
-		vcyl(ctx, 0.9, 0.55, at(side * 0.35, 0.45, 0), ctx.c2)
-		ell(ctx, 0.6, 0.25, 0.75, at(side * 0.35, 0.1, -0.1), ctx.c2:Lerp(BLACK, 0.2))
+		ell(ctx, 0.55, 0.9, 0.55, at(side * 0.35, 0.47, 0), ctx.c2)
+		blk(ctx, 0.6, 0.25, 0.75, at(side * 0.35, 0.12, -0.08), ctx.c2:Lerp(BLACK, 0.2))
 	end
 	local bodyCF = at(0, 1.55, 0)
 	local bs = Vector3.new(1.45, 1.5, 1.05)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.0, 1.0, 0.6, at(0, 1.45, -0.25), ctx.c2)
+	ell(ctx, 1.0, 1.0, 0.4, at(0, 1.45, -0.4), ctx.c2)
+	blk(ctx, 1.5, 0.18, 1.1, at(0, 0.95, 0), ctx.c1:Lerp(BLACK, 0.25))
 	for _, side in SIDES do
-		ell(ctx, 0.45, 1.25, 0.45, at(side * 0.92, 1.5, 0, 0, 0, side * 10), ctx.c1)
-		ball(ctx, 0.45, at(side * 1.02, 0.88, 0), ctx.c2)
+		ell(ctx, 0.45, 1.25, 0.45, at(side * 0.95, 1.5, 0, 0, 0, side * 10), ctx.c1)
+		ell(ctx, 0.48, 0.45, 0.48, at(side * 1.05, 0.85, 0), ctx.c2)
 	end
 	local head = at(0, 2.75, 0)
 	local hs = Vector3.new(1.1, 1.1, 1.05)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
-	ell(ctx, 0.75, 0.6, 0.35, head * CFrame.new(0, -0.12, -0.38), ctx.c2)
+	muzzle(ctx, head, hs, ctx.c2)
 	return {
 		head = head,
 		headSize = hs,
@@ -552,20 +665,17 @@ TEMPLATES.frog = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 0.7, 0)
 	local bs = Vector3.new(1.6, 1.0, 1.6)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.3, 0.7, 1.2, at(0, 0.55, -0.25), ctx.c2)
-	local ec, em = eyeColor(ctx)
+	ell(ctx, 1.3, 0.6, 0.5, at(0, 0.5, -0.65), ctx.c2)
 	for _, side in SIDES do
-		ball(ctx, 0.55, at(side * 0.42, 1.22, -0.42), ctx.c1)
-		ball(ctx, 0.32, at(side * 0.44, 1.28, -0.62), ec, em)
-		if not ctx.has.eyes_glow then
-			ball(ctx, 0.11, at(side * 0.47, 1.36, -0.76), WHITE)
-		end
-		ell(ctx, 0.55, 0.4, 0.95, at(side * 0.75, 0.3, 0.35), ctx.c1)
-		ell(ctx, 0.6, 0.12, 0.6, at(side * 0.85, 0.06, 0.0), ctx.c3)
-		vcyl(ctx, 0.5, 0.25, at(side * 0.5, 0.3, -0.55), ctx.c1)
-		ball(ctx, 0.25, at(side * 0.55, 0.62, -0.7), PINK)
+		ell(ctx, 0.55, 0.5, 0.55, at(side * 0.42, 1.22, -0.42), ctx.c1)
+		squareEye(ctx, at(side * 0.42, 1.25, -0.7), 0.3, side)
+		ell(ctx, 0.55, 0.4, 0.95, at(side * 0.78, 0.3, 0.35), ctx.c1)
+		blk(ctx, 0.6, 0.12, 0.6, at(side * 0.88, 0.06, 0.0), ctx.c3)
+		blk(ctx, 0.25, 0.5, 0.25, at(side * 0.5, 0.3, -0.55), ctx.c1)
+		blk(ctx, 0.35, 0.1, 0.35, at(side * 0.5, 0.05, -0.65), ctx.c3)
+		blk(ctx, 0.25, 0.15, 0.06, at(side * 0.55, 0.62, -0.82), PINK)
 	end
-	blk(ctx, 0.9, 0.05, 0.05, at(0, 0.66, -0.8), BLACK)
+	blk(ctx, 0.9, 0.05, 0.06, at(0, 0.66, -0.82), BLACK)
 	return {
 		head = at(0, 0.95, -0.4),
 		headSize = Vector3.new(1.2, 0.8, 0.8),
@@ -578,44 +688,53 @@ TEMPLATES.frog = function(ctx: Ctx): Anchors
 end
 
 TEMPLATES.turtle = function(ctx: Ctx): Anchors
-	local bodyCF = at(0, 0.95, 0)
-	local bs = Vector3.new(1.8, 1.1, 2.0)
+	local bodyCF = at(0, 0.9, 0)
+	local bs = Vector3.new(1.8, 0.9, 2.0)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c2)
-	vcyl(ctx, 0.2, 1.95, at(0, 0.55, 0), ctx.c3)
+	ell(ctx, 1.4, 0.4, 1.6, at(0, 1.5, 0), ctx.c2)
+	blk(ctx, 2.0, 0.2, 2.2, at(0, 0.5, 0), ctx.c3)
 	if not ctx.has.icing then
-		for _, p in { { 0, 0 }, { 0.45, 0.4 }, { -0.45, 0.4 }, { 0.45, -0.4 }, { -0.45, -0.4 } } do
-			local y = math.sqrt(math.max(0.05, 1 - (p[1] / 0.9) ^ 2 - (p[2] / 1.0) ^ 2)) * 0.55
-			ball(ctx, 0.5, at(p[1], 0.95 + y * 0.92, p[2]), ctx.c3)
+		for _, p in { { 0, 0 }, { 0.42, 0.45 }, { -0.42, 0.45 }, { 0.42, -0.45 }, { -0.42, -0.45 } } do
+			blk(ctx, 0.5, 0.15, 0.5, at(p[1], 1.73, p[2]), ctx.c3)
 		end
 	end
-	local head = at(0, 0.85, -1.2)
-	local hs = Vector3.new(0.75, 0.7, 0.8)
-	ell(ctx, 0.5, 0.45, 0.6, at(0, 0.7, -0.85), ctx.c1)
+	local head = at(0, 0.85, -1.3)
+	local hs = Vector3.new(0.75, 0.7, 0.75)
+	ell(ctx, 0.5, 0.45, 0.6, at(0, 0.7, -0.95), ctx.c1)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
+	blk(ctx, 0.4, 0.05, 0.06, head * CFrame.new(0, -0.18, -0.38), DARK, PLASTIC)
 	for _, x in SIDES do
 		for _, z in SIDES do
-			ell(ctx, 0.5, 0.35, 0.55, at(x * 0.72, 0.25, z * 0.62), ctx.c1)
+			blk(ctx, 0.5, 0.35, 0.55, at(x * 0.78, 0.22, z * 0.65), ctx.c1)
+			blk(ctx, 0.35, 0.1, 0.2, at(x * 0.82, 0.05, z * 0.65 - 0.3), ctx.c1:Lerp(BLACK, 0.2))
 		end
 	end
-	ell(ctx, 0.2, 0.2, 0.4, at(0, 0.5, 1.05), ctx.c1)
-	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.5, 1.1), top = 1.5 }
+	blk(ctx, 0.2, 0.2, 0.4, at(0, 0.5, 1.15), ctx.c1)
+	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.5, 1.1), top = 1.8 }
 end
 
 TEMPLATES.whale = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 1.5, 0)
 	local bs = Vector3.new(1.8, 1.6, 3.0)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.5, 1.0, 2.6, at(0, 1.15, -0.1), ctx.c2)
-	ell(ctx, 0.6, 0.6, 1.0, at(0, 1.6, 1.65, -15, 0, 0), ctx.c1)
-	ell(ctx, 1.7, 0.12, 0.6, at(0, 1.85, 2.15), ctx.c1)
-	local ec, em = eyeColor(ctx)
-	for _, side in SIDES do
-		ell(ctx, 0.75, 0.1, 0.42, at(side * 0.95, 1.15, -0.4, 0, 0, side * 25), ctx.c1)
-		ball(ctx, 0.22, at(side * 0.78, 1.55, -0.9), ec, em)
+	ell(ctx, 1.6, 1.3, 0.6, at(0, 1.5, -1.6), ctx.c1)
+	blk(ctx, 1.5, 0.4, 2.6, at(0, 0.8, -0.2), ctx.c2)
+	for i = -1, 1 do
+		blk(ctx, 0.08, 0.06, 2.0, at(i * 0.35, 0.58, -0.4), ctx.c2:Lerp(BLACK, 0.25))
 	end
-	blk(ctx, 1.0, 0.05, 0.05, at(0, 1.25, -1.47), DARK)
+	ell(ctx, 1.0, 0.9, 0.9, at(0, 1.6, 1.8), ctx.c1)
+	ell(ctx, 0.6, 0.6, 1.0, at(0, 1.65, 2.5, -10, 0, 0), ctx.c1)
+	for _, side in SIDES do
+		blk(ctx, 1.0, 0.14, 0.7, at(side * 0.5, 1.85, 3.1, 0, side * 25, 0), ctx.c1)
+		blk(ctx, 0.8, 0.12, 0.45, at(side * 1.0, 1.0, -0.5, 0, 0, side * 25), ctx.c1)
+		squareEye(ctx, at(side * 0.91, 1.55, -0.95, 0, -side * 90, 0), 0.24, side)
+		blk(ctx, 0.4, 0.1, 0.3, at(side * 1.45, 0.78, -0.35, 0, 0, side * 25), ctx.c2)
+		blk(ctx, 0.06, 0.2, 0.2, at(side * 0.81, 1.15, -1.8), DARK)
+	end
+	blk(ctx, 1.62, 0.06, 0.06, at(0, 1.2, -1.92), DARK)
+	blk(ctx, 0.3, 0.06, 0.3, at(0, 2.32, -0.6), DARK)
 	return {
-		head = at(0, 1.65, -1.05),
+		head = at(0, 1.65, -1.2),
 		headSize = Vector3.new(1.6, 1.4, 0.9),
 		body = bodyCF,
 		bodySize = bs,
@@ -629,21 +748,24 @@ TEMPLATES.jelly = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 2.2, 0)
 	local bs = Vector3.new(1.7, 1.2, 1.7)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1, nil, 0.15)
+	ell(ctx, 1.2, 0.4, 1.2, at(0, 2.95, 0), ctx.c1, nil, 0.15)
 	ell(ctx, 1.0, 0.6, 1.0, at(0, 2.1, 0), ctx.c2, ctx.accentMat)
-	vcyl(ctx, 0.15, 1.6, at(0, 1.65, 0), ctx.c2, nil, 0.2)
+	blk(ctx, 1.9, 0.2, 1.9, at(0, 1.6, 0), ctx.c2, nil, 0.2)
 	if ctx.has.tentacles_thick then
 		for i = 1, 8 do
 			local t = i / 8 * math.pi * 2
 			local cf = at(math.cos(t) * 0.6, 1.0, math.sin(t) * 0.6)
 				* CFrame.Angles(0, -t, 0)
 				* CFrame.Angles(0, 0, rad(-15))
-			ell(ctx, 0.35, 1.7, 0.35, cf, ctx.c1)
-			ball(ctx, 0.16, cf * CFrame.new(0.15, -0.3, 0), ctx.c3)
+			blk(ctx, 0.35, 1.3, 0.35, cf * CFrame.new(0, 0.2, 0), ctx.c1)
+			blk(ctx, 0.28, 0.6, 0.28, cf * CFrame.new(0.15, -0.65, 0) * CFrame.Angles(0, 0, rad(-20)), ctx.c1)
+			blk(ctx, 0.12, 0.12, 0.06, cf * CFrame.new(0.2, -0.1, 0), ctx.c3)
 		end
 	else
 		for i = 1, 7 do
 			local t = i / 7 * math.pi * 2
-			vcyl(ctx, 1.5, 0.12, at(math.cos(t) * 0.5, 0.95, math.sin(t) * 0.5), ctx.c3, nil, 0.25)
+			blk(ctx, 0.12, 0.8, 0.12, at(math.cos(t) * 0.5, 1.15, math.sin(t) * 0.5), ctx.c3, nil, 0.25)
+			blk(ctx, 0.1, 0.7, 0.1, at(math.cos(t) * 0.58, 0.45, math.sin(t) * 0.58, 0, 0, 8), ctx.c3, nil, 0.25)
 		end
 	end
 	return {
@@ -652,7 +774,7 @@ TEMPLATES.jelly = function(ctx: Ctx): Anchors
 		body = bodyCF,
 		bodySize = bs,
 		tail = at(0, 1, 0.6),
-		top = 2.8,
+		top = 3.15,
 		upright = true,
 	}
 end
@@ -661,37 +783,52 @@ TEMPLATES.lizard = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 0.65, 0)
 	local bs = Vector3.new(1.0, 0.6, 2.0)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 0.6, 0.35, 1.7, at(0, 0.83, 0), ctx.c2)
-	local head = at(0, 0.78, -1.3)
-	local hs = Vector3.new(0.85, 0.5, 0.95)
+	blk(ctx, 0.5, 0.15, 1.7, at(0, 0.97, 0), ctx.c2)
+	blk(ctx, 0.7, 0.45, 0.4, at(0, 0.72, -1.05), ctx.c1)
+	local head = at(0, 0.78, -1.45)
+	local hs = Vector3.new(0.85, 0.5, 0.8)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
+	blk(ctx, 0.7, 0.15, 0.4, head * CFrame.new(0, -0.18, -0.45), ctx.c2)
 	for _, side in SIDES do
+		blk(ctx, 0.07, 0.07, 0.06, head * CFrame.new(side * 0.15, 0.08, -0.62), BLACK)
 		for _, z in { -0.6, 0.55 } do
-			ell(ctx, 0.75, 0.18, 0.25, at(side * 0.6, 0.3, z, 0, 0, -side * 20), ctx.c1)
+			blk(ctx, 0.6, 0.18, 0.25, at(side * 0.62, 0.35, z, 0, 0, -side * 25), ctx.c1)
+			blk(ctx, 0.3, 0.1, 0.35, at(side * 0.88, 0.05, z - 0.1), ctx.c1:Lerp(BLACK, 0.15))
 		end
 	end
-	ell(ctx, 0.45, 0.32, 1.1, at(0, 0.5, 1.4), ctx.c1)
-	ell(ctx, 0.25, 0.2, 0.9, at(0, 0.4, 2.2), ctx.c1)
+	for i = 0, 2 do
+		blk(ctx, 0.25, 0.12, 0.25, at(0, 1.08, -0.5 + i * 0.5), ctx.c3)
+	end
+	blk(ctx, 0.45, 0.32, 1.1, at(0, 0.5, 1.45), ctx.c1)
+	blk(ctx, 0.25, 0.2, 0.9, at(0, 0.4, 2.3), ctx.c1)
+	blk(ctx, 0.12, 0.12, 0.4, at(0, 0.35, 2.85), ctx.c2)
 	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 0.45, 2.5), top = 1.05 }
 end
 
 TEMPLATES.blob = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 1.0, 0)
-	local bs = Vector3.new(1.6, 1.8, 1.6)
+	local bs = Vector3.new(1.6, 1.6, 1.6)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
+	ell(ctx, 1.2, 0.4, 1.2, at(0, 1.9, 0), ctx.c1)
+	blk(ctx, 1.3, 0.3, 1.3, at(0, 0.15, 0), ctx.c1:Lerp(BLACK, 0.1))
+	blk(ctx, 1.0, 0.9, 0.08, at(0, 0.85, -0.8), ctx.c2)
 	for _, side in SIDES do
-		ball(ctx, 0.3, at(side * 0.5, 0.95, -0.66), PINK)
-		ell(ctx, 0.55, 0.25, 0.65, at(side * 0.4, 0.1, -0.2), ctx.c3)
-		ell(ctx, 0.35, 0.6, 0.35, at(side * 0.82, 0.9, 0, 0, 0, side * 35), ctx.c1)
+		blk(ctx, 0.3, 0.15, 0.08, at(side * 0.52, 1.05, -0.82), PINK)
+		blk(ctx, 0.55, 0.25, 0.65, at(side * 0.4, 0.1, -0.25), ctx.c3)
+		ell(ctx, 0.4, 0.6, 0.4, at(side * 0.88, 0.9, 0, 0, 0, side * 35), ctx.c1)
+		blk(ctx, 0.3, 0.3, 0.3, at(side * 1.1, 0.6, 0), ctx.c2)
 	end
-	blk(ctx, 0.4, 0.05, 0.05, at(0, 0.85, -0.8), BLACK)
+	blk(ctx, 0.4, 0.06, 0.06, at(0, 0.95, -0.83), BLACK)
+	for i = -1, 1 do
+		blk(ctx, 0.2, 0.3 - math.abs(i) * 0.1, 0.2, at(i * 0.22, 2.2, 0, 0, 0, -i * 20), ctx.c3)
+	end
 	return {
-		head = at(0, 1.3, 0),
-		headSize = Vector3.new(1.5, 1.1, 1.5),
+		head = at(0, 1.4, 0),
+		headSize = Vector3.new(1.6, 1.1, 1.6),
 		body = bodyCF,
 		bodySize = bs,
 		tail = at(0, 0.8, 0.8),
-		top = 1.9,
+		top = 2.1,
 		upright = true,
 	}
 end
@@ -699,35 +836,50 @@ end
 TEMPLATES.dino = function(ctx: Ctx): Anchors
 	for _, side in SIDES do
 		ell(ctx, 0.6, 1.1, 0.85, at(side * 0.45, 1.05, 0.25), ctx.c1)
-		ell(ctx, 0.55, 0.25, 0.9, at(side * 0.45, 0.12, 0.0), ctx.c1)
-		ell(ctx, 0.2, 0.2, 0.55, at(side * 0.45, 1.95, -0.75, 30, 0, 0), ctx.c1)
+		blk(ctx, 0.55, 0.25, 0.9, at(side * 0.45, 0.12, 0.0), ctx.c1)
+		blk(ctx, 0.5, 0.1, 0.15, at(side * 0.45, 0.06, -0.5), WHITE)
+		blk(ctx, 0.2, 0.2, 0.55, at(side * 0.45, 1.95, -0.75, 30, 0, 0), ctx.c1)
+		blk(ctx, 0.2, 0.08, 0.15, at(side * 0.45, 1.78, -1.05), WHITE)
 	end
 	local bodyCF = at(0, 1.95, 0.25)
 	local bs = Vector3.new(1.45, 1.45, 2.0)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 1.0, 1.0, 1.6, at(0, 1.75, 0), ctx.c2)
+	ell(ctx, 1.0, 1.0, 0.5, at(0, 1.75, -0.65), ctx.c2)
 	ell(ctx, 0.75, 0.65, 2.2, at(0, 1.65, 1.8, -8, 0, 0), ctx.c1)
-	ell(ctx, 0.4, 0.35, 1.2, at(0, 1.4, 2.9), ctx.c1)
+	blk(ctx, 0.4, 0.35, 1.2, at(0, 1.4, 2.9), ctx.c1)
+	for i = 0, 3 do
+		blk(ctx, 0.15, 0.3, 0.35, at(0, 2.75 - i * 0.25, -0.2 + i * 0.75), ctx.c2:Lerp(ctx.c1, 0.5))
+	end
 	local head = at(0, 2.95, -0.95)
 	local hs = Vector3.new(1.05, 0.9, 1.5)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
-	ell(ctx, 0.9, 0.35, 1.25, head * CFrame.new(0, -0.38, -0.1), ctx.c2)
+	blk(ctx, 0.9, 0.35, 1.25, head * CFrame.new(0, -0.5, -0.1), ctx.c2)
+	for _, side in SIDES do
+		blk(ctx, 0.1, 0.08, 0.06, head * CFrame.new(side * 0.22, 0.2, -0.76), BLACK)
+	end
 	return { head = head, headSize = hs, body = bodyCF, bodySize = bs, tail = at(0, 1.4, 3.2), top = 3.4 }
 end
 
 TEMPLATES.penguin = function(ctx: Ctx): Anchors
 	local bodyCF = at(0, 1.0, 0)
-	local bs = Vector3.new(1.2, 1.7, 1.1)
+	local bs = Vector3.new(1.2, 1.6, 1.1)
 	ctx.body = ell(ctx, bs.X, bs.Y, bs.Z, bodyCF, ctx.c1)
-	ell(ctx, 0.9, 1.3, 0.6, at(0, 0.9, -0.32), ctx.c2)
+	ell(ctx, 0.9, 1.3, 0.4, at(0, 0.95, -0.4), ctx.c2)
 	local head = at(0, 2.05, 0)
-	local hs = Vector3.new(0.95, 0.9, 0.9)
+	local hs = Vector3.new(0.95, 0.85, 0.9)
 	ell(ctx, hs.X, hs.Y, hs.Z, head, ctx.c1)
-	ell(ctx, 0.7, 0.55, 0.4, head * CFrame.new(0, -0.05, -0.3), ctx.c2)
-	ell(ctx, 0.3, 0.15, 0.4, head * CFrame.new(0, -0.14, -0.52), ctx.c3)
+	ell(ctx, 0.7, 0.5, 0.4, head * CFrame.new(0, -0.05, -0.3), ctx.c2)
+	blk(ctx, 0.3, 0.15, 0.35, head * CFrame.new(0, -0.15, -0.6), ctx.c3)
+	blk(ctx, 0.3, 0.15, 0.08, head * CFrame.new(0, 0.48, 0), ctx.c1)
+	blk(ctx, 0.5, 0.15, 0.4, at(0, 0.3, 0.6, -30, 0, 0), ctx.c1)
 	for _, side in SIDES do
-		ell(ctx, 0.18, 0.9, 0.45, at(side * 0.62, 1.05, 0, 0, 0, side * 15), ctx.c1)
-		ell(ctx, 0.4, 0.12, 0.5, at(side * 0.25, 0.05, -0.2), ctx.c3)
+		blk(ctx, 0.18, 0.9, 0.45, at(side * 0.66, 1.05, 0, 0, 0, side * 15), ctx.c1)
+		blk(ctx, 0.4, 0.12, 0.5, at(side * 0.25, 0.06, -0.2), ctx.c3)
+		for _, t in SIDES do
+			blk(ctx, 0.1, 0.1, 0.18, at(side * 0.25 + t * 0.12, 0.05, -0.5), ctx.c3:Lerp(BLACK, 0.15))
+		end
+		blk(ctx, 0.14, 0.3, 0.35, at(side * 0.78, 0.55, 0.05, 0, 0, side * 25), ctx.c1:Lerp(BLACK, 0.2))
+		blk(ctx, 0.18, 0.1, 0.06, head * CFrame.new(side * 0.3, -0.15, -0.46), PINK)
 	end
 	return {
 		head = head,
@@ -748,22 +900,24 @@ local F: { [string]: (Ctx, Anchors) -> () } = {}
 
 local function noop(_ctx: Ctx, _a: Anchors) end
 
--- 몸통 표면 위의 점 (fx, fz 는 -1~1 비율)
+-- 몸통(블록) 윗면 위의 점 (fx, fz 는 -1~1 비율). 모서리 깎인 부분은 조금 낮춤
 local function onBody(a: Anchors, fx: number, fz: number, lift: number?): CFrame
 	local bs = a.bodySize
-	local y = math.sqrt(math.max(0.05, 1 - fx * fx - fz * fz)) * bs.Y / 2 * (lift or 0.95)
-	return a.body * CFrame.new(fx * bs.X / 2, y, fz * bs.Z / 2)
+	local edge = math.max(math.abs(fx), math.abs(fz))
+	local drop = if edge > 0.75 then math.min(bs.X, bs.Y, bs.Z) * 0.2 else 0
+	local y = (bs.Y / 2 - drop) * (lift or 1)
+	return a.body * CFrame.new(fx * bs.X / 2 * 0.9, y, fz * bs.Z / 2 * 0.9)
 end
 
--- 몸통을 두르는 띠 (가로 몸: Z 방향으로 자름, 선 몸: Y 방향으로 자름)
+-- 몸통을 두르는 띠 (가로 몸: Z 방향으로 자름, 선 몸: Y 방향으로 자름). 블록 몸이라 몸보다 살짝 크게
 local function bands(ctx: Ctx, a: Anchors, positions: { number }, color: Color3, thickness: number)
 	local bs = a.bodySize
 	for _, f in positions do
-		local k = math.sqrt(math.max(0.05, 1 - f * f)) * 1.04
+		local k = 1.04
 		if a.upright then
-			ell(ctx, bs.X * k, thickness, bs.Z * k, a.body * CFrame.new(0, f * bs.Y / 2, 0), color)
+			blk(ctx, bs.X * k, thickness, bs.Z * k, a.body * CFrame.new(0, f * bs.Y / 2 * 0.85, 0), color)
 		else
-			ell(ctx, bs.X * k, bs.Y * k, thickness, a.body * CFrame.new(0, 0, f * bs.Z / 2), color)
+			blk(ctx, bs.X * k, bs.Y * k, thickness, a.body * CFrame.new(0, 0, f * bs.Z / 2 * 0.85), color)
 		end
 	end
 end
@@ -1725,10 +1879,77 @@ local function currentSide(): string
 end
 
 ------------------------------------------------------------------
--- 부모 동물 (둥지 옆, 큰 크기)
+-- 머리 위 이름표 (원작: [희귀도 색] / 이름 / $수입/s, 굵은 검은 외곽선)
 ------------------------------------------------------------------
 
-local PARENT_SCALE = 2.2
+type TagSpec = { name: string, text: string, color: Color3, weight: number }
+
+local OUTLINE = Color3.new(0, 0, 0)
+local INCOME_GREEN = Color3.fromRGB(90, 255, 90)
+
+-- 이름표 BillboardGui "PetTag" (자식 TextLabel 이름 = spec.name). bottomY = 이름표 아래끝 높이(어도니 기준)
+local function petTag(
+	adornee: BasePart,
+	bottomY: number,
+	maxDistance: number,
+	widthStuds: number,
+	lines: { TagSpec }
+): BillboardGui
+	local total = 0
+	for _, line in lines do
+		total += line.weight
+	end
+	local unit = widthStuds * 0.17
+	local heightStuds = total * unit
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "PetTag"
+	gui.Size = UDim2.fromScale(widthStuds, heightStuds)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, bottomY + heightStuds / 2, 0)
+	gui.LightInfluence = 0
+	gui.MaxDistance = maxDistance
+	gui.Adornee = adornee
+	local y = 0
+	for _, line in lines do
+		local h = line.weight / total
+		local label = Instance.new("TextLabel")
+		label.Name = line.name
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0, y)
+		label.Size = UDim2.fromScale(1, h)
+		label.Font = Enum.Font.FredokaOne
+		label.TextScaled = true
+		label.TextColor3 = line.color
+		label.TextStrokeColor3 = OUTLINE
+		label.TextStrokeTransparency = 0
+		label.Text = line.text
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = OUTLINE
+		stroke.Thickness = 2.5
+		stroke.LineJoinMode = Enum.LineJoinMode.Round
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+		stroke.Parent = label
+		label.Parent = gui
+		y += h
+	end
+	gui.Parent = adornee
+	return gui
+end
+
+local function rarityColor(rarityId: string?): Color3
+	local r = if rarityId then Rarities.get(rarityId) else nil
+	return if r then rgb(r.color) else WHITE
+end
+
+local function rarityName(rarityId: string?): string
+	local r = if rarityId then Rarities.get(rarityId) else nil
+	return if r then r.name elseif rarityId then rarityId else ""
+end
+
+------------------------------------------------------------------
+-- 부모 동물 (둥지 근처 장식, 구역마다 2마리 정도)
+------------------------------------------------------------------
+
+local PARENT_SCALE = 1.8
 local parentModels: { [BasePart]: Model } = {}
 
 local function nestPets(biomeId: string, side: string?): { Pets.Pet }
@@ -1752,30 +1973,26 @@ local function buildParent(spot: BasePart)
 	end
 	local biomeId = spot:GetAttribute("BiomeId")
 	local nestIndex = spot:GetAttribute("NestIndex")
-	if typeof(biomeId) ~= "string" or typeof(nestIndex) ~= "number" then
+	if typeof(biomeId) ~= "string" then
 		return
 	end
+	local index = if typeof(nestIndex) == "number" then nestIndex else 1
 	local biome = Biomes.get(biomeId)
 	local side = if biome and biome.sides then currentSide() else nil
 	local list = nestPets(biomeId, side)
 	if #list == 0 then
 		return
 	end
-	local pet = list[((nestIndex - 1) % #list) + 1]
+	local pet = list[((index - 1) % #list) + 1]
 	local model = PetVisualService.build(pet.id, PARENT_SCALE, { effects = true })
 	local ground = spot.Position - Vector3.new(0, spot.Size.Y / 2, 0)
 	model:PivotTo(CFrame.new(ground) * spot.CFrame.Rotation)
-	local rarity = Rarities.get(pet.rarity)
 	local root = model.PrimaryPart
 	if root then
-		Gui.tag(root, height(model) + 1.5, 90, {
-			{ text = pet.name, color = if rarity then rgb(rarity.color):Lerp(WHITE, 0.25) else WHITE },
-			{
-				text = if rarity then rarity.name else pet.rarity,
-				weight = 0.65,
-				color = if rarity then rgb(rarity.color) else WHITE,
-			},
-		}, 8)
+		petTag(root, height(model) + 0.6, 60, 4, {
+			{ name = "Rarity", text = rarityName(pet.rarity), color = rarityColor(pet.rarity), weight = 0.8 },
+			{ name = "PetName", text = pet.name, color = WHITE, weight = 0.8 },
+		})
 	end
 	model:SetAttribute("BiomeId", biomeId)
 	CollectionService:AddTag(model, Visuals.Tags.ParentAnimal)
@@ -1797,10 +2014,13 @@ end
 
 ------------------------------------------------------------------
 -- 우리 (장착 펫 진열)
+--   PenArea 파트 = 우리 직사각형 전체를 덮는 납작한 파트, LookVector = 우리 앞(앞마당·복도 쪽).
+--   펫은 우리 "뒤쪽 2/3" 에 격자로 줄 맞춰 서서 모두 LookVector 쪽을 봄 (앞 1/3 은 부화 중 알 자리).
 ------------------------------------------------------------------
 
 local MAX_PEN = 18
-local PEN_SCALE = 1.2
+local PEN_SCALE = 1.3
+local PEN_FOOTPRINT = 3.4 -- 크기 1 펫 한 마리가 차지하는 폭(스터드, 대략). 칸이 좁으면 이것에 맞춰 줄임
 local SIZE_SCALE: { [string]: number } = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 }
 
 type PenState = { signature: string, models: { Model } }
@@ -1847,25 +2067,35 @@ local function signatureOf(owner: number, records: { Types.PetRecord }): string
 	return table.concat(parts, "|")
 end
 
-local function penSpots(pen: BasePart, n: number): { CFrame }
+-- 격자 자리 n 개 + 한 칸 크기(스터드). 앞줄부터 채우고, 마지막 줄은 가운데 정렬
+local function penSpots(pen: BasePart, n: number): ({ CFrame }, number)
 	local result: { CFrame } = {}
+	if n <= 0 then
+		return result, 0
+	end
+	local width = pen.Size.X * 0.92
+	local depth = pen.Size.Z
+	local backDepth = depth * (2 / 3) * 0.92
+	local cols = math.clamp(math.ceil(math.sqrt(n * width / math.max(1, backDepth))), 1, n)
+	local rows = math.ceil(n / cols)
+	local colW = width / cols
+	local rowD = backDepth / rows
+	local zStart = -depth / 6 + (depth * (2 / 3) - backDepth) / 2
 	local top = pen.Position.Y + pen.Size.Y / 2
-	local outer = math.min(n, 10)
-	local inner = n - outer
-	local function ring(count: number, rx: number, rz: number, offset: number)
-		for i = 1, count do
-			local t = (i - 0.5) / count * math.pi * 2 + offset
-			local x = pen.Position.X + math.cos(t) * rx
-			local z = pen.Position.Z + math.sin(t) * rz
-			-- 모두 +Z(베이스 입구 쪽)를 바라봄
-			table.insert(result, CFrame.new(x, top, z) * CFrame.Angles(0, math.pi, 0))
-		end
+	local look = pen.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude > 0.01 then flat.Unit else Vector3.new(0, 0, -1)
+	for i = 1, n do
+		local r = math.floor((i - 1) / cols)
+		local c = (i - 1) % cols
+		local inRow = if r == rows - 1 then n - cols * (rows - 1) else cols
+		local x = (c - (inRow - 1) / 2) * colW
+		local z = zStart + (r + 0.5) * rowD
+		local p = pen.CFrame:PointToWorldSpace(Vector3.new(x, 0, z))
+		local pos = Vector3.new(p.X, top, p.Z)
+		table.insert(result, CFrame.lookAt(pos, pos + flat))
 	end
-	ring(outer, pen.Size.X * 0.38, pen.Size.Z * 0.32, 0)
-	if inner > 0 then
-		ring(inner, pen.Size.X * 0.18, pen.Size.Z * 0.12, 0.3)
-	end
-	return result
+	return result, math.min(colW, rowD)
 end
 
 local function mutationText(record: Types.PetRecord): string
@@ -1883,26 +2113,31 @@ local function mutationText(record: Types.PetRecord): string
 	return table.concat(parts, " · ")
 end
 
-local function buildPenPet(record: Types.PetRecord, spot: CFrame, parent: Instance): Model
-	local scale = PEN_SCALE * (SIZE_SCALE[record.size] or 1)
+local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, parent: Instance): Model
+	local mult = SIZE_SCALE[record.size] or 1
+	local fit = if cell > 0 then cell / PEN_FOOTPRINT else PEN_SCALE
+	local scale = math.max(0.6, math.min(PEN_SCALE, fit) * mult)
 	local model = PetVisualService.build(record.petId, scale, { effects = true })
 	model:PivotTo(spot)
 	local pet = Pets.get(record.petId)
-	local rarity = if pet then Rarities.get(pet.rarity) else nil
-	local lines: { Gui.TagLine } = {
+	local rarityId = if pet then pet.rarity else nil
+	local lines: { TagSpec } = {
+		{ name = "Rarity", text = rarityName(rarityId), color = rarityColor(rarityId), weight = 0.85 },
+		{ name = "PetName", text = if pet then pet.name else record.petId, color = WHITE, weight = 0.8 },
 		{
-			text = if pet then pet.name else record.petId,
-			color = if rarity then rgb(rarity.color):Lerp(WHITE, 0.3) else WHITE,
+			name = "Income",
+			text = Format.money(Economy.recordIncome(record)) .. "/s",
+			color = INCOME_GREEN,
+			weight = 1.1,
 		},
-		{ text = Format.money(Economy.recordIncome(record)) .. "/초", color = Color3.fromRGB(120, 255, 120) },
 	}
 	local extra = mutationText(record)
 	if extra ~= "" then
-		table.insert(lines, { text = extra, color = Color3.fromRGB(255, 230, 120), weight = 0.75 })
+		table.insert(lines, { name = "Extra", text = extra, color = Color3.fromRGB(255, 230, 120), weight = 0.6 })
 	end
 	local root = model.PrimaryPart
 	if root then
-		Gui.tag(root, height(model) + 1, 60, lines, 5)
+		petTag(root, height(model) + 0.5, 70, 5, lines)
 		local first = record.mutations[1]
 		local look = if first then Visuals.mutationLooks[first] else nil
 		if look then
@@ -1954,10 +2189,10 @@ local function refreshPens()
 						end
 					end
 					local models: { Model } = {}
-					local places = penSpots(pen, #records)
+					local places, cell = penSpots(pen, #records)
 					local parent = pen.Parent or pen
 					for i, record in records do
-						table.insert(models, buildPenPet(record, places[i], parent))
+						table.insert(models, buildPenPet(record, places[i], cell, parent))
 					end
 					pens[index] = { signature = signature, models = models }
 				end
@@ -1967,10 +2202,88 @@ local function refreshPens()
 end
 
 ------------------------------------------------------------------
--- 경비 겉모습
+-- 경비 겉모습 (거대함: 키 25~40 스터드)
+--   HumanoidRootPart 에 Weld "GuardPose" 로 붙임 (C0 를 바꿔 서기/자기 자세 전환).
+--   State == "Idle"/"Sleeping" → 자는 자세(낮추고 앞으로 살짝 엎드림) + 머리 위 파란 Z (BillboardGui "SleepZ")
+--   State == "Chase" → 일어선 자세 + 빨간 테두리(Highlight "GuardGlow"). 그 밖("Return" 등) → 일어섬, 테두리 끔
 ------------------------------------------------------------------
 
-local guardVisuals: { [Model]: Model } = {}
+local GUARD_HEIGHT = 32 -- Visuals.guards[..].height 가 없을 때
+local Z_COLOR = Color3.fromRGB(110, 170, 255)
+local Z_STROKE = Color3.fromRGB(25, 45, 120)
+
+type GuardInfo = {
+	visual: Model,
+	pose: Weld,
+	stand: CFrame,
+	sleep: CFrame,
+	z: BillboardGui,
+	glow: Highlight,
+}
+local guardInfo: { [Model]: GuardInfo } = {}
+
+-- 크기 1 일 때 키 (경비 크기 계산용, 한 번만 만들어 봄)
+local baseHeights: { [string]: number } = {}
+local function baseHeight(id: string): number
+	local cached = baseHeights[id]
+	if cached then
+		return cached
+	end
+	local m = PetVisualService.build(id, 1, nil)
+	local h = math.max(0.5, height(m))
+	m:Destroy()
+	baseHeights[id] = h
+	return h
+end
+
+local function sleepZ(adornee: BasePart, h: number): BillboardGui
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "SleepZ"
+	gui.Adornee = adornee
+	gui.LightInfluence = 0
+	gui.MaxDistance = 300
+	local size = math.max(8, h * 0.4)
+	gui.Size = UDim2.fromScale(size, size)
+	gui.StudsOffsetWorldSpace = Vector3.new(h * 0.15, h + size * 0.3, 0)
+	-- 작은 Z(아래 왼쪽) → 큰 Z(위 오른쪽). 클라가 Z1~Z3 을 둥실둥실 움직여도 됨
+	for i, spec in { { 0.08, 0.62, 0.26 }, { 0.32, 0.32, 0.34 }, { 0.58, 0.0, 0.42 } } do
+		local label = Instance.new("TextLabel")
+		label.Name = "Z" .. i
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(spec[1], spec[2])
+		label.Size = UDim2.fromScale(spec[3], spec[3])
+		label.Font = Enum.Font.FredokaOne
+		label.TextScaled = true
+		label.Text = "Z"
+		label.TextColor3 = Z_COLOR
+		label.Rotation = -12 + i * 6
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Z_STROKE
+		stroke.Thickness = 3
+		stroke.LineJoinMode = Enum.LineJoinMode.Round
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+		stroke.Parent = label
+		label.Parent = gui
+	end
+	gui.Parent = adornee
+	return gui
+end
+
+local function isSleeping(state: any): boolean
+	return state == nil or state == "Idle" or state == "Sleeping"
+end
+
+local function applyGuardState(guard: Model)
+	local info = guardInfo[guard]
+	if not info or info.visual.Parent ~= guard then
+		return
+	end
+	local state = guard:GetAttribute("State")
+	local sleeping = isSleeping(state)
+	info.pose.C0 = if sleeping then info.sleep else info.stand
+	info.z.Enabled = sleeping
+	info.glow.Enabled = state == "Chase"
+end
 
 local function dressGuard(guard: Model)
 	if guard.Parent == nil then
@@ -1990,43 +2303,57 @@ local function dressGuard(guard: Model)
 	if dark and currentSide() == "dark" then
 		modelId = dark
 	end
-	local old = guardVisuals[guard]
-	if old and old.Parent then
-		if old.Name == modelId then
+	local old = guardInfo[guard]
+	if old and old.visual.Parent then
+		if old.visual.Name == modelId then
+			applyGuardState(guard)
 			return
 		end
-		old:Destroy()
+		old.visual:Destroy()
 	end
+	guardInfo[guard] = nil
 	for _, child in guard:GetChildren() do
 		if child:IsA("BasePart") then
 			child.Transparency = 1
 		end
 	end
-	local visual = PetVisualService.build(modelId, spec.scale, { effects = false })
+	local targetHeight = spec.height or GUARD_HEIGHT
+	local scale = targetHeight / baseHeight(modelId)
+	local visual = PetVisualService.build(modelId, scale, { effects = false })
 	visual.Name = modelId
+	local h = height(visual)
 	local humanoid = guard:FindFirstChildOfClass("Humanoid")
 	local hip = if humanoid then humanoid.HipHeight else 2
-	visual:PivotTo(root.CFrame * CFrame.new(0, -root.Size.Y / 2 - hip, 0))
-	local vroot = visual.PrimaryPart
-	if vroot then
-		vroot.Anchored = false
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = root
-		weld.Part1 = vroot
-		weld.Parent = vroot
-	end
-	-- 경비는 무섭게 빨간 테두리
-	local h = Instance.new("Highlight")
-	h.Name = "GuardGlow"
-	h.FillTransparency = 1
-	h.OutlineColor = Color3.fromRGB(255, 60, 60)
-	h.DepthMode = Enum.HighlightDepthMode.Occluded
-	h.Adornee = visual
-	h.Parent = visual
-	CollectionService:AddTag(h, Visuals.Tags.RarityHighlight)
+	-- 서기: 발바닥(Root) = 루트 아래 HipHeight 만큼 (땅)
+	local stand = CFrame.new(0, -root.Size.Y / 2 - hip, 0)
+	-- 자기: 조금 가라앉고 앞으로 엎드리듯 기울임 + 살짝 옆으로
+	local sleep = stand * CFrame.new(0, -h * 0.05, 0) * CFrame.Angles(rad(-7), 0, rad(4))
+	visual:PivotTo(root.CFrame * stand)
+	local vroot = visual.PrimaryPart :: BasePart
+	vroot.Anchored = false
+	local pose = Instance.new("Weld")
+	pose.Name = "GuardPose"
+	pose.Part0 = root
+	pose.Part1 = vroot
+	pose.C0 = stand
+	pose.Parent = vroot
+
+	local z = sleepZ(vroot, h)
+
+	-- 쫓을 때만 빨간 테두리 (희귀도 Highlight 한계 관리 태그는 안 붙임: 추격 중인 경비만 켜짐)
+	local glow = Instance.new("Highlight")
+	glow.Name = "GuardGlow"
+	glow.FillTransparency = 1
+	glow.OutlineColor = Color3.fromRGB(255, 50, 50)
+	glow.DepthMode = Enum.HighlightDepthMode.Occluded
+	glow.Adornee = visual
+	glow.Enabled = false
+	glow.Parent = visual
+
 	CollectionService:AddTag(visual, Visuals.Tags.GuardVisual)
 	visual.Parent = guard
-	guardVisuals[guard] = visual
+	guardInfo[guard] = { visual = visual, pose = pose, stand = stand, sleep = sleep, z = z, glow = glow }
+	applyGuardState(guard)
 	pcall(function()
 		root:SetNetworkOwner(nil) -- 용접으로 조립이 바뀌어도 서버가 계속 물리 담당
 	end)
@@ -2041,8 +2368,11 @@ local function onGuard(inst: Instance)
 	guard:GetAttributeChangedSignal("GuardName"):Connect(function()
 		dressGuard(guard)
 	end)
+	guard:GetAttributeChangedSignal("State"):Connect(function()
+		applyGuardState(guard)
+	end)
 	guard.Destroying:Connect(function()
-		guardVisuals[guard] = nil
+		guardInfo[guard] = nil
 	end)
 end
 
@@ -2082,6 +2412,8 @@ end
 
 -- 우리 진열을 지금 바로 다시 맞춤 (보통은 1초마다 자동. 다른 서비스가 즉시 갱신하고 싶을 때 호출 가능)
 PetVisualService.refreshPens = refreshPens
+-- 경비 자세(자기/서기)·Z·빨간 테두리를 State Attribute 에 맞춤 (State 가 바뀌면 자동. 테스트·즉시 갱신용)
+PetVisualService.refreshGuard = applyGuardState
 
 function PetVisualService.start()
 	if PetVisualService.started then
@@ -2119,7 +2451,7 @@ function PetVisualService.start()
 		if state then
 			state:GetAttributeChangedSignal(Tags.StateAttributes.HeavenSide):Connect(function()
 				rebuildSidedParents()
-				for guard in guardVisuals do
+				for guard in guardInfo do
 					dressGuard(guard)
 				end
 			end)

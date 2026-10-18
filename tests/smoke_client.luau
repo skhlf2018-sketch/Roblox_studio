@@ -67,11 +67,14 @@ local CLASSES = {
 	"Tool",
 	"Backpack",
 	"Weld",
+	"Humanoid",
+	"Backpack",
 }
 local EVENTS = {
 	"MouseButton1Down",
 	"MouseButton1Up",
 	"MouseLeave",
+	"MouseEnter",
 	"Activated",
 	"Destroying",
 	"AncestryChanged",
@@ -148,6 +151,9 @@ local CollectionService = {
 }
 
 local player = Instance.new("Player")
+pcall(function()
+	player.UserId = 77
+end)
 local playerGui = Instance.new("Folder")
 playerGui.Name = "PlayerGui"
 playerGui.Parent = player
@@ -302,8 +308,13 @@ local NetStub = {
 	send = function(name, ...)
 		table.insert(sent, { name = name, args = { ... } })
 	end,
+	trySend = function(name, ...)
+		table.insert(sent, { name = name, args = { ... } })
+		return true
+	end,
 	get = function() end,
 }
+NetStub.onLater = NetStub.on
 local function fire(name, ...)
 	waits = 0
 	for _, fn in handlers[name] or {} do
@@ -327,6 +338,7 @@ local function runSafe(fn, ...)
 	end
 end
 local delayDepth = 0
+local holdDelays = false -- true 면 task.delay 를 실행하지 않음 (잠깐 떠 있는 팝업을 검사할 때)
 local taskStub = {
 	spawn = runSafe,
 	defer = function(fn, ...)
@@ -337,7 +349,7 @@ local taskStub = {
 	end,
 	delay = function(_, fn, ...)
 		-- 바로 실행 (연출이 끝까지 도는지 확인). 깊은 재귀는 끊음
-		if delayDepth > 20 then
+		if delayDepth > 20 or holdDelays then
 			return
 		end
 		delayDepth += 1
@@ -460,6 +472,31 @@ end
 tag(door, "QuestGate")
 local crystal = worldPart("SakuraCrystal_c1", roblox.Vector3.new(3, 1, 3))
 tag(crystal, "SakuraCrystal")
+-- 2판 월드 흉내: 우리 펫(PenPet) · 우리 안 부화 중 알 · 업그레이드 표지판 · 판매 가게(가까이) · 트레일 상점
+local penPet = Instance.new("Model")
+penPet.Name = "chicken"
+local penPetRoot = worldPart("Root", roblox.Vector3.new(20, 1, 20), nil, penPet)
+penPet.PrimaryPart = penPetRoot
+penPet:SetAttribute("PetUid", "p1")
+penPet.Parent = Workspace
+penPet:SetAttribute("Height", 3)
+tag(penPet, "PenPet")
+local growingEgg = worldPart("Incubating_i2", roblox.Vector3.new(25, 1, 20), roblox.Vector3.new(2, 2.5, 2))
+growingEgg:SetAttribute("EggUid", "i2")
+growingEgg:SetAttribute("OwnerUserId", player.UserId)
+growingEgg:SetAttribute("PetId", "chicken")
+growingEgg:SetAttribute("Progress", 5)
+growingEgg:SetAttribute("Required", 5)
+growingEgg:SetAttribute("Ready", true)
+tag(growingEgg, "IncubatingEgg")
+local upgradeSign = worldPart("UpgradeSign", roblox.Vector3.new(30, 4, 20), roblox.Vector3.new(8, 4.6, 0.8))
+upgradeSign:SetAttribute("Kind", "Treadmill")
+upgradeSign:SetAttribute("PlotIndex", 1)
+tag(upgradeSign, "UpgradeSign")
+local sellStall = worldPart("SellStall", roblox.Vector3.new(4, 2, 4), roblox.Vector3.new(7, 3.4, 3))
+tag(sellStall, "SellStall")
+local trailShop = worldPart("TrailShop", roblox.Vector3.new(60, 2, -260), roblox.Vector3.new(12, 3.4, 3))
+tag(trailShop, "TrailShop")
 
 ------------------------------------------------------------------
 -- 시작
@@ -496,6 +533,8 @@ local function body()
 			"AltarController",
 			"QuestController",
 			"WeaponController",
+			"TreadmillController",
+			"TrailController",
 		}
 	do
 		ctrl(name).start()
@@ -635,71 +674,206 @@ local function body()
 		return b, click(b)
 	end
 
-	print("[1차 창]")
-	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings" } do
+	print("[창 (2판 원작 스타일)]")
+	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "Trail" } do
 		Windows.open(w)
 		check(Windows.isOpen(w), "창 열기 " .. w)
 	end
+	-- 상점: 업그레이드 카드 사기 / 트레일 탭 → 트레일 상점 창 / 로벅스 탭은 준비 중
 	Windows.open("Shop")
-	check(clickText("트레일"), "상점 트레일 탭")
+	local penCard = playerGui:FindFirstChild("PenCard", true)
+	check(penCard and click(penCard:FindFirstChild("Buy")), "상점 펫 우리 업그레이드 사기 누름")
+	check(lastSent("PurchaseUpgrade") and lastSent("PurchaseUpgrade").args[1] == "Pen", "PurchaseUpgrade(Pen) 보냄")
+	check(click(playerGui:FindFirstChild("Tab_speed", true)), "상점 속도 탭 (로벅스)")
+	check(findButton("준비 중") ~= nil, "로벅스 상품은 '준비 중'")
+	check(
+		click(playerGui:FindFirstChild("Tab_trail", true)) and Windows.isOpen("Trail"),
+		"상점 트레일 탭 → 트레일 상점 창"
+	)
+	local trailCard = playerGui:FindFirstChild("Trail_green", true)
+	check(
+		trailCard and trailCard:FindFirstChild("SpeedBadge") and trailCard.SpeedBadge.Text == "x2 스피드",
+		"트레일 카드 'x2 스피드' 배지"
+	)
+	check(click(trailCard and trailCard:FindFirstChild("BuyTrail")), "트레일 사기 누름")
+	local tr = lastSent("PurchaseUpgrade")
+	check(tr and tr.args[1] == "Trail" and tr.args[2] == "green", "PurchaseUpgrade(Trail, green) 보냄")
+	local greyCard = playerGui:FindFirstChild("Trail_grey", true)
+	check(
+		greyCard and greyCard:FindFirstChild("Owned") and greyCard.Owned.Text == "장착됨",
+		"가진 트레일 = '장착됨'"
+	)
+	-- 인덱스: 숲 카드 → 개 고르기 → 획득! / 다른 구역 탭 / 모두 획득
 	Windows.open("Index")
-	check(clickText("2. 호수"), "도감 구역 탭")
-	Windows.open("Index")
-	clickText("1. 숲")
-	check(click(playerGui:FindFirstChild("Claim", true)), "도감 받기! 누름")
+	check(click(playerGui:FindFirstChild("Tab_lake", true)), "인덱스 구역 탭 (호수)")
+	check(click(playerGui:FindFirstChild("Tab_forest", true)), "인덱스 구역 탭 (숲)")
+	check(click(playerGui:FindFirstChild("Card_dog", true)), "인덱스 카드 (개) 고름")
+	local detailName = playerGui:FindFirstChild("Detail", true):FindFirstChild("PetName", true)
+	check(
+		detailName and detailName.Text ~= "???",
+		"고른 펫 이름 보임: " .. tostring(detailName and detailName.Text)
+	)
+	check(click(playerGui:FindFirstChild("Claim", true)), "인덱스 획득! 누름")
 	check(
 		lastSent("ClaimIndexReward") and lastSent("ClaimIndexReward").args[1] == "dog",
 		"ClaimIndexReward(dog) 보냄"
 	)
+	local claimAll = playerGui:FindFirstChild("ClaimAll", true)
+	check(claimAll and claimAll.Visible and claimAll.Text == "모두 획득 (1)!", "모두 획득 (1)! 버튼")
+	check(click(claimAll) and lastSent("ClaimIndexReward").args[1] == "all", "ClaimIndexReward(all) 보냄")
+	check(click(playerGui:FindFirstChild("NextPet", true)), "다음 펫 > 버튼")
+	-- 펫 창: 장착 / 최고 펫 / 판매 가게 근처면 판매 버튼
 	Windows.open("Pets")
 	check(click(playerGui:FindFirstChild("Equip", true)), "펫 장착 누름")
 	check(lastSent("EquipPet") ~= nil, "EquipPet 보냄")
 	check(clickText("최고 펫"), "최고 펫 장착 누름")
+	local sell = playerGui:FindFirstChild("Sell", true)
+	check(
+		sell ~= nil and string.find(sell.Text, "판매", 1, true) ~= nil,
+		"판매 가게 근처: 카드에 판매 버튼 (" .. tostring(sell and sell.Text) .. ")"
+	)
+	check(click(sell) and lastSent("SellPet") ~= nil, "SellPet(uid) 보냄")
 	Windows.open("Settings")
 	check(clickText("켜짐"), "설정 토글")
 
 	print("[폰 버튼 크기 (844x390, 46px 이상)]")
-	local petsScale = Ui.fitScale(roblox.Vector2.new(900, 570))
-	local equipH = Ui.touch(52, roblox.Vector2.new(900, 570))
-	check(equipH * petsScale >= 45.9, string.format("펫 장착 버튼 %.1fpx", equipH * petsScale))
-	local indexScale = Ui.fitScale(roblox.Vector2.new(880, 560))
-	local claimH = Ui.touch(40, roblox.Vector2.new(880, 560))
-	check(claimH * indexScale >= 45.9, string.format("도감 받기! 버튼 %.1fpx", claimH * indexScale))
-	Windows.open("Pets")
-	local equipButton = playerGui:FindFirstChild("Equip", true)
-	check(equipButton and equipButton.Size.Y.Offset == equipH, "펫 카드 장착 버튼 높이 = " .. equipH)
-	Windows.open("Index")
-	clickText("1. 숲")
-	local claimButton = playerGui:FindFirstChild("Claim", true)
-	check(claimButton and claimButton.Size.Y.Offset == claimH, "도감 받기! 버튼 높이 = " .. claimH)
-
-	-- 창 닫기 X · 도감 탭/모두 받기 · 상점 버튼 (2차 수정)
 	local screen = playerGui:FindFirstChild("StealAnEggUI")
 	local windowsLayer = screen and screen:FindFirstChild("Windows")
-	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "PetPicker" } do
+	local function px(button, holderName)
+		local holder = windowsLayer:FindFirstChild(holderName)
+		local s = Ui.fitScale(roblox.Vector2.new(holder.Size.X.Offset, holder.Size.Y.Offset))
+		return (button and button.Size.Y.Offset or 0) * s
+	end
+	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "PetPicker", "Trail" } do
 		local holder = windowsLayer and windowsLayer:FindFirstChild(w)
 		local header = holder and holder:FindFirstChild("Header", true)
 		local x = header and header:FindFirstChild("Button")
 		if holder then
-			local s = Ui.fitScale(roblox.Vector2.new(holder.Size.X.Offset, holder.Size.Y.Offset))
-			check(
-				x and x.Size.Y.Offset * s >= 45.9,
-				string.format("%s 창 닫기 X %.1fpx", w, (x and x.Size.Y.Offset or 0) * s)
-			)
+			check(px(x, w) >= 45.9, string.format("%s 창 닫기 X %.1fpx", w, px(x, w)))
 		end
 	end
+	Windows.open("Pets")
+	local equipButton = playerGui:FindFirstChild("Equip", true)
+	check(px(equipButton, "Pets") >= 45.9, string.format("펫 장착 버튼 %.1fpx", px(equipButton, "Pets")))
+	check(px(playerGui:FindFirstChild("Sell", true), "Pets") >= 45.9, "펫 판매 버튼 46px 이상")
 	Windows.open("Index")
-	local indexScale2 = Ui.fitScale(roblox.Vector2.new(880, 560))
-	local tab1 = findButton("1. 숲")
-	check(tab1 and tab1.Size.Y.Offset * indexScale2 >= 45.9, "도감 구역 탭 46px 이상")
-	local all = findButton("받기 (") or findButton("받을 보상")
-	check(all and all.Size.Y.Offset * indexScale2 >= 45.9, "도감 모두 받기 46px 이상")
+	check(px(playerGui:FindFirstChild("Claim", true), "Index") >= 45.9, "인덱스 획득! 버튼 46px 이상")
+	check(px(playerGui:FindFirstChild("ClaimAll", true), "Index") >= 45.9, "인덱스 모두 획득 46px 이상")
+	check(px(playerGui:FindFirstChild("Tab_forest", true), "Index") >= 45.9, "인덱스 구역 탭 46px 이상")
 	Windows.open("Shop")
-	local shopScale = Ui.fitScale(roblox.Vector2.new(820, 560))
-	local buy = findButton("사기") or findButton("최대 레벨")
-	check(buy and buy.Size.Y.Offset * shopScale >= 45.9, "상점 사기 버튼 46px 이상")
-	local shopTab = findButton("러닝머신")
-	check(shopTab and shopTab.Size.Y.Offset * shopScale >= 45.9, "상점 탭 46px 이상")
+	click(playerGui:FindFirstChild("Tab_upgrades", true))
+	check(px(playerGui:FindFirstChild("Buy", true), "Shop") >= 45.9, "상점 사기 버튼 46px 이상")
+	check(px(playerGui:FindFirstChild("Tab_featured", true), "Shop") >= 45.9, "상점 탭 46px 이상")
+	Windows.open("Trail")
+	check(px(playerGui:FindFirstChild("BuyTrail", true), "Trail") >= 45.9, "트레일 사기 버튼 46px 이상")
+	Windows.close()
+
+	print("[2판 HUD · 알 들기 · 러닝머신 · 구역 배너 · 돈 팝업 · 부화]")
+	local hudLayer0 = screen:FindFirstChild("Hud")
+	check(
+		hudLayer0:FindFirstChild("Stats") and hudLayer0.Stats:FindFirstChild("Speed", true),
+		"왼쪽 아래 속도·돈"
+	)
+	check(hudLayer0:FindFirstChild("Timer") ~= nil, "오른쪽 아래 남은 시간")
+	local Hud0 = ctrl("HudController")
+	check(
+		Hud0.koreanClock(238) == "3분 58초" and Hud0.koreanClock(52) == "52초 안에",
+		"시간 글자 '3분 58초' / '52초 안에'"
+	)
+	-- 알 버튼 → 성장하는 달걀 패널
+	check(click(playerGui:FindFirstChild("EggButton", true)), "주황 알 버튼 누름")
+	local panel = playerGui:FindFirstChild("GrowingEggs", true)
+	check(panel and panel.Visible, "성장하는 달걀 패널 열림")
+	check(
+		panel and panel:FindFirstChild("i1", true) and panel:FindFirstChild("i2", true),
+		"패널에 자라는 알 2줄"
+	)
+	check(click(panel and panel:FindFirstChild("Play", true)), "▶ 버튼")
+	local Inc = ctrl("IncubatorController")
+	check(Inc.shortTime(112) == "1m 52s" and Inc.shortTime(300) == "5m", "알 시간 글자 '1m 52s' / '5m'")
+	check(
+		click(playerGui:FindFirstChild("PetsButton", true)) and Windows.isOpen("Pets"),
+		"주황 발바닥 버튼 → 펫 창"
+	)
+	Windows.close()
+	-- 우리 안 부화 중 알: "에그 / 시간" 이름표 + 부화 프롬프트
+	check(growingEgg:FindFirstChild("GrowTag") ~= nil, "우리 안 알 위 '에그' 이름표")
+	local hatchPrompt = growingEgg:FindFirstChild("HatchPrompt")
+	check(hatchPrompt and hatchPrompt.ActionText == "부화!", "내 알에 '부화!' 프롬프트")
+	check(trigger(hatchPrompt) and lastSent("HatchEgg").args[1] == "i2", "프롬프트 → HatchEgg(i2)")
+	-- 업그레이드 표지판 프롬프트
+	local signPrompt = upgradeSign:FindFirstChild("UpgradePrompt")
+	check(signPrompt and signPrompt.Enabled == true, "내 베이스 업그레이드 표지판 프롬프트")
+	check(
+		trigger(signPrompt) and lastSent("PurchaseUpgrade").args[1] == "Treadmill",
+		"표지판 → PurchaseUpgrade(Treadmill)"
+	)
+	-- 판매 가게 / 트레일 상점 프롬프트
+	check(
+		trigger(sellStall:FindFirstChild("SellPrompt")) and Windows.isOpen("Pets"),
+		"판매 가게 프롬프트 → 펫 창"
+	)
+	check(
+		trigger(trailShop:FindFirstChild("TrailPrompt")) and Windows.isOpen("Trail"),
+		"트레일 상점 프롬프트 → 트레일 창"
+	)
+	Windows.close()
+	-- 알 들기: 달리기!! 배너 + 비네트 + 드롭 버튼 + 핫바 알 칸
+	player:SetAttribute("CarryingEgg", "e1")
+	sigOf(player, "Attr_CarryingEgg"):Fire()
+	local runBanner = playerGui:FindFirstChild("RunBanner", true)
+	check(runBanner and runBanner.Visible and runBanner.Text == "달리기!!", "'달리기!!' 배너")
+	check(playerGui:FindFirstChild("RunVignette", true).Visible, "빨간 비네트")
+	check(playerGui:FindFirstChild("EggSlot", true).Visible, "핫바 알 칸")
+	local dropButton = playerGui:FindFirstChild("DropButton", true)
+	check(dropButton and dropButton.Parent.Visible, "드롭 버튼 보임")
+	check(click(dropButton) and lastSent("DropEgg") ~= nil, "드롭 → DropEgg 보냄")
+	fire("RunAlert", { egg = { petId = "dog" }, guardName = "닭", guardSpeed = 1000, yourSpeed = 5, weightKg = 4740 })
+	check(string.find(runBanner.SpeedWarning.Text, "속도가 부족", 1, true) ~= nil, "속도 부족 경고")
+	fire("ChaseEnded", { biomeId = "forest", reason = "safe" })
+	player:SetAttribute("CarryingEgg", "")
+	sigOf(player, "Attr_CarryingEgg"):Fire()
+	check(
+		not runBanner.Visible and not playerGui:FindFirstChild("EggSlot", true).Visible,
+		"알 내려놓으면 배너·알 칸 사라짐"
+	)
+	-- 러닝머신
+	player:SetAttribute("OnTreadmill", true)
+	sigOf(player, "Attr_OnTreadmill"):Fire()
+	check(playerGui:FindFirstChild("TreadmillHint", true).Visible, "러닝머신 안내 보임")
+	fakeServices.UserInputService.InputBegan:Fire({ KeyCode = roblox.Enum.KeyCode.Space }, false)
+	check(lastSent("TreadmillLeave") ~= nil, "점프(스페이스) → TreadmillLeave")
+	holdDelays = true
+	fire("TreadmillStep", { amount = 500 })
+	local pop = root:FindFirstChild("StepPop")
+	check(pop and pop:FindFirstChildWhichIsA("TextLabel").Text == "+500", "걸음 팝업 '+500'")
+	player:SetAttribute("OnTreadmill", false)
+	sigOf(player, "Attr_OnTreadmill"):Fire()
+	-- 구역 배너 · 돈 팝업
+	fire("ZoneEntered", { biomeId = "jungle", name = "정글", nameEn = "Jungle" })
+	local zb = playerGui:FindFirstChild("ZoneBanner", true)
+	check(zb and zb.Text == "Jungle 😬", "구역 배너 'Jungle 😬': " .. tostring(zb and zb.Text))
+	fire("IncomeTick", { petUid = "p1", amount = 34000 })
+	local moneyPop = penPetRoot:FindFirstChild("MoneyPop")
+	local moneyText = moneyPop and moneyPop:FindFirstChildWhichIsA("TextLabel").Text
+	holdDelays = false
+	check(moneyText == "+$34K", "펫 돈 팝업 '+$34K': " .. tostring(moneyText))
+	-- 슬로우 모드
+	player:SetAttribute("WalkSpeed", 32)
+	local hum = character:FindFirstChildOfClass("Humanoid")
+	hum.WalkSpeed = 32
+	check(click(playerGui:FindFirstChild("slow", true)), "슬로우 모드 누름")
+	check(Hud0.isSlow() and hum.WalkSpeed == 16, "슬로우 모드: 걷기 속도 절반 (" .. hum.WalkSpeed .. ")")
+	click(playerGui:FindFirstChild("slow", true))
+	check(not Hud0.isSlow() and hum.WalkSpeed == 32, "슬로우 모드 끔: 원래 속도")
+	-- 희귀 알 공지 (색 조각 글씨)
+	local Notify = ctrl("NotifyController")
+	local text = Notify.rareEggText({ biomeId = "jungle", petId = "dog", rarity = "secret" })
+	check(
+		text and string.find(text, "Jungle", 1, true) and string.find(text, "에그 등장!", 1, true),
+		"희귀 알 공지 글자: " .. tostring(text)
+	)
+
 	print("[퓨전 머신]")
 	local fusionPrompt = promptOf(machine, "FusionPrompt")
 	check(fusionPrompt ~= nil and fusionPrompt.Enabled == true, "내 퓨전 머신에 프롬프트(켜짐)")
@@ -931,18 +1105,18 @@ local function body()
 		local s = menu:FindFirstChild("MenuScale").Scale
 		local list = {}
 		for _, b in menu:GetChildren() do
-			if b:IsA("TextButton") then
-				local size = b.Size.X.Offset * s
-				local cx = menu.Position.X.Offset + b.Position.X.Offset * s
-				local cy = menu.Position.Y.Offset + b.Position.Y.Offset * s
+			if b:IsA("TextButton") and b.Visible then
+				-- 2판: 버튼 AnchorPoint (0, 0) — Position 이 왼쪽 위
+				local x = menu.Position.X.Offset + b.Position.X.Offset * s
+				local y = menu.Position.Y.Offset + b.Position.Y.Offset * s
 				table.insert(list, {
 					name = b.Name,
 					order = b.LayoutOrder,
-					x = cx - size / 2,
-					y = cy - size / 2,
-					w = size,
+					x = x,
+					y = y,
+					w = b.Size.X.Offset * s,
 					h = b.Size.Y.Offset * s,
-					badgeTop = cy - size / 2 + 6 * s - 15 * s,
+					badgeTop = y + 6 * s - 15 * s,
 				})
 			end
 		end
@@ -955,13 +1129,22 @@ local function body()
 		local s = bar:FindFirstChild("HotbarScale").Scale
 		local w = bar.Size.X.Offset * s
 		local h = bar.Size.Y.Offset * s
+		local ax = bar.AnchorPoint.X
 		return {
-			x = area.X + bar.Position.X.Offset - w,
+			x = area.X * bar.Position.X.Scale + bar.Position.X.Offset - w * ax,
 			y = area.Y + bar.Position.Y.Offset - h,
 			w = w,
 			h = h,
 			slot = Layout.SLOT * s,
 		}
+	end
+	-- 속도·돈 묶음 자리 (PC: 왼쪽 아래 330x150, 터치: 위 한 줄 520x48 — HudController 와 같은 숫자)
+	local function statsRect(area, touch)
+		local k = Ui.scale()
+		if touch then
+			return { x = 10, y = 4, w = 520 * k, h = 48 * k }
+		end
+		return { x = 10, y = area.Y - 6 - 150 * k, w = 330 * k, h = 150 * k }
 	end
 	local function fmt(r)
 		return string.format("(%d,%d %dx%d)", math.floor(r.x + 0.5), math.floor(r.y + 0.5), r.w, r.h)
@@ -994,7 +1177,7 @@ local function body()
 		local rects = menuRects()
 		local plan = Hud.menuPlan()
 		check(#rects == 6, tag .. " 메뉴 버튼 6개")
-		local joy = { x = 0, y = area.Y - 130, w = 130, h = 130 }
+		local joy = Layout.joystickZone(area)
 		local inside, big, clearJoy, badgeOk = true, true, true, true
 		local parts = {}
 		for _, r in rects do
@@ -1011,7 +1194,7 @@ local function body()
 		check(big, tag .. " 메뉴 버튼 44px 이상 (" .. plan.size .. "px)")
 		check(badgeOk, tag .. " 배지도 위로 안 잘림")
 		if case.touch then
-			check(clearJoy, tag .. " 메뉴가 왼쪽 아래 조이스틱(130x130)과 안 겹침")
+			check(clearJoy, tag .. " 메뉴가 왼쪽 아래 조이스틱과 안 겹침")
 		end
 		-- 겹치는 버튼 없음
 		local overlap = false
@@ -1023,21 +1206,20 @@ local function body()
 			end
 		end
 		check(not overlap, tag .. " 메뉴 버튼끼리 안 겹침")
-		-- 위쪽 돈·속도 막대와 안 겹침
-		local topW = 760 * Ui.scale()
-		local topRect = { x = (area.X - topW) / 2, y = 6, w = topW, h = 64 * Ui.scale() }
-		local hitTop = false
+		-- 속도·돈 묶음(PC 왼쪽 아래 / 터치 위 한 줄)과 안 겹침
+		local st = statsRect(area, case.touch)
+		local hitStats = false
 		for _, r in rects do
-			if Layout.overlaps(r, topRect) then
-				hitTop = true
+			if Layout.overlaps(r, st) then
+				hitStats = true
 			end
 		end
-		check(not hitTop, tag .. " 메뉴가 위쪽 돈·속도 막대와 안 겹침")
+		check(not hitStats, tag .. " 메뉴가 속도·돈 묶음과 안 겹침 " .. fmt(st))
 
 		local hb = hotbarRect(area)
 		print("    핫바 " .. tag .. ": " .. fmt(hb) .. string.format(" 칸 %.1fpx", hb.slot))
 		check(
-			#case.tools == 0 or (bar.Size.X.Offset == #case.tools * 88 + (#case.tools - 1) * 10),
+			#case.tools == 0 or (bar.Size.X.Offset == #case.tools * Layout.SLOT + (#case.tools - 1) * Layout.SLOT_GAP),
 			tag .. " 핫바 너비 = 칸 수"
 		)
 		check(hb.x >= 0 and hb.y >= 0 and hb.x + hb.w <= area.X and hb.y + hb.h <= area.Y, tag .. " 핫바 화면 안")
@@ -1054,7 +1236,8 @@ local function body()
 			)
 			check(not Layout.overlaps(hb, joy), tag .. " 핫바가 조이스틱과 안 겹침")
 		else
-			check(-bar.Position.X.Offset == 14, tag .. " PC 핫바는 오른쪽 아래 그대로 (14px)")
+			check(math.abs(hb.x + hb.w / 2 - area.X / 2) < 1, tag .. " PC 핫바는 원작처럼 아래 가운데")
+			check(not Layout.overlaps(hb, statsRect(area, false)), tag .. " 핫바가 속도·돈과 안 겹침")
 		end
 		for _, r in rects do
 			check(not Layout.overlaps(r, hb), tag .. " 메뉴 " .. r.name .. " 와 핫바 안 겹침")

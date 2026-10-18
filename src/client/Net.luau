@@ -44,4 +44,35 @@ function Net.send(name: string, ...: any)
 	Net.get(name):FireServer(...)
 end
 
+-- 2판처럼 서버에 아직 없을 수도 있는 Remote: 기다리는 동안 부른 쪽을 멈추지 않음 (따로 기다렸다가 연결)
+function Net.onLater(name: string, handler: (...any) -> ())
+	task.spawn(function()
+		local ok, err = pcall(function()
+			Net.on(name, handler)
+		end)
+		if not ok then
+			warn("[Net] " .. name .. " 연결 실패: " .. tostring(err))
+		end
+	end)
+end
+
+-- 있으면 보내고, 아직 없으면 조용히 버림 (버튼이 멈추지 않게). 보냈으면 true
+function Net.trySend(name: string, ...: any): boolean
+	local remote = cache[name]
+	if not remote then
+		local f = folder or ReplicatedStorage:FindFirstChild(Remotes.FOLDER_NAME)
+		local found = if f then f:FindFirstChild(name) else nil
+		if found and found:IsA("RemoteEvent") then
+			cache[name] = found
+			remote = found
+		end
+	end
+	if remote then
+		remote:FireServer(...)
+		return true
+	end
+	warn("[Net] Remote 아직 없음: " .. name)
+	return false
+end
+
 return Net

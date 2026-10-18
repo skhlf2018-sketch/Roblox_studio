@@ -30,16 +30,31 @@ Theme.Colors = {
 	red = Color3.fromRGB(240, 70, 80),
 	gray = Color3.fromRGB(160, 160, 170),
 	mint = Color3.fromRGB(80, 215, 185),
+	-- 2판 원작 스타일 (진한 창·버튼)
+	win = Color3.fromRGB(46, 48, 60), -- 창 바탕 (진한 회남색)
+	winDark = Color3.fromRGB(30, 32, 42), -- 창 안 칸·푸터
+	winEdge = Color3.fromRGB(14, 15, 22), -- 두꺼운 테두리
+	shopGreen = Color3.fromRGB(70, 210, 50), -- 상점 버튼
+	indexCyan = Color3.fromRGB(30, 190, 245), -- 인덱스 버튼·창 제목
+	trailPurple = Color3.fromRGB(170, 70, 225), -- 트레일 상점 제목
+	eggRed = Color3.fromRGB(230, 40, 50), -- 오른쪽 알 버튼
+	pawOrange = Color3.fromRGB(255, 150, 40), -- 오른쪽 발바닥 버튼
+	speedRed = Color3.fromRGB(255, 70, 110), -- 왼쪽 아래 속도 숫자
+	moneyGreen = Color3.fromRGB(70, 235, 60), -- 왼쪽 아래 돈 숫자
+	runRed = Color3.fromRGB(200, 15, 25), -- "달리기!!" 배너·드롭 버튼
 }
+
+Theme.FontBold = Enum.Font.FredokaOne -- 굵은 외곽선 숫자 (원작 HUD)
 
 -- 메뉴 버튼 색
 Theme.Menu = {
-	index = Theme.Colors.orange,
+	index = Theme.Colors.indexCyan,
 	gift = Theme.Colors.yellow,
-	shop = Theme.Colors.green,
-	pets = Theme.Colors.pink,
+	shop = Theme.Colors.shopGreen,
+	pets = Theme.Colors.pawOrange,
 	settings = Theme.Colors.purple,
 	quest = Theme.Colors.mint,
+	trail = Theme.Colors.trailPurple,
 }
 
 Theme.Tween = {

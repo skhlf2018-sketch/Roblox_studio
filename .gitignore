@@ -1,0 +1,19 @@
+# Rojo 빌드 결과물
+build/
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.rbxl.lock
+*.rbxlx.lock
+
+# 도구 캐시
+roblox.yml
+roblox.toml
+sourcemap.json
+
+# 에디터/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -15,6 +15,7 @@
 	  /pet crane 3      펫 바로 받기 (퓨전·제단·합성 시험용, 최대 20마리)
 	  /quests           마법의 숲 퀘스트 전부 끝내기
 	  /zone lake        (2판) 그 구역 입구로 순간이동 (구역 id 또는 번호 1~15, "hub" = 허브 기본 스폰) — 긴 복도 시험용
+	  /egg axolotl      (3판) 그 펫의 알을 가방에 바로 넣기 (알 놓기·부화·밤 30배 시험용)
 ]]
 
 local RunService = game:GetService("RunService")
@@ -39,10 +40,11 @@ local IndexService = require(script.Parent.IndexService)
 local SakuraService = require(script.Parent.SakuraService)
 local QuestService = require(script.Parent.QuestService)
 local EggService = require(script.Parent.EggService)
+local BaseService = require(script.Parent.BaseService)
 
 local DevCommands = {}
 
-local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "quests", "zone" }
+local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "quests", "zone", "egg" }
 
 local function isAllowed(player: Player): boolean
 	if #Config.DEV_USER_IDS > 0 then
@@ -118,6 +120,10 @@ local function handle(player: Player, message: string)
 		IndexService.discover(player, arg)
 	elseif command == "quests" then
 		QuestService.completeAll(player)
+	elseif command == "egg" and arg ~= nil and Pets.get(arg) then
+		if not BaseService.grantEgg(player, arg, "normal", {}, "dev") then
+			return
+		end
 	elseif command == "zone" then
 		local target = zoneTarget(arg or "")
 		if not target or not teleportTo(player, target) then

@@ -4,7 +4,7 @@
 
 	숫자는 전부 "원본" 값입니다.
 	- income: 기본 수입/초 (원본). 실제 수입은 Economy.petIncome (× GROWTH_MULTIPLIER × 크기 × 돌연변이)
-	- hatchSeconds: 부화 시간(원본, 초). 실제 시간은 Economy.hatchSeconds (÷ GROWTH_MULTIPLIER)
+	- hatchSeconds: 부화 시간(원본, 초). 실제 시간 Economy.hatchSeconds 도 이 값 그대로 (2판 수정: ÷ GROWTH_MULTIPLIER 없앰, 밤 30배만)
 	- source: 어디서 나오나
 	    "nest"   = 둥지에서 훔침
 	    "altar"  = 천사&악마 제단 제물 (2단계 이후)

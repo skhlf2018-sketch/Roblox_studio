@@ -52,11 +52,23 @@ return function(T, Loader)
 		T.eq(#Economy.bestEquipSet(pets, 10), 4)
 	end)
 
-	T.test("부화 시간 = 원본 ÷ 3", function()
-		T.near(Economy.hatchSeconds("chicken"), 10 / 3, 1e-9)
-		T.eq(Economy.hatchSeconds("ghost_king"), 86400 / 3)
-		T.eq(Economy.hatchSeconds("king_snake"), 1800)
-	end)
+	T.test(
+		"2판 수정 부화 시간 = 원작 그대로 (÷3 없음, 하한 없음) — 닭 10초 · 전설 5분 · 비밀 1.5시간 · 신성 24시간",
+		function()
+			T.eq(Economy.hatchSeconds("chicken"), 10)
+			T.eq(Economy.hatchSeconds("brr_brr_patapim"), 300, "전설 5분")
+			T.eq(Economy.hatchSeconds("king_snake"), 5400, "비밀 1.5시간")
+			T.eq(Economy.hatchSeconds("ghost_king"), 86400, "신성 24시간")
+			T.eq(Economy.hatchSeconds("jitterbug"), 20)
+			T.eq(Economy.hatchSeconds("없는펫"), 1)
+			-- 수입·러닝머신은 그대로 ×3
+			T.eq(Economy.growthMultiplier(), 3)
+			-- 낮 1초 = 1초, 밤 1초 = 30초 → 닭은 낮 10초, 밤 1초 안에
+			T.eq(Economy.remainingSeconds(0, 10, Economy.growthRate(false, false)), 10)
+			T.near(Economy.remainingSeconds(0, 10, Economy.growthRate(true, false)), 1 / 3, 1e-9)
+			T.eq(Economy.remainingSeconds(0, 300, Economy.growthRate(true, false)), 10, "전설은 밤 10초 내내")
+		end
+	)
 
 	T.test("성장 속도: 밤 30배, 게임패스 2배, 둘 다 60배", function()
 		T.eq(Economy.growthRate(false, false), 1)

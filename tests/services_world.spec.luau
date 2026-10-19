@@ -101,16 +101,18 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"알의 펫은 그 구역 둥지 펫 풀에서만, 특별 알이 아니면 비밀·영원·신성 없음, 천사&악마는 이번 주기 쪽 펫만",
+		"알의 펫은 그 구역 둥지 펫 풀에서만, 특별 알이 아니면 앞 구역엔 비밀·영원·신성 없음(2판 수정: 뒤 구역은 일반 스폰도 됨), 천사&악마는 이번 주기 쪽 펫만",
 		function()
 			local w = eggWorld()
+			local EggRoll = w.H.shared("EggRoll")
 			local function check(cycle)
 				for _, egg in eggParts(w.H) do
 					local pet = w.Pets.get(egg:GetAttribute("PetId"))
 					T.eq(pet.biome, egg:GetAttribute("BiomeId"))
 					T.eq(pet.source, "nest")
 					if not egg:GetAttribute("Special") then
-						T.falsy(pet.rarity == "secret" or pet.rarity == "eternal" or pet.rarity == "divine", pet.id)
+						-- 일반 스폰은 가중치가 있는 펫만 (비밀 이상은 그 구역 중심 ±2 안일 때만)
+						T.truthy(EggRoll.nestWeight(pet) > 0, pet.id)
 					else
 						T.truthy(pet.rarity == "secret" or pet.rarity == "eternal" or pet.rarity == "divine", pet.id)
 					end
@@ -297,7 +299,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역 밖에서 잡히면 알이 그 자리에 떨어지고(누구나 줍기), 120초 뒤 사라짐",
+		"구역 밖에서 잡히면 알이 그 자리에 떨어지고(누구나 줍기), 60초 뒤 사라짐 (2판 수정 120 → 60)",
 		function()
 			local w = eggWorld()
 			local egg = nestEgg(w.H, "forest")
@@ -315,7 +317,8 @@ return function(T, Loader)
 			egg:FindFirstChild("StealPrompt").Triggered:Fire(other)
 			T.eq(egg:GetAttribute("EggState"), "Carried")
 			T.eq(other.attrs.CarryingEgg, egg:GetAttribute("EggUid"))
-			-- 이번엔 아무도 안 주우면 120초 뒤 사라짐
+			-- 이번엔 아무도 안 주우면 60초 뒤 사라짐
+			T.eq(w.Config.DROPPED_EGG_LIFETIME, 60)
 			local egg2 = nestEgg(w.H, "lake")
 			w.H.advance(w.Config.RAGDOLL_SECONDS + 0.1) -- 방금 잡혀서 기절 중이었음
 			pressE(w, egg2)
@@ -323,10 +326,10 @@ return function(T, Loader)
 			w.H.teleport(w.player, 0, 3, 0)
 			w.EggService.dropCarried(w.player, "guard")
 			T.eq(egg2:GetAttribute("EggState"), "Dropped")
-			w.H.advance(119)
-			T.falsy(egg2.destroyed, "119초")
+			w.H.advance(59)
+			T.falsy(egg2.destroyed, "59초")
 			w.H.advance(2)
-			T.truthy(egg2.destroyed, "120초가 넘으면 사라짐")
+			T.truthy(egg2.destroyed, "60초가 넘으면 사라짐")
 			w.H.uninstall()
 		end
 	)
@@ -400,6 +403,78 @@ return function(T, Loader)
 				end
 			end
 			T.truthy(refilled, "같은 둥지에")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"2판 수정 드롭한 알: 그 자리에 남고 DroppedAt/ExpiresAt(서버 시각) 카운트다운, 사라지기 전엔 그 둥지 안 채움 → 사라지고 30초 뒤 채움, 다시 주우면 카운트다운 지움",
+		function()
+			local w = eggWorld()
+			local before = #eggParts(w.H)
+			local egg = nestEgg(w.H, "forest")
+			local nestX, nestZ = egg.Position.X, egg.Position.Z
+			pressE(w, egg)
+			local x, z = w.H.zoneSpot("forest")
+			w.H.teleport(w.player, x + 7, 3, z) -- 알의 구역 안
+			local t0 = w.H.clock() -- 가짜 workspace:GetServerTimeNow() = 가상 시계
+			w.H.client(w.player, "DropEgg")
+			T.eq(egg:GetAttribute("EggState"), "Dropped")
+			T.eq(egg.Position.X, x + 7, "둥지로 안 가고 그 자리")
+			T.eq(egg:GetAttribute("DroppedAt"), t0)
+			T.eq(
+				egg:GetAttribute("ExpiresAt"),
+				t0 + w.Config.DROPPED_EGG_LIFETIME,
+				"남은 시간 = ExpiresAt - 지금"
+			)
+			-- 다시 주우면 카운트다운 지움, 다시 버리면 새로 60초
+			w.H.advance(10)
+			pressE(w, egg)
+			T.eq(egg:GetAttribute("ExpiresAt"), nil, "들고 있는 동안은 카운트다운 없음")
+			T.eq(egg:GetAttribute("DroppedAt"), nil)
+			w.H.teleport(w.player, x + 7, 3, z)
+			w.EggService.dropEgg(w.player)
+			local t1 = w.H.clock()
+			T.eq(egg:GetAttribute("ExpiresAt"), t1 + 60)
+			-- 바닥에 있는 동안(60초)은 그 둥지가 비어 있음 (낮 30초 다시 채우기 안 함)
+			w.H.advance(59)
+			T.falsy(egg.destroyed)
+			T.eq(#eggParts(w.H), before, "떨어진 알이 있는 동안은 둥지를 안 채움")
+			w.H.advance(1.5)
+			T.truthy(egg.destroyed, "60초 지나면 사라짐")
+			T.eq(#eggParts(w.H), before - 1)
+			w.H.advance(29)
+			T.eq(#eggParts(w.H), before - 1, "사라지고 30초가 안 지남")
+			w.H.advance(2)
+			T.eq(#eggParts(w.H), before, "사라진 뒤 30초 → 그 둥지에 새 알")
+			local refilled = false
+			for _, part in eggParts(w.H) do
+				if
+					part:GetAttribute("EggState") == "Nest"
+					and part.Position.X == nestX
+					and part.Position.Z == nestZ
+				then
+					refilled = true
+				end
+			end
+			T.truthy(refilled, "같은 둥지")
+			-- 떨어진 알을 다시 주워 그 구역 안에서 경비에게 잡히면 둥지로 (둥지 복귀는 이때만)
+			local egg3 = nestEgg(w.H, "lake")
+			pressE(w, egg3)
+			local lx, lz = w.H.zoneSpot("lake")
+			w.H.teleport(w.player, lx, 3, lz)
+			w.EggService.dropEgg(w.player)
+			pressE(w, egg3)
+			T.eq(w.EggService.dropCarried(w.player, "guard"), "ReturnToNest")
+			T.eq(egg3:GetAttribute("EggState"), "Nest")
+			T.eq(egg3:GetAttribute("ExpiresAt"), nil)
+			-- 초기화(대기)가 오면 떨어진 알은 지워지고 모든 둥지가 새로 채워짐
+			local egg4 = nestEgg(w.H, "snow")
+			pressE(w, egg4)
+			w.EggService.dropEgg(w.player)
+			w.H.setPhase("Intermission", 2)
+			T.truthy(egg4.destroyed)
+			T.eq(#eggParts(w.H), 120, "둥지 120개 전부 새 알")
 			w.H.uninstall()
 		end
 	)

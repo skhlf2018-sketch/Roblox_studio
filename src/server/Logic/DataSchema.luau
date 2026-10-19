@@ -2,7 +2,7 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 3. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 4. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 펫 id, 잘못된 숫자, 중복 uid, 칸 수 초과 장착 등은 고치거나 버림)
 
 	버전 기록:
@@ -11,6 +11,11 @@
 	     1 → 2: weapons 를 도감 발견 기록으로 채움 (나머지는 기본값)
 	  3 (2판 마무리) + equippedTrail (장착한 트레일, "none" = 해제). 배율은 장착한 트레일만 적용
 	     2 → 3: 가진 트레일 중 가장 높은 배율을 장착 (전에는 그게 자동 적용이었음 → 속도 그대로)
+	  4 (2판 수정) + eggs (알 가방, 최대 EGG_INVENTORY_MAX). 놓인 알(incubators)은 슬롯 번호 대신 베이스 기준 x, z
+	     3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 MapLayout.eggGridLocal(n) (1~8 = 옛 슬롯 자리 그대로)
+	     옛 선물 알 대기 줄(eggQueue)은 reconcile 이 가방 뒤에 새 uid 로 붙임 (저장 데이터에 남지 않음)
+	  놓인 알 보정: 위치가 없거나 우리 밖·다른 알과 겹치면 빈 격자 자리로, PLACED_EGG_MAX 를 넘거나 자리가 없으면 가방으로
+	  (알은 버리지 않음 — 가방까지 가득 찰 때만 버림)
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
 	  (DataSchema.isNewerVersion)
 	경고 카운트(치트 방지)는 저장하지 않음.
@@ -19,6 +24,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
+local MapLayout = require(Shared.Data.MapLayout)
 local Pets = require(Shared.Data.Pets)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
@@ -26,6 +32,7 @@ local Upgrades = require(Shared.Data.Upgrades)
 local Weapons = require(Shared.Data.Weapons)
 local Quests = require(Shared.Data.Quests)
 local Economy = require(Shared.Economy)
+local EggPlacement = require(Shared.EggPlacement)
 local Progression = require(Shared.Progression)
 local AltarRules = require(Shared.AltarRules)
 local Types = require(Shared.Types)
@@ -33,13 +40,11 @@ local Types = require(Shared.Types)
 type PlayerData = Types.PlayerData
 type PetRecord = Types.PetRecord
 type IncubatorRecord = Types.IncubatorRecord
-type QueuedEgg = Types.QueuedEgg
+type BagEgg = Types.BagEgg
 
 local DataSchema = {}
 
 DataSchema.VERSION = Config.SCHEMA_VERSION
-
-local QUEUE_SOURCES: { [string]: boolean } = { altar = true, shrine = true, quest = true }
 
 function DataSchema.default(_now: number): PlayerData
 	-- _now 는 나중 스키마(가입 시각 등)용으로 받아 둠
@@ -67,8 +72,8 @@ function DataSchema.default(_now: number): PlayerData
 		shrineUsed = {},
 		quests = {},
 		questsRewarded = false,
-		eggQueue = {},
 		equippedTrail = Upgrades.NO_TRAIL,
+		eggs = {},
 	}
 end
 
@@ -161,6 +166,46 @@ local function cleanDiscovered(value: unknown): { [string]: boolean }
 		end
 	end
 	return result
+end
+
+-- 알 항목(가방·놓인 알 공용) → 올바른 BagEgg 모양, 안 되면 nil. uid 는 seenUid 에 기록 (중복이면 nil)
+-- required 는 지금 성장 배율로 다시 계산, progress 는 0 ~ required
+local function cleanEgg(entry: unknown, seenUid: { [string]: boolean }): BagEgg?
+	if typeof(entry) ~= "table" then
+		return nil
+	end
+	local e = entry :: { [string]: unknown }
+	local uid, petId = e.uid, e.petId
+	if not isUid(uid) or seenUid[uid :: string] or typeof(petId) ~= "string" then
+		return nil
+	end
+	local pet = Pets.get(petId :: string)
+	if not pet then
+		return nil
+	end
+	seenUid[uid :: string] = true
+	local required = Economy.hatchSeconds(pet.id)
+	return {
+		uid = uid :: string,
+		petId = pet.id,
+		size = cleanSize(e.size),
+		mutations = DataSchema.cleanMutations(e.mutations),
+		biomeId = pet.biome,
+		special = e.special == true,
+		progress = math.min(required, finiteNonNegative(e.progress, 0)),
+		required = required,
+	}
+end
+
+local function finiteOrNil(value: unknown): number?
+	if typeof(value) ~= "number" then
+		return nil
+	end
+	local n = value :: number
+	if n ~= n or n == math.huge or n == -math.huge then
+		return nil
+	end
+	return n
 end
 
 ------------------------------------------------------------------
@@ -293,43 +338,62 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		data.tools.bearTrap = integerIn(tools.bearTrap, 0, Config.BEAR_TRAP_MAX_OWNED, data.tools.bearTrap)
 	end
 
-	-- 부화 슬롯
+	-- 우리에 놓인 알 (2판 수정: 베이스 기준 x, z). 자리가 깨졌으면 빈 격자 자리로, 넘치면 가방으로
+	local placedSpots: { EggPlacement.Spot } = {}
+	local toBag: { BagEgg } = {}
 	if typeof(src.incubators) == "table" then
-		local usedSlots: { [number]: boolean } = {}
 		for _, entry in src.incubators :: { unknown } do
-			if typeof(entry) == "table" then
+			local egg = cleanEgg(entry, seenUid)
+			if egg then
+				maxUid = math.max(maxUid, uidNumber(egg.uid))
 				local e = entry :: { [string]: unknown }
-				local uid, petId = e.uid, e.petId
-				local slot = if typeof(e.slot) == "number" then math.floor(e.slot :: number) else 0
-				if slot < 1 or slot > Config.INCUBATOR_SLOTS then
-					slot = 0 -- 범위 밖 슬롯은 버림
+				local lx, lz = finiteOrNil(e.x), finiteOrNil(e.z)
+				local spot: MapLayout.XZ? = nil
+				if #data.incubators < Config.PLACED_EGG_MAX then
+					if lx and lz and EggPlacement.check(lx, lz, egg.size, placedSpots) then
+						spot = { x = lx, z = lz }
+					else
+						spot = EggPlacement.firstFreeGrid(egg.size, placedSpots)
+					end
 				end
-				if
-					isUid(uid)
-					and not seenUid[uid :: string]
-					and typeof(petId) == "string"
-					and Pets.get(petId :: string)
-					and slot >= 1
-					and not usedSlots[slot]
-				then
-					seenUid[uid :: string] = true
-					usedSlots[slot] = true
-					maxUid = math.max(maxUid, uidNumber(uid :: string))
-					local pet = Pets.get(petId :: string)
-					local required = Economy.hatchSeconds(petId :: string) -- 성장 배율이 바뀌어도 맞게 다시 계산
+				if spot then
 					local record: IncubatorRecord = {
-						uid = uid :: string,
-						petId = petId :: string,
-						size = cleanSize(e.size),
-						mutations = DataSchema.cleanMutations(e.mutations),
-						biomeId = if pet then pet.biome else "",
-						slot = slot,
-						progress = math.min(required, finiteNonNegative(e.progress, 0)),
-						required = required,
+						uid = egg.uid,
+						petId = egg.petId,
+						size = egg.size,
+						mutations = egg.mutations,
+						biomeId = egg.biomeId,
+						special = egg.special,
+						x = spot.x,
+						z = spot.z,
+						progress = egg.progress,
+						required = egg.required,
 					}
 					table.insert(data.incubators, record)
+					table.insert(placedSpots, { x = spot.x, z = spot.z, size = egg.size })
+				else
+					table.insert(toBag, egg)
 				end
 			end
+		end
+	end
+
+	-- 알 가방 (2판 수정): 저장된 가방 → (자리가 없어 넘친 놓인 알) 순서, EGG_INVENTORY_MAX 까지
+	if typeof(src.eggs) == "table" then
+		for _, entry in src.eggs :: { unknown } do
+			if #data.eggs >= Config.EGG_INVENTORY_MAX then
+				break
+			end
+			local egg = cleanEgg(entry, seenUid)
+			if egg then
+				maxUid = math.max(maxUid, uidNumber(egg.uid))
+				table.insert(data.eggs, egg)
+			end
+		end
+	end
+	for _, egg in toBag do
+		if #data.eggs < Config.EGG_INVENTORY_MAX then
+			table.insert(data.eggs, egg)
 		end
 	end
 
@@ -390,31 +454,34 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	end
 	data.questsRewarded = src.questsRewarded == true
 
+	-- uid 카운터는 기존 uid 보다 항상 크게
+	data.nextUid = math.max(integerIn(src.nextUid, 1, 2 ^ 52, 1), maxUid + 1)
+
+	-- 옛 선물 알 대기 줄 (버전 2·3 의 eggQueue) → 가방 뒤에 새 uid 로 (2판 수정에서 대기 줄 없앰)
 	if typeof(src.eggQueue) == "table" then
 		for _, entry in src.eggQueue :: { unknown } do
-			if #data.eggQueue >= Config.EGG_QUEUE_MAX then
+			if #data.eggs >= Config.EGG_INVENTORY_MAX then
 				break
 			end
 			if typeof(entry) == "table" then
 				local e = entry :: { [string]: unknown }
-				local petId, source = e.petId, e.source
-				if typeof(petId) == "string" and Pets.get(petId :: string) then
-					local queued: QueuedEgg = {
-						petId = petId :: string,
+				local pet = if typeof(e.petId) == "string" then Pets.get(e.petId :: string) else nil
+				if pet then
+					table.insert(data.eggs, {
+						uid = DataSchema.newUid(data, "i"),
+						petId = pet.id,
 						size = cleanSize(e.size),
 						mutations = DataSchema.cleanMutations(e.mutations),
-						source = if typeof(source) == "string" and QUEUE_SOURCES[source :: string]
-							then source :: string
-							else "altar",
-					}
-					table.insert(data.eggQueue, queued)
+						biomeId = pet.biome,
+						special = false,
+						progress = 0,
+						required = Economy.hatchSeconds(pet.id),
+					})
 				end
 			end
 		end
 	end
 
-	-- uid 카운터는 기존 uid 보다 항상 크게
-	data.nextUid = math.max(integerIn(src.nextUid, 1, 2 ^ 52, 1), maxUid + 1)
 	data.version = Config.SCHEMA_VERSION
 	return data
 end
@@ -449,6 +516,24 @@ function DataSchema.migrate(raw: unknown): unknown
 		end
 		src.equippedTrail = Economy.bestTrailId(owned)
 		version = 3
+	end
+	if version < 4 then
+		-- 3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 n (1~8 = 옛 슬롯 자리 그대로). 이상한 슬롯은 reconcile 이 빈 자리로
+		-- (옛 eggQueue 는 reconcile 이 가방으로 옮김 — 새 uid 가 필요해서)
+		if typeof(src.incubators) == "table" then
+			for _, entry in src.incubators :: { unknown } do
+				if typeof(entry) == "table" then
+					local e = entry :: { [string]: unknown }
+					local spot = if typeof(e.slot) == "number" then MapLayout.eggGridLocal(e.slot :: number) else nil
+					if spot and e.x == nil and e.z == nil then
+						e.x = spot.x
+						e.z = spot.z
+					end
+					e.slot = nil
+				end
+			end
+		end
+		version = 4
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

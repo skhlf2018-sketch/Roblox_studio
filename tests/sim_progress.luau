@@ -20,7 +20,7 @@
 	      어느 구역: 보통 알(-10%)을 들고도 경비가 못 잡는 가장 뒤 구역 (게임과 같은 SpeedMath.canEscape)
 	      어떤 알: 그 구역 둥지 8개(일반 추첨 + 초기화 특별 알) 중 들고 도망칠 수 있는 알,
 	              도감에 없는 펫 우선 → 수입이 가장 높은 알
-	  - 부화 슬롯 8칸, 부화 시간 ÷3, 밤 30배. 다 자라면 바로 부화 → 장착 칸만큼 수입 높은 펫 장착
+	  - 우리에 놓는 알 최대 8개(Config.PLACED_EGG_MAX, 2판 수정 전 부화 슬롯 8칸과 같음), 밤 30배. 가방은 안 셈(가져오면 바로 놓음). 부화 시간은 원작 그대로(2판 수정: ÷3 없음), 둥지 희귀도는 구역 중심 희귀도 가중치(EggRoll.nestWeight). 다 자라면 바로 부화 → 장착 칸만큼 수입 높은 펫 장착
 	  - 도감 보상은 발견 즉시 받음 (속도 + 돈). 무료 보상 +10,000 속도는 시작할 때 받음.
 	  - 돈이 생기면 살 수 있는 업그레이드(러닝머신 다음 레벨 / 다음 트레일 / 우리 다음 레벨) 중 가장 싼 것부터 계속 삼
 	  - 퓨전·제단·사쿠라·다른 플레이어 방해는 넣지 않음
@@ -166,7 +166,7 @@ local function simulate(seed, indexSpeed)
 	end
 
 	local function trip()
-		if #incubators >= Config.INCUBATOR_SLOTS then
+		if #incubators >= Config.PLACED_EGG_MAX then
 			return
 		end
 		local biome = zoneFor()

@@ -108,27 +108,151 @@ return function(T, Loader)
 		T.eq(MapLayout.plotAt({ x = 0, z = -40 }), nil)
 	end)
 
-	T.test("incubatorSpots: 8칸, 우리 안, 서로 6 이상 떨어짐 / petRect 는 우리 안 뒤쪽", function()
-		for i = 1, 7 do
-			local spots = MapLayout.incubatorSpots(i)
-			T.eq(#spots, Config.INCUBATOR_SLOTS)
-			local pen = MapLayout.penRect(i)
-			local pets = MapLayout.petRect(i)
-			for a, s in spots do
-				T.truthy(MapLayout.inRect(pen, s.x, s.z), "우리 안 " .. i .. "/" .. a)
-				T.falsy(MapLayout.inRect(pets, s.x, s.z), "펫 자리와 안 겹침 " .. i .. "/" .. a)
-				for b, t in spots do
-					if a ~= b then
-						T.truthy(math.sqrt((s.x - t.x) ^ 2 + (s.z - t.z) ^ 2) >= 6, "간격")
+	T.test(
+		"[옛 받침] incubatorSpots: 8칸, 우리 안, 서로 6 이상 떨어짐 / petRect 는 우리 안 뒤쪽",
+		function()
+			for i = 1, 7 do
+				local spots = MapLayout.incubatorSpots(i)
+				T.eq(#spots, 8)
+				local pen = MapLayout.penRect(i)
+				local pets = MapLayout.petRect(i)
+				for a, s in spots do
+					T.truthy(MapLayout.inRect(pen, s.x, s.z), "우리 안 " .. i .. "/" .. a)
+					T.falsy(MapLayout.inRect(pets, s.x, s.z), "펫 자리와 안 겹침 " .. i .. "/" .. a)
+					for b, t in spots do
+						if a ~= b then
+							T.truthy(math.sqrt((s.x - t.x) ^ 2 + (s.z - t.z) ^ 2) >= 6, "간격")
+						end
 					end
 				end
+				T.truthy(
+					pets.xMin >= pen.xMin and pets.xMax <= pen.xMax and pets.zMin >= pen.zMin and pets.zMax <= pen.zMax
+				)
+				T.truthy(MapLayout.isInPen(MapLayout.rectCenter(pets), i))
 			end
-			T.truthy(
-				pets.xMin >= pen.xMin and pets.xMax <= pen.xMax and pets.zMin >= pen.zMin and pets.zMax <= pen.zMax
-			)
-			T.truthy(MapLayout.isInPen(MapLayout.rectCenter(pets), i))
+			T.eq(#MapLayout.incubatorSpots(99), 0)
 		end
-		T.eq(#MapLayout.incubatorSpots(99), 0)
+	)
+
+	T.test(
+		"2판 수정 베이스 기준 좌표: toLocal ↔ toWorld 왕복, 왼쪽·오른쪽 거울, PEN_LOCAL = 모든 베이스 penRect",
+		function()
+			local pen = MapLayout.PEN_LOCAL
+			T.eq(pen.xMin, -35)
+			T.eq(pen.xMax, 11)
+			T.eq(pen.zMin, -30)
+			T.eq(pen.zMax, 30)
+			for i = 1, 7 do
+				local p = MapLayout.plot(i)
+				for _, l in { { -35, -30 }, { 11, 30 }, { -12.3, 5.1 }, { 0, 0 } } do
+					local wpos = MapLayout.toWorld(i, l[1], l[2])
+					local back = MapLayout.toLocal(i, wpos)
+					T.near(back.x, l[1], 1e-9)
+					T.near(back.z, l[2], 1e-9)
+				end
+				-- 로컬 우리 네 모서리 = 월드 penRect
+				local a = MapLayout.toWorld(i, pen.xMin, pen.zMin)
+				local b = MapLayout.toWorld(i, pen.xMax, pen.zMax)
+				T.near(math.min(a.x, b.x), p.penRect.xMin, 1e-9)
+				T.near(math.max(a.x, b.x), p.penRect.xMax, 1e-9)
+				T.near(math.min(a.z, b.z), p.penRect.zMin, 1e-9)
+				T.near(math.max(a.z, b.z), p.penRect.zMax, 1e-9)
+				-- +lx = 복도 쪽
+				local front = MapLayout.toWorld(i, 35, 0)
+				T.near(math.abs(front.x), 40, 1e-9, "앞 가장자리 |x| = 40")
+				T.truthy(MapLayout.isInPen(MapLayout.toWorld(i, 0, 0), i))
+				T.falsy(MapLayout.isInPen(MapLayout.toWorld(i, 10, 0), i, 2), "울타리 2 안쪽만 (inset)")
+			end
+			T.eq(MapLayout.toLocal(99, { x = 0, z = 0 }), nil)
+			T.eq(MapLayout.toWorld(0, 0, 0), nil)
+			T.truthy(MapLayout.isInPenLocal(0, 0))
+			T.falsy(MapLayout.isInPenLocal(0 / 0, 0))
+			T.falsy(MapLayout.isInPenLocal(12, 0), "앞마당")
+		end
+	)
+
+	T.test(
+		"eggGridLocal: 20칸 전부 우리 안(울타리 2 안쪽), 서로 7 이상, 1~8 = 옛 부화 슬롯 자리",
+		function()
+			local seen = {}
+			for i = 1, MapLayout.EGG_GRID_COUNT do
+				local s = MapLayout.eggGridLocal(i)
+				T.truthy(s, "칸 " .. i)
+				T.truthy(MapLayout.isInPenLocal(s.x, s.z, Config.EGG_PLACE_FENCE_MARGIN), "우리 안 " .. i)
+				for _, t in seen do
+					T.truthy(math.sqrt((s.x - t.x) ^ 2 + (s.z - t.z) ^ 2) >= 7, "간격 " .. i)
+				end
+				table.insert(seen, s)
+			end
+			T.eq(MapLayout.eggGridLocal(0), nil)
+			T.eq(MapLayout.eggGridLocal(MapLayout.EGG_GRID_COUNT + 1), nil)
+			T.eq(MapLayout.eggGridLocal(2.5), nil)
+			T.eq(MapLayout.eggGridLocal(0 / 0), nil)
+			for i = 1, 8 do
+				local s = MapLayout.eggGridLocal(i)
+				local old = MapLayout.incubatorSpots(3)[i]
+				local w = MapLayout.toWorld(3, s.x, s.z)
+				T.near(w.x, old.x, 1e-9)
+				T.near(w.z, old.z, 1e-9)
+			end
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite("EggPlacement (2판 수정: 우리 안 원하는 자리에 알 놓기 규칙)")
+
+	local EggPlacement = Loader.require("ReplicatedStorage/Shared/EggPlacement")
+
+	T.test(
+		"우리 안(울타리 2 안쪽)만, 다른 알과 4 이상(큰 알은 지름 평균), 펫과 4 이상",
+		function()
+			T.eq(Config.EGG_PLACE_SPACING, 4)
+			T.eq(Config.EGG_PLACE_FENCE_MARGIN, 2)
+			T.truthy(EggPlacement.check(0, 0, "normal", {}))
+			T.truthy(EggPlacement.check(9, 28, "normal", {}), "모서리 딱 2 안쪽")
+			T.truthy(EggPlacement.check(-33, -28, "normal", {}))
+			local ok, reason = EggPlacement.check(9.01, 0, "normal", {})
+			T.falsy(ok)
+			T.eq(reason, "outside")
+			T.falsy(EggPlacement.check(0, 28.01, "normal", {}))
+			T.falsy(EggPlacement.check(20, 0, "normal", {}), "앞마당")
+			T.falsy(EggPlacement.check(0 / 0, 0, "normal", {}))
+			T.falsy(EggPlacement.check(math.huge, 0, "normal", {}))
+			-- 알끼리
+			local placed = { { x = 0, z = 0, size = "normal" } }
+			ok, reason = EggPlacement.check(0, 3.99, "normal", placed)
+			T.falsy(ok)
+			T.eq(reason, "tooClose")
+			T.truthy(EggPlacement.check(0, 4, "normal", placed), "딱 4")
+			T.eq(EggPlacement.gap("normal", "normal"), 4)
+			T.near(EggPlacement.gap("giant", "giant"), 4.8, 1e-9, "초거대 지름 4.8")
+			T.near(EggPlacement.gap("giant", "normal"), 4, 1e-9, "(4.8 + 2) / 2 = 3.4 → 최소 4")
+			T.near(EggPlacement.gap("huge", "giant"), 4.2, 1e-9)
+			T.eq(EggPlacement.gap("모름", nil), 4)
+			local giant = { { x = 0, z = 0, size = "giant" } }
+			T.falsy(EggPlacement.check(0, 4.7, "giant", giant))
+			T.truthy(EggPlacement.check(0, 4.8, "giant", giant))
+			-- 펫 자리
+			T.falsy(EggPlacement.check(-20, 0, "normal", {}, { { x = -20, z = 3 } }))
+			T.truthy(EggPlacement.check(-20, 0, "normal", {}, { { x = -20, z = 4 } }))
+			T.eq(EggPlacement.round(-12.34), -12.3)
+			T.eq(EggPlacement.round(5.06), 5.1)
+		end
+	)
+
+	T.test("firstFreeGrid: 빈 격자 첫 자리, 다 차면 nil / 안내 글", function()
+		local placed = {}
+		for i = 1, MapLayout.EGG_GRID_COUNT do
+			local s = EggPlacement.firstFreeGrid("giant", placed)
+			T.eq(s.x, MapLayout.eggGridLocal(i).x, "칸 " .. i)
+			T.eq(s.z, MapLayout.eggGridLocal(i).z)
+			table.insert(placed, { x = s.x, z = s.z, size = "giant" })
+		end
+		T.eq(EggPlacement.firstFreeGrid("normal", placed), nil)
+		T.truthy(string.find(EggPlacement.message("full"), "8개까지", 1, true))
+		T.truthy(string.find(EggPlacement.message("outside"), "우리", 1, true))
+		T.truthy(string.find(EggPlacement.message("tooClose"), "가까워요", 1, true))
+		T.truthy(#EggPlacement.message(nil) > 0)
 	end)
 
 	T.test(

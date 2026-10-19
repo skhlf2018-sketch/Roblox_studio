@@ -14,7 +14,12 @@ return function(T, Loader)
 		T.eq(MoveCheck.allowedDistance(-5, 1), Config.MOVE_CHECK_SLACK)
 		T.falsy(MoveCheck.isViolation(54, 16, 1))
 		T.truthy(MoveCheck.isViolation(54.1, 16, 1))
-		T.falsy(MoveCheck.isViolation(120 * 1.0, 120, 1), "최대 WalkSpeed 로 1초 달리기는 정상")
+		T.falsy(
+			MoveCheck.isViolation(Config.SPEED_WALK_MAX, Config.SPEED_WALK_MAX, 1),
+			"최대 WalkSpeed(150) 로 1초 달리기는 정상"
+		)
+		-- 알 든 사람 0.2초 틱도 최대 걷기에서 안 걸림 (150 × 0.2 = 30 < 150 × 0.2 × 1.5 + 8 = 53)
+		T.falsy(MoveCheck.isCarryJump(Config.SPEED_WALK_MAX * 0.2, Config.SPEED_WALK_MAX, 0.2))
 	end)
 
 	T.test("수평 거리만 (위아래는 안 봄)", function()

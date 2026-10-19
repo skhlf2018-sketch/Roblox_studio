@@ -125,29 +125,63 @@ return function(T, Loader)
 		T.eq(d.indexClaimed.bear, nil)
 	end)
 
-	T.test("부화 슬롯: 필요 시간 다시 계산, 슬롯 중복·범위 밖 제거", function()
-		local d = DataSchema.reconcile({
-			incubators = {
-				{
-					uid = "i1",
-					petId = "king_snake",
-					size = "normal",
-					mutations = {},
-					slot = 1,
-					progress = 99999,
-					required = 5,
+	T.test(
+		"2판 수정 놓인 알: 필요 시간 다시 계산, 자리가 깨지거나 겹치면 빈 격자 자리로, 8개 넘으면 가방으로",
+		function()
+			local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
+			local grid1 = MapLayout.eggGridLocal(1)
+			local d = DataSchema.reconcile({
+				version = 4,
+				incubators = {
+					{
+						uid = "i1",
+						petId = "king_snake",
+						size = "normal",
+						mutations = {},
+						x = grid1.x,
+						z = grid1.z,
+						progress = 99999,
+						required = 5,
+					},
+					-- 같은 자리(겹침) → 빈 격자 자리(2번)로
+					{ uid = "i2", petId = "chicken", size = "normal", mutations = {}, x = grid1.x, z = grid1.z },
+					-- 우리 밖(앞마당) → 빈 격자 자리로
+					{ uid = "i3", petId = "chicken", size = "normal", mutations = {}, x = 30, z = 0 },
+					-- 위치 없음 / NaN → 빈 격자 자리로
+					{ uid = "i4", petId = "dog", size = "normal", mutations = {}, progress = 2 },
+					{ uid = "i5", petId = "dog", size = "normal", mutations = {}, x = 0 / 0, z = 3 },
+					-- 우리 안 아무 자리 (격자 아님) 는 그대로
+					{ uid = "i6", petId = "dog", size = "big", mutations = {}, x = -20.5, z = 11.3, special = true },
+					{ uid = "i7", petId = "dog", size = "normal", mutations = {} },
+					{ uid = "i8", petId = "dog", size = "normal", mutations = {} },
+					-- 9, 10번째 → 놓을 수 있는 수(8) 초과 → 가방으로 (진행도 그대로)
+					{ uid = "i9", petId = "bear", size = "normal", mutations = {}, progress = 4 },
+					{ uid = "i10", petId = "bear", size = "huge", mutations = {} },
+					{ uid = "i11", petId = "없는펫", size = "normal", mutations = {} },
 				},
-				{ uid = "i2", petId = "chicken", size = "normal", mutations = {}, slot = 1, progress = 0 },
-				{ uid = "i3", petId = "chicken", size = "normal", mutations = {}, slot = 99, progress = 0 },
-				{ uid = "i4", petId = "dog", size = "normal", mutations = {}, slot = 2, progress = 2 },
-			},
-		}, 0)
-		T.eq(#d.incubators, 2)
-		T.eq(d.incubators[1].required, 1800, "5400 ÷ 3")
-		T.eq(d.incubators[1].progress, 1800, "필요량 넘지 않음")
-		T.eq(d.incubators[1].biomeId, "jungle")
-		T.eq(d.incubators[2].uid, "i4")
-	end)
+			}, 0)
+			T.eq(#d.incubators, Config.PLACED_EGG_MAX)
+			T.eq(d.incubators[1].required, 5400, "원작 그대로 (2판 수정: ÷3 없음)")
+			T.eq(d.incubators[1].progress, 5400, "필요량 넘지 않음")
+			T.eq(d.incubators[1].biomeId, "jungle")
+			T.eq(d.incubators[1].x, grid1.x)
+			local grid2 = MapLayout.eggGridLocal(2)
+			T.eq(d.incubators[2].x, grid2.x, "겹치면 다음 빈 격자")
+			T.eq(d.incubators[2].z, grid2.z)
+			T.eq(d.incubators[6].x, -20.5, "우리 안 아무 자리는 그대로")
+			T.eq(d.incubators[6].z, 11.3)
+			T.truthy(d.incubators[6].special)
+			T.falsy(d.incubators[2].special)
+			for _, record in d.incubators do
+				T.eq(record.slot, nil, "슬롯 번호 없음")
+				T.truthy(MapLayout.isInPenLocal(record.x, record.z, Config.EGG_PLACE_FENCE_MARGIN), record.uid)
+			end
+			T.eq(#d.eggs, 2, "넘친 알 2개는 가방으로 (모르는 펫은 버림)")
+			T.eq(d.eggs[1].uid, "i9")
+			T.eq(d.eggs[1].progress, 4, "진행도 그대로")
+			T.eq(d.eggs[2].size, "huge")
+		end
+	)
 
 	T.test("newUid 는 증가", function()
 		local d = DataSchema.default(0)
@@ -169,15 +203,16 @@ return function(T, Loader)
 		return discovered
 	end
 
-	T.test("버전 3 기본값 (2단계 필드 + 장착 트레일 none)", function()
-		T.eq(Config.SCHEMA_VERSION, 3)
+	T.test("버전 4 기본값 (2단계 필드 + 장착 트레일 none + 빈 알 가방, 대기 줄 없음)", function()
+		T.eq(Config.SCHEMA_VERSION, 4)
 		local d = DataSchema.default(0)
-		T.eq(d.version, 3)
+		T.eq(d.version, 4)
 		T.eq(d.sakuraCrystals, 0)
 		T.falsy(d.sakuraUnlocked)
 		T.falsy(d.questsRewarded)
 		T.eq(#d.weapons, 0)
-		T.eq(#d.eggQueue, 0)
+		T.eq(#d.eggs, 0)
+		T.eq(d.eggQueue, nil, "2판 수정: 대기 줄 없앰")
 		T.eq(next(d.shrineUsed), nil)
 		T.eq(next(d.quests), nil)
 		T.eq(d.equippedTrail, "none")
@@ -190,33 +225,94 @@ return function(T, Loader)
 			indexDiscovered = discoverAll("angels_demons", { equinox = true, aetheron = true }),
 		}
 		local migrated = DataSchema.migrate(v1)
-		T.eq(migrated.version, 3)
+		T.eq(migrated.version, 4)
 		T.eq(migrated.weapons[1], "angel_spear")
 		local d = DataSchema.reconcile(migrated, 0)
-		T.eq(d.version, 3)
+		T.eq(d.version, 4)
 		T.eq(d.money, 500)
 		T.eq(d.weapons[1], "angel_spear")
 		T.eq(d.sakuraCrystals, 0)
 		-- version 이 없던 아주 옛 데이터도 1 로 보고 변환
-		T.eq(DataSchema.migrate({ money = 1 }).version, 3)
+		T.eq(DataSchema.migrate({ money = 1 }).version, 4)
 	end)
 
 	T.test("새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음", function()
-		T.truthy(DataSchema.isNewerVersion({ version = 4 }))
+		T.truthy(DataSchema.isNewerVersion({ version = 5 }))
+		T.falsy(DataSchema.isNewerVersion({ version = 4 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 3 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 2 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 1 }))
 		T.falsy(DataSchema.isNewerVersion(nil))
-		T.eq(DataSchema.migrate({ version = 4 }).version, 4)
-		T.eq(DataSchema.migrate({ version = 4 }).equippedTrail, nil, "새 버전 데이터는 안 건드림")
+		T.eq(DataSchema.migrate({ version = 5 }).version, 5)
+		T.eq(DataSchema.migrate({ version = 5 }).equippedTrail, nil, "새 버전 데이터는 안 건드림")
 	end)
+
+	T.test(
+		"마이그레이션 3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 n (옛 자리 그대로), 대기 줄 → 가방",
+		function()
+			local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
+			local v3 = {
+				version = 3,
+				nextUid = 10,
+				incubators = {
+					{ uid = "i3", petId = "bear", size = "normal", mutations = {}, slot = 3, progress = 5 },
+					{ uid = "i4", petId = "dog", size = "big", mutations = { "golden" }, slot = 8, progress = 0 },
+					{ uid = "i5", petId = "dog", size = "normal", mutations = {}, slot = 2.5, progress = 0 },
+				},
+				eggQueue = {
+					{ petId = "ring_guard", size = "big", mutations = { "golden" }, source = "altar" },
+					{ petId = "없는펫", size = "big", mutations = {}, source = "altar" },
+					{ petId = "jitterbug", size = "이상함", mutations = {}, source = "quest" },
+				},
+			}
+			local migrated = DataSchema.migrate(v3)
+			T.eq(migrated.version, 4)
+			local s3, s8 = MapLayout.eggGridLocal(3), MapLayout.eggGridLocal(8)
+			T.eq(migrated.incubators[1].x, s3.x)
+			T.eq(migrated.incubators[1].z, s3.z)
+			T.eq(migrated.incubators[1].slot, nil)
+			T.eq(
+				migrated.incubators[3].x,
+				nil,
+				"이상한 슬롯 번호는 자리 없음 → reconcile 이 빈 자리로"
+			)
+			local d = DataSchema.reconcile(migrated, 0)
+			T.eq(#d.incubators, 3, "알은 하나도 안 사라짐")
+			T.eq(d.incubators[1].x, s3.x)
+			T.eq(d.incubators[1].progress, 5)
+			T.eq(d.incubators[2].x, s8.x)
+			T.eq(d.incubators[2].z, s8.z)
+			T.eq(d.incubators[2].mutations[1], "golden")
+			local g1 = MapLayout.eggGridLocal(1)
+			T.eq(d.incubators[3].x, g1.x, "빈 격자 1번 자리")
+			T.eq(d.incubators[3].z, g1.z)
+			-- 옛 슬롯 n 자리 = 옛 MapLayout.incubatorSpots 의 n 번째 (월드) 자리
+			for plot = 1, MapLayout.PLOT_COUNT do
+				local world = MapLayout.toWorld(plot, s3.x, s3.z)
+				T.eq(world.x, MapLayout.incubatorSpots(plot)[3].x)
+				T.eq(world.z, MapLayout.incubatorSpots(plot)[3].z)
+			end
+			-- 대기 줄 → 가방 (새 uid, 모르는 펫은 버림)
+			T.eq(d.eggQueue, nil)
+			T.eq(#d.eggs, 2)
+			T.eq(d.eggs[1].petId, "ring_guard")
+			T.eq(d.eggs[1].size, "big")
+			T.eq(d.eggs[1].mutations[1], "golden")
+			T.eq(d.eggs[1].uid, "i10", "uid 카운터에서 새 uid")
+			T.eq(d.eggs[2].petId, "jitterbug")
+			T.eq(d.eggs[2].size, "normal")
+			T.eq(d.eggs[2].progress, 0)
+			T.eq(d.eggs[2].required, Loader.require("ReplicatedStorage/Shared/Economy").hatchSeconds("jitterbug"))
+			T.eq(d.nextUid, 12)
+		end
+	)
 
 	T.test(
 		"마이그레이션 2 → 3: 가진 트레일 중 가장 높은 배율을 장착 (전에 자동 적용되던 것 → 속도 그대로)",
 		function()
 			local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 			local migrated = DataSchema.migrate({ version = 2, trails = { "grey", "purple", "blue", "가짜", 7 } })
-			T.eq(migrated.version, 3)
+			T.eq(migrated.version, 4)
 			T.eq(migrated.equippedTrail, "purple")
 			local d = DataSchema.reconcile(migrated, 0)
 			T.eq(d.equippedTrail, "purple")
@@ -250,9 +346,9 @@ return function(T, Loader)
 		T.eq(eq({ version = 3, trails = { "grey" }, equippedTrail = "none" }), "none")
 	end)
 
-	T.test("v2 필드 보정: 잘못된 값 버리기", function()
+	T.test("v2 필드 보정: 잘못된 값 버리기 (옛 대기 줄은 가방으로, 가방 상한까지)", function()
 		local queue = {}
-		for i = 1, Config.EGG_QUEUE_MAX + 5 do
+		for i = 1, Config.EGG_INVENTORY_MAX + 5 do
 			table.insert(queue, { petId = "ring_guard", size = "big", mutations = { "golden" }, source = "altar" })
 			if i == 2 then
 				table.insert(queue, { petId = "없는펫", size = "big", mutations = {}, source = "altar" })
@@ -279,10 +375,11 @@ return function(T, Loader)
 		T.truthy(d.questsRewarded)
 		T.eq(#d.weapons, 1)
 		T.eq(d.weapons[1], "katana")
-		T.eq(#d.eggQueue, Config.EGG_QUEUE_MAX)
-		T.eq(d.eggQueue[1].size, "normal")
-		T.eq(d.eggQueue[1].source, "altar", "모르는 출처 → altar")
-		T.eq(d.eggQueue[2].mutations[1], "golden")
+		T.eq(#d.eggs, Config.EGG_INVENTORY_MAX)
+		T.eq(d.eggs[1].petId, "jitterbug")
+		T.eq(d.eggs[1].size, "normal")
+		T.eq(d.eggs[2].mutations[1], "golden")
+		T.eq(d.eggQueue, nil)
 	end)
 
 	T.test("돈·속도 상한, 넘친 펫은 팔아서 돈으로 (장착 펫은 안 팖)", function()

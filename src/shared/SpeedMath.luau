@@ -2,9 +2,10 @@
 --[[
 	SpeedMath — 속도 숫자 → 실제 WalkSpeed, 경비 추격 속도 (순수 로직, Lune 테스트 대상)
 
-	1) 플레이어 속도(숫자, 수십억 이상 커짐)는 로그 곡선으로 WalkSpeed 16~120 에 대응:
-	     walkSpeed = MIN + (MAX - MIN) * log10(1 + speed) / log10(1 + SPEED_CURVE_MAX)
-	   예) 0 → 16, 10 → 24.3, 900 → 39.6, 10K → 48.0, 500B → 109.6
+	1) 플레이어 속도(숫자, 수십억 이상 커짐)는 로그 곡선으로 WalkSpeed 16~150 에 대응 (2판 수정: 원작 영상 기준):
+	     walkSpeed = clamp(16 × (1 + log10(max(speed, 10) / 10)), 16, 150)     (SPEED_LOG_BASE / _FLOOR / SPEED_WALK_MAX)
+	   예) 10 이하 → 16, 20 → 20.8, 200 → 36.8, 10K → 64, 64K → 76.9, 1M → 96, 5.8M → 108.2, 1B → 144, 2.37B~ → 150
+	   (속도 숫자 자체·러닝머신·도감 보상은 그대로, 숫자 → 걷기 변환만 바뀜)
 
 	2) 실효 속도 = 모은 속도 × 트레일 배율 × (1 - 알 무게 감소)
 	   알을 들면 WalkSpeed 도 (1 - 감소) 만큼 줄어 "무겁다"는 느낌이 남.
@@ -19,6 +20,8 @@
 	     ratio = clamp(ratio, MIN_RATIO 0.85, MAX_RATIO 3.0)
 	     추격 WalkSpeed = 플레이어 WalkSpeed × ratio                           (guardChaseSpeed)
 	   → ratio < 1 (추천 이상) 이면 0.85 ~ 0.99배라 절대 못 잡음, 모자랄수록 빨라짐 (최대 3배)
+	   비율은 속도 "숫자"로 정하고 플레이어 WalkSpeed 에 곱하므로 곡선을 바꿔도 이 성질은 그대로
+	   (플레이어 WalkSpeed 상한 150 × 1.2 = 180 < 경비 상한 GUARD_MAX_WALKSPEED 250 → 모자라면 항상 더 빠름).
 	   경비가 집으로 돌아갈 때(평소) 속도는 같은 로그 곡선으로 변환한 toWalkSpeed(경비 속도).
 ]]
 
@@ -29,15 +32,11 @@ local NORMAL_PENALTY = (Sizes.get(Sizes.DEFAULT) :: Sizes.Size).speedPenalty
 
 local SpeedMath = {}
 
-local LOG_MAX = math.log10(1 + Config.SPEED_CURVE_MAX)
-
 function SpeedMath.toWalkSpeed(speed: number): number
-	local s = math.max(0, speed)
-	if s ~= s then -- NaN 방지
-		s = 0
-	end
-	local t = math.clamp(math.log10(1 + s) / LOG_MAX, 0, 1)
-	return Config.WALKSPEED_MIN + (Config.WALKSPEED_MAX - Config.WALKSPEED_MIN) * t
+	local floor = Config.SPEED_LOG_FLOOR
+	local s = if speed == speed then math.max(floor, speed) else floor -- NaN 방지
+	local ws = Config.SPEED_LOG_BASE * (1 + math.log10(s / floor))
+	return math.clamp(ws, Config.SPEED_LOG_BASE, Config.SPEED_WALK_MAX)
 end
 
 -- 모은 속도 × 트레일 배율

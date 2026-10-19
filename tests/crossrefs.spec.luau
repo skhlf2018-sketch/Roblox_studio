@@ -158,7 +158,7 @@ return function(T, Loader)
 				T.truthy(codeServer[name], "코드(Remotes.ToServer)에 없음: " .. name)
 			end
 			T.eq(#sorted(codeClient), 22) -- 2판 +3: ZoneEntered, IncomeTick, TreadmillStep
-			T.eq(#sorted(codeServer), 18) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail
+			T.eq(#sorted(codeServer), 20) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail · 2판 수정 +2: PlaceEgg, PickUpPlacedEgg
 		end
 	)
 
@@ -198,7 +198,7 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("클라→서버 Remote 17개 전부 서버에 처리기(Net.on)가 있음", function()
+	T.test("클라→서버 Remote 20개 전부 서버에 처리기(Net.on)가 있음", function()
 		local handled = scan(SERVER, "Net%.on%(%s*Remotes%.ToServer%.([%w_]+)")
 		for name in Remotes.ToServer do
 			T.truthy(handled[name], name .. " 를 받는 Net.on 이 서버에 없음")
@@ -222,8 +222,10 @@ return function(T, Loader)
 
 	-- [2판 마무리 임시] 서버가 먼저 만들고 선임이 버튼을 붙이는 중인 Remote. 클라가 보내기 시작하면
 	-- 아래 두 번째 테스트가 실패해서 "이 목록에서 지우라"고 알려 줌 (목록이 저절로 남아 있지 않게).
-	--   EquipTrail: 트레일 상점 창 카드의 장착/장착 해제 버튼
-	local AWAITING_CLIENT = {}
+	--   (EquipTrail 은 선임이 붙여서 지움)
+	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
+	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
+	local AWAITING_CLIENT = { PlaceEgg = true, PickUpPlacedEgg = true }
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",
@@ -459,7 +461,7 @@ return function(T, Loader)
 			end
 		end
 		T.truthy(Config.GROWTH_MULTIPLIER >= 1)
-		T.truthy(Config.WALKSPEED_MAX > Config.WALKSPEED_MIN)
+		T.truthy(Config.SPEED_WALK_MAX > Config.SPEED_LOG_BASE)
 		T.truthy(Config.GUARD_CHASE_MIN_RATIO < 1 and Config.GUARD_CHASE_MAX_RATIO > 1)
 		T.truthy(
 			Config.GUARD_CHASE_MARGIN > 0 and Config.GUARD_CHASE_MARGIN < 1,
@@ -467,7 +469,8 @@ return function(T, Loader)
 		)
 		T.truthy(Config.MOVE_CHECK_KICK_WARNINGS >= 2)
 		T.truthy(Config.PET_INVENTORY_MAX >= 18, "최대 우리 칸(18)보다 작으면 안 됨")
-		T.truthy(Config.INCUBATOR_SLOTS >= 1 and Config.EGG_QUEUE_MAX >= 0)
+		T.truthy(Config.PLACED_EGG_MAX >= 1 and Config.EGG_INVENTORY_MAX >= Config.PLACED_EGG_MAX)
+		T.truthy(Config.GUARD_MAX_WALKSPEED > Config.SPEED_WALK_MAX * Config.GUARD_CHASE_SLOW_MIN_RATIO)
 		T.truthy(
 			Config.SESSION_LOCK_STALE_SECONDS > Config.SESSION_LOCK_WAIT_ATTEMPTS * Config.SESSION_LOCK_WAIT_SECONDS - 1
 		)

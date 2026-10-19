@@ -181,12 +181,13 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"부화 시간이 가장 긴 알(유령 왕 24시간 ÷ 3 = 8시간)은 몇 바퀴 만에 부화하나",
+		"부화 시간이 가장 긴 알(유령 왕 24시간, 2판 수정: ÷3 없음)은 몇 바퀴 만에 부화하나",
 		function()
 			local required = Economy.hatchSeconds("ghost_king")
-			T.eq(required, 8 * 3600)
+			T.eq(required, 24 * 3600)
+			-- 한 바퀴(낮 285 + 밤 10 + 대기 3 = 298초)에 자라는 양 = 285 + 10 × 30 + 3 = 588초
 			local cycles = required / (285 + 300 + 3)
-			T.truthy(cycles > 48 and cycles < 50, "약 49바퀴 = 약 4시간 (실제 " .. cycles .. ")")
+			T.truthy(cycles > 146 and cycles < 148, "약 147바퀴 = 약 12시간 (실제 " .. cycles .. ")")
 		end
 	)
 
@@ -447,11 +448,11 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("치트 이동 허용 거리: 1초 54(WalkSpeed 16), 120 이면 210 — 경계 포함", function()
+	T.test("치트 이동 허용 거리: 1초 54(WalkSpeed 16), 최대 150 이면 255 — 경계 포함", function()
 		T.falsy(MoveCheck.isViolation(54, 16, 1))
 		T.truthy(MoveCheck.isViolation(54.0001, 16, 1))
-		T.falsy(MoveCheck.isViolation(210, 120, 1))
-		T.truthy(MoveCheck.isViolation(210.01, 120, 1))
+		T.falsy(MoveCheck.isViolation(255, 150, 1), "2판 수정 최대 걷기 150 → 255")
+		T.truthy(MoveCheck.isViolation(255.01, 150, 1))
 		T.falsy(MoveCheck.isViolation(0, 0, 0))
 	end)
 

@@ -6,10 +6,10 @@
 	- Remote SakuraOffer(petUid?): 인큐베이터 근처에서 학(Crane) 1마리를 바쳐 해금 (저장: sakuraUnlocked)
 	    uid 를 안 주면 가진 학 중 수입이 가장 낮은 학을 바침. 장착 중이면 자동 해제.
 	- Remote SakuraApply(targetUid): 인큐베이터 근처에서 크리스탈 SAKURA_APPLY_COST 개를 써서
-	    부화 중인 알(uid "i..") 또는 보관 펫(uid "p..")에 블룸 97.5% / 스피릿 블룸 2.5%.
+	    알(uid "i.." — 우리에 놓인 알 또는 2판 수정의 가방 속 알) 또는 보관 펫(uid "p..")에 블룸 97.5% / 스피릿 블룸 2.5%.
 	    블룸은 자연 돌연변이 위에 겹칠 수 있고, 블룸끼리는 안 됨.
 	- 크리스탈 얻기 (저장: sakuraCrystals):
-	    벚꽃 구역 알을 내 베이스에 배달할 때마다 SAKURA_CRYSTALS_PER_DELIVERY 개
+	    벚꽃 구역 알을 배달할 때마다(2판 수정: 들고 허브에 들어올 때) SAKURA_CRYSTALS_PER_DELIVERY 개
 	    초기화(대기 단계) 때마다 벚꽃 둥지 근처에 SAKURA_CRYSTAL_DROPS_PER_RESET 개가 떨어짐 → 먼저 줍는 사람 것 (E 키)
 ]]
 
@@ -145,8 +145,9 @@ function SakuraService.apply(player: Player, targetUid: string)
 		return
 	end
 	local egg = BaseService.findIncubator(player, targetUid)
-	local pet = if egg then nil else PetService.findPet(player, targetUid)
-	local current = if egg then egg.mutations elseif pet then pet.mutations else nil
+	local bagEgg = if egg then nil else BaseService.findBagEgg(player, targetUid)
+	local pet = if egg or bagEgg then nil else PetService.findPet(player, targetUid)
+	local current = if egg then egg.mutations elseif bagEgg then bagEgg.mutations elseif pet then pet.mutations else nil
 	if not current then
 		return
 	end
@@ -160,6 +161,9 @@ function SakuraService.apply(player: Player, targetUid: string)
 	if egg then
 		egg.mutations = SakuraRules.apply(egg.mutations, bloomId)
 		BaseService.refreshIncubator(player, egg.uid)
+	elseif bagEgg then
+		bagEgg.mutations = SakuraRules.apply(bagEgg.mutations, bloomId)
+		BaseService.refreshBag(player)
 	elseif pet then
 		pet.mutations = SakuraRules.apply(pet.mutations, bloomId)
 		PetService.changed(player)
@@ -169,7 +173,7 @@ function SakuraService.apply(player: Player, targetUid: string)
 	Net.fire(player, Remotes.ToClient.SakuraResult, {
 		kind = "bloom",
 		targetUid = targetUid,
-		target = if egg then "egg" else "pet",
+		target = if egg or bagEgg then "egg" else "pet",
 		mutation = bloomId,
 		crystals = data.sakuraCrystals,
 	})
@@ -296,7 +300,7 @@ function SakuraService.start()
 		end
 	end)
 
-	BaseService.delivered:connect(function(player: Player, record: Types.IncubatorRecord)
+	BaseService.delivered:connect(function(player: Player, record: Types.BagEgg)
 		if record.biomeId == BIOME then
 			SakuraService.addCrystals(player, Config.SAKURA_CRYSTALS_PER_DELIVERY)
 		end

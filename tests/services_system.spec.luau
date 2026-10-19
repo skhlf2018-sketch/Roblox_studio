@@ -202,18 +202,34 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("/skip: 낮/밤 단계를 넘김 요청, /grow: 부화 슬롯 알을 다 자란 상태로", function()
+	T.test("/skip: 낮/밤 단계를 넘김 요청, /grow: 우리에 놓인 알을 다 자란 상태로", function()
 		local w = devWorld()
 		chat(w, "/skip")
 		T.eq(w.H.cycle.skipped, 1)
 		w.PetService.recalc(w.player)
 		local B = w.H.server("Services/BaseService")
 		B.grantEgg(w.player, "ghost_king", "normal", {}, "altar")
-		B.grantEgg(w.player, "yeti", "normal", {}, "altar")
+		for i, petId in { "ghost_king", "yeti" } do
+			local spot = w.H.MapLayout.eggGridLocal(i)
+			table.insert(w.data.incubators, {
+				uid = "i10" .. i,
+				petId = petId,
+				size = "normal",
+				mutations = {},
+				biomeId = "",
+				special = false,
+				x = spot.x,
+				z = spot.z,
+				progress = 0,
+				required = 100,
+			})
+		end
 		chat(w, "/grow")
+		T.eq(#w.data.incubators, 2)
 		for _, record in w.data.incubators do
 			T.eq(record.progress, record.required)
 		end
+		T.eq(w.data.eggs[1].progress, 0, "가방 속 알은 그대로 (우리에 놓아야 자람)")
 		w.H.uninstall()
 	end)
 
@@ -257,7 +273,7 @@ return function(T, Loader)
 		T.eq(w.data.quests.fuse_once, 1)
 		T.eq(w.data.quests.deliver_eternal, 1)
 		local gotEgg = false
-		for _, record in w.data.incubators do
+		for _, record in w.data.eggs do
 			if record.petId == "jitterbug" then
 				gotEgg = true
 			end
@@ -322,7 +338,7 @@ return function(T, Loader)
 		local data, saveEnabled, newer = load(w, p)
 		T.truthy(saveEnabled)
 		T.falsy(newer)
-		T.eq(data.version, 3)
+		T.eq(data.version, 4)
 		T.eq(data.money, w.Config.STARTING_MONEY)
 		local stored = w.H.store.data["player_7"]
 		T.eq(stored._lock.jobId, "job-A")
@@ -420,11 +436,11 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"더 새 버전(4) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
+		"더 새 버전(5) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
 		function()
 			local w = dataWorld()
 			w.H.store.data["player_11"] = {
-				data = { version = 4, money = 999, futureField = "중요" },
+				data = { version = 5, money = 999, futureField = "중요" },
 			}
 			local p = w.H.newPlayer(11, "Future")
 			local data, saveEnabled, newer = load(w, p)
@@ -435,14 +451,14 @@ return function(T, Loader)
 			local stored = w.H.store.data["player_11"]
 			T.eq(stored._lock, nil)
 			T.eq(stored.data.futureField, "중요")
-			T.eq(stored.data.version, 4)
+			T.eq(stored.data.version, 5)
 			-- 이 세션의 저장은 막혀 있음
 			local session = openSession(w, p, data)
 			session.saveEnabled = saveEnabled
 			T.falsy(w.H.run(function()
 				return w.DataService.save(p, true)
 			end))
-			T.eq(w.H.store.data["player_11"].data.version, 4, "저장 안 됨")
+			T.eq(w.H.store.data["player_11"].data.version, 5, "저장 안 됨")
 			w.H.uninstall()
 		end
 	)

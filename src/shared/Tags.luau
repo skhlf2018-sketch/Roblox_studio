@@ -22,7 +22,7 @@ local Tags = {
 	PlotSpawn = "PlotSpawn", -- 베이스 스폰 위치 (MapLayout plot.spawn). Attr: PlotIndex
 	PlotSign = "PlotSign", -- 주인 이름 표지판. Attr: PlotIndex
 	DeliveryPad = "DeliveryPad", -- [1판 — 2판 서버는 안 씀(배달 = 베이스 영역 진입). 선임 맵·클라 교체 후 삭제]
-	IncubatorSlot = "IncubatorSlot", -- (선택) 부화 알 받침. MapLayout.incubatorSpots 자리. Attr: PlotIndex, SlotIndex
+	IncubatorSlot = "IncubatorSlot", -- [2판 수정: 부화 슬롯 없앰 — 알은 우리 아무 데나(PlaceEgg). 선임 받침 지우면 삭제] Attr: PlotIndex, SlotIndex
 	PenArea = "PenArea", -- 우리(펫 진열) 바닥. MapLayout penRect. Attr: PlotIndex
 	Treadmill = "Treadmill", -- 러닝머신 벨트 (MapLayout plot.treadmill 중심, TREADMILL_PAD 크기, 윗면은 바닥 + 2 이하). Attr: PlotIndex
 	FusionMachine = "FusionMachine", -- 퓨전 머신 (MapLayout plot.fusion). Attr: PlotIndex
@@ -38,7 +38,7 @@ local Tags = {
 
 	-- 동적 오브젝트 (서버가 만듦)
 	Egg = "Egg", -- 둥지/바닥/머리 위 알. Attr: EggUid, PetId, BiomeId, Rarity, Size, Mutations, Special, EggState, QuestOnly, WeightKg
-	IncubatingEgg = "IncubatingEgg", -- 우리 안 부화 중 알. Attr: EggUid, OwnerUserId, PetId, SlotIndex, Progress, Required, Ready, Mutations
+	IncubatingEgg = "IncubatingEgg", -- 우리에 놓인 부화 중 알 (PlaceEgg 한 자리). Attr: EggUid, OwnerUserId, PlotIndex, PetId, Size, Mutations, Special, Progress, Required, Ready
 	BearTrap = "BearTrap", -- 설치된 곰덫. Attr: OwnerUserId
 	SakuraCrystal = "SakuraCrystal", -- 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 (ProximityPrompt "CrystalPrompt" 로 줍기)
 

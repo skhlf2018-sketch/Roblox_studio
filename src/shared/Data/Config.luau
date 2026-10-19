@@ -7,7 +7,7 @@
 
 local Config = {
 	------------------------------------------------------------------
-	-- 성장 배율 (설계문서 14-1): 부화 시간 ÷G, 펫 수입 ×G, 러닝머신 걸음당 속도 ×G
+	-- 성장 배율 (설계문서 14-1): 펫 수입 ×G, 러닝머신 걸음당 속도 ×G (2판 수정: 부화 시간은 ÷G 안 함 — 원작 그대로, 밤 30배만)
 	------------------------------------------------------------------
 	GROWTH_MULTIPLIER = 3,
 
@@ -16,7 +16,13 @@ local Config = {
 	------------------------------------------------------------------
 	MAX_PLAYERS = 7,
 	PLOT_COUNT = 7,
-	INCUBATOR_SLOTS = 8, -- [추정] 베이스 하나의 부화 슬롯 수
+	-- 알 가방 / 우리에 놓기 (2판 수정: 허브에 들고 들어오면 알은 가방으로, 플레이어가 우리 안 원하는 자리에 놓음)
+	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 알 수 (가득 차면 배달·선물 알을 못 받음)
+	PLACED_EGG_MAX = 8, -- [추정] 우리에 한 번에 놓아 둘 수 있는 알 수 (1판 부화 슬롯 8칸과 같은 밸런스)
+	EGG_PLACE_SPACING = 4, -- 놓는 알 ↔ 다른 놓인 알·펫 최소 간격(스터드). 큰 알끼리는 두 알 지름 평균까지 늘어남
+	EGG_PLACE_FENCE_MARGIN = 2, -- 알 가운데가 우리 울타리에서 이만큼 안쪽이어야 함
+	EGG_PLACE_RADIUS = 14, -- 내 베이스 밖에 서 있으면 놓을 자리에서 이 거리 안이어야 PlaceEgg 가능
+	ALLOW_EGG_PICKUP = true, -- PickUpPlacedEgg(놓은 알을 다시 가방으로, 진행도 유지) 허용 — 원작에 있는지 확인 전 [추정]
 	-- 펫 보관함 상한 (DataStore 4MB·네트워크 보호). 넘치면 장착 안 된 펫 중 수입이 가장 낮은 펫을 자동 판매
 	PET_INVENTORY_MAX = 500,
 	PET_AUTO_SELL_SECONDS = 60, -- 자동 판매 가격 = 그 펫 초당 수입 × 이 초
@@ -38,18 +44,22 @@ local Config = {
 	------------------------------------------------------------------
 	NESTS_PER_BIOME = 8,
 	NEST_RESPAWN_SECONDS = 30, -- [추정] 낮 동안 빈 둥지가 다시 채워지는 시간 (0이면 다시 안 채움)
-	DROPPED_EGG_LIFETIME = 120, -- [추정] 바닥에 떨어진 알이 사라지는 시간(초)
+	-- [추정] 바닥에 떨어진 알이 사라지는 시간(초). 2판 수정: 120 → 60 (사장님 "짧은 편이 좋음").
+	-- 알 파트 Attribute ExpiresAt 으로 클라가 머리 위 카운트다운. 그 둥지는 알이 사라진 뒤에야 다시 채움
+	DROPPED_EGG_LIFETIME = 60,
 	PICKUP_DISTANCE = 12, -- 서버에서 확인하는 줍기 최대 거리(스터드)
 	PROMPT_DISTANCE = 10, -- ProximityPrompt 표시 거리
 	EGG_BASE_DIAMETER = 2, -- 보통 크기 알 지름(스터드), 크기 등급의 eggScale 을 곱함
 
 	------------------------------------------------------------------
-	-- 속도 → WalkSpeed 변환 (설계문서 9-3: 로그 곡선, 수석이 정함)
-	--   walkSpeed = MIN + (MAX - MIN) * log10(1 + speed) / log10(1 + SPEED_CURVE_MAX)
+	-- 속도 → WalkSpeed 변환 (2판 수정: 원작 영상 관찰로 다시 맞춤, SpeedMath.toWalkSpeed)
+	--   walkSpeed = clamp(BASE × (1 + log10(max(speed, FLOOR) / FLOOR)), BASE, MAX)
+	--   속도 20 → 20.8 / 200 → 36.8 / 10K → 64 / 64K → 76.9 / 1M → 96 / 5.8M → 108.2 / 1B → 144 / 약 2.37B 이상 → 150
+	--   (원작: 시작 ≈ 기본 걷기 16, 200 ≈ 35~40, 5.8M = 구역 하나(240)를 약 2초, 1B 넘으면 물리 한계로 상한)
 	------------------------------------------------------------------
-	WALKSPEED_MIN = 16,
-	WALKSPEED_MAX = 120,
-	SPEED_CURVE_MAX = 1e13, -- 이 속도(10T)에서 WALKSPEED_MAX 도달
+	SPEED_LOG_BASE = 16, -- 로블록스 기본 걷기 = 최소 WalkSpeed
+	SPEED_LOG_FLOOR = 10, -- 속도가 이 값 이하면 16, 그 위로 10배마다 +16
+	SPEED_WALK_MAX = 150, -- WalkSpeed 상한
 	CARRY_WALKSPEED_MIN = 8, -- 알을 들었을 때 WalkSpeed 하한
 	STARTING_SPEED = 20, -- [추정] 시작 속도 (숲 추천 속도 10 → 초거대 알을 들어도 숲 경비는 못 잡음)
 	STARTING_MONEY = 0,
@@ -79,6 +89,9 @@ local Config = {
 	GUARD_DEFAULT_HEIGHT = 8, -- 경비 키를 모를 때 (겉모습 모델 Height Attribute → Visuals.guards[..].height → 이 값)
 	GUARD_CATCH_GRACE_SECONDS = 1.5, -- 둥지에서 줍자마자 바로 잡히지 않도록 주는 유예 (바닥 알 다시 줍기는 유예 없음)
 	GUARD_TICK_SECONDS = 0.1,
+	-- 2판 수정: 추격 목표 = 플레이어 위치 + 서버가 본 이동 속도 × 이 초 (150 스터드/초면 틱당 15 스터드 →
+	-- 0.1초 전 자리를 목표로 주면 경비가 거기 먼저 도착해 멈췄다 달렸다 함). 잡힘은 틱 사이 가장 가까웠던 거리로 판정
+	GUARD_LEAD_SECONDS = 0.25,
 	GUARD_HOME_TOLERANCE = 4, -- 집에서 이 거리 안이면 도착 → 다시 잠듦 (State "Sleeping")
 	GUARD_SEPARATION = 30, -- [추정] 경비끼리 이 거리보다 가까우면 옆으로 비켜 감 (거대 경비 겹침 방지)
 	GUARD_COLLISION_GROUP = "Guardians", -- 경비끼리는 안 부딪힘 (서로 끼어 멈추지 않게, 겹침은 위 비켜 가기로)
@@ -94,7 +107,7 @@ local Config = {
 	------------------------------------------------------------------
 	-- 베이스 / 안전 구역 (2판: 맵 배치는 shared/Data/MapLayout)
 	--   안전 구역 = 허브 (z < MapLayout.SAFE_ZONE_Z): 경비 추격 끝, 도구 사용·피격 불가
-	--   배달 = 알을 든 채 자기 베이스 영역(MapLayout.isInPlot) 에 들어오면 자동
+	--   배달 (2판 수정) = 알을 든 채 허브(MapLayout.isInHub)에 들어오는 순간 자동 → 알은 가방(data.eggs)으로
 	------------------------------------------------------------------
 	SAFE_ZONE_RADIUS = 48, -- [1판 — 서버 로직은 안 씀. 선임 MapBuilder 교체가 끝나면 지움]
 	BASE_TICK_SECONDS = 0.2,
@@ -160,7 +173,7 @@ local Config = {
 	SAKURA_UNLOCK_PET = "crane", -- 학 1마리를 바치면 해금
 	SAKURA_RADIUS = 14, -- 인큐베이터 파트 표면에서 이 거리 안
 	SAKURA_APPLY_COST = 1, -- [추정] 블룸 1번에 크리스탈 몇 개
-	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 알을 베이스에 배달할 때마다
+	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 알을 배달할 때마다 (2판 수정: 허브에 들고 들어올 때)
 	SAKURA_CRYSTAL_DROPS_PER_RESET = 3, -- [추정] 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 수
 	SAKURA_CRYSTAL_PICKUP_DISTANCE = 12,
 	SAKURA_CRYSTAL_MAX = 999999,
@@ -171,7 +184,7 @@ local Config = {
 	ALTAR_RADIUS = 14,
 	ALTAR_RINGLORD_CHANCE = 0.20, -- 링로드 20% / 링 가드 80%
 	SHRINE_RADIUS = 14,
-	EGG_QUEUE_MAX = 20, -- 부화 슬롯이 가득 찼을 때 선물 알(제단·합성·퀘스트)이 기다리는 줄 길이
+	-- (선물 알 대기 줄 EGG_QUEUE_MAX 는 2판 수정에서 없앰: 선물 알도 가방으로, 상한 EGG_INVENTORY_MAX)
 
 	------------------------------------------------------------------
 	-- 마법의 숲 퀘스트 (설계문서 4장, QuestService / shared/Data/Quests)
@@ -193,7 +206,7 @@ local Config = {
 	-- 알 든 사람 (BaseService 0.2초 틱): 한 틱에 WalkSpeed × 경과초 × FACTOR + SLACK 보다 멀리 움직이면 알을 원래 자리에 떨어뜨림
 	CARRY_JUMP_SPEED_FACTOR = 1.5,
 	CARRY_JUMP_SLACK = 8,
-	-- 배달: 알을 주운 곳에서 배달 패드까지 거리 ÷ (WalkSpeed × FACTOR) 보다 빨리 오면 거부 (알은 둥지로)
+	-- 배달: 알을 주운 곳에서 배달한 곳(허브 안)까지 거리 ÷ (WalkSpeed × FACTOR) 보다 빨리 오면 거부 (알은 둥지로)
 	DELIVERY_TIME_SPEED_FACTOR = 1.3,
 
 	------------------------------------------------------------------
@@ -201,7 +214,7 @@ local Config = {
 	------------------------------------------------------------------
 	DATASTORE_NAME = "StealAnEgg_PlayerData",
 	DATASTORE_KEY_PREFIX = "player_",
-	SCHEMA_VERSION = 3, -- 3 (2판 마무리): + equippedTrail
+	SCHEMA_VERSION = 4, -- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

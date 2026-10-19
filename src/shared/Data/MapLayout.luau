@@ -22,16 +22,22 @@
 	     ┌──────────────────┬────────────────┐ z = 중심+30
 	     │   펫 우리 (pen)   │   앞마당 (yard) │
 	     │ petRect(뒤)       │ 러닝머신 v=-19  │
-	     │ 알 8개(앞, 울타리쪽)│ 스폰 v=0       │
-	     │                  │ 퓨전 v=+19     │
+	     │ 알: 우리 아무 데나 │ 스폰 v=0       │
+	     │   (PlaceEgg)     │ 퓨전 v=+19     │
 	     └──────────────────┴────────────────┘ z = 중심-30
 	   - 깊이(d=70, x 방향) 중 뒤쪽 46 = 우리, 앞쪽 24 = 앞마당. 폭(w=60, z 방향).
 	   - 오른쪽 베이스는 x 를 뒤집은 거울 모양 (z 방향 배치는 같음).
 
+	베이스 기준(로컬) 좌표 (2판 수정: 놓인 알 저장 위치 — 다음 접속에 다른 베이스를 받아도 같은 자리):
+	   lx = (x - 베이스 가운데 x) × facing  → +35 = 앞(복도 쪽) 가장자리, -35 = 뒤 벽
+	   lz = z - 베이스 가운데 z             → -30 ~ +30
+	   toLocal(plotIndex, pos) / toWorld(plotIndex, lx, lz). 우리 = PEN_LOCAL (lx -35 ~ 11, lz -30 ~ 30)
+
 	규칙:
 	  - z < SAFE_ZONE_Z(0) 이면 허브 = 안전 구역 (경비 추격 끝, 도구 사용 불가, 밤에도 있을 수 있음)
 	  - 구역 판정은 z 범위만 봄: zoneAt(z). 구역 사이에 벽·문 없음.
-	  - 배달 = 알을 든 채 isInPlot(자기 베이스) 안에 들어오면 자동.
+	  - 배달 (2판 수정) = 알을 든 채 isInHub(허브) 안에 들어오는 순간 자동 → 알은 가방으로.
+	    가방의 알은 플레이어가 우리(isInPen) 안 원하는 자리에 놓음 (PlaceEgg, 규칙은 shared/EggPlacement).
 ]]
 
 local Biomes = require(script.Parent.Biomes)
@@ -54,7 +60,7 @@ export type Plot = {
 	center: XZ,
 	size: { w: number, d: number }, -- w = z 방향 폭, d = x 방향 깊이(벽 → 복도)
 	facing: number, -- +1 = +x 를 바라봄(왼쪽 베이스), -1 = -x 를 바라봄(오른쪽 베이스)
-	rect: Rect, -- 베이스 전체 (배달 판정 영역)
+	rect: Rect, -- 베이스 전체 (울타리 안 앞마당 + 우리)
 	penRect: Rect, -- 펫 우리 (뒤쪽 2/3, 울타리 안)
 	yardRect: Rect, -- 앞마당 (복도 쪽 1/3)
 	spawn: XZ,
@@ -92,7 +98,7 @@ MapLayout.PLOT_CENTER_X = 75 -- 왼쪽 -75 / 오른쪽 +75 (벽 -110 에 뒤가 
 MapLayout.YARD_DEPTH = 24 -- 앞마당 깊이 (≈ 1/3)
 MapLayout.PEN_DEPTH = 46 -- 우리 깊이 (≈ 2/3)
 MapLayout.TREADMILL_PAD = { sizeX = 12, sizeZ = 8 } -- 러닝머신 벨트 (x 방향으로 달림)
-MapLayout.EGG_AREA_DEPTH = 16 -- 우리 앞쪽(울타리 쪽) 이 깊이 = 부화 중 알 자리, 그 뒤 = 펫 자리
+MapLayout.EGG_AREA_DEPTH = 16 -- 우리 앞쪽(울타리 쪽) 이 깊이 = 펫을 안 세우는 곳 (알을 놓기 좋은 자리), 그 뒤 = 펫 자리
 
 ------------------------------------------------------------------
 -- 구역 15개 (Biomes.list 순서: 숲 → … → 유령 성)
@@ -243,21 +249,66 @@ function MapLayout.petRect(plotIndex: number): Rect?
 	return rect(frontX - f * u0, frontX - f * u1, p.center.z - p.size.w / 2 + 3, p.center.z + p.size.w / 2 - 3)
 end
 
--- 부화 중 알 자리 8개 (우리 앞쪽, 울타리 바로 뒤 2줄 × 4칸). 슬롯 번호 1~8 순서
-function MapLayout.incubatorSpots(plotIndex: number): { XZ }
+------------------------------------------------------------------
+-- 베이스 기준(로컬) 좌표 (2판 수정: 놓인 알 위치 저장용)
+--   lx = (x - 가운데 x) × facing (+ = 복도 쪽), lz = z - 가운데 z. 왼쪽·오른쪽 베이스가 거울이라 로컬 모양은 같음
+------------------------------------------------------------------
+local HALF_D = MapLayout.PLOT_SIZE.d / 2
+local HALF_W = MapLayout.PLOT_SIZE.w / 2
+
+-- 우리(penRect) 를 로컬 좌표로: lx -35(뒤 벽) ~ 11(우리 울타리), lz -30 ~ 30 — 모든 베이스가 같음
+MapLayout.PEN_LOCAL = rect(-HALF_D, HALF_D - MapLayout.YARD_DEPTH, -HALF_W, HALF_W)
+
+-- 월드 위치(Vector3 / {x,z}) → 이 베이스 로컬 {x = lx, z = lz}. 없는 베이스면 nil
+function MapLayout.toLocal(plotIndex: number, pos: any): XZ?
 	local p = plots[plotIndex]
 	if not p then
+		return nil
+	end
+	local x, z = xz(pos)
+	return { x = (x - p.center.x) * p.facing, z = z - p.center.z }
+end
+
+-- 로컬 (lx, lz) → 이 베이스 월드 {x, z}. 없는 베이스면 nil
+function MapLayout.toWorld(plotIndex: number, lx: number, lz: number): XZ?
+	local p = plots[plotIndex]
+	if not p then
+		return nil
+	end
+	return { x = p.center.x + p.facing * lx, z = p.center.z + lz }
+end
+
+-- 로컬 좌표가 우리 안인가 (inset 만큼 울타리 안쪽까지만 인정, 기본 0)
+function MapLayout.isInPenLocal(lx: number, lz: number, inset: number?): boolean
+	if lx ~= lx or lz ~= lz then
+		return false
+	end
+	return MapLayout.inRect(MapLayout.PEN_LOCAL, lx, lz, -(inset or 0))
+end
+
+-- 알 격자 자리 i (로컬, 1 ~ EGG_GRID_COUNT): 우리 울타리 쪽부터 4칸씩 줄 (줄 간격 7, 칸 간격 14).
+--   1~8 = 1판 부화 슬롯 8칸과 같은 자리 → 저장 v3 → v4 마이그레이션(슬롯 번호 → 자리), 위치가 깨진 알 자리 찾기
+MapLayout.EGG_GRID_COUNT = 20
+function MapLayout.eggGridLocal(i: number): XZ?
+	if i < 1 or i > MapLayout.EGG_GRID_COUNT or i % 1 ~= 0 then
+		return nil
+	end
+	local row = math.floor((i - 1) / 4)
+	local col = (i - 1) % 4
+	-- 우리 울타리(lx 11)에서 4 안쪽부터 7씩 뒤로: 7, 0, -7, -14, -21
+	return { x = HALF_D - MapLayout.YARD_DEPTH - 4 - row * 7, z = -21 + col * 14 }
+end
+
+-- [2판 수정 전 부화 슬롯 8칸 자리 — 서버는 이제 안 씀. 선임 MapBuilder 가 받침(IncubatorSlot)을 지으면서 부름.
+--  받침을 지우면 이 함수도 지웁니다] = eggGridLocal(1~8) 의 월드 자리
+function MapLayout.incubatorSpots(plotIndex: number): { XZ }
+	if not plots[plotIndex] then
 		return {}
 	end
-	local f = p.facing
-	local frontX = p.center.x + f * p.size.d / 2
 	local spots: { XZ } = {}
-	for row = 1, 2 do
-		local u = MapLayout.YARD_DEPTH + 4 + (row - 1) * 7 -- 28, 35
-		for col = 1, 4 do
-			local v = -21 + (col - 1) * 14 -- -21, -7, 7, 21
-			table.insert(spots, { x = frontX - f * u, z = p.center.z + v })
-		end
+	for i = 1, 8 do
+		local l = MapLayout.eggGridLocal(i) :: XZ
+		table.insert(spots, MapLayout.toWorld(plotIndex, l.x, l.z) :: XZ)
 	end
 	return spots
 end
@@ -359,7 +410,7 @@ function MapLayout.isInHub(pos: any): boolean
 	return z < MapLayout.SAFE_ZONE_Z and z >= MapLayout.HUB.zMin - 10 and math.abs(x) <= MapLayout.HALF_WIDTH + 10
 end
 
--- 이 베이스 영역(울타리 포함 전체) 안인가 → 배달 판정
+-- 이 베이스 영역(울타리 포함 전체) 안인가 (2판 수정: 배달 판정은 isInHub. 이건 PlaceEgg "내 베이스 안" 등)
 function MapLayout.isInPlot(pos: any, plotIndex: number): boolean
 	local p = plots[plotIndex]
 	if not p then
@@ -369,13 +420,14 @@ function MapLayout.isInPlot(pos: any, plotIndex: number): boolean
 	return MapLayout.inRect(p.rect, x, z)
 end
 
-function MapLayout.isInPen(pos: any, plotIndex: number): boolean
+-- 이 베이스 우리(펫·놓인 알 자리) 안인가. inset 을 주면 울타리에서 그만큼 안쪽까지만 (PlaceEgg 는 EGG_PLACE_FENCE_MARGIN)
+function MapLayout.isInPen(pos: any, plotIndex: number, inset: number?): boolean
 	local p = plots[plotIndex]
 	if not p then
 		return false
 	end
 	local x, z = xz(pos)
-	return MapLayout.inRect(p.penRect, x, z)
+	return MapLayout.inRect(p.penRect, x, z, -(inset or 0))
 end
 
 -- 러닝머신 벨트 사각형 (plot.treadmill 중심, TREADMILL_PAD 크기)

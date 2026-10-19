@@ -130,13 +130,22 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("둥지 가중치: 비밀/영원/신성은 0 (초기화 특별 추첨으로만)", function()
-		for _, id in EggSpawn.SPECIAL_RARITIES do
-			T.eq(EggSpawn.NEST_RARITY_WEIGHTS[id], 0, id)
-			T.truthy(EggSpawn.SPECIAL_CHANCE_PER_RESET[id] > 0, id)
+	T.test(
+		"둥지 가중치 (2판 수정): 중심 ±0/1/2 = 1.0/0.5/0.2, 그 밖 0.05, 비밀/영원/신성은 그 밖이면 0 (특별 추첨으로만)",
+		function()
+			T.eq(EggSpawn.CENTER_RARITY_FIRST, 1)
+			T.eq(EggSpawn.CENTER_RARITY_LAST, 10)
+			T.eq(EggSpawn.DISTANCE_WEIGHTS[1], 1.0)
+			T.eq(EggSpawn.DISTANCE_WEIGHTS[2], 0.5)
+			T.eq(EggSpawn.DISTANCE_WEIGHTS[3], 0.2)
+			T.eq(EggSpawn.FAR_WEIGHT, 0.05)
+			T.eq(EggSpawn.SPECIAL_FAR_WEIGHT, 0)
+			for _, id in EggSpawn.SPECIAL_RARITIES do
+				T.truthy(EggSpawn.SPECIAL_CHANCE_PER_RESET[id] > 0, id)
+			end
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.divine, 0.002)
 		end
-		T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.divine, 0.002)
-	end)
+	)
 
 	T.test("도감 보상: 설계문서 예시와 일치", function()
 		local forest = Biomes.get("forest").recommendedSpeed

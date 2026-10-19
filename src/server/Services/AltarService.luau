@@ -5,7 +5,7 @@
 	제단 (Tag "Altar", Attribute Side = "light"(천국) / "dark"(지옥)):
 	  Remote AltarOffer(petUid): 가까운 제단(ALTAR_RADIUS)에 그 쪽 펫을 제물로 걸어 둠.
 	  같은 낮/밤 주기에 반대쪽 제단에 다른 사람이 제물을 걸면 → 두 사람 펫이 사라지고
-	  각자 링 가드(80%) / 링로드(20%) 알을 받음 (베이스 부화 슬롯에 바로, 가득 차면 대기 줄).
+	  각자 링 가드(80%) / 링로드(20%) 알을 받음 (2판 수정: 알 가방으로, 가방이 가득 차면 제물을 못 바침).
 	  기다리는 동안 펫은 보관함에 그대로 있음. 주기가 바뀌면 제물 취소 (펫은 남음).
 	  제단 파트 Attribute PendingCount = 기다리는 제물 수 (연출용)
 
@@ -136,7 +136,11 @@ function AltarService.offer(player: Player, petUid: string)
 		return
 	end
 	if not BaseService.canReceiveEgg(player) then
-		Net.notify(player, "error", "알을 받을 자리가 없어요! 부화 슬롯을 비워 주세요.")
+		Net.notify(
+			player,
+			"error",
+			"알을 받을 자리가 없어요! 알 가방을 비워 주세요 (가방의 알을 우리에 놓기)."
+		)
 		return
 	end
 	local offer: Offer = { userId = player.UserId, petUid = pet.uid, petId = pet.petId, side = side }
@@ -198,7 +202,11 @@ function AltarService.shrineFuse(player: Player, uidA: string, uidB: string)
 		return
 	end
 	if not BaseService.canReceiveEgg(player) then
-		Net.notify(player, "error", "알을 받을 자리가 없어요! 부화 슬롯을 비워 주세요.")
+		Net.notify(
+			player,
+			"error",
+			"알을 받을 자리가 없어요! 알 가방을 비워 주세요 (가방의 알을 우리에 놓기)."
+		)
 		return
 	end
 	local size = AltarRules.shrineSize(a.size, b.size)
@@ -215,7 +223,7 @@ function AltarService.shrineFuse(player: Player, uidA: string, uidB: string)
 		size = size,
 		mutations = mutations,
 	})
-	Net.notify(player, "success", "비밀 합성 성공! " .. resultName .. " 알이 부화 슬롯에 들어갔어요!")
+	Net.notify(player, "success", "비밀 합성 성공! " .. resultName .. " 알이 알 가방에 들어갔어요!")
 end
 
 local function ensurePlaces()

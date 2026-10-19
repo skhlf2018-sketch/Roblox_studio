@@ -23,7 +23,7 @@ local Remotes = {
 		RunAlert = "RunAlert",
 		ChaseEnded = "ChaseEnded",
 		Caught = "Caught",
-		EggDelivered = "EggDelivered",
+		EggDelivered = "EggDelivered", -- 2판 수정: 알을 들고 허브에 들어와 가방에 들어감 (BagEgg)
 		HatchResult = "HatchResult",
 		OfflineIncome = "OfflineIncome",
 		IndexRewarded = "IndexRewarded",
@@ -63,6 +63,9 @@ local Remotes = {
 		SellPet = "SellPet", -- (petUid) 판매 가게 근처에서 펫 팔기
 		TreadmillLeave = "TreadmillLeave", -- () 러닝머신에서 내림 (클라가 점프할 때)
 		EquipTrail = "EquipTrail", -- (trailId | "none") 가진 트레일 장착 / "none" 이면 해제
+		-- 2판 수정 (알 가방)
+		PlaceEgg = "PlaceEgg", -- (eggUid, x, z) 가방의 알을 내 우리 안 그 자리(월드 x, z)에 놓음 → 부화 시작
+		PickUpPlacedEgg = "PickUpPlacedEgg", -- (eggUid) 우리에 놓은 알을 다시 가방으로 (진행도 유지, Config.ALLOW_EGG_PICKUP)
 	},
 
 	-- 클라 → 서버 레이트 리밋: burst = 한 번에 허용, perSecond = 초당 회복
@@ -85,6 +88,8 @@ local Remotes = {
 		SellPet = { burst = 10, perSecond = 4 },
 		TreadmillLeave = { burst = 3, perSecond = 2 },
 		EquipTrail = { burst = 5, perSecond = 2 },
+		PlaceEgg = { burst = 5, perSecond = 3 },
+		PickUpPlacedEgg = { burst = 5, perSecond = 3 },
 	} :: { [string]: { burst: number, perSecond: number } },
 
 	-- PurchaseUpgrade 의 kind

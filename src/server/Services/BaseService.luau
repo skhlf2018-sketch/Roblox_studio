@@ -1,23 +1,29 @@
 --!strict
 --[[
-	BaseService — 베이스 플롯 배정(서버 7명 = 7칸), 배달, 부화 슬롯, 부화, 구역 표시, 밤 텔레포트
+	BaseService — 베이스 플롯 배정(서버 7명 = 7칸), 배달(→ 알 가방), 우리에 알 놓기·다시 줍기, 부화, 구역 표시, 밤 텔레포트
 
-	2판 (맵 배치는 shared/Data/MapLayout):
-	  - 배달 = 알을 든 채 자기 베이스 영역(MapLayout.isInPlot, 울타리 안 전체)에 들어오면 자동. 배달 패드 없음.
-	      → 빈 부화 슬롯에 등록 (data.incubators, 저장됨) → EggDelivered + BaseService.delivered:fire(player, record)
-	  - 부화 중 알 파트(IncubatingEgg)는 우리(pen) 안 MapLayout.incubatorSpots(plotIndex)[slot] 자리에 놓임.
-	      Attribute Progress/Required/Ready 는 1초마다 갱신 (선임이 머리 위 "에그 1m 52s" 표시)
-	  - 1초마다 자람: 진행 += 1 × 성장 속도(밤 30배, 게임패스 2배 플래그)
-	  - 다 자라면 클라가 HatchEgg(eggUid) 요청 (우리 안 알 ProximityPrompt / Growing Eggs 패널) → 펫 생성
+	2판 수정 (사장님: "안전 구역 다 들어오면 알 획득"):
+	  - 배달 = 알을 든 채 허브(안전 구역, MapLayout.isInHub = z < 0)에 들어오는 순간 자동.
+	      경비 추격 끝(ChaseEnded reason "safe")과 같은 순간. 베이스가 없는 사람(8번째)도 똑같이 받음.
+	      → 알은 알 가방(data.eggs, 최대 EGG_INVENTORY_MAX, 저장)으로 → EggDelivered(BagEgg) + DataUpdate("eggs")
+	        + BaseService.delivered:fire(player, bagEgg) (퀘스트·사쿠라 크리스탈)
+	      가방이 가득 차면 배달 안 됨: 알은 손에 그대로, 안내는 3초에 한 번 (가방을 비우면 다음 틱에 배달).
+	  - 가방의 알은 플레이어가 우리(penRect) 안 원하는 자리에 놓음: Remote PlaceEgg(eggUid, x, z) (월드 x, z)
+	      검증: 내 베이스가 있음 · 가방에 그 알 · 놓인 알 < PLACED_EGG_MAX · 내가 내 베이스 안(또는 그 자리 14 안)
+	            · 그 자리가 내 우리 안(울타리에서 2 안쪽) · 다른 놓인 알·내 우리 펫과 간격 (shared/EggPlacement)
+	      → data.incubators 에 베이스 기준 좌표(x, z, MapLayout.toLocal)로 저장 → 그 자리에 IncubatingEgg 파트 + 부화 시작
+	  - Remote PickUpPlacedEgg(eggUid): 놓인 알을 다시 가방으로 (진행도 유지). Config.ALLOW_EGG_PICKUP 으로 켜고 끔.
+	      (부화 버튼처럼 거리 검사 없음 — 가방으로 옮기는 것뿐이라 이득이 없음)
+	  - 1초마다 자람: 우리에 놓인 알만 (진행 += 1 × 성장 속도, 밤 30배, 게임패스 2배 플래그). 가방 속 알은 안 자람
+	  - 다 자라면 클라가 HatchEgg(eggUid) 요청 (우리 안 알 ProximityPrompt / 성장하는 달걀 패널) → 펫 생성
+	  - 선물 알(grantEgg: 제단·비밀 통로 합성·퀘스트)도 가방으로 (2단계 대기 줄 eggQueue 없앰). 가방이 차면 못 받음
 	  - 0.2초마다 구역 표시: 플레이어 Attr CurrentZone(구역 id | "hub" | ""), InSafeZone(허브 안),
 	      새 구역에 들어가면 ZoneEntered { biomeId, name, nameEn } 1회 (허브는 안 보냄)
-	  - 밤이 되면: 알 든 사람(자기 베이스 밖) + 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 순간이동
-	      (허브 경계 밤 벽 1장에 막혀 못 돌아오지 않게). 베이스가 없으면 허브 기본 스폰.
-	오프라인 동안에도 알은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간).
+	  - 밤이 되면: 허브 밖(z ≥ 0)에 있던 사람(알을 들었든 아니든) → 자기 베이스로 순간이동 (밤 벽에 안 갇히게).
+	      알을 들고 있었으면 허브라 다음 틱에 가방으로 배달. 베이스가 없으면 허브 기본 스폰.
+	오프라인 동안에도 놓인 알은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간).
 
 	2단계 (그대로):
-	  - 선물 알(grantEgg): 제단·비밀 통로 합성·퀘스트 보상 알은 부화 슬롯에 바로 들어감.
-	    슬롯이 가득 차면 data.eggQueue(저장, 최대 EGG_QUEUE_MAX)에서 기다렸다가 부화로 슬롯이 비면 자동으로 들어감.
 	  - 순간이동 치트 방지:
 	      배달: 주운 곳 → 배달한 곳 거리 ÷ (WalkSpeed × 1.3) 보다 빨리 왔으면 거부, 알은 둥지로 (EggService.confiscate)
 	      0.2초 틱: 알 든 사람이 WalkSpeed × 경과초 × 1.5 + 8 스터드보다 멀리 움직이면 알을 이전 위치에 떨어뜨림
@@ -34,7 +40,9 @@ local MapLayout = require(Shared.Data.MapLayout)
 local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
+local Visuals = require(Shared.Data.Visuals)
 local Economy = require(Shared.Economy)
+local EggPlacement = require(Shared.EggPlacement)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
@@ -57,7 +65,7 @@ local IndexService = require(script.Parent.IndexService)
 local AntiCheatService = require(script.Parent.AntiCheatService)
 
 type IncubatorRecord = Types.IncubatorRecord
-type QueuedEgg = Types.QueuedEgg
+type BagEgg = Types.BagEgg
 
 type Visual = {
 	part: BasePart,
@@ -69,13 +77,13 @@ type CarryTrack = {
 	time: number,
 }
 
-export type GrantResult = "slot" | "queued"
+export type GrantResult = "bag"
 
 local Attr = Tags.PlayerAttributes
 
 local BaseService = {}
 
--- 알을 베이스에 배달해 부화 슬롯에 들어감 (player, record: IncubatorRecord) → 퀘스트·사쿠라 크리스탈
+-- 알을 들고 허브에 들어와 가방에 들어감 (player, egg: BagEgg) → 퀘스트·사쿠라 크리스탈
 BaseService.delivered = Signal.new()
 
 local plotOwners: { [number]: Player? } = {}
@@ -83,7 +91,7 @@ local visuals: { [Player]: { [string]: Visual } } = {}
 local carryTracks: { [Player]: CarryTrack } = {}
 
 ------------------------------------------------------------------
--- 부화 슬롯 겉모습 (선임이 바꿀 자리)
+-- 우리에 놓인 알 겉모습 (선임 EggVisualService 가 껍데기를 꾸밈)
 ------------------------------------------------------------------
 
 local function visualText(record: IncubatorRecord, rate: number): string
@@ -95,7 +103,7 @@ local function visualText(record: IncubatorRecord, rate: number): string
 	return name .. "\n" .. Format.duration(Economy.remainingSeconds(record.progress, record.required, rate))
 end
 
--- 바닥 높이 (아래로 레이캐스트: 선임이 IncubatorSlot 받침·스폰 판을 두었으면 그 윗면)
+-- 바닥 높이 (아래로 레이캐스트: 우리 바닥 윗면)
 local function floorAt(spot: MapLayout.XZ): number
 	return MapBuilder.groundY(Vector3.new(spot.x, MapLayout.FLOOR_Y + 1, spot.z), {})
 end
@@ -109,7 +117,7 @@ local function createVisual(player: Player, record: IncubatorRecord)
 	if perPlayer and perPlayer[record.uid] then
 		return -- 이미 있음
 	end
-	local spot = MapLayout.incubatorSpots(session.plotIndex)[record.slot]
+	local spot = MapLayout.toWorld(session.plotIndex, record.x, record.z)
 	if not spot then
 		return
 	end
@@ -135,10 +143,11 @@ local function createVisual(player: Player, record: IncubatorRecord)
 	part.CFrame = CFrame.new(spot.x, floorAt(spot) + d * 1.25 / 2, spot.z)
 	part:SetAttribute("EggUid", record.uid)
 	part:SetAttribute("OwnerUserId", player.UserId)
+	part:SetAttribute("PlotIndex", session.plotIndex)
 	part:SetAttribute("PetId", record.petId)
-	part:SetAttribute("SlotIndex", record.slot)
 	part:SetAttribute("Size", record.size)
 	part:SetAttribute("Mutations", table.concat(record.mutations, ","))
+	part:SetAttribute("Special", record.special)
 	part:SetAttribute("Progress", record.progress)
 	part:SetAttribute("Required", record.required)
 	part:SetAttribute("Ready", record.progress >= record.required)
@@ -160,21 +169,39 @@ local function destroyVisual(player: Player, uid: string)
 	end
 end
 
--- 부화 중 알 기록 찾기 (사쿠라 인큐베이터 등)
-function BaseService.findIncubator(player: Player, uid: string): IncubatorRecord?
-	local _, data = Sessions.getLoaded(player)
-	if not data then
-		return nil
-	end
-	for _, record in data.incubators do
+local function incubatorIndex(data: Types.PlayerData, uid: string): number?
+	for i, record in data.incubators do
 		if record.uid == uid then
-			return record
+			return i
 		end
 	end
 	return nil
 end
 
--- 부화 중 알의 돌연변이가 바뀌었을 때 겉모습 Attribute 갱신
+local function bagIndex(data: Types.PlayerData, uid: string): number?
+	for i, egg in data.eggs do
+		if egg.uid == uid then
+			return i
+		end
+	end
+	return nil
+end
+
+-- 우리에 놓인 알 기록 찾기 (사쿠라 인큐베이터 등)
+function BaseService.findIncubator(player: Player, uid: string): IncubatorRecord?
+	local _, data = Sessions.getLoaded(player)
+	local index = if data then incubatorIndex(data, uid) else nil
+	return if data and index then data.incubators[index] else nil
+end
+
+-- 가방 속 알 찾기 (사쿠라 인큐베이터 등)
+function BaseService.findBagEgg(player: Player, uid: string): BagEgg?
+	local _, data = Sessions.getLoaded(player)
+	local index = if data then bagIndex(data, uid) else nil
+	return if data and index then data.eggs[index] else nil
+end
+
+-- 놓인 알의 돌연변이가 바뀌었을 때 겉모습 Attribute 갱신
 function BaseService.refreshIncubator(player: Player, uid: string)
 	local record = BaseService.findIncubator(player, uid)
 	local perPlayer = visuals[player]
@@ -183,6 +210,11 @@ function BaseService.refreshIncubator(player: Player, uid: string)
 		visual.part:SetAttribute("Mutations", table.concat(record.mutations, ","))
 	end
 	Snapshot.section(player, "incubators")
+end
+
+-- 가방 속 알이 바뀌었을 때 (사쿠라 블룸 등)
+function BaseService.refreshBag(player: Player)
+	Snapshot.section(player, "eggs")
 end
 
 ------------------------------------------------------------------
@@ -248,7 +280,7 @@ function BaseService.teleportToSafety(player: Player)
 	serverTeleport(player, session, MapLayout.hubSpots.mainSpawn, Vector3.new(0, 0, 1))
 end
 
--- 늦게 베이스를 받은 사람: 부화 슬롯 겉모습 + 집으로 + 상태 다시 보내기
+-- 늦게 베이스를 받은 사람: 놓인 알 겉모습 + 집으로 + 상태 다시 보내기
 local function onPlotAssigned(player: Player)
 	local session, data = Sessions.getLoaded(player)
 	if session and data then
@@ -279,29 +311,16 @@ function BaseService.releasePlot(player: Player)
 end
 
 ------------------------------------------------------------------
--- 배달 / 선물 알 / 부화
+-- 배달 (→ 가방) / 선물 알 / 우리에 놓기·다시 줍기 / 부화
 ------------------------------------------------------------------
 
-local function freeSlot(data: Types.PlayerData): number?
-	local used: { [number]: boolean } = {}
-	for _, record in data.incubators do
-		used[record.slot] = true
-	end
-	for slot = 1, Config.INCUBATOR_SLOTS do
-		if not used[slot] then
-			return slot
-		end
-	end
-	return nil
-end
-
-local function newRecord(
+local function newBagEgg(
 	data: Types.PlayerData,
 	petId: string,
 	size: string,
 	mutations: { string },
-	slot: number
-): IncubatorRecord
+	special: boolean
+): BagEgg
 	local pet = Pets.get(petId)
 	return {
 		uid = DataSchema.newUid(data, "i"),
@@ -309,10 +328,17 @@ local function newRecord(
 		size = size,
 		mutations = table.clone(mutations),
 		biomeId = if pet then pet.biome else "",
-		slot = slot,
+		special = special,
 		progress = 0,
 		required = Economy.hatchSeconds(petId),
 	}
+end
+
+local function bagFullText(): string
+	return string.format(
+		"알 가방이 가득 찼어요 (%d개)! 가방의 알을 우리에 놓거나 부화시키세요.",
+		Config.EGG_INVENTORY_MAX
+	)
 end
 
 -- 배달 직전 순간이동 검사: 주운 곳에서 배달한 곳까지 너무 빨리 왔나
@@ -328,27 +354,22 @@ local function isTooFast(player: Player, at: Vector3): boolean
 	return MoveCheck.isTooFastDelivery(distance, elapsed, session.walkSpeed)
 end
 
+-- 들고 있는 알을 가방으로 (baseTick 이 허브 안에서 부름)
 function BaseService.deliver(player: Player)
 	local session, data = Sessions.getLoaded(player)
-	if not session or not data then
+	if not session or not data or not EggService.getCarried(player) then
 		return
 	end
-	local slot = freeSlot(data)
-	if not slot then
-		if Sessions.useCooldown(session, "incubatorFullNotice", 3, os.clock()) then
-			Net.notify(
-				player,
-				"error",
-				"부화 슬롯이 가득 찼어요! 다 자란 알을 먼저 부화시키세요."
-			)
+	if #data.eggs >= Config.EGG_INVENTORY_MAX then
+		if Sessions.useCooldown(session, "eggBagFullNotice", 3, os.clock()) then
+			Net.notify(player, "error", bagFullText())
 		end
 		return
 	end
-	-- 배달한 곳 = 지금 캐릭터 위치 (없으면 베이스 가운데)
+	-- 배달한 곳 = 지금 캐릭터 위치 (없으면 허브 경계)
 	local root = Character.getRoot(player)
-	local plot = MapLayout.plot(session.plotIndex)
-	local at = if root then root.Position elseif plot then Vector3.new(plot.center.x, 0, plot.center.z) else nil
-	if at and isTooFast(player, at) then
+	local at = if root then root.Position else Vector3.new(0, MapLayout.FLOOR_Y, MapLayout.SAFE_ZONE_Z)
+	if isTooFast(player, at) then
 		EggService.confiscate(player)
 		AntiCheatService.flag(player, "배달이 너무 빨라요 (순간이동 의심)")
 		return
@@ -358,25 +379,21 @@ function BaseService.deliver(player: Player)
 		return
 	end
 	carryTracks[player] = nil
-	local record = newRecord(data, egg.petId, egg.size, egg.mutations, slot)
-	table.insert(data.incubators, record)
+	local bagEgg = newBagEgg(data, egg.petId, egg.size, egg.mutations, egg.special == true)
+	table.insert(data.eggs, bagEgg)
 	data.stats.eggsDelivered = (data.stats.eggsDelivered or 0) + 1
-	createVisual(player, record)
-	Net.fire(player, Remotes.ToClient.EggDelivered, record)
-	Snapshot.section(player, "incubators")
-	BaseService.delivered:fire(player, record)
+	Net.fire(player, Remotes.ToClient.EggDelivered, bagEgg)
+	Snapshot.section(player, "eggs")
+	BaseService.delivered:fire(player, bagEgg)
 end
 
--- 선물 알을 받을 자리가 있나 (빈 슬롯 또는 대기 줄)
+-- 선물 알을 받을 자리가 있나 (가방에 빈칸)
 function BaseService.canReceiveEgg(player: Player): boolean
 	local _, data = Sessions.getLoaded(player)
-	if not data then
-		return false
-	end
-	return freeSlot(data) ~= nil or #data.eggQueue < Config.EGG_QUEUE_MAX
+	return data ~= nil and #data.eggs < Config.EGG_INVENTORY_MAX
 end
 
--- 선물 알 (제단·비밀 통로·퀘스트): 빈 슬롯에 바로, 없으면 대기 줄. 자리가 없으면 nil
+-- 선물 알 (제단·비밀 통로·퀘스트): 가방으로. 가방이 가득 찼거나 모르는 펫이면 nil
 function BaseService.grantEgg(
 	player: Player,
 	petId: string,
@@ -385,55 +402,135 @@ function BaseService.grantEgg(
 	source: string
 ): GrantResult?
 	local _, data = Sessions.getLoaded(player)
-	if not data or not Pets.get(petId) then
+	if not data or not Pets.get(petId) or #data.eggs >= Config.EGG_INVENTORY_MAX then
 		return nil
 	end
-	local slot = freeSlot(data)
-	if slot then
-		local record = newRecord(data, petId, size, mutations, slot)
-		table.insert(data.incubators, record)
-		createVisual(player, record)
-		Net.fire(player, Remotes.ToClient.EggGranted, { record = record, queued = false, source = source })
-		Snapshot.section(player, "incubators")
-		return "slot"
-	end
-	if #data.eggQueue >= Config.EGG_QUEUE_MAX then
-		return nil
-	end
-	local queued: QueuedEgg = { petId = petId, size = size, mutations = table.clone(mutations), source = source }
-	table.insert(data.eggQueue, queued)
-	Net.fire(player, Remotes.ToClient.EggGranted, { egg = queued, queued = true, source = source })
-	Net.notify(
-		player,
-		"info",
-		"부화 슬롯이 가득 차서 선물 알이 기다리고 있어요. 알을 부화시키면 들어가요!"
-	)
-	Snapshot.section(player, "incubators")
-	return "queued"
+	local egg = newBagEgg(data, petId, size, mutations, false)
+	table.insert(data.eggs, egg)
+	-- queued 는 2단계 클라 호환용 (대기 줄은 없어져서 항상 false)
+	Net.fire(player, Remotes.ToClient.EggGranted, { egg = egg, queued = false, source = source })
+	Snapshot.section(player, "eggs")
+	return "bag"
 end
 
--- 대기 줄 알을 빈 슬롯으로
-local function fillFromQueue(player: Player)
-	local _, data = Sessions.getLoaded(player)
-	if not data then
-		return
+-- 놓인 알 자리 목록 (EggPlacement 용, 로컬 좌표)
+local function placedSpots(data: Types.PlayerData): { EggPlacement.Spot }
+	local spots: { EggPlacement.Spot } = {}
+	for _, record in data.incubators do
+		table.insert(spots, { x = record.x, z = record.z, size = record.size })
 	end
-	local moved = false
-	while #data.eggQueue > 0 do
-		local slot = freeSlot(data)
-		if not slot then
-			break
+	return spots
+end
+
+-- 내 우리에 서 있는 펫 자리 (로컬). 선임 PetVisualService 가 놓은 PenPet 모델 위치
+local function penPetSpots(plotIndex: number): { EggPlacement.Spot }
+	local spots: { EggPlacement.Spot } = {}
+	for _, inst in CollectionService:GetTagged(Visuals.Tags.PenPet) do
+		if inst:IsA("Model") then
+			local position = inst:GetPivot().Position
+			if MapLayout.isInPen(position, plotIndex) then
+				local l = MapLayout.toLocal(plotIndex, position)
+				if l then
+					table.insert(spots, { x = l.x, z = l.z })
+				end
+			end
 		end
-		local queued = table.remove(data.eggQueue, 1) :: QueuedEgg
-		local record = newRecord(data, queued.petId, queued.size, queued.mutations, slot)
-		table.insert(data.incubators, record)
-		createVisual(player, record)
-		Net.fire(player, Remotes.ToClient.EggGranted, { record = record, queued = false, source = queued.source })
-		moved = true
 	end
-	if moved then
-		Snapshot.section(player, "incubators")
+	return spots
+end
+
+-- PlaceEgg: 가방의 알을 내 우리 (x, z)(월드)에 놓음 → 부화 시작. 성공하면 true
+function BaseService.placeEgg(player: Player, uid: string, x: number, z: number): boolean
+	local session, data = Sessions.getLoaded(player)
+	if not session or not data then
+		return false
 	end
+	local index = bagIndex(data, uid)
+	if not index then
+		return false -- 가방에 없는 알 (남의 알·이미 놓은 알·이상한 uid)
+	end
+	if session.plotIndex == 0 then
+		Net.notify(
+			player,
+			"error",
+			"아직 내 베이스가 없어요! 베이스를 받으면 알을 놓을 수 있어요."
+		)
+		return false
+	end
+	if #data.incubators >= Config.PLACED_EGG_MAX then
+		Net.notify(player, "error", EggPlacement.message("full"))
+		return false
+	end
+	local root = Character.getRoot(player)
+	if not root then
+		return false
+	end
+	local near = MoveCheck.horizontalDistance(root.Position.X, root.Position.Z, x, z) <= Config.EGG_PLACE_RADIUS
+	if not near and not MapLayout.isInPlot(root.Position, session.plotIndex) then
+		Net.notify(player, "error", "내 베이스 우리 가까이에서 놓아 주세요!")
+		return false
+	end
+	local l = MapLayout.toLocal(session.plotIndex, { x = x, z = z })
+	if not l then
+		return false
+	end
+	local egg = data.eggs[index]
+	local lx, lz = EggPlacement.round(l.x), EggPlacement.round(l.z)
+	local ok, reason = EggPlacement.check(lx, lz, egg.size, placedSpots(data), penPetSpots(session.plotIndex))
+	if not ok then
+		Net.notify(player, "error", EggPlacement.message(reason))
+		return false
+	end
+	table.remove(data.eggs, index)
+	local required = Economy.hatchSeconds(egg.petId)
+	local record: IncubatorRecord = {
+		uid = egg.uid,
+		petId = egg.petId,
+		size = egg.size,
+		mutations = egg.mutations,
+		biomeId = egg.biomeId,
+		special = egg.special,
+		x = lx,
+		z = lz,
+		progress = math.min(egg.progress, required),
+		required = required,
+	}
+	table.insert(data.incubators, record)
+	createVisual(player, record)
+	Snapshot.section(player, "eggs")
+	Snapshot.section(player, "incubators")
+	return true
+end
+
+-- PickUpPlacedEgg: 놓인 알을 다시 가방으로 (진행도 유지). 성공하면 true
+function BaseService.pickUpEgg(player: Player, uid: string): boolean
+	if not Config.ALLOW_EGG_PICKUP then
+		return false
+	end
+	local _, data = Sessions.getLoaded(player)
+	local index = if data then incubatorIndex(data, uid) else nil
+	if not data or not index then
+		return false
+	end
+	if #data.eggs >= Config.EGG_INVENTORY_MAX then
+		Net.notify(player, "error", bagFullText())
+		return false
+	end
+	local record = table.remove(data.incubators, index) :: IncubatorRecord
+	destroyVisual(player, record.uid)
+	table.insert(data.eggs, {
+		uid = record.uid,
+		petId = record.petId,
+		size = record.size,
+		mutations = record.mutations,
+		biomeId = record.biomeId,
+		special = record.special,
+		progress = record.progress,
+		required = record.required,
+	})
+	Snapshot.section(player, "eggs")
+	Snapshot.section(player, "incubators")
+	return true
 end
 
 function BaseService.hatch(player: Player, uid: string)
@@ -441,13 +538,7 @@ function BaseService.hatch(player: Player, uid: string)
 	if not session or not data then
 		return
 	end
-	local index: number? = nil
-	for i, record in data.incubators do
-		if record.uid == uid then
-			index = i
-			break
-		end
-	end
+	local index = incubatorIndex(data, uid)
 	if not index then
 		return
 	end
@@ -476,14 +567,13 @@ function BaseService.hatch(player: Player, uid: string)
 		sold = not kept, -- 보관함이 가득 차서 바로 팔렸나
 	})
 	Snapshot.section(player, "incubators")
-	fillFromQueue(player)
 end
 
 ------------------------------------------------------------------
 -- 주기 처리
 ------------------------------------------------------------------
 
--- 1초마다: 알 자라기
+-- 1초마다: 우리에 놓인 알 자라기 (가방 속 알은 안 자람)
 local function growTick(dt: number): ...any
 	local isNight = CycleService.isNight()
 	for player, session in Sessions.all() do
@@ -558,7 +648,7 @@ end
 -- 배달 높이 제한: 바닥에서 이보다 높이 떠 있으면(날아가는 중 등) 배달 안 함
 local DELIVERY_MAX_HEIGHT = 20
 
--- 0.2초마다: 구역 표시, 알 든 사람 순간이동 검사, 베이스 영역에 들어오면 배달
+-- 0.2초마다: 구역 표시, 알 든 사람 순간이동 검사, 알을 든 채 허브(안전 구역)에 들어오면 배달
 local function baseTick(): ...any
 	local carriers = EggService.carriers()
 	local now = os.clock()
@@ -571,11 +661,8 @@ local function baseTick(): ...any
 		local root = Character.getRoot(player)
 		if root then
 			updateZone(player, session, root.Position)
-			if carriers[player] and not checkCarryJump(player, session, root, now) and session.plotIndex > 0 then
-				if
-					MapLayout.isInPlot(root.Position, session.plotIndex)
-					and root.Position.Y - MapLayout.FLOOR_Y < DELIVERY_MAX_HEIGHT
-				then
+			if carriers[player] and not checkCarryJump(player, session, root, now) then
+				if MapLayout.isInHub(root.Position) and root.Position.Y - MapLayout.FLOOR_Y < DELIVERY_MAX_HEIGHT then
 					BaseService.deliver(player)
 				end
 			end
@@ -592,14 +679,13 @@ function BaseService.onPlayerReady(player: Player)
 	if not session or not data then
 		return
 	end
-	-- 오프라인 동안 자란 만큼 (밤 가속 없음)
+	-- 오프라인 동안 자란 만큼 (놓인 알만, 밤 가속 없음)
 	local offline = Economy.offlineGrowthSeconds(data.lastSaveTime, os.time())
 	local rate = Economy.growthRate(false, session.hasGrowthPass)
 	for _, record in data.incubators do
 		record.progress = Economy.advanceIncubation(record.progress, record.required, offline, rate)
 		createVisual(player, record)
 	end
-	fillFromQueue(player)
 end
 
 function BaseService.onCharacterAdded(player: Player, character: Model)
@@ -629,24 +715,30 @@ function BaseService.start()
 			BaseService.hatch(player, eggUid)
 		end
 	end)
+	Net.on(Remotes.ToServer.PlaceEgg, function(player: Player, uid: unknown, x: unknown, z: unknown)
+		local eggUid = Validate.uid(uid)
+		local px, pz = Validate.finiteNumber(x), Validate.finiteNumber(z)
+		if eggUid and px and pz then
+			BaseService.placeEgg(player, eggUid, px, pz)
+		end
+	end)
+	Net.on(Remotes.ToServer.PickUpPlacedEgg, function(player: Player, uid: unknown)
+		local eggUid = Validate.uid(uid)
+		if eggUid then
+			BaseService.pickUpEgg(player, eggUid)
+		end
+	end)
 
-	-- 밤: 알 든 사람(자기 베이스 밖) + 허브 밖(z ≥ 0)에 있던 사람(알 없어도) → 자기 베이스로
-	--   (밤 벽이 허브 경계 z = 0 을 막으므로 밖에 갇히지 않게)
+	-- 밤: 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 (밤 벽이 허브 경계 z = 0 을 막으므로 밖에 갇히지 않게).
+	--   알을 들고 있었으면 베이스(허브 안)에 도착하자마자 다음 틱에 가방으로 배달
 	CycleService.changed:connect(function(phase: Types.Phase)
 		if phase ~= "Night" then
 			return
 		end
-		local carriers = EggService.carriers()
-		for player, session in Sessions.all() do
+		for player in Sessions.all() do
 			local root = Character.getRoot(player)
-			if root then
-				if carriers[player] then
-					if not MapLayout.isInPlot(root.Position, session.plotIndex) then
-						BaseService.teleportToSafety(player)
-					end
-				elseif not MapLayout.isInHub(root.Position) then
-					BaseService.teleportToSafety(player)
-				end
+			if root and not MapLayout.isInHub(root.Position) then
+				BaseService.teleportToSafety(player)
 			end
 		end
 	end)

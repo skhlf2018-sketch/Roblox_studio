@@ -23,7 +23,8 @@ local Sessions = require(script.Parent.Sessions)
 
 local Snapshot = {}
 
-export type Section = "pets" | "incubators" | "index" | "upgrades" | "tools" | "flags" | "special" | "quests"
+-- "eggs" (2판 수정) = 알 가방 / "incubators" = 우리에 놓인 알. 알을 놓거나 다시 주우면 둘 다 보냄
+export type Section = "pets" | "incubators" | "eggs" | "index" | "upgrades" | "tools" | "flags" | "special" | "quests"
 
 function Snapshot.build(player: Player): Types.Snapshot?
 	local session, data = Sessions.getLoaded(player)
@@ -49,7 +50,9 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		unlockedWeapons = data.weapons,
 		tools = data.tools,
 		incubators = data.incubators,
-		eggQueue = data.eggQueue,
+		eggs = data.eggs,
+		eggInventoryMax = Config.EGG_INVENTORY_MAX,
+		placedEggMax = Config.PLACED_EGG_MAX,
 		freeRewardClaimed = data.freeRewardClaimed,
 		plotIndex = session.plotIndex,
 		saveEnabled = session.saveEnabled,
@@ -83,7 +86,9 @@ function Snapshot.section(player: Player, section: Section)
 			incomePerSecond = session.incomePerSecond,
 		}
 	elseif section == "incubators" then
-		payload = { incubators = data.incubators, eggQueue = data.eggQueue }
+		payload = { incubators = data.incubators }
+	elseif section == "eggs" then
+		payload = { eggs = data.eggs }
 	elseif section == "index" then
 		payload = {
 			indexDiscovered = data.indexDiscovered,

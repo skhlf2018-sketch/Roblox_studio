@@ -11,6 +11,8 @@ local Data = script.Parent.Data
 local Pets = require(Data.Pets)
 local Sizes = require(Data.Sizes)
 local Mutations = require(Data.Mutations)
+local Biomes = require(Data.Biomes)
+local Rarities = require(Data.Rarities)
 local EggSpawn = require(Data.EggSpawn)
 
 type Pet = Pets.Pet
@@ -103,11 +105,39 @@ function EggRoll.nestPool(biomeId: string, side: string?): { Pet }
 	return pool
 end
 
-function EggRoll.nestWeight(pet: Pet): number
-	return EggSpawn.NEST_RARITY_WEIGHTS[pet.rarity] or 0
+local biomeIndex: { [string]: number } = {}
+for i, biome in Biomes.list do
+	biomeIndex[biome.id] = i
+end
+local specialRarity: { [string]: boolean } = {}
+for _, id in EggSpawn.SPECIAL_RARITIES do
+	specialRarity[id] = true
 end
 
--- 일반 추첨 1마리 (비밀/영원/신성 제외)
+-- 2판 수정: 구역 순서(1~15)에 따른 중심 희귀도 (1 일반 → 10 신성, 선형 + 반올림). 모르는 구역은 1
+function EggRoll.centerRarity(biomeId: string): number
+	local i = biomeIndex[biomeId] or 1
+	local count = #Biomes.list
+	local t = if count > 1 then (i - 1) / (count - 1) else 0
+	local first, last = EggSpawn.CENTER_RARITY_FIRST, EggSpawn.CENTER_RARITY_LAST
+	return math.round(first + (last - first) * t)
+end
+
+-- 일반 추첨 가중치: 펫 희귀도와 그 구역 중심의 차이로 (EggSpawn 주석). 비밀 이상은 중심 ±2 밖이면 0
+function EggRoll.nestWeight(pet: Pet): number
+	local order = Rarities.order(pet.rarity)
+	if order <= 0 then
+		return 0
+	end
+	local d = math.abs(order - EggRoll.centerRarity(pet.biome))
+	local near = EggSpawn.DISTANCE_WEIGHTS[d + 1]
+	if near then
+		return near
+	end
+	return if specialRarity[pet.rarity] then EggSpawn.SPECIAL_FAR_WEIGHT else EggSpawn.FAR_WEIGHT
+end
+
+-- 일반 추첨 1마리 (앞 구역의 비밀/영원/신성은 제외, 뒤 구역은 보통 둥지에도 나옴)
 function EggRoll.rollNestPet(biomeId: string, side: string?, rand: RandomFn): Pet?
 	return EggRoll.weightedPick(EggRoll.nestPool(biomeId, side), EggRoll.nestWeight, rand)
 end

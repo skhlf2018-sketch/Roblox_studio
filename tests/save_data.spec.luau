@@ -1,7 +1,7 @@
 --!nocheck
 --[[
 	저장 데이터 안전성:
-	  - 버전 1 → 2 마이그레이션이 옛 데이터를 하나도 안 잃는지
+	  - 버전 1 → 2 → 3 → 4 마이그레이션이 옛 데이터를 하나도 안 잃는지 (4: 슬롯 알 → 우리 자리, 대기 줄 → 알 가방)
 	  - 엉터리 데이터(nil, 문자열, 음수, 거대 수, NaN, inf, 이상한 표 ...)를 넣어도 터지지 않고 올바른 기본값/보정값이 나오는지
 	  - 무작위 쓰레기 데이터(퍼징)로 수천 번 돌려도 항상 "올바른 PlayerData" 규칙을 지키는지
 ]]
@@ -17,6 +17,8 @@ return function(T, Loader)
 	local Quests = Loader.require("ReplicatedStorage/Shared/Data/Quests")
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
+	local EggPlacement = Loader.require("ReplicatedStorage/Shared/EggPlacement")
+	local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
 
 	local NAN = 0 / 0
 
@@ -132,37 +134,64 @@ return function(T, Loader)
 		then
 			return "곰덫 개수 " .. tostring(d.tools.bearTrap)
 		end
-		local slotsUsed = {}
-		for i, e in d.incubators do
-			local err = noteUid(e.uid, "incubators[" .. i .. "]")
+		-- 알 공통 (놓인 알·가방 알)
+		local function checkEgg(e, where)
+			local err = noteUid(e.uid, where)
 			if err then
 				return err
 			end
-			if not Pets.get(e.petId) then
-				return "부화 슬롯에 모르는 펫"
+			local pet = Pets.get(e.petId)
+			if not pet then
+				return where .. " 모르는 펫"
 			end
-			if
-				type(e.slot) ~= "number"
-				or e.slot % 1 ~= 0
-				or e.slot < 1
-				or e.slot > Config.INCUBATOR_SLOTS
-				or slotsUsed[e.slot]
-			then
-				return "슬롯 번호 " .. tostring(e.slot)
+			if e.biomeId ~= pet.biome then
+				return where .. " biomeId"
 			end
-			slotsUsed[e.slot] = true
+			if type(e.special) ~= "boolean" then
+				return where .. " special"
+			end
 			if not finiteNonNegative(e.progress) or e.progress > e.required + 1e-9 then
-				return "progress " .. tostring(e.progress)
+				return where .. " progress " .. tostring(e.progress)
 			end
 			if e.required ~= Economy.hatchSeconds(e.petId) then
-				return "required 가 현재 성장 배율과 다름"
+				return where .. " required 가 현재 성장 배율과 다름"
 			end
 			if not Sizes.get(e.size) or not Economy.isValidMutationSet(e.mutations) then
-				return "부화 슬롯 알 크기/돌연변이"
+				return where .. " 크기/돌연변이"
 			end
+			return nil
 		end
-		if #d.incubators > Config.INCUBATOR_SLOTS then
-			return "부화 슬롯 초과"
+		local placed = {}
+		for i, e in d.incubators do
+			local where = "incubators[" .. i .. "]"
+			local err = checkEgg(e, where)
+			if err then
+				return err
+			end
+			if e.slot ~= nil then
+				return where .. " 옛 슬롯 번호가 남음"
+			end
+			-- 2판 수정: 베이스 기준 자리 — 우리 안(울타리 2 안쪽), 다른 놓인 알과 간격
+			local ok = type(e.x) == "number" and type(e.z) == "number" and EggPlacement.check(e.x, e.z, e.size, placed)
+			if not ok then
+				return where .. " 자리 " .. tostring(e.x) .. ", " .. tostring(e.z)
+			end
+			table.insert(placed, { x = e.x, z = e.z, size = e.size })
+		end
+		if #d.incubators > Config.PLACED_EGG_MAX then
+			return "놓인 알 초과"
+		end
+		if type(d.eggs) ~= "table" or #d.eggs > Config.EGG_INVENTORY_MAX then
+			return "알 가방 초과"
+		end
+		for i, e in d.eggs do
+			local err = checkEgg(e, "eggs[" .. i .. "]")
+			if err then
+				return err
+			end
+			if e.x ~= nil or e.slot ~= nil then
+				return "가방 알에 자리가 있음"
+			end
 		end
 		if type(d.nextUid) ~= "number" or d.nextUid ~= d.nextUid or d.nextUid <= maxNumber then
 			return "nextUid " .. tostring(d.nextUid) .. " ≤ 기존 uid 번호 " .. maxNumber
@@ -193,16 +222,8 @@ return function(T, Loader)
 				return "quests " .. tostring(id)
 			end
 		end
-		if #d.eggQueue > Config.EGG_QUEUE_MAX then
-			return "대기 줄 초과"
-		end
-		for _, q in d.eggQueue do
-			if not Pets.get(q.petId) or not Sizes.get(q.size) or not Economy.isValidMutationSet(q.mutations) then
-				return "대기 줄 알"
-			end
-			if q.source ~= "altar" and q.source ~= "shrine" and q.source ~= "quest" then
-				return "대기 줄 출처 " .. tostring(q.source)
-			end
+		if d.eggQueue ~= nil then
+			return "2판 수정: 대기 줄(eggQueue)이 남음"
 		end
 		return nil
 	end
@@ -284,7 +305,7 @@ return function(T, Loader)
 		"옛 데이터가 하나도 안 사라지고, 새 필드는 기본값, 호수 도감 완성이라 물 방망이가 자동 해금",
 		function()
 			local migrated = DataSchema.migrate(v1Save())
-			T.eq(migrated.version, 3, "1 → 2 → 3 한 번에")
+			T.eq(migrated.version, 4, "1 → 2 → 3 → 4 한 번에")
 			T.eq(migrated.equippedTrail, "blue", "2 → 3: 가진 것(grey·blue) 중 최고 배율 장착")
 			local d = DataSchema.reconcile(migrated, 1700001000)
 			T.eq(checkValid(d), nil)
@@ -307,18 +328,23 @@ return function(T, Loader)
 			T.eq(d.freeRewardClaimed, true)
 			T.eq(d.stats.eggsStolen, 40)
 			T.eq(d.stats.eggsDelivered, 4)
-			-- 부화 슬롯 알: 필요 시간은 지금 성장 배율로 다시 계산 (30 → 90 ÷ 3 = 30)
+			-- 부화 슬롯 알: 필요 시간은 지금 규칙으로 다시 계산 (저장된 30 → 원작 90, 2판 수정: ÷3 없음)
+			-- 2판 수정: 슬롯 2번 → 우리 안 격자 2번 자리 (옛 슬롯 자리 그대로)
 			T.eq(#d.incubators, 1)
 			T.eq(d.incubators[1].required, Economy.hatchSeconds("bear"))
 			T.eq(d.incubators[1].progress, 12.5)
 			T.eq(d.incubators[1].mutations[1], "rainbow")
+			T.eq(d.incubators[1].x, MapLayout.eggGridLocal(2).x)
+			T.eq(d.incubators[1].z, MapLayout.eggGridLocal(2).z)
+			T.eq(d.incubators[1].slot, nil)
 			-- 새 필드
 			T.eq(d.sakuraCrystals, 0)
 			T.falsy(d.sakuraUnlocked)
 			T.eq(next(d.shrineUsed), nil)
 			T.eq(next(d.quests), nil)
 			T.falsy(d.questsRewarded)
-			T.eq(#d.eggQueue, 0)
+			T.eq(#d.eggs, 0)
+			T.eq(d.eggQueue, nil)
 			T.eq(#d.weapons, 1)
 			T.eq(d.weapons[1], "water_bat")
 			-- uid 카운터는 기존 uid(p1~p3, i4) 보다 큼
@@ -339,6 +365,8 @@ return function(T, Loader)
 			v2.questsRewarded = true
 			v2.quests = { fuse_once = 1 }
 			v2.shrineUsed = { equinox = true }
+			v2.version = 2
+			v2.eggs = nil
 			v2.eggQueue = { { petId = "ringlord", size = "big", mutations = {}, source = "altar" } }
 			local kept = DataSchema.reconcile(DataSchema.migrate(v2), 0)
 			T.eq(kept.sakuraCrystals, 50)
@@ -346,7 +374,24 @@ return function(T, Loader)
 			T.truthy(kept.questsRewarded)
 			T.eq(kept.quests.fuse_once, 1)
 			T.truthy(kept.shrineUsed.equinox)
-			T.eq(#kept.eggQueue, 1)
+			T.eq(#kept.eggs, 1, "옛 대기 줄 알 → 가방")
+			T.eq(kept.eggs[1].petId, "ringlord")
+			-- 이미 4 인 데이터의 가방·놓인 알은 그대로
+			local v4 = DataSchema.default(0)
+			v4.nextUid = 9
+			v4.eggs = {
+				{ uid = "i3", petId = "ghost_king", size = "big", mutations = {}, special = true, progress = 7 },
+			}
+			v4.incubators = {
+				{ uid = "i4", petId = "bear", size = "normal", mutations = {}, x = -20.5, z = 13.2, progress = 2 },
+			}
+			local again = DataSchema.reconcile(DataSchema.migrate(v4), 0)
+			T.eq(again.eggs[1].uid, "i3")
+			T.eq(again.eggs[1].progress, 7)
+			T.truthy(again.eggs[1].special)
+			T.eq(again.incubators[1].x, -20.5)
+			T.eq(again.incubators[1].z, 13.2)
+			T.eq(again.nextUid, 9)
 		end
 	)
 
@@ -364,13 +409,14 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("더 새 버전(4, 4.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
-		for _, v in { 4, 4.5, 1e9 } do
+	T.test("더 새 버전(5, 4.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
+		for _, v in { 5, 4.5, 1e9 } do
 			T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
 			T.eq(DataSchema.migrate({ version = v, money = 1 }).version, v)
 		end
 		T.falsy(DataSchema.isNewerVersion({ version = math.huge * 0 }))
 		T.falsy(DataSchema.isNewerVersion("version=3"))
+		T.falsy(DataSchema.isNewerVersion({ version = 4 }), "지금 버전")
 	end)
 
 	------------------------------------------------------------------
@@ -448,6 +494,7 @@ return function(T, Loader)
 				"shrineUsed",
 				"quests",
 				"eggQueue",
+				"eggs",
 				"equippedTrail",
 			}
 			local garbage = { 5, "x", true, false, NAN, math.huge, { "a", "b" }, { a = 1 }, { {} }, { [1] = NAN } }
@@ -502,24 +549,37 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"uid 가 보관함과 부화 슬롯 사이에서도 겹치지 않음 (겹치면 뒤쪽을 버림)",
+		"uid 가 보관함·놓인 알·가방 사이에서도 겹치지 않음 (겹치면 뒤쪽을 버림), 위치 쓰레기는 빈 격자 자리로",
 		function()
 			local d = DataSchema.reconcile({
+				version = 4,
 				pets = { { uid = "x1", petId = "chicken", size = "normal", mutations = {} } },
 				incubators = {
-					{ uid = "x1", petId = "dog", size = "normal", mutations = {}, slot = 1, progress = 0 },
-					{ uid = "x2", petId = "dog", size = "normal", mutations = {}, slot = 2.9, progress = NAN },
-					{ uid = "x3", petId = "dog", size = "normal", mutations = {}, slot = 0, progress = 0 },
-					{ uid = "x4", petId = "dog", size = "normal", mutations = {}, slot = 9, progress = 0 },
-					{ uid = "x5", petId = "dog", size = "normal", mutations = {}, slot = NAN, progress = 0 },
-					{ uid = "x6", petId = "dog", size = "normal", mutations = {}, slot = "1", progress = 0 },
+					{ uid = "x1", petId = "dog", size = "normal", mutations = {}, x = 0, z = 0, progress = 0 },
+					{ uid = "x2", petId = "dog", size = "normal", mutations = {}, x = 0, z = 0, progress = NAN },
+					{ uid = "x3", petId = "dog", size = "normal", mutations = {}, x = "1", z = {}, progress = 0 },
+					{ uid = "x4", petId = "dog", size = "normal", mutations = {}, x = math.huge, z = 0 },
+					{ uid = "x5", petId = "dog", size = "normal", mutations = {}, x = 0, z = 0 },
+				},
+				eggs = {
+					{ uid = "x2", petId = "dog", size = "normal", mutations = {} },
+					{ uid = "x6", petId = "dog", size = "normal", mutations = {}, progress = -3, x = 5 },
+					{ uid = "x6", petId = "bear" },
+					"쓰레기",
+					{ uid = "x7", petId = "없는펫" },
 				},
 			}, 0)
 			T.eq(checkValid(d), nil)
-			T.eq(#d.incubators, 1)
+			T.eq(#d.incubators, 4)
 			T.eq(d.incubators[1].uid, "x2")
-			T.eq(d.incubators[1].slot, 2)
+			T.eq(d.incubators[1].x, 0, "첫 알은 제자리")
 			T.eq(d.incubators[1].progress, 0, "NaN 진행도는 0")
+			T.eq(d.incubators[4].uid, "x5")
+			T.truthy(d.incubators[4].x ~= 0 or d.incubators[4].z ~= 0, "겹친 알은 다른 자리로")
+			T.eq(#d.eggs, 1)
+			T.eq(d.eggs[1].uid, "x6")
+			T.eq(d.eggs[1].progress, 0)
+			T.eq(d.eggs[1].x, nil, "가방 알에는 자리가 없음")
 		end
 	)
 
@@ -531,10 +591,11 @@ return function(T, Loader)
 				incubators = {
 					{ uid = "i900", petId = "dog", size = "normal", mutations = {}, slot = 1, progress = 0 },
 				},
+				eggs = { { uid = "i950", petId = "dog", size = "normal", mutations = {} } },
 				nextUid = 3,
 			}, 0)
-			T.truthy(d.nextUid > 900)
-			local seen = { p500 = true, i900 = true }
+			T.truthy(d.nextUid > 950)
+			local seen = { p500 = true, i900 = true, i950 = true }
 			for _ = 1, 2000 do
 				local uid = DataSchema.newUid(d, "p")
 				T.falsy(seen[uid], "uid 겹침 " .. uid)
@@ -544,7 +605,7 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("v2 필드 쓰레기: 퀘스트·제단·대기 줄·무기", function()
+	T.test("v2 필드 쓰레기: 퀘스트·제단·옛 대기 줄(→ 가방)·무기", function()
 		local d = DataSchema.reconcile({
 			quests = { deliver_eggs = -5, fuse_once = 2.7, deliver_eternal = "1", ["가짜"] = 3 },
 			shrineUsed = { equinox = 1, aetheron = true, chicken = true },
@@ -562,8 +623,9 @@ return function(T, Loader)
 		T.eq(d.quests.deliver_eternal, nil)
 		T.eq(d.shrineUsed.equinox, nil, "true 가 아니면 무시")
 		T.truthy(d.shrineUsed.aetheron)
-		T.eq(#d.eggQueue, 2)
-		T.eq(d.eggQueue[1].source, "altar")
+		T.eq(#d.eggs, 2, "알려진 펫 2개만 가방으로")
+		T.eq(d.eggs[2].size, "normal", "이상한 크기 → 보통")
+		T.eq(#d.eggs[2].mutations, 0)
 		T.eq(#d.weapons, 2, "katana, scythe 만 (기본 방망이·중복 제외)")
 	end)
 
@@ -579,20 +641,26 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("펫 5,000마리 + 부화 슬롯 5,000개짜리 큰 데이터도 1초 안에 처리", function()
-		local pets, incubators = {}, {}
-		for i = 1, 5000 do
-			table.insert(pets, { uid = "p" .. i, petId = "chicken", size = "normal", mutations = {} })
-			table.insert(
-				incubators,
-				{ uid = "i" .. i, petId = "dog", size = "normal", mutations = {}, slot = i, progress = 0 }
-			)
+	T.test(
+		"펫 5,000마리 + 놓인 알 5,000개 + 가방 5,000개짜리 큰 데이터도 1초 안에 처리",
+		function()
+			local pets, incubators, eggs = {}, {}, {}
+			for i = 1, 5000 do
+				table.insert(pets, { uid = "p" .. i, petId = "chicken", size = "normal", mutations = {} })
+				table.insert(
+					incubators,
+					{ uid = "i" .. i, petId = "dog", size = "normal", mutations = {}, x = 0, z = 0, progress = 0 }
+				)
+				table.insert(eggs, { uid = "e" .. i, petId = "dog", size = "normal", mutations = {} })
+			end
+			local started = os.clock()
+			local d = DataSchema.reconcile({ version = 4, pets = pets, incubators = incubators, eggs = eggs }, 0)
+			T.truthy(os.clock() - started < 1, "느림")
+			T.eq(#d.incubators, Config.PLACED_EGG_MAX)
+			T.eq(#d.eggs, Config.EGG_INVENTORY_MAX)
+			T.eq(checkValid(d), nil)
 		end
-		local started = os.clock()
-		local d = DataSchema.reconcile({ pets = pets, incubators = incubators }, 0)
-		T.truthy(os.clock() - started < 1, "느림")
-		T.eq(#d.incubators, Config.INCUBATOR_SLOTS)
-	end)
+	)
 
 	------------------------------------------------------------------
 	T.suite("저장 데이터: 무작위 퍼징 (쓰레기 5,000개)")
@@ -707,7 +775,7 @@ return function(T, Loader)
 			for i = 1, 5000 do
 				local raw = {
 					version = maybe(function()
-						return pick({ 1, 2 })
+						return pick({ 1, 2, 3, 4 })
 					end),
 					money = maybe(function()
 						return rand() * 1e12
@@ -750,6 +818,23 @@ return function(T, Loader)
 						e.slot = maybe(function()
 							return math.floor(rand() * 10)
 						end)
+						-- 2판 수정: 베이스 기준 자리 (우리 안·밖·겹침이 섞이게 좁은 범위)
+						e.x = maybe(function()
+							return math.floor(rand() * 60) - 40
+						end)
+						e.z = maybe(function()
+							return math.floor(rand() * 70) - 35
+						end)
+						e.progress = maybe(function()
+							return rand() * 1e5
+						end)
+						e.special = maybe(function()
+							return rand() < 0.5
+						end)
+						return e
+					end)),
+					eggs = maybe(listOf(function()
+						local e = petEntry()
 						e.progress = maybe(function()
 							return rand() * 1e5
 						end)

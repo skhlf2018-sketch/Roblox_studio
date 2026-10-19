@@ -9,7 +9,7 @@
 	전부 끝나면 (한 번만, data.questsRewarded):
 	  - 퀘스트 문(Tag "QuestGate") 통과: 서버 CollisionGroup — 문 파트는 "QuestGate", 끝낸 사람 캐릭터는 "QuestPassed"
 	    (둘은 서로 안 부딪힘, 다른 사람에게는 그대로 벽). 플레이어 Attribute QuestsDone = true (문 연출용)
-	  - 지터버그 알 즉시 지급 (부화 슬롯, 가득 차면 대기 줄)
+	  - 지터버그 알 즉시 지급 (2판 수정: 알 가방으로)
 	  - 이후 초기화 때마다, 퀘스트를 끝낸 사람이 서버에 있으면 QUEST_SECRET_EGG_CHANCE(1%) 로
 	    마법의 숲 둥지에 영혼 세계 수호자 알 등장 (퀘스트를 끝낸 사람만 주울 수 있음, 서버 공지)
 	퀘스트 문 파트가 맵에 없으면 마법의 숲 구역 안에 임시 문을 만듦.
@@ -224,7 +224,7 @@ function QuestService.start()
 	setupCollisionGroups()
 	ensureGate()
 
-	BaseService.delivered:connect(function(player: Player, record: Types.IncubatorRecord)
+	BaseService.delivered:connect(function(player: Player, record: Types.BagEgg)
 		local pet = Pets.get(record.petId)
 		QuestService.record(player, {
 			kind = "deliver",

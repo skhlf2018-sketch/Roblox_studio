@@ -3,7 +3,8 @@
 	Economy — 수입·부화 시간·러닝머신·트레일·오프라인 수입 계산 (순수 로직, Lune 테스트 대상)
 
 	데이터 표(Pets, Upgrades)는 원본 숫자를 그대로 두고,
-	GROWTH_MULTIPLIER 는 오직 이 모듈에서만 적용합니다.
+	GROWTH_MULTIPLIER 는 오직 이 모듈에서만 적용합니다 (펫 수입 ×G, 러닝머신 ×G).
+	2판 수정: 부화 시간에는 안 씀 (원작 부화 시간 그대로, 밤 30배만).
 ]]
 
 local Data = script.Parent.Data
@@ -137,13 +138,14 @@ end
 -- 부화
 ------------------------------------------------------------------
 
--- 실제 부화 시간(초) = 원본 ÷ G (최소 1초)
+-- 실제 부화 시간(초) = 원본 그대로 (2판 수정, 사장님 "모든 알이 3초로 끝나면 안 됨": ÷ GROWTH_MULTIPLIER 없앰,
+-- 하한 없음). 닭 10초 · 전설 5분 · 비밀 1.5시간 · 신성 12~24시간. 빨라지는 건 밤 30배(growthRate)뿐
 function Economy.hatchSeconds(petId: string): number
 	local pet = Pets.get(petId)
 	if not pet then
 		return 1
 	end
-	return math.max(1, pet.hatchSeconds / Config.GROWTH_MULTIPLIER)
+	return pet.hatchSeconds
 end
 
 -- 1초에 몇 초만큼 자라나: 밤 30배, 성장 2배 게임패스

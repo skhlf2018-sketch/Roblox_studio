@@ -128,6 +128,22 @@ end)
 pcall(roblox.implementMethod, "Humanoid", "EquipTool", function() end)
 pcall(roblox.implementMethod, "ParticleEmitter", "Emit", function() end)
 pcall(roblox.implementMethod, "Humanoid", "UnequipTools", function() end)
+-- 소리: Lune 에는 Sound:Play/Stop 이 없고 IsPlaying 은 기본값이 없어 읽으면 오류
+-- (소리 ID 를 채운 뒤부터 배경음 Sound 가 실제로 생김 → SoundController 는 IsPlaying 대신 Playing 을 봄)
+pcall(roblox.implementMethod, "Sound", "Play", function(inst)
+	inst.Playing = true
+end)
+pcall(roblox.implementMethod, "Sound", "Stop", function(inst)
+	inst.Playing = false
+end)
+pcall(roblox.implementProperty, "Sound", "Ended", function(inst)
+	return sigOf(inst, "Ended")
+end)
+pcall(roblox.implementMethod, "SoundService", "PlayLocalSound", function() end)
+-- 서버 시각 (떨어진 알 카운트다운·남은 시간): 늘 1000
+pcall(roblox.implementMethod, "Workspace", "GetServerTimeNow", function()
+	return 1000
+end)
 
 -- 태그 (테스트가 직접 채움)
 local tagged = {}
@@ -222,6 +238,10 @@ local fakeServices = {
 		KeyboardEnabled = false,
 		MouseEnabled = false,
 		InputBegan = signal(),
+		TouchTapInWorld = signal(),
+		GetMouseLocation = function()
+			return roblox.Vector2.new(422, 195)
+		end,
 		LastInputTypeChanged = signal(),
 		GetLastInputType = function()
 			return roblox.Enum.UserInputType.Touch
@@ -489,6 +509,31 @@ growingEgg:SetAttribute("Progress", 5)
 growingEgg:SetAttribute("Required", 5)
 growingEgg:SetAttribute("Ready", true)
 tag(growingEgg, "IncubatingEgg")
+-- 아직 자라는 내 알 (집기 프롬프트) · 남의 알 (프롬프트 없음)
+local youngEgg = worldPart("Incubating_i1", roblox.Vector3.new(27, 1, 20), roblox.Vector3.new(2, 2.5, 2))
+youngEgg:SetAttribute("EggUid", "i1")
+youngEgg:SetAttribute("OwnerUserId", player.UserId)
+youngEgg:SetAttribute("PetId", "dog")
+youngEgg:SetAttribute("Progress", 3)
+youngEgg:SetAttribute("Required", 5)
+youngEgg:SetAttribute("Ready", false)
+tag(youngEgg, "IncubatingEgg")
+local othersEgg = worldPart("Incubating_i9", roblox.Vector3.new(200, 1, 20), roblox.Vector3.new(2, 2.5, 2))
+othersEgg:SetAttribute("EggUid", "i9")
+othersEgg:SetAttribute("OwnerUserId", 12345)
+othersEgg:SetAttribute("Progress", 5)
+othersEgg:SetAttribute("Required", 5)
+tag(othersEgg, "IncubatingEgg")
+-- 바닥에 떨어진 알 (60초 잔류, ExpiresAt = 서버 시각 1000 + 32 → "32초")
+local droppedEgg = worldPart("Egg_d1", roblox.Vector3.new(0, 1, 60), roblox.Vector3.new(2, 2.5, 2))
+droppedEgg:SetAttribute("EggUid", "d1")
+droppedEgg:SetAttribute("EggState", "Dropped")
+droppedEgg:SetAttribute("DroppedAt", 1000 - 28)
+droppedEgg:SetAttribute("ExpiresAt", 1000 + 32)
+tag(droppedEgg, "Egg")
+local nestEgg = worldPart("Egg_n1", roblox.Vector3.new(0, 1, 80), roblox.Vector3.new(2, 2.5, 2))
+nestEgg:SetAttribute("EggState", "Nest")
+tag(nestEgg, "Egg")
 local upgradeSign = worldPart("UpgradeSign", roblox.Vector3.new(30, 4, 20), roblox.Vector3.new(8, 4.6, 0.8))
 upgradeSign:SetAttribute("Kind", "Treadmill")
 upgradeSign:SetAttribute("PlotIndex", 1)
@@ -575,7 +620,8 @@ local function body()
 				size = "normal",
 				mutations = {},
 				biomeId = "forest",
-				slot = 1,
+				x = -10,
+				z = -20,
 				progress = 3,
 				required = 5,
 			},
@@ -585,12 +631,37 @@ local function body()
 				size = "normal",
 				mutations = {},
 				biomeId = "forest",
-				slot = 2,
+				x = -10,
+				z = 20,
 				progress = 5,
 				required = 5,
 			},
 		},
-		eggQueue = {},
+		-- 2판 수정: 알 가방 (BagEgg)
+		eggs = {
+			{
+				uid = "e1",
+				petId = "unicorn",
+				size = "big",
+				mutations = { "golden" },
+				biomeId = "forest",
+				special = false,
+				progress = 0,
+				required = 300,
+			},
+			{
+				uid = "e2",
+				petId = "dog",
+				size = "normal",
+				mutations = {},
+				biomeId = "forest",
+				special = true,
+				progress = 2,
+				required = 10,
+			},
+		},
+		eggInventoryMax = 50,
+		placedEggMax = 8,
 		freeRewardClaimed = false,
 		plotIndex = 1,
 		saveEnabled = true,
@@ -809,27 +880,218 @@ local function body()
 		Hud0.koreanClock(238) == "3분 58초" and Hud0.koreanClock(52) == "52초 안에",
 		"시간 글자 '3분 58초' / '52초 안에'"
 	)
-	-- 알 버튼 → 성장하는 달걀 패널
+	-- 알 버튼 → 알 창 ("성장하는 달걀" 패널: 성장 중 탭 + 가방 탭)
 	check(click(playerGui:FindFirstChild("EggButton", true)), "주황 알 버튼 누름")
 	local panel = playerGui:FindFirstChild("GrowingEggs", true)
 	check(panel and panel.Visible, "성장하는 달걀 패널 열림")
+	local list = panel and panel:FindFirstChild("List")
 	check(
-		panel and panel:FindFirstChild("i1", true) and panel:FindFirstChild("i2", true),
-		"패널에 자라는 알 2줄"
+		list and list.Visible and list:FindFirstChild("i1") and list:FindFirstChild("i2"),
+		"성장 중 탭: 놓인 알 2줄"
 	)
-	check(click(panel and panel:FindFirstChild("Play", true)), "▶ 버튼")
+	local tabGrow = panel and panel:FindFirstChild("Tab_grow")
+	local tabBag = panel and panel:FindFirstChild("Tab_bag")
+	check(
+		tabGrow and tabGrow.Text == "성장 중 2/8",
+		"탭 글자 '성장 중 2/8': " .. tostring(tabGrow and tabGrow.Text)
+	)
+	check(tabBag and tabBag.Text == "가방 2/50", "탭 글자 '가방 2/50': " .. tostring(tabBag and tabBag.Text))
+	local readyRow = list and list:FindFirstChild("i2")
+	local readyTime = readyRow and readyRow:FindFirstChild("Time", true)
+	check(
+		readyTime and readyTime.Text == "부화 가능!",
+		"다 자란 알 줄 '부화 가능!': " .. tostring(readyTime and readyTime.Text)
+	)
+	local youngRow = list and list:FindFirstChild("i1")
+	local youngTime = youngRow and youngRow:FindFirstChild("Time", true)
+	check(
+		youngTime and youngTime.Text == "2s",
+		"자라는 알 남은 시간 '2s': " .. tostring(youngTime and youngTime.Text)
+	)
+	check(
+		readyRow and readyRow:FindFirstChild("EggName") and readyRow.EggName.Text ~= "",
+		"줄에 펫 이름: " .. tostring(readyRow and readyRow:FindFirstChild("EggName") and readyRow.EggName.Text)
+	)
+	check(click(readyRow and readyRow:FindFirstChild("Play")), "▶ 버튼 (다 자란 알)")
+	check(lastSent("HatchEgg") and lastSent("HatchEgg").args[1] == "i2", "▶ → HatchEgg(i2)")
+	local pickUpButton = youngRow and youngRow:FindFirstChild("PickUp")
+	check(pickUpButton and pickUpButton.Visible, "자라는 알 줄에 '가방' (다시 줍기) 버튼")
+	check(
+		click(pickUpButton) and lastSent("PickUpPlacedEgg") and lastSent("PickUpPlacedEgg").args[1] == "i1",
+		"'가방' 버튼 → PickUpPlacedEgg(i1)"
+	)
+	check(
+		readyRow and readyRow:FindFirstChild("PickUp") and not readyRow.PickUp.Visible,
+		"다 자란 알은 '가방' 버튼 숨김 (부화만)"
+	)
+	-- 가방 탭: 알 카드 (희귀도 색·펫 이름·크기·돌연변이·놓기)
+	check(click(tabBag), "가방 탭 누름")
+	local bagGrid = panel and panel:FindFirstChild("Bag")
+	check(bagGrid and bagGrid.Visible and not list.Visible, "가방 탭으로 바뀜")
+	local card1 = bagGrid and bagGrid:FindFirstChild("e1")
+	check(card1 and bagGrid:FindFirstChild("e2"), "가방 알 카드 2장")
+	local detail1 = card1 and card1:FindFirstChild("EggDetail")
+	check(
+		detail1 and string.find(detail1.Text, "큼", 1, true) and string.find(detail1.Text, "골든", 1, true),
+		"카드에 크기·돌연변이: " .. tostring(detail1 and detail1.Text)
+	)
+	check(card1 and card1:FindFirstChild("EggName") and card1.EggName.Text ~= "", "카드에 펫 이름")
+	local Ui0 = uiModule("Ui")
+	local cardScale = Ui0.scale()
+	check(
+		panel.Size.Y.Offset * cardScale <= Ui0.area().Y,
+		string.format("알 창 높이 %.0fpx ≤ 화면 %dpx (폰)", panel.Size.Y.Offset * cardScale, Ui0.area().Y)
+	)
+	check(
+		card1 and card1.Place.Size.Y.Offset * cardScale >= 45.9,
+		string.format("'놓기' 버튼 %.1fpx (46 이상)", card1 and card1.Place.Size.Y.Offset * cardScale or 0)
+	)
+	check(
+		tabBag.Size.Y.Offset * cardScale >= 45.9,
+		string.format("탭 버튼 %.1fpx (46 이상)", tabBag.Size.Y.Offset * cardScale)
+	)
 	local Inc = ctrl("IncubatorController")
 	check(Inc.shortTime(112) == "1m 52s" and Inc.shortTime(300) == "5m", "알 시간 글자 '1m 52s' / '5m'")
+
+	print("[알 놓기 모드]")
+	-- State 는 Snapshot 표를 그대로 고치므로(DataUpdate 가 키를 덮어씀) 원래 목록을 따로 들고 있음
+	local savedIncubators, savedEggs = snapshot.incubators, snapshot.eggs
+	local MapLayout = requireNode(Loader.get("ReplicatedStorage/Shared/Data/MapLayout"))
+	-- 내 베이스(1번) 앞마당에 서 있음
+	local spawnSpot = MapLayout.plot(1).spawn
+	root.Position = roblox.Vector3.new(spawnSpot.x, 3, spawnSpot.z)
+	root.CFrame = roblox.CFrame.new(root.Position)
+	check(click(card1 and card1:FindFirstChild("Place")), "카드 '놓기' 누름")
+	check(Inc.isPlacing(), "놓기 모드 시작")
+	check(not panel.Visible, "놓기 모드에서는 알 창 닫힘")
+	local ghost = Workspace:FindFirstChild("EggPlacePreview")
+	check(
+		ghost ~= nil and ghost:FindFirstChild("EggPlaceRing") ~= nil,
+		"반투명 알 미리보기 + 바닥 동그라미"
+	)
+	local placeBar = playerGui:FindFirstChild("PlaceBar", true)
+	check(placeBar and placeBar.Visible, "위 안내 줄 보임")
+	local placeHere = placeBar and placeBar:FindFirstChild("PlaceHere")
+	check(placeHere and placeHere.Visible, "폰: '여기 놓기' 버튼 보임")
+	check(ghost and ghost.Color.G > ghost.Color.R, "폰: 처음엔 우리 안 첫 빈자리에 초록 미리보기")
+	local okSpot = MapLayout.toWorld(1, -24, 0)
+	local ok1 = Inc.previewAt(okSpot.x, okSpot.z)
+	check(ok1 and ghost.Color.G > ghost.Color.R, "우리 안 빈자리 = 초록")
+	local hint = placeBar:FindFirstChild("PlaceHint")
+	check(hint and string.find(hint.Text, "놓을 수 있어요", 1, true), "안내: " .. tostring(hint and hint.Text))
+	local yard = MapLayout.toWorld(1, 25, 0)
+	local ok2, reason2 = Inc.previewAt(yard.x, yard.z)
+	check(not ok2 and ghost.Color.R > ghost.Color.G, "우리 밖(앞마당) = 빨강")
+	check(reason2 and string.find(reason2, "울타리", 1, true), "이유: " .. tostring(reason2))
+	local near = MapLayout.toWorld(1, -10, -19)
+	local ok3, reason3 = Inc.previewAt(near.x, near.z)
+	check(
+		not ok3 and reason3 and string.find(reason3, "가까워요", 1, true),
+		"놓인 알 옆 = 빨강 (" .. tostring(reason3) .. ")"
+	)
+	local fence = MapLayout.toWorld(1, -34.5, 0)
+	check(not Inc.previewAt(fence.x, fence.z), "울타리(뒤 벽) 2스터드 안 = 빨강")
+	local beforeSent = #sent
+	check(
+		not Inc.confirmPlace() and #sent == beforeSent and Inc.isPlacing(),
+		"빨강에서 놓기 → 안 보냄, 모드 유지"
+	)
+	Inc.previewAt(okSpot.x, okSpot.z)
+	check(click(placeHere), "'여기 놓기' 누름")
+	local placed = lastSent("PlaceEgg")
+	check(
+		placed
+			and placed.args[1] == "e1"
+			and math.abs(placed.args[2] - okSpot.x) < 0.01
+			and math.abs(placed.args[3] - okSpot.z) < 0.01,
+		"PlaceEgg(e1, 월드 x, z) 보냄"
+	)
+	check(
+		not Inc.isPlacing() and Workspace:FindFirstChild("EggPlacePreview") == nil,
+		"보낸 뒤 놓기 모드 끝, 미리보기 지움"
+	)
+	check(not placeBar.Visible, "안내 줄 숨김")
+	-- 멀리 서 있으면 빨강
+	Inc.beginPlace("e2")
+	root.Position = roblox.Vector3.new(0, 3, -140)
+	local ok4, reason4 = Inc.previewAt(okSpot.x, okSpot.z)
+	check(
+		not ok4 and reason4 and string.find(reason4, "가까이", 1, true),
+		"베이스 밖 멀리 = 빨강 (" .. tostring(reason4) .. ")"
+	)
+	root.Position = roblox.Vector3.new(spawnSpot.x, 3, spawnSpot.z)
+	-- ESC 로 취소
+	fakeServices.UserInputService.InputBegan:Fire({ KeyCode = roblox.Enum.KeyCode.Escape }, false)
+	check(not Inc.isPlacing() and Workspace:FindFirstChild("EggPlacePreview") == nil, "ESC → 놓기 모드 끝")
+	-- 취소 버튼
+	Inc.beginPlace("e2")
+	check(
+		click(placeBar:FindFirstChild("PlaceCancel")) and not Inc.isPlacing(),
+		"'취소' 버튼 → 놓기 모드 끝"
+	)
+	-- 놓으려던 알이 가방에서 사라지면 저절로 끝
+	Inc.beginPlace("e2")
+	fire("DataUpdate", "eggs", { eggs = { savedEggs[1] } })
+	check(not Inc.isPlacing(), "가방에서 알이 사라지면 놓기 모드 끝")
+	check(not Inc.beginPlace("nope"), "가방에 없는 알은 놓기 모드 안 됨")
+	-- 우리가 가득 차면 놓기 모드 안 들어감
+	local full = {}
+	for i = 1, 8 do
+		table.insert(full, {
+			uid = "f" .. i,
+			petId = "dog",
+			size = "normal",
+			mutations = {},
+			x = -30 + i,
+			z = 0,
+			progress = 0,
+			required = 10,
+		})
+	end
+	fire("DataUpdate", "incubators", { incubators = full })
+	check(not Inc.beginPlace("e1") and not Inc.isPlacing(), "우리 8개 가득 → 놓기 모드 안 됨")
+	fire("DataUpdate", "incubators", { incubators = savedIncubators })
+	fire("DataUpdate", "eggs", { eggs = savedEggs })
+
 	check(
 		click(playerGui:FindFirstChild("PetsButton", true)) and Windows.isOpen("Pets"),
 		"주황 발바닥 버튼 → 펫 창"
 	)
 	Windows.close()
-	-- 우리 안 부화 중 알: "에그 / 시간" 이름표 + 부화 프롬프트
-	check(growingEgg:FindFirstChild("GrowTag") ~= nil, "우리 안 알 위 '에그' 이름표")
+	-- 우리 안 부화 중 알: 이름표는 서버 것("에그 1m 52s"), 클라는 프롬프트 2개
+	check(growingEgg:FindFirstChild("GrowTag") == nil, "클라 이름표 없음 (서버 이름표만)")
 	local hatchPrompt = growingEgg:FindFirstChild("HatchPrompt")
-	check(hatchPrompt and hatchPrompt.ActionText == "부화!", "내 알에 '부화!' 프롬프트")
+	check(
+		hatchPrompt and hatchPrompt.ActionText == "부화!" and hatchPrompt.Enabled,
+		"다 자란 내 알: '부화!' 프롬프트 켜짐"
+	)
+	check(
+		growingEgg:FindFirstChild("PickUpPrompt") and not growingEgg.PickUpPrompt.Enabled,
+		"다 자란 알: '집기' 프롬프트 꺼짐"
+	)
 	check(trigger(hatchPrompt) and lastSent("HatchEgg").args[1] == "i2", "프롬프트 → HatchEgg(i2)")
+	local pickPrompt = youngEgg:FindFirstChild("PickUpPrompt")
+	check(
+		pickPrompt and pickPrompt.ActionText == "집기" and pickPrompt.Enabled,
+		"자라는 내 알: '집기' 프롬프트 켜짐"
+	)
+	check(not youngEgg.HatchPrompt.Enabled, "자라는 알: '부화!' 프롬프트 꺼짐")
+	check(trigger(pickPrompt) and lastSent("PickUpPlacedEgg").args[1] == "i1", "'집기' → PickUpPlacedEgg(i1)")
+	check(
+		othersEgg:FindFirstChild("HatchPrompt") == nil and othersEgg:FindFirstChild("PickUpPrompt") == nil,
+		"남의 알은 프롬프트 없음"
+	)
+	-- 떨어진 알 카운트다운
+	local dropTimer = droppedEgg:FindFirstChild("DropTimer")
+	local dropText = dropTimer and dropTimer:FindFirstChild("Time")
+	check(
+		dropText and dropText.Text == "32초",
+		"떨어진 알 머리 위 '32초': " .. tostring(dropText and dropText.Text)
+	)
+	check(nestEgg:FindFirstChild("DropTimer") == nil, "둥지 알은 카운트다운 없음")
+	droppedEgg:SetAttribute("ExpiresAt", nil)
+	sigOf(droppedEgg, "Attr_ExpiresAt"):Fire()
+	check(droppedEgg:FindFirstChild("DropTimer") == nil, "다시 주우면(ExpiresAt 없음) 카운트다운 사라짐")
 	-- 업그레이드 표지판 프롬프트
 	local signPrompt = upgradeSign:FindFirstChild("UpgradePrompt")
 	check(signPrompt and signPrompt.Enabled == true, "내 베이스 업그레이드 표지판 프롬프트")
@@ -1073,14 +1335,44 @@ local function body()
 	fire("Announce", { kind = "rareEgg", text = "숲에 비밀 알!", rarity = "secret" })
 	fire("RunAlert", { egg = { petId = "dog" }, guardName = "닭", guardSpeed = 10, yourSpeed = 5 })
 	fire("Caught", { cause = "guard", by = "닭", eggOutcome = "ReturnToNest", ragdollSeconds = 2 })
-	fire("EggDelivered", { petId = "dog", slot = 1, required = 5 })
+	holdDelays = true -- 토스트가 바로 사라지지 않게
+	fire("EggDelivered", {
+		uid = "e3",
+		petId = "dog",
+		size = "normal",
+		mutations = {},
+		biomeId = "forest",
+		special = false,
+		progress = 0,
+		required = 10,
+	})
+	local function toastHas(text)
+		for _, d in playerGui:GetDescendants() do
+			if d:IsA("TextLabel") and string.find(d.Text, text, 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+	check(
+		toastHas("에그를 훔쳤어요! 가방에 들어갔어요"),
+		"배달 토스트 '에그를 훔쳤어요! 가방에 들어갔어요'"
+	)
 	fire("HatchResult", {
 		pet = { uid = "p30", petId = "unicorn", size = "giant", mutations = { "rainbow" } },
 		isNew = true,
 		income = 1e9,
 		equipped = true,
 	})
-	fire("EggGranted", { record = { petId = "ringlord" }, queued = false, source = "altar" })
+	fire(
+		"EggGranted",
+		{ egg = { uid = "e4", petId = "ringlord", size = "normal", mutations = {} }, queued = false, source = "altar" }
+	)
+	check(
+		toastHas("가방에 들어갔어요") and not toastHas("부화 슬롯"),
+		"선물 알 토스트 '가방에 들어갔어요'"
+	)
+	holdDelays = false
 	fire("PetsSold", { pets = { {} }, money = 100 })
 	check(true, "이벤트 처리")
 

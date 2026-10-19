@@ -120,7 +120,7 @@ local function fadeTo(target: Sound?)
 	if target then
 		local def = Sounds[target.Name]
 		target.Volume = 0
-		if not target.IsPlaying then
+		if not target.Playing then
 			target:Play()
 		end
 		TweenService:Create(target, TweenInfo.new(1), { Volume = if def then def.volume else 0.3 }):Play()

@@ -225,7 +225,7 @@ return function(T, Loader)
 	--   (EquipTrail 은 선임이 붙여서 지움)
 	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
 	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
-	local AWAITING_CLIENT = { PlaceEgg = true, PickUpPlacedEgg = true }
+	local AWAITING_CLIENT: { [string]: boolean } = {}
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",

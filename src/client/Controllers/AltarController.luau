@@ -401,7 +401,7 @@ function AltarController.start()
 				title = "제단 성공!",
 				titleColor = C.yellow,
 				ribbon = petName(eggId) .. " 알",
-				footer = "알이 부화 슬롯에 들어갔어요"
+				footer = "알이 가방에 들어갔어요"
 					.. (if p.partner and p.partner ~= "" then " (짝: " .. tostring(p.partner) .. ")" else ""),
 				delay = 0.8,
 			})
@@ -434,7 +434,7 @@ function AltarController.start()
 			title = "비밀 합성!",
 			titleColor = C.purple,
 			ribbon = "합성 알",
-			footer = "알이 부화 슬롯에 들어갔어요",
+			footer = "알이 가방에 들어갔어요",
 			delay = 1.1,
 		})
 		shrines.refresh()

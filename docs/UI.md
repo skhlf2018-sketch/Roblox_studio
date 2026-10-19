@@ -33,10 +33,10 @@
 | `UI/Ui.luau` | 창 = **진한 회남색 + 두꺼운 검은 테두리 + 줄무늬 제목 띠(`Ui.stripes`) + 빨간 네모 X**. 버튼 모서리 10 |
 | `UI/Icons.luau` | **새 파일.** HUD 그림을 Frame 으로: cart·book·egg·paw·shoe·money·moon·sun·trash·star·lock·gear·gift·scroll·sell·trail |
 | `UI/Layout.luau` | 반응형 자리 계산. `Layout.menu(..., topLimit, bottomOverride)` 추가, 핫바 칸 64(원작처럼 작게) |
-| `UI/Windows.luau`, `UI/PetViewport.luau`, `UI/PetPicker.luau`, `UI/WorldPrompt.luau`, `UI/Fx.luau` | 그대로 (PetPicker 글자색만 진한 창에 맞춤) |
+| `UI/Windows.luau`, `UI/PetViewport.luau`, `UI/PetPicker.luau`, `UI/WorldPrompt.luau`, `UI/Fx.luau` | 그대로 (PetPicker 글자색만 진한 창에 맞춤. 3판: `PetPicker.myEggs` 에 가방 알도 — 사쿠라 블룸은 가방 알도 됨) |
 | `Controllers/HudController.luau` | **다시 씀.** 3장 HUD 전부 + 슬로우 모드 |
 | `Controllers/ChaseController.luau` | **다시 씀.** "달리기!!" 배너·빨간 비네트·드롭 버튼, 잡힘 연출 |
-| `Controllers/IncubatorController.luau` | **다시 씀.** "성장하는 달걀" 패널 + 우리 안 알 "에그 / 1m 52s" + "부화!" 프롬프트 |
+| `Controllers/IncubatorController.luau` | **다시 씀 (3판).** 알 창("성장하는 달걀" 패널: 성장 중 탭 + 가방 탭) + **알 놓기 모드**(`PlaceEgg`) + 우리 안 알 "부화!"/"집기" 프롬프트 |
 | `Controllers/TreadmillController.luau` | **새 파일.** 러닝머신 위에선 이동 입력 끄기, 점프 → `TreadmillLeave`, "+500" 분홍 팝업 |
 | `Controllers/TrailController.luau` | **새 파일.** 트레일 상점 창 + 허브 가게 프롬프트 |
 | `Controllers/IndexController.luau` | **다시 씀.** 원작 "펫 인덱스" 창 |
@@ -76,7 +76,7 @@
 - **베이스(7개)** — `MapLayout.plot(i)`:
   - 우리(뒤 46, `PenArea` 파트가 우리 전체를 덮고 LookVector = 복도 쪽) + 앞마당(24).
   - **나무 X자 울타리**: 검은 기둥(10 간격) + 위·아래 가로대 + X 보강재, 가로대 색 = `Visuals.plotColors[i]`(갈색·흰·노랑·하늘·분홍·연두·보라). 우리 앞 가운데 12 출입구.
-  - 우리 안 앞쪽 부화 알 받침 8개(`IncubatorSlot`, `MapLayout.incubatorSpots`), 펫은 뒤쪽(`petRect`).
+  - 우리 바닥은 비어 있음 (3판: 부화 알 받침 없앰 — 알은 플레이어가 `PlaceEgg` 로 우리 안 아무 데나 놓음), 펫은 뒤쪽(`petRect`).
   - 앞마당: 스폰(흰 원), **러닝머신**(벨트 = `Treadmill` 태그, `treadmillRect` 12×8, 윗면 = 바닥+1, Attr `Level`), **퓨즈 머신**(파란 기계 + "?" 화면(`Core`) + 별 패널 + 빨간 표시등 `Tube1~3` + 청록 링 + "퓨즈 머신 / 0/3" 빌보드 `FuseLabel`), **판매 가게**(작은 천막, `SellStall` + `PlotIndex`), 업그레이드 표지판 2개(남색 판 "펫 우리 업그레이드 / 레벨 5 > 레벨 6 / [$50B]", "러닝머신 업그레이드 …", `UpgradeSign` 태그 + Attr `Kind`/`PlotIndex`), 주인 이름 간판(`PlotSign`), 러닝머신 위 "+100/스텝" 분홍 빌보드.
   - 표지판 숫자·러닝머신 모양은 주인 Attribute `PenLevel`/`TreadmillLevel` 이 바뀔 때마다 갱신 (`Economy.nextPenCost`/`nextTreadmillCost`/`treadmillPerStep`).
 - **러닝머신 모양 10단계**(`TREAD_STYLES`): 1 기본(회색 벨트) · 2 사이파이(흰 틀 + 청록 네온) · 3 불꽃(검붉은 틀 + 화로 불) · 4 셀럽(레드카펫 + 금 기둥·벨벳 줄) · 5 황금(반짝) · 6 얼음(파란 틀 + 하늘색 얼음 결정, 원작 사진) · 7 럭키블록("?" 노란 블록) · 8 해커(검정 + 초록 네온 모니터) · 9 악마(뿔 + 붉은 불) · 10 천사(날개 + 금 링). 레벨 0(잠김) = 기본 모양 반투명 + "잠김 ($1K)".
@@ -94,7 +94,7 @@
 | 경비 겉모습 `SleepZ` 빌보드(`Z1~Z3`), `GuardPose` 용접, `GuardGlow` | WorldFx Z 둥실둥실 |
 | 우리 펫 `PetUid` Attr + `PenPet` 태그, 빌보드 `PetTag`(`Rarity`/`PetName`/`Income`/`Extra`) | WorldFx 돈 팝업·통통 |
 | 알 `EggVisual` 폴더(`Layer`·`Spot1~2`), 빌보드 `WeightTag`(`Gender`/`Kg`) | WorldFx 레인보우 순환 |
-| 부화 중 알 빌보드 `GrowTag`(`Title`/`Time`), 프롬프트 `HatchPrompt` (클라가 붙임) | IncubatorController |
+| 부화 중 알 프롬프트 `HatchPrompt`("부화!")·`PickUpPrompt`("집기") (클라가 내 알에만 붙임, 이름표는 서버 `Label`) · 놓기 미리보기 `EggPlacePreview`(+`EggPlaceRing`, 내 화면만) · 떨어진 알 `DropTimer`(`Time`) | IncubatorController · WorldFxController |
 
 ---
 
@@ -137,15 +137,18 @@
 | 왼쪽 메뉴 (넓은 버튼: 아이콘 + 글자) | HudController | 상점 → Shop 창, 인덱스 → Index 창(배지 = 받을 보상 수), 퀘스트(QuestController 가 `addMenuButton`), 선물(받을 게 있을 때만), 슬로우 모드, 설정 |
 | 슬로우 모드 | HudController | 켜면 `Humanoid.WalkSpeed` = 플레이어 Attr `WalkSpeed` ÷ 2 (서버가 속도를 바꿔도 다시 절반으로). 느려지기만 하므로 치트 검사와 충돌 없음 |
 | 왼쪽 아래 속도·돈·친구 부스트 | HudController | Attr `Speed`(빨강), `Money`(초록, 숫자 올라가는 애니메이션). "친구 부스트" 는 장식 |
-| 오른쪽 알 버튼 / 발바닥 버튼 | HudController + IncubatorController | 알 → "성장하는 달걀" 패널 열고 닫기, 초록 배지 = 지금 부화 가능 수. 발바닥 → Pets 창 |
+| 오른쪽 알 버튼 / 발바닥 버튼 | HudController + IncubatorController | 알 → 알 창("성장하는 달걀" 패널) 열고 닫기, 초록 배지 = 가방 속 알 수 + 지금 부화 가능 수(할 일 수). 새 알이 들어오면 버튼 통통 + 다음에 열 때 "가방" 탭. 발바닥 → Pets 창 |
 | 오른쪽 아래 시간 | HudController | GameState `Phase`/`PhaseEndsAt`. 낮엔 달 그림(밤까지), 밤엔 해 그림(낮까지). "3분 58초" / 1분 아래는 "52초 안에" |
 | 구역 배너 | HudController | `ZoneEntered{nameEn}` + 테마 `label` 이모지 ("Jungle 😬"), 2.6초 |
 | 공지 | NotifyController | `Announce` — 희귀 알은 `rareEggText`: 구역(초록) + 희귀도(색) + 알 이름(금) "에그 등장!" |
-| 토스트 | NotifyController | `Notify`, `EggDelivered` → "에그를 훔쳤어요!" (바탕 없는 굵은 외곽선 글씨) |
+| 토스트 | NotifyController | `Notify`, `EggDelivered` → "에그를 훔쳤어요! 가방에 들어갔어요", `EggGranted` → "제단 선물 알: 펫이름! 가방에 들어갔어요" (바탕 없는 굵은 외곽선 글씨) |
 | 달리기!! | ChaseController | Attr `CarryingEgg` ≠ "" 동안 배너 + 비네트(맥박) + 드롭 버튼(`DropEgg`). `RunAlert` 속도 부족 경고, `ChaseEnded.reason` 안내, 허브에선 "베이스로!" |
 | 잡힘 | ChaseController | `Caught` → "잡혔다!" + 화면 흔들림 + 빨간 번쩍 |
-| 성장하는 달걀 패널 | IncubatorController | 줄: 알 그림 + 초록 막대 + "5m 25s" + ▶(다 자랐으면 `HatchEgg`, 아니면 안내). "모두 성장시키기"(로벅스)는 꺼 둠 |
-| 우리 안 알 이름표·부화 | IncubatorController | `IncubatingEgg` 위 "에그 / 1m 52s" → 다 자라면 "부화!" + 내 알에만 프롬프트(E) → `HatchEgg(uid)` |
+| 알 창 "성장 중" 탭 | IncubatorController | 우리에 놓인 알(`snap.incubators`) 줄: 알 그림 + 펫 이름(희귀도 색) + 초록 막대 + "5m 25s"(다 자라면 노란 막대 "부화 가능!") + 주황 "가방"(`PickUpPlacedEgg`, 자라는 중일 때만) + ▶(다 자랐으면 `HatchEgg`, 아니면 안내). 탭 글자 "성장 중 2/8"(`placedEggMax`). "모두 성장시키기"(로벅스)는 꺼 둠 |
+| 알 창 "가방" 탭 | IncubatorController | 가방 속 알(`snap.eggs`, `DataUpdate("eggs")`) 카드 3열: 희귀도 색 테두리·바탕, 펫 색 알 그림(특별 알 ★), 펫 이름, "전설 · 큼 · 골든"(희귀도·크기·돌연변이), 초록 **놓기** → 알 놓기 모드. 탭 글자 "가방 3/50"(`eggInventoryMax`). 창 높이는 폰 화면 안으로 줄고 넘치면 스크롤 |
+| 알 놓기 모드 | IncubatorController | 우리 바닥(y = 0 평면)에 반투명 네온 알 + 바닥 동그라미(같은 크기 알 간격). **초록 = 놓을 수 있음 / 빨강 = 안 됨** — `EggPlacement.check(MapLayout.toLocal(PlotIndex, 점))` + 놓인 알 + 우리 펫(PenPet) 간격 + 놓인 알 수 + 서 있는 곳(베이스 안 또는 14 안), 서버 `PlaceEgg` 와 같은 순서. 위 안내 줄 `PlaceBar`(이유 글 = `EggPlacement.message`). PC: 마우스 따라감, 왼쪽 클릭 → `PlaceEgg(uid, x, z)`(월드). 폰: 처음엔 우리 안 첫 빈 격자 자리, 바닥을 톡(`TouchTapInWorld`) → 미리보기 이동, **여기 놓기** → `PlaceEgg`. ESC·**취소** → 끝, 보낸 뒤·그 알이 가방에서 사라지면 끝. 모드 중엔 알 창 닫힘 |
+| 우리 안 알 이름표·부화·집기 | IncubatorController | 이름표 "에그 1m 52s" 는 **서버(BaseService) 것**을 그대로 씀(클라 이름표 없음). 내 `IncubatingEgg` 에만 프롬프트 2개(E): 다 자라면 **부화!** → `HatchEgg(uid)`, 자라는 중이면 **집기**(0.4초 누르기) → `PickUpPlacedEgg(uid)` (`Config.ALLOW_EGG_PICKUP`) |
+| 떨어진 알 카운트다운 | WorldFxController | `Egg` 파트 Attribute `ExpiresAt`(서버 시각)이 있으면 머리 위 빨간 "32초" (`ceil(ExpiresAt - workspace:GetServerTimeNow())`, 0.25초마다), 10초부터 노랑/빨강 깜빡. Attribute 가 없어지면(다시 주움) 지움 |
 | 러닝머신 | TreadmillController | Attr `OnTreadmill` 동안 이동 입력 끔 + "점프하면 내려와요"(터치 "내리기" 버튼). 점프 → `TreadmillLeave`. `TreadmillStep{amount}` → 분홍 "+500" |
 | 돈 팝업 | WorldFxController | `IncomeTick{petUid, amount}` → 그 펫 위 큰 초록 "+$34K" 떠오름 |
 | 핫바 | HotbarController | PC 아래 가운데, 작은 어두운 칸(번호·그림·"x3"), 알 들면 마지막 칸에 알 |
@@ -257,6 +260,6 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오�
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
 lune run tests/smoke_visuals.luau   # 서버: 2판 맵(구역 15 = MapLayout z 범위, 둥지 자리, 파트 수 ≤ 12000, 2048 한계, 판매 8·트레일 1·밤 벽 1, 베이스 7 우리 방향·러닝머신 자리·레벨 0~10 모양·표지판 숫자·주인 간판), 특수 장소 모델, 펫 134종(평균 30~80 파트), 우리 격자, 경비 15종 크기·자세, 알 6층·무게 라벨
-lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작, 창 6개(인덱스·상점·트레일·펫 판매…), 폰 버튼 46px, 2판 HUD(알 버튼·패널·▶·발바닥·시간 글자), 부화 프롬프트, 업그레이드 표지판·판매 가게·트레일 상점 프롬프트, 달리기!!·드롭·알 칸, 러닝머신(점프→TreadmillLeave, +500), 구역 배너, +$34K, 슬로우 모드, 희귀 알 공지, 퓨전·사쿠라·제단·비밀 통로·퀘스트·무기, 반응형 HUD(750×381·844×390·1428×750)
+lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작, 창 6개(인덱스·상점·트레일·펫 판매…), 폰 버튼 46px, 2판 HUD(알 버튼·패널·▶·발바닥·시간 글자), 3판 알 창(성장 중 탭 "부화 가능!"·가방 버튼 → PickUpPlacedEgg, 가방 탭 카드·놓기 46px·창 높이), 알 놓기 모드(초록/빨강: 우리 안·앞마당·놓인 알 옆·울타리·멀리 서 있음, 여기 놓기 → PlaceEgg(uid, 월드 x, z), ESC·취소·가방에서 사라짐·우리 가득), 부화!/집기 프롬프트(남의 알 없음), 떨어진 알 "32초", 배달·선물 알 토스트 "가방에 들어갔어요", 업그레이드 표지판·판매 가게·트레일 상점 프롬프트, 달리기!!·드롭·알 칸, 러닝머신(점프→TreadmillLeave, +500), 구역 배너, +$34K, 슬로우 모드, 희귀 알 공지, 퓨전·사쿠라·제단·비밀 통로·퀘스트·무기, 반응형 HUD(750×381·844×390·1428×750)
 ```
 `@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 체크리스트로 스튜디오에서.

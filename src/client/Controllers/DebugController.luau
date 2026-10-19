@@ -25,13 +25,14 @@ function DebugController.start()
 	Net.on(E.Snapshot, function(snapshot: any)
 		print(
 			string.format(
-				"[Snapshot] 돈 %s, 속도 %s, 펫 %d마리(장착 %d/%d), 부화 중 %d개, 베이스 %d번",
+				"[Snapshot] 돈 %s, 속도 %s, 펫 %d마리(장착 %d/%d), 부화 중 %d개, 가방 %d개, 베이스 %d번",
 				Format.money(snapshot.money),
 				Format.number(snapshot.effectiveSpeed),
 				#snapshot.pets,
 				#snapshot.equipped,
 				snapshot.penSlots,
 				#snapshot.incubators,
+				#(snapshot.eggs or {}),
 				snapshot.plotIndex
 			)
 		)
@@ -81,13 +82,16 @@ function DebugController.start()
 			)
 		)
 	end)
+	-- 2판 수정: 배달한 알은 알 가방으로 (slot 없음 — BagEgg)
 	Net.on(E.EggDelivered, function(record: any)
+		if typeof(record) ~= "table" then
+			return
+		end
 		print(
 			string.format(
-				"[배달] %s 알 → 부화 슬롯 %d (%s)",
-				petName(record.petId),
-				record.slot,
-				Format.duration(record.required)
+				"[배달] %s 알 → 알 가방 (부화 %s)",
+				petName(tostring(record.petId)),
+				Format.duration(tonumber(record.required) or 0)
 			)
 		)
 	end)

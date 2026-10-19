@@ -56,7 +56,6 @@ export type PlotParts = {
 	treadmill: BasePart?,
 	pen: BasePart?,
 	sign: BasePart?,
-	incubatorSlots: { [number]: BasePart },
 }
 
 -- 맵 전용 숫자 (배치 좌표는 MapLayout)
@@ -3216,29 +3215,7 @@ local function buildPlot(index: number, parent: Instance)
 	fenceLine(plotFolder, Vector3.new(penFrontX, 0, zA), Vector3.new(backX - f * 0.5, 0, zA), fenceColor)
 	fenceLine(plotFolder, Vector3.new(penFrontX, 0, zB), Vector3.new(backX - f * 0.5, 0, zB), fenceColor)
 
-	-- 부화 알 받침 8개 (MapLayout.incubatorSpots)
-	for slot, spot in MapLayout.incubatorSpots(index) do
-		makePart({
-			name = "IncubatorSlot" .. slot,
-			size = Vector3.new(0.4, 4.6, 4.6),
-			cframe = CFrame.new(spot.x, FLOOR_TOP + 0.2, spot.z) * CFrame.Angles(0, 0, math.rad(90)),
-			parent = plotFolder,
-			color = Color3.fromRGB(150, 100, 55),
-			material = Enum.Material.Plastic,
-			shape = Enum.PartType.Cylinder,
-			canCollide = false,
-			tag = Tags.IncubatorSlot,
-			attributes = { PlotIndex = index, SlotIndex = slot },
-		})
-		P(
-			plotFolder,
-			"VCyl",
-			Vector3.new(3.4, 0.5, 0),
-			CFrame.new(spot.x, FLOOR_TOP + 0.3, spot.z),
-			Color3.fromRGB(225, 190, 110),
-			M.Plastic
-		)
-	end
+	-- 2판 수정: 부화 알 받침 없음 — 알은 우리 바닥 아무 데나 놓음 (PlaceEgg, IncubatorController 놓기 모드)
 
 	-- 스폰 (앞마당 가운데) + 흰 원
 	makePart({
@@ -3685,7 +3662,7 @@ local function indexMap()
 	for _, p in taggedParts(Tags.Plot) do
 		local index = numberAttr(p, "PlotIndex")
 		if index then
-			plots[index] = { index = index, floor = p, incubatorSlots = {} }
+			plots[index] = { index = index, floor = p }
 		end
 	end
 	local function attach(tag: string, apply: (PlotParts, BasePart) -> ())
@@ -3708,12 +3685,6 @@ local function indexMap()
 	end)
 	attach(Tags.PlotSign, function(plot, p)
 		plot.sign = p
-	end)
-	attach(Tags.IncubatorSlot, function(plot, p)
-		local slot = numberAttr(p, "SlotIndex")
-		if slot then
-			plot.incubatorSlots[slot] = p
-		end
 	end)
 
 	for _, biome in Biomes.list do

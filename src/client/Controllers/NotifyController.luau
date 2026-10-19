@@ -3,10 +3,10 @@
 	NotifyController — 알림
 	- Notify      → 화면 아래 가운데 굵은 외곽선 글씨 토스트 (원작 "에그를 훔쳤어요!")
 	- Announce    → 상단 가운데 굵은 외곽선 글씨 한 줄 ("ALL EGG RESET!", "OO 구역에 OO 알 등장!", 밤/낮)
-	- EggDelivered → "에그를 훔쳤어요!" 토스트, IndexRewarded → 보상 토스트
+	- EggDelivered → "에그를 훔쳤어요! 가방에 들어갔어요" 토스트 (2판 수정: 알 가방), IndexRewarded → 보상 토스트
 	- 희귀 알 공지는 원작처럼 색 조각 글씨: "Jungle에 비밀 킹 스네이크 에그 등장!" (NotifyController.rareEggText)
 	- OfflineIncome → 접속 때 "자리 비운 동안 $X 벌었어요!" 팝업
-	- EggGranted / PetsSold 토스트 (사쿠라·제단·비밀 통로 결과 연출은 SakuraController / AltarController)
+	- EggGranted ("○○ 선물 알: 펫! 가방에 들어갔어요") / PetsSold 토스트 (사쿠라·제단·비밀 통로 결과 연출은 SakuraController / AltarController)
 	  NotifyController.toast(text, kind) 는 다른 컨트롤러도 씀.
 ]]
 
@@ -261,7 +261,7 @@ function NotifyController.start()
 		NotifyController.banner(text or escape(tostring(payload.text)), color)
 	end)
 	Net.on(E.EggDelivered, function()
-		NotifyController.toast("에그를 훔쳤어요!", "success")
+		NotifyController.toast("에그를 훔쳤어요! 가방에 들어갔어요", "success")
 	end)
 	Net.on(E.IndexRewarded, function(payload: any)
 		if typeof(payload) ~= "table" then
@@ -308,19 +308,13 @@ function NotifyController.start()
 	local SOURCES: { [string]: string } = { altar = "제단", shrine = "비밀 통로", quest = "퀘스트" }
 	local extra = E :: { [string]: string }
 	onOptional(extra.EggGranted, function(p)
-		local egg = p.record or p.egg or {}
+		-- 2판 수정: 선물 알도 알 가방으로 (대기 줄 없음, payload.queued 는 안 봄)
+		local egg = p.egg or p.record or {}
 		local from = SOURCES[tostring(p.source)] or "선물"
-		if p.queued then
-			NotifyController.toast(
-				from .. " 선물 알! 부화 슬롯이 가득 차서 기다리는 중이에요",
-				"info"
-			)
-		else
-			NotifyController.toast(
-				from .. " 선물 알: " .. petName(egg.petId) .. "! 부화 슬롯에 들어갔어요",
-				"success"
-			)
-		end
+		NotifyController.toast(
+			from .. " 선물 알: " .. petName(egg.petId) .. "! 가방에 들어갔어요",
+			"success"
+		)
 	end)
 	onOptional(extra.PetsSold, function(p)
 		local n = if typeof(p.pets) == "table" then #p.pets else 0

@@ -284,7 +284,10 @@ local function body()
 	check(#(tagged.TrailShop or {}) == 1, "트레일 상점 1개")
 	check(#(tagged.NightWall or {}) == 1, "밤 벽 1장 (허브 경계)")
 	check(#(tagged.MainSpawn or {}) == 1, "기본 스폰 1개")
-	check(#(tagged.IncubatorSlot or {}) == 56, "부화 알 받침 7×8")
+	check(
+		#(tagged.IncubatorSlot or {}) == 0,
+		"부화 알 받침 없음 (2판 수정: 알은 우리 바닥 아무 데나)"
+	)
 	local plotOk = true
 	for i = 1, 7 do
 		local plot = MapBuilder.getPlot(i)

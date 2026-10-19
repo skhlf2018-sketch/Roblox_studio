@@ -6,6 +6,7 @@
 	- 머리 위에 든 알 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 희귀도 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
+	- 바닥에 떨어진 알(Egg, Attribute ExpiresAt) 머리 위 빨간 "32초" 카운트다운 (2판 수정, 10초부터 깜빡)
 	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 펫 돈 팝업 "+$34K"(IncomeTick) / 자는 경비 Z 둥실둥실 / 부화: 반짝 / 잡힘: 머리 위 "퍽!" + 별
 ]]
 
@@ -138,6 +139,56 @@ local function popText(adornee: BasePart, text: string, color: Color3)
 	task.delay(0.9, function()
 		gui:Destroy()
 	end)
+end
+
+------------------------------------------------------------------
+-- 떨어진 알 카운트다운 "32초" (2판 수정: 알 파트 Attribute ExpiresAt, workspace:GetServerTimeNow 기준)
+------------------------------------------------------------------
+
+local dropTimers: { [BasePart]: TextLabel } = {}
+
+local function refreshDropTimer(egg: BasePart)
+	local expires = egg:GetAttribute("ExpiresAt")
+	local label = dropTimers[egg]
+	if typeof(expires) ~= "number" or egg.Parent == nil then
+		if label then
+			local gui = label.Parent
+			if gui then
+				gui:Destroy()
+			end
+			dropTimers[egg] = nil
+		end
+		return
+	end
+	if not label or label.Parent == nil then
+		local gui = Instance.new("BillboardGui")
+		gui.Name = "DropTimer"
+		gui.Size = UDim2.fromOffset(110, 46)
+		gui.StudsOffsetWorldSpace = Vector3.new(0, egg.Size.Y / 2 + 2.4, 0)
+		gui.LightInfluence = 0
+		gui.MaxDistance = 140
+		gui.Adornee = egg
+		local text = Instance.new("TextLabel")
+		text.Name = "Time"
+		text.Size = UDim2.fromScale(1, 1)
+		text.BackgroundTransparency = 1
+		text.Font = Enum.Font.FredokaOne
+		text.TextScaled = true
+		text.TextColor3 = Color3.fromRGB(255, 55, 55)
+		text.TextStrokeTransparency = 0
+		text.TextStrokeColor3 = Color3.fromRGB(60, 0, 0)
+		text.Parent = gui
+		gui.Parent = egg
+		label = text
+		dropTimers[egg] = text
+	end
+	local left = math.max(0, math.ceil(expires - Workspace:GetServerTimeNow()))
+	local shown = label :: TextLabel
+	shown.Text = tostring(left) .. "초"
+	-- 10초 남으면 노랑 ↔ 빨강 깜빡
+	shown.TextColor3 = if left <= 10 and left % 2 == 0
+		then Color3.fromRGB(255, 220, 60)
+		else Color3.fromRGB(255, 55, 55)
 end
 
 -- 2판: 배달 패드가 없어서 내 베이스 스폰 자리(앞마당 가운데)에서 반짝
@@ -274,6 +325,24 @@ function WorldFxController.start()
 	CollectionService:GetInstanceRemovedSignal(Tags.Egg):Connect(function(inst)
 		if inst:IsA("BasePart") then
 			eggs[inst] = nil
+			dropTimers[inst] = nil
+		end
+	end)
+	-- 바닥에 떨어진 알 머리 위 "32초" 카운트다운 (Attribute ExpiresAt = 서버 시각)
+	watchTag(Tags.Egg, function(inst)
+		if inst:IsA("BasePart") then
+			refreshDropTimer(inst)
+			inst:GetAttributeChangedSignal("ExpiresAt"):Connect(function()
+				refreshDropTimer(inst)
+			end)
+		end
+	end)
+	task.spawn(function()
+		while true do
+			for egg in dropTimers do
+				refreshDropTimer(egg)
+			end
+			task.wait(0.25)
 		end
 	end)
 

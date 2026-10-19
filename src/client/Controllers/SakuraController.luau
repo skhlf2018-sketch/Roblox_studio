@@ -213,6 +213,12 @@ local function nameOfTarget(uid: string): string
 				return (if pet then pet.name else record.petId) .. " 알"
 			end
 		end
+		for _, record in (snap.eggs or {}) :: { Types.BagEgg } do
+			if record.uid == uid then
+				local pet = Pets.get(record.petId)
+				return (if pet then pet.name else record.petId) .. " 알"
+			end
+		end
 		for _, record in (snap.pets or {}) :: { Types.PetRecord } do
 			if record.uid == uid then
 				local pet = Pets.get(record.petId)

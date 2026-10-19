@@ -127,6 +127,17 @@ function PetPicker.myEggs(): { Item }
 			note = "부화 중 알",
 		})
 	end
+	-- 2판 수정: 가방 속 알도 (SakuraApply 는 가방 알도 받음)
+	for _, record in (snap.eggs or {}) :: { Types.BagEgg } do
+		table.insert(list, {
+			uid = record.uid,
+			petId = record.petId,
+			size = record.size,
+			mutations = record.mutations or {},
+			kind = "egg",
+			note = "가방 알",
+		})
+	end
 	return list
 end
 
@@ -652,7 +663,7 @@ function PetPicker.open(opts: Options)
 	Windows.register(NAME, window, render)
 
 	s.unsubscribe = State.onChanged(function(section: string)
-		if s.alive and (section == "pets" or section == "incubators" or section == "snapshot") then
+		if s.alive and (section == "pets" or section == "incubators" or section == "eggs" or section == "snapshot") then
 			refreshItems()
 			render()
 		end

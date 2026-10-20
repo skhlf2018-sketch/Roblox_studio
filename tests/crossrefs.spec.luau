@@ -470,7 +470,11 @@ return function(T, Loader)
 		T.truthy(Config.MOVE_CHECK_KICK_WARNINGS >= 2)
 		T.truthy(Config.PET_INVENTORY_MAX >= 18, "최대 우리 칸(18)보다 작으면 안 됨")
 		T.truthy(Config.PLACED_EGG_MAX >= 1 and Config.EGG_INVENTORY_MAX >= Config.PLACED_EGG_MAX)
-		T.truthy(Config.GUARD_MAX_WALKSPEED > Config.SPEED_WALK_MAX * Config.GUARD_CHASE_SLOW_MIN_RATIO)
+		T.truthy(
+			Config.GUARD_MAX_WALKSPEED >= Config.SPEED_WALK_MAX,
+			"4판: 경비 상한은 플레이어 상한 이상"
+		)
+		T.truthy(Config.SPEED_LOG_SLOPE > 0 and Config.SPEED_LOG_SLOPE <= 2)
 		T.truthy(
 			Config.SESSION_LOCK_STALE_SECONDS > Config.SESSION_LOCK_WAIT_ATTEMPTS * Config.SESSION_LOCK_WAIT_SECONDS - 1
 		)

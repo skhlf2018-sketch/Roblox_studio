@@ -139,12 +139,6 @@ local function findPart(uid: string): BasePart?
 	return nil
 end
 
-local function phaseRate(): number
-	local state = ReplicatedStorage:FindFirstChild(Tags.StateFolderName)
-	local phase = if state then state:GetAttribute(Tags.StateAttributes.Phase) else "Day"
-	return Economy.growthRate(phase == "Night", false)
-end
-
 local function partProgress(part: BasePart, fallbackP: number, fallbackR: number): (number, number)
 	local p = part:GetAttribute("Progress")
 	local r = part:GetAttribute("Required")
@@ -922,7 +916,6 @@ function IncubatorController.start()
 	-- 막대·남은 시간·프롬프트·알 버튼 배지
 	local lastBadge = 0
 	local function tick()
-		local rate = phaseRate()
 		refreshPrompts()
 		local ready = 0
 		for _, record in snapIncubators() do
@@ -944,7 +937,7 @@ function IncubatorController.start()
 				row.bar.BackgroundColor3 = if isReady then C.yellow else C.shopGreen
 				row.timeLabel.Text = if isReady
 					then "부화 가능!"
-					else shortTime(Economy.remainingSeconds(progress, required, rate))
+					else shortTime(Economy.timerSeconds(progress, required)) -- 4판: 밤엔 이 숫자가 30배 빨리 줆
 				row.timeLabel.TextColor3 = if isReady then Color3.fromRGB(70, 40, 0) else C.white
 				Ui.setButton(row.play, nil, if isReady then C.yellow else C.shopGreen, true)
 				row.pickUp.Visible = Config.ALLOW_EGG_PICKUP and not isReady

@@ -8,7 +8,7 @@
 	  - 추격 포기 거리 없음: 알 든 사람이 허브(z < SAFE_ZONE_Z)에 들어가거나(= 배달, reason "safe") / 잡히거나 /
 	    알을 놓거나(DropEgg) / 밤이 될 때까지 계속 쫓음 → 끝나면 State "Return" 으로 집에 걸어가서 다시 "Sleeping"
 	  - 알의 구역 경비만 쫓음: 먼 구역 알을 들고 앞 구역들을 지나가도 그 구역 경비는 안 깨어남
-	  - 추격 속도: SpeedMath.guardChaseSpeed = 플레이어 WalkSpeed × clamp(경비 속도/알 든 실효 속도 × 0.99, 0.85, 3.0)
+	  - 추격 속도 (4판): SpeedMath.guardChaseSpeed(경비 속도) = 구역마다 고정, 플레이어 속도와 무관 (사장님 결정)
 	    (추천 속도 이상이면 0.85 ~ 0.99배라 못 잡음, 모자라면 최소 1.2배로 반드시 따라잡음)
 	  - 추격 목표 (2판 수정): 플레이어 위치 + 서버가 본 이동 속도 × GUARD_LEAD_SECONDS(0.25) (GuardLogic.leadPoint)
 	    → 걷기 150 으로 도망가도 0.1초 전 자리에 먼저 도착해 멈추지 않고 계속 달림
@@ -381,9 +381,9 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 	end
 
 	if best and bestRoot then
+		-- 4판: 추격 속도는 구역마다 고정 (플레이어 속도와 무관). 플레이어 WalkSpeed 는 앞 지점 예측에만 씀
 		local walkSpeed = SpeedService.getWalkSpeed(best)
-		guard.humanoid.WalkSpeed =
-			SpeedMath.guardChaseSpeed(guard.biome.guardSpeed, SpeedService.getCarrySpeed(best), walkSpeed)
+		guard.humanoid.WalkSpeed = SpeedMath.guardChaseSpeed(guard.biome.guardSpeed)
 
 		local p = bestRoot.Position
 		local g = guard.root.Position

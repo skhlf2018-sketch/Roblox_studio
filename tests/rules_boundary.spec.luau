@@ -89,12 +89,15 @@ return function(T, Loader)
 		"경비는 안전한 사람보다 느리고 위험한 사람보다 빠르게 쫓음 (WalkSpeed 기준)",
 		function()
 			for _, b in Biomes.list do
+				local chase = SpeedMath.guardChaseSpeed(b.guardSpeed) -- 4판: 구역 고정
 				local walk = SpeedMath.toWalkSpeed(b.recommendedSpeed * 1.2)
-				local safeChase = SpeedMath.guardChaseWalkSpeed(b.guardSpeed, b.recommendedSpeed * 1.2, walk)
-				T.truthy(safeChase < walk, b.id .. " 안전한 사람보다 느림")
+				T.truthy(chase < walk, b.id .. " 안전한 사람보다 느림")
 				local riskyWalk = SpeedMath.toWalkSpeed(b.recommendedSpeed * 0.5)
-				local riskyChase = SpeedMath.guardChaseWalkSpeed(b.guardSpeed, b.recommendedSpeed * 0.5, riskyWalk)
-				T.truthy(riskyChase > riskyWalk, b.id .. " 위험한 사람보다 빠름")
+				-- 숲(추천 10)은 곡선 바닥이라 둘 다 최소 20 → 같을 수 있음
+				T.truthy(
+					chase > riskyWalk or riskyWalk <= Config.SPEED_LOG_BASE,
+					b.id .. " 위험한 사람보다 빠름"
+				)
 			end
 		end
 	)
@@ -107,8 +110,9 @@ return function(T, Loader)
 					or ratio ~= ratio,
 				"ratio " .. tostring(bad)
 			)
-			local ws = SpeedMath.guardChaseWalkSpeed(1000, bad, 20)
-			T.truthy(ws >= 1 or ws ~= ws)
+			local ws = SpeedMath.guardChaseSpeed(bad)
+			T.truthy(ws >= 1 and ws == ws, "경비 속도가 이상해도 추격 WalkSpeed 는 1 이상 유한")
+			T.falsy(SpeedMath.canEscape(1000, bad))
 		end
 		T.eq(SpeedMath.guardChaseRatio(1000, 0), Config.GUARD_CHASE_MAX_RATIO)
 	end)
@@ -137,13 +141,15 @@ return function(T, Loader)
 			local free = SpeedMath.toWalkSpeed(speed)
 			for _, size in Sizes.list do
 				local carried = SpeedMath.carryWalkSpeed(speed, size.speedPenalty)
+				T.truthy(carried <= free, "알 들면 더 빨라지진 않음")
 				T.near(
 					carried,
-					math.max(Config.CARRY_WALKSPEED_MIN, free * (1 - size.speedPenalty)),
+					math.max(Config.CARRY_WALKSPEED_MIN, SpeedMath.toWalkSpeed(speed * (1 - size.speedPenalty))),
 					1e-9,
 					size.id .. " " .. speed
 				)
-				T.truthy(carried < free or free * (1 - size.speedPenalty) < Config.CARRY_WALKSPEED_MIN)
+				-- 속도 숫자가 곡선 바닥(10) 이하면 들어도 안 들어도 최소 20 이라 같을 수 있음
+				T.truthy(carried < free or speed * (1 - size.speedPenalty) <= Config.SPEED_LOG_FLOOR)
 				T.truthy(carried >= Config.CARRY_WALKSPEED_MIN)
 			end
 		end

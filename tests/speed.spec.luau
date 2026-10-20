@@ -12,26 +12,28 @@ return function(T, Loader)
 	T.test(
 		"2판 수정 WalkSpeed = clamp(16 × (1 + log10(max(속도, 10) / 10)), 16, 150) — 원작 관찰 기준점",
 		function()
-			T.eq(Config.SPEED_LOG_BASE, 16)
+			T.eq(Config.SPEED_LOG_BASE, 20)
+			T.eq(Config.SPEED_LOG_SLOPE, 0.95)
 			T.eq(Config.SPEED_LOG_FLOOR, 10)
-			T.eq(Config.SPEED_WALK_MAX, 150)
-			T.eq(SpeedMath.toWalkSpeed(0), 16)
-			T.eq(SpeedMath.toWalkSpeed(-5), 16)
-			T.eq(SpeedMath.toWalkSpeed(10), 16, "10 이하 = 로블록스 기본 걷기")
+			T.eq(Config.SPEED_WALK_MAX, 230)
+			T.eq(SpeedMath.toWalkSpeed(0), 20)
+			T.eq(SpeedMath.toWalkSpeed(-5), 20)
+			T.eq(SpeedMath.toWalkSpeed(10), 20, "10 이하 = 최소 20")
 			-- 표 (보고서·GAME_DESIGN 2판 B 와 같은 숫자)
-			T.near(SpeedMath.toWalkSpeed(20), 20.82, 0.01, "시작 속도: 기본 걷기 16 과 비슷")
-			T.near(SpeedMath.toWalkSpeed(200), 36.82, 0.01, "원작 200 ≈ 35~40")
-			T.near(SpeedMath.toWalkSpeed(1e4), 64, 1e-9)
-			T.near(SpeedMath.toWalkSpeed(6.4e4), 76.90, 0.01)
-			T.near(SpeedMath.toWalkSpeed(1e6), 96, 1e-9)
-			T.near(SpeedMath.toWalkSpeed(5.8e6), 108.21, 0.01, "원작 5.8M ≈ 105~110")
-			T.near(SpeedMath.toWalkSpeed(1e9), 144, 1e-9)
-			T.eq(SpeedMath.toWalkSpeed(1e10), 150, "상한")
-			T.eq(SpeedMath.toWalkSpeed(1e30), 150)
-			T.eq(SpeedMath.toWalkSpeed(math.huge), 150)
+			T.near(SpeedMath.toWalkSpeed(20), 25.72, 0.01, "시작 속도 (4판: 기본 걷기보다 조금 빠르게)")
+			T.near(SpeedMath.toWalkSpeed(200), 44.72, 0.01, "4판: 원작(35~40)보다 20% 빠르게")
+			T.near(SpeedMath.toWalkSpeed(1e4), 77, 1e-9)
+			T.near(SpeedMath.toWalkSpeed(6.4e4), 92.32, 0.01)
+			T.near(SpeedMath.toWalkSpeed(1e6), 115, 1e-9)
+			T.near(SpeedMath.toWalkSpeed(5.8e6), 129.51, 0.01, "4판: 원작 5.8M(105~110)보다 20% 빠르게")
+			T.near(SpeedMath.toWalkSpeed(1e9), 172, 1e-9)
+			T.near(SpeedMath.toWalkSpeed(1e10), 191, 1e-9)
+			T.eq(SpeedMath.toWalkSpeed(2e12), 230, "상한")
+			T.eq(SpeedMath.toWalkSpeed(1e30), 230)
+			T.eq(SpeedMath.toWalkSpeed(math.huge), 230)
 			-- 원작: 5.8M 이면 구역 하나(240)를 약 2초, 심연의 바다(z ≈ 1560)에서 허브까지 약 15초
-			T.near(240 / SpeedMath.toWalkSpeed(5.8e6), 2.2, 0.1)
-			T.near(1560 / SpeedMath.toWalkSpeed(5.8e6), 14.4, 0.2)
+			T.near(240 / SpeedMath.toWalkSpeed(5.8e6), 1.85, 0.05)
+			T.near(1560 / SpeedMath.toWalkSpeed(5.8e6), 12.05, 0.2)
 			local prev = 0
 			for _, s in { 0, 10, 20, 900, 1e4, 4e4, 1.7e5, 7e5, 2.5e6, 1.8e7, 7e8, 2.5e9, 7e9, 2e10, 5e11 } do
 				local ws = SpeedMath.toWalkSpeed(s)
@@ -42,39 +44,35 @@ return function(T, Loader)
 	)
 
 	T.test("NaN 은 0 취급", function()
-		T.eq(SpeedMath.toWalkSpeed(0 / 0), 16)
+		T.eq(SpeedMath.toWalkSpeed(0 / 0), 20)
 	end)
 
 	T.test(
-		"새 곡선에서도: 추천 속도 이상이면 경비가 플레이어보다 느리고(못 잡음), 모자라면 반드시 더 빠름 (15구역 × 4크기, WalkSpeed 기준)",
+		"4판 고정 추격: 추천 속도 이상이면 경비가 플레이어보다 느리고(못 잡음), 모자라면 경비가 더 빠름 (15구역 × 4크기, WalkSpeed 기준)",
 		function()
-			-- 경비 상한 250 이 플레이어 최대 걷기(150) × 최소 추격 배율(1.2) 보다 커야 "모자라면 반드시 더 빠름" 이 상한에서도 성립
-			T.truthy(Config.GUARD_MAX_WALKSPEED > Config.SPEED_WALK_MAX * Config.GUARD_CHASE_SLOW_MIN_RATIO)
+			-- 플레이어 상한(230)이 맨 끝 구역 경비 추격 속도보다 커야 빠른 사람은 추월 가능
+			T.truthy(Config.SPEED_WALK_MAX > SpeedMath.guardChaseSpeed(SpeedMath.guardSpeedFor(500e9)))
+			T.truthy(Config.GUARD_MAX_WALKSPEED >= Config.SPEED_WALK_MAX)
 			for _, b in Biomes.list do
 				for _, size in Sizes.list do
 					local need = SpeedMath.requiredSpeed(b.recommendedSpeed, size.speedPenalty)
+					local chase = SpeedMath.guardChaseSpeed(b.guardSpeed)
+					-- 숲(추천 10)은 곡선 바닥(속도 10 이하 = 20) 근처라 WalkSpeed 가 같을 수 있음 → 숫자 비교(canEscape)만 엄격히
 					for _, k in { 1.001, 1.5, 10, 1e6 } do
-						local speed = need * k
-						local walk = SpeedMath.carryWalkSpeed(speed, size.speedPenalty)
-						local chase = SpeedMath.guardChaseSpeed(
-							b.guardSpeed,
-							SpeedMath.carrySpeed(speed, size.speedPenalty),
-							walk
+						local walk = SpeedMath.carryWalkSpeed(need * k, size.speedPenalty)
+						T.truthy(
+							chase < walk or walk <= Config.SPEED_LOG_BASE,
+							b.id .. " " .. size.id .. " ×" .. k .. " 안전: 경비가 느림"
 						)
-						T.truthy(chase < walk, b.id .. " " .. size.id .. " ×" .. k .. " 안전: 경비가 느림")
+						T.truthy(SpeedMath.canEscape(b.guardSpeed, SpeedMath.carrySpeed(need * k, size.speedPenalty)))
 					end
 					for _, k in { 0.999, 0.9, 0.5, 1e-3 } do
-						local speed = need * k
-						local walk = SpeedMath.carryWalkSpeed(speed, size.speedPenalty)
-						local chase = SpeedMath.guardChaseSpeed(
-							b.guardSpeed,
-							SpeedMath.carrySpeed(speed, size.speedPenalty),
-							walk
-						)
+						local walk = SpeedMath.carryWalkSpeed(need * k, size.speedPenalty)
 						T.truthy(
-							chase >= walk * Config.GUARD_CHASE_SLOW_MIN_RATIO - 1e-9,
-							b.id .. " " .. size.id .. " ×" .. k .. " 위험: 경비가 1.2배 이상 빠름"
+							chase > walk or chase <= Config.SPEED_LOG_BASE,
+							b.id .. " " .. size.id .. " ×" .. k .. " 위험: 경비가 더 빠름"
 						)
+						T.falsy(SpeedMath.canEscape(b.guardSpeed, SpeedMath.carrySpeed(need * k, size.speedPenalty)))
 					end
 				end
 			end
@@ -157,8 +155,13 @@ return function(T, Loader)
 	T.test("알 들면 WalkSpeed 감소, 하한 적용", function()
 		local free = SpeedMath.toWalkSpeed(1e4)
 		local carry = SpeedMath.carryWalkSpeed(1e4, 0.5)
-		T.near(carry, free * 0.5, 1e-9)
-		T.eq(SpeedMath.carryWalkSpeed(0, 0.5), Config.CARRY_WALKSPEED_MIN)
+		T.near(carry, SpeedMath.toWalkSpeed(1e4 * 0.5), 1e-9, "4판: 무게는 속도 숫자에 적용한 뒤 곡선")
+		T.truthy(carry < free)
+		T.eq(
+			SpeedMath.carryWalkSpeed(0, 0.5),
+			Config.SPEED_LOG_BASE,
+			"곡선 바닥 20 (하한 8 은 그 아래 보험)"
+		)
 		T.eq(SpeedMath.walkSpeedFor(1e4, 0), free)
 	end)
 
@@ -178,18 +181,36 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("모자랄수록 경비가 더 빨라짐, 상한 적용", function()
-		local g = 1e4
-		local r90 = SpeedMath.guardChaseRatio(g, 9e3)
-		local r50 = SpeedMath.guardChaseRatio(g, 5e3)
-		T.truthy(r50 > r90 and r90 > 1, "순서")
-		T.near(r50, 2 * Config.GUARD_CHASE_MARGIN, 1e-9)
-		T.eq(SpeedMath.guardChaseRatio(g, 1), Config.GUARD_CHASE_MAX_RATIO)
-		T.eq(SpeedMath.guardChaseRatio(g, 0), Config.GUARD_CHASE_MAX_RATIO)
-		T.eq(SpeedMath.guardChaseRatio(g, 1e9), Config.GUARD_CHASE_MIN_RATIO)
-		T.near(SpeedMath.guardChaseWalkSpeed(g, 5e3, 40), 40 * r50, 1e-9)
-		T.eq(SpeedMath.guardChaseWalkSpeed(g, 1, 200), Config.GUARD_MAX_WALKSPEED)
-	end)
+	T.test(
+		"(참고용 옛 비율) 모자랄수록 비율이 커짐, 상한 적용 — 게임 추격 속도는 이 비율을 안 씀",
+		function()
+			local g = 1e4
+			local r90 = SpeedMath.guardChaseRatio(g, 9e3)
+			local r50 = SpeedMath.guardChaseRatio(g, 5e3)
+			T.truthy(r50 > r90 and r90 > 1, "순서")
+			T.near(r50, 2 * Config.GUARD_CHASE_MARGIN, 1e-9)
+			T.eq(SpeedMath.guardChaseRatio(g, 1), Config.GUARD_CHASE_MAX_RATIO)
+			T.eq(SpeedMath.guardChaseRatio(g, 0), Config.GUARD_CHASE_MAX_RATIO)
+			T.eq(SpeedMath.guardChaseRatio(g, 1e9), Config.GUARD_CHASE_MIN_RATIO)
+		end
+	)
+
+	T.test(
+		"4판 추격 속도: 구역마다 고정 = toWalkSpeed(경비 속도 × 0.99), 플레이어 속도와 무관, 상한 적용",
+		function()
+			local g = SpeedMath.guardSpeedFor(1e4) -- 9000
+			T.near(SpeedMath.guardChaseSpeed(g), SpeedMath.toWalkSpeed(g * Config.GUARD_CHASE_MARGIN), 1e-9)
+			T.truthy(
+				SpeedMath.guardChaseSpeed(g) < SpeedMath.toWalkSpeed(9e3),
+				"딱 경비 속도면 플레이어가 1% 빠름"
+			)
+			T.truthy(SpeedMath.guardChaseSpeed(g) > SpeedMath.toWalkSpeed(8e3), "모자라면 경비가 빠름")
+			T.truthy(SpeedMath.guardChaseSpeed(1e30) <= Config.GUARD_MAX_WALKSPEED)
+			T.eq(SpeedMath.guardChaseSpeed(0), SpeedMath.toWalkSpeed(0))
+			T.truthy(SpeedMath.canEscape(g, 9e3) and not SpeedMath.canEscape(g, 8.9e3))
+			T.falsy(SpeedMath.canEscape(g, 0 / 0), "NaN 은 못 도망")
+		end
+	)
 
 	T.test(
 		"2판 추격 공식: 플레이어 WalkSpeed × clamp(추천/실효 × 0.99, 0.85, 3.0), 모자라면 최소 1.2배",
@@ -207,8 +228,11 @@ return function(T, Loader)
 			-- 많이 모자람: 비율 그대로, 상한 3
 			T.near(SpeedMath.guardChaseRatio(g, 4.5e3), 1.98, 1e-9)
 			T.eq(SpeedMath.guardChaseRatio(g, 1e3), 3.0)
-			T.near(SpeedMath.guardChaseSpeed(g, 4.5e3, 40), 40 * 1.98, 1e-9, "WalkSpeed 곱")
-			T.eq(SpeedMath.guardChaseSpeed, SpeedMath.guardChaseWalkSpeed, "1판 이름도 같은 함수")
+			T.eq(
+				SpeedMath.guardChaseWalkSpeed,
+				nil,
+				"옛 2판 이름은 없어짐 (추격 속도는 guardChaseSpeed(경비 속도) 하나)"
+			)
 		end
 	)
 

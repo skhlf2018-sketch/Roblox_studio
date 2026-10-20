@@ -100,7 +100,9 @@ local function visualText(record: IncubatorRecord, rate: number): string
 	if record.progress >= record.required then
 		return name .. "\n부화 준비 완료!"
 	end
-	return name .. "\n" .. Format.duration(Economy.remainingSeconds(record.progress, record.required, rate))
+	-- 4판: 남은 "알 시간"을 그대로 보여 줌 (밤에는 이 숫자가 30배 빨리 줄어듦). rate 는 호환용으로 받기만 함
+	local _ = rate
+	return name .. "\n" .. Format.duration(Economy.timerSeconds(record.progress, record.required))
 end
 
 -- 바닥 높이 (아래로 레이캐스트: 우리 바닥 윗면)

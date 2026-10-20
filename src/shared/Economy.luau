@@ -166,7 +166,13 @@ function Economy.advanceIncubation(progress: number, required: number, dt: numbe
 	return nextProgress, nextProgress >= required
 end
 
--- 남은 실제 시간(초) — UI 표시용
+-- 알 위 타이머에 보여 줄 숫자 = 남은 "알 시간"(초). 밤에는 이 숫자가 1초에 30씩 줄고, 낮이면 1씩 줆
+-- (4판: 밤이 되자마자 표시가 ÷30 으로 확 줄었다가 낮에 다시 늘어나던 것을 고침 — 숫자는 그대로, 줄어드는 빠르기만 바뀜)
+function Economy.timerSeconds(progress: number, required: number): number
+	return math.max(0, required - progress)
+end
+
+-- 지금 속도가 계속될 때 실제로 남는 시간(초) — 계산·테스트용 (표시에는 timerSeconds 를 씀)
 function Economy.remainingSeconds(progress: number, required: number, rate: number): number
 	if rate <= 0 then
 		return math.huge

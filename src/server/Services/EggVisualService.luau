@@ -382,12 +382,12 @@ local function decorateEgg(egg: BasePart)
 		beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
 		beam.Parent = egg
 
-		-- 지도 어디서나 보이는 이름표
+		-- 멀리서도 보이는 이름표 (벽을 뚫고 보이므로 너무 멀면 내 머리 위에 붙은 것처럼 보여 500 스터드 안에서만)
 		local gui = Instance.new("BillboardGui")
 		gui.Name = "SpecialTag"
 		gui.AlwaysOnTop = true
 		gui.LightInfluence = 0
-		gui.MaxDistance = 100000
+		gui.MaxDistance = 500
 		gui.Size = UDim2.fromOffset(170, 54)
 		gui.StudsOffsetWorldSpace = Vector3.new(0, egg.Size.Y + 5, 0)
 		gui.Adornee = egg

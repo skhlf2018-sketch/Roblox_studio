@@ -745,7 +745,7 @@ return function(T, Loader)
 					humanoid = child
 				end
 			end
-			local expected = w.SpeedMath.guardChaseWalkSpeed(10, w.session.carrySpeed, w.session.walkSpeed)
+			local expected = w.SpeedMath.guardChaseSpeed(10)
 			T.near(humanoid.WalkSpeed, expected, 1e-9)
 			T.eq(humanoid.moveTarget.X, w.player.Character.root.Position.X)
 			T.truthy(humanoid.moves >= 1)
@@ -754,7 +754,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"속도가 충분하면(추천 이상) 경비가 플레이어보다 느리고, 모자라면 더 빠르게 쫓음",
+		"4판: 경비 추격 속도는 구역 고정 — 빠른 플레이어든 느린 플레이어든 같은 WalkSpeed, 빠른 플레이어보다는 느림",
 		function()
 			local w = guardWorld()
 			carryForest(w, w.player, 100, 0.10) -- 숲 경비 10 보다 훨씬 빠름
@@ -767,10 +767,12 @@ return function(T, Loader)
 					humanoid = child
 				end
 			end
+			local fixed = w.SpeedMath.guardChaseSpeed(10)
+			T.near(humanoid.WalkSpeed, fixed, 1e-9)
 			T.truthy(humanoid.WalkSpeed < w.session.walkSpeed, "빠른 플레이어보다 느림")
-			carryForest(w, w.player, 5, 0.10) -- 경비가 더 빠름
+			carryForest(w, w.player, 5, 0.10) -- 느린 플레이어
 			w.H.advance(0.2)
-			T.truthy(humanoid.WalkSpeed > w.session.walkSpeed, "느린 플레이어보다 빠름")
+			T.near(humanoid.WalkSpeed, fixed, 1e-9, "플레이어가 느려져도 경비 속도는 그대로")
 			w.H.uninstall()
 		end
 	)

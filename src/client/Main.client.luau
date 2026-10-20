@@ -71,6 +71,7 @@ boot("WeaponController")
 -- 선임 5차 (2판): 러닝머신 입력·걸음 팝업, 트레일 상점 창
 boot("TreadmillController")
 boot("TrailController")
+boot("SpeedFxController") -- 4판: 빠를수록 시야를 넓혀 속도 체감
 
 -- 접속 직후 서버가 보낸 Snapshot 을 놓쳤을 수 있으니 한 번 요청
 Net.send(Remotes.ToServer.RequestSnapshot)

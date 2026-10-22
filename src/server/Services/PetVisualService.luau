@@ -12,6 +12,12 @@
 	       머리 위 BillboardGui "PetTag": TextLabel "Rarity"(희귀도 색) / "PetName"(흰) / "Income"($수입/s, 초록) / "Extra"(크기·돌연변이, 있을 때)
 	    4) 경비(Guardian 태그) 겉모습 — 키 25~40 스터드, HumanoidRootPart 에 Weld "GuardPose" (Humanoid·HumanoidRootPart 이름은 그대로)
 	       State Idle/Sleeping → 자는 자세 + BillboardGui "SleepZ"(TextLabel Z1~Z3), Chase → 일어섬 + Highlight "GuardGlow"
+	       4판: build(.., { guard = true }) 로 경비 전용 GUARD_EXTRAS 를 더함 — 얼굴 + 그 동물·괴물다운 소품.
+	       얼굴: Chase 일 때만 눈 뜸(EyeOpen) + 화난 눈썹(Brow), 그 밖(Sleeping/Idle/Return)은 감은 눈(EyeClosed)·눈썹 없음
+	       (닭 턱볏·꼬리깃, 백조 치켜든 날개, 전갈 등껍질, 호랑이 줄무늬·송곳니, 예티 얼음 몽둥이, 케르베로스 가시 목걸이,
+	        벨루가 멜론 이마·경비 모자, 티렉스 등 가시, 해골 보스 갈비뼈·지팡이·망토, 오니 금줄, 고릴라 왕 망토·홀,
+	        천사 창 / 악마 삼지창, 정령 빛 구슬·잎 관, 생강빵 사탕 지팡이, 사신 유령불 등불) + 반짝이·불씨·안개 효과.
+	       키(Height Attribute)는 기본 모양과 같음 → GuardianService 잡힘 거리 그대로.
 	- 통통 튀는 애니메이션·희귀도 Highlight 개수 제한(31개)은 클라 WorldFxController 가 처리.
 
 	모델 좌표: Root 파트가 "바닥 한가운데", 앞 = -Z (LookVector), 위 = +Y. 크기 1 일 때 키 약 2~3.5 스터드.
@@ -38,6 +44,9 @@ local Sessions = require(Server.Sessions)
 
 type Color = Visuals.Color
 
+-- 경비 눈 하나: 눈 파트들 + 자리(크기 1 기준) + 감은 눈 줄을 그릴지 (해골·두건의 빛 눈은 끄기만)
+type EyeRec = { parts: { BasePart }, pos: CFrame, e: number, close: boolean }
+
 type Ctx = {
 	model: Model,
 	root: BasePart,
@@ -49,6 +58,7 @@ type Ctx = {
 	accentMat: Enum.Material,
 	has: { [string]: boolean },
 	body: BasePart?,
+	eyes: { EyeRec }?, -- 경비 겉모습일 때만: 만든 눈 기록 (자는 얼굴 ↔ 추격 얼굴 바꾸기)
 	bodyKind: string,
 }
 
@@ -69,6 +79,7 @@ type Anchors = {
 export type BuildOptions = {
 	effects: boolean?, -- 희귀도 Highlight/파티클/빛
 	rarity: string?, -- 펫 데이터에 없는 모양(경비 전용)일 때
+	guard: boolean?, -- 4판: 구역 경비 겉모습 (GUARD_EXTRAS 표정·테마 소품·효과를 더함, 키는 그대로)
 }
 
 local PetVisualService = {}
@@ -267,12 +278,19 @@ end
 
 -- 네모 눈 한 쌍 (검은 네모 + 흰 하이라이트 네모). pos = 눈 가운데, 앞 = -Z
 local function squareEye(ctx: Ctx, pos: CFrame, e: number, side: number)
+	local parts: { BasePart }
 	if ctx.has.eyes_glow then
-		blk(ctx, e * 1.05, e * 1.05, 0.08, pos, ctx.c3, NEON)
-		return
+		parts = { blk(ctx, e * 1.05, e * 1.05, 0.08, pos, ctx.c3, NEON) }
+	else
+		parts = {
+			blk(ctx, e, e * 1.15, 0.08, pos, BLACK, PLASTIC),
+			blk(ctx, e * 0.4, e * 0.4, 0.06, pos * CFrame.new(side * e * 0.18, e * 0.25, -0.03), WHITE, PLASTIC),
+		}
 	end
-	blk(ctx, e, e * 1.15, 0.08, pos, BLACK, PLASTIC)
-	blk(ctx, e * 0.4, e * 0.4, 0.06, pos * CFrame.new(side * e * 0.18, e * 0.25, -0.03), WHITE, PLASTIC)
+	local eyes = ctx.eyes
+	if eyes then
+		table.insert(eyes, { parts = parts, pos = pos, e = e, close = true })
+	end
 end
 
 -- 머리(블록) 앞면에 눈 + 얼굴 아래쪽에 작은 입 선
@@ -1459,7 +1477,10 @@ F.skull = function(ctx, a)
 	for _, side in SIDES do
 		local p = hf(a, side * 0.24, 0.08, -0.38)
 		ball(ctx, hx * 0.32, p, BLACK)
-		ball(ctx, hx * 0.12, p * CFrame.new(0, 0, -hx * 0.12), ctx.c3, NEON)
+		local glowEye = ball(ctx, hx * 0.12, p * CFrame.new(0, 0, -hx * 0.12), ctx.c3, NEON)
+		if ctx.eyes then
+			table.insert(ctx.eyes, { parts = { glowEye }, pos = p, e = hx * 0.12, close = false })
+		end
 	end
 	ball(ctx, hx * 0.12, hf(a, 0, -0.18, -0.46), BLACK)
 	bands(ctx, a, { -0.35, 0, 0.35 }, DARK, 0.1)
@@ -1704,7 +1725,13 @@ F.hood = function(ctx, a)
 	ell(ctx, hs.X * 1.3, hs.Y * 1.25, hs.Z * 1.3, hf(a, 0, 0.12, 0.12), ctx.c2)
 	ell(ctx, hs.X * 0.8, hs.Y * 0.75, 0.2, hf(a, 0, 0, -0.55), BLACK)
 	for _, side in SIDES do
-		ball(ctx, hs.X * 0.12, hf(a, side * 0.18, 0.05, -0.62), ctx.c3, NEON)
+		local glowEye = ball(ctx, hs.X * 0.12, hf(a, side * 0.18, 0.05, -0.62), ctx.c3, NEON)
+		if ctx.eyes then
+			table.insert(
+				ctx.eyes,
+				{ parts = { glowEye }, pos = hf(a, side * 0.18, 0.05, -0.62), e = hs.X * 0.12, close = false }
+			)
+		end
 	end
 end
 
@@ -1794,6 +1821,326 @@ local function applyRarity(ctx: Ctx, rarityId: string)
 end
 
 ------------------------------------------------------------------
+-- 경비 전용 겉모습 더하기 (4판) — 구역 경비가 "그 동물/괴물"처럼 보이게 표정(화난 눈썹)·테마 소품·효과
+--   build(id, scale, { guard = true }) 일 때만 (우리 펫·부모 동물·UI 모델은 그대로).
+--   키(a.top)는 바꾸지 않음 → Height Attribute(GuardianService 잡힘 거리) 그대로. 경비 하나 +4~12 파트.
+------------------------------------------------------------------
+
+local ICE = Color3.fromRGB(175, 225, 255)
+local LAVA = Color3.fromRGB(255, 110, 30)
+
+-- 화난 눈썹 (eyesAt 과 같은 눈 자리 바로 위, 안쪽이 내려간 비스듬한 막대)
+local function angryBrows(ctx: Ctx, a: Anchors, color: Color3?)
+	if a.skipEyes then
+		return
+	end
+	local hs = a.headSize
+	local e = math.max(0.14, math.min(hs.X, hs.Y) * 0.22)
+	for _, side in SIDES do
+		local brow = blk(
+			ctx,
+			e * 1.5,
+			e * 0.32,
+			0.1,
+			a.head
+				* CFrame.new(side * hs.X * 0.24, hs.Y * 0.1 + e * 0.95, -hs.Z * 0.5 - 0.03)
+				* CFrame.Angles(0, 0, rad(side * 22)),
+			color or BLACK,
+			PLASTIC
+		)
+		brow.Name = "Brow" -- 추격(Chase) 때만 보임 (setGuardFace)
+	end
+end
+
+-- 손에 든 것 기준점 (사람형 = 오른손, 그 밖 = 몸 오른쪽)
+local function handOf(a: Anchors): CFrame
+	return a.hand or at(a.bodySize.X / 2 + 0.6, 0.9, -0.2)
+end
+
+local GUARD_EXTRAS: { [string]: (Ctx, Anchors) -> () } = {}
+
+-- 1 숲: 닭 — 빨간 턱볏, 검푸른 꼬리깃 2, 볼 터치
+GUARD_EXTRAS.chicken = function(ctx, a)
+	blk(ctx, 0.22, 0.38, 0.14, hf(a, 0, -0.4, -0.56), RED)
+	for _, side in SIDES do
+		blk(
+			ctx,
+			0.16,
+			0.95,
+			0.28,
+			a.tail * CFrame.new(side * 0.14, 0.55, 0.3) * CFrame.Angles(rad(-22), 0, rad(side * 14)),
+			Color3.fromRGB(40, 90, 75)
+		)
+		blk(ctx, 0.2, 0.12, 0.06, hf(a, side * 0.36, -0.12, -0.52), PINK, PLASTIC)
+	end
+	angryBrows(ctx, a)
+end
+
+-- 2 호수: 백조 — 검은 부리 혹, 성나서 치켜든 날개 + 깃털 끝
+GUARD_EXTRAS.swan = function(ctx, a)
+	blk(ctx, 0.18, 0.14, 0.14, hf(a, 0, -0.02, -0.62), BLACK, PLASTIC)
+	for _, side in SIDES do
+		local wing = at(side * 0.85, 2.2, 0.35) * CFrame.Angles(rad(20), 0, rad(side * 18))
+		blk(ctx, 0.18, 1.3, 1.1, wing, WHITE)
+		blk(ctx, 0.16, 0.55, 0.5, wing * CFrame.new(side * 0.05, 0.75, 0.35), ctx.c2)
+	end
+	angryBrows(ctx, a)
+end
+
+-- 3 사막: 전갈 — 등 껍질 마디 3, 머리 위 빨간 눈 2
+GUARD_EXTRAS.scorpion = function(ctx, a)
+	for i = 0, 2 do
+		blk(ctx, 1.1, 0.12, 0.3, at(0, 1.32, -0.15 + i * 0.5), ctx.c1:Lerp(BLACK, 0.3))
+	end
+	for _, side in SIDES do
+		blk(ctx, 0.12, 0.12, 0.08, hf(a, side * 0.18, 0.48, -0.3), RED, NEON)
+	end
+	angryBrows(ctx, a)
+end
+
+-- 4 정글: 호랑이 — 이마 줄무늬 3, 흰 볼털, 송곳니
+GUARD_EXTRAS.tiger = function(ctx, a)
+	local hs = a.headSize
+	for i = -1, 1 do
+		blk(ctx, 0.1, 0.3, 0.06, hf(a, i * 0.15, 0.36, -0.51) * CFrame.Angles(0, 0, rad(-i * 15)), BLACK, PLASTIC)
+	end
+	local m = a.head * CFrame.new(0, -hs.Y * 0.27, -hs.Z * 0.5 - 0.12)
+	for _, side in SIDES do
+		blk(ctx, 0.3, 0.3, 0.3, hf(a, side * 0.55, -0.2, -0.2), WHITE)
+		blk(ctx, 0.08, 0.2, 0.06, m * CFrame.new(side * 0.12, -hs.Y * 0.22, -0.1), WHITE, PLASTIC)
+	end
+	angryBrows(ctx, a)
+end
+
+-- 5 눈: 예티 — 어깨·머리 털 뭉치, 얼음 몽둥이, 눈송이 반짝이
+GUARD_EXTRAS.yeti = function(ctx, a)
+	local fur = WHITE:Lerp(ICE, 0.15)
+	for _, side in SIDES do
+		blk(ctx, 0.5, 0.35, 0.5, at(side * 0.85, 2.3, 0), fur)
+	end
+	blk(ctx, 0.35, 0.3, 0.35, hf(a, 0, 0.56, 0), fur)
+	local hand = handOf(a)
+	vcyl(ctx, 1.4, 0.18, hand * CFrame.new(0, 0.5, -0.1), WOOD, PLASTIC)
+	blk(
+		ctx,
+		0.55,
+		0.75,
+		0.55,
+		hand * CFrame.new(0, 1.4, -0.1) * CFrame.Angles(0, rad(45), 0),
+		ICE,
+		Enum.Material.Ice,
+		0.1
+	)
+	if ctx.body then
+		emitter(ctx.body, "sparkle", WHITE, ctx.s * 0.6)
+	end
+	angryBrows(ctx, a, DARK)
+end
+
+-- 6 화산: 케르베로스 — 가시 목걸이, 몸에 용암 금, 불씨
+GUARD_EXTRAS.cerberus = function(ctx, a)
+	blk(ctx, 0.95, 0.2, 0.8, at(0, 1.75, -1.05), BLACK, PLASTIC)
+	for _, p in { { -0.42, -1.05 }, { 0.42, -1.05 }, { 0, -1.42 }, { 0, -0.68 } } do
+		blk(ctx, 0.12, 0.26, 0.12, at(p[1], 1.95, p[2]), SILVER, FOIL)
+	end
+	for i, z in { -0.5, 0.3, -0.1 } do
+		local side = if i == 2 then -1 else 1
+		blk(ctx, 0.06, 0.55, 0.07, at(side * 0.81, 1.4, z) * CFrame.Angles(rad(20 * i), 0, 0), LAVA, NEON)
+	end
+	if ctx.body then
+		emitter(ctx.body, "sparkle", LAVA, ctx.s * 0.7)
+	end
+	angryBrows(ctx, a, DARK)
+end
+
+-- 7 심연의 바다: 벨루가 — 이마 혹(멜론), 경비 모자, 물방울
+GUARD_EXTRAS.beluga_whale = function(ctx, _a)
+	ell(ctx, 1.4, 0.9, 0.9, at(0, 2.05, -1.35), WHITE:Lerp(ICE, 0.25))
+	blk(ctx, 0.9, 0.28, 0.9, at(0, 2.45, -0.6), Color3.fromRGB(35, 50, 125))
+	blk(ctx, 1.0, 0.08, 0.35, at(0, 2.33, -1.12), WHITE, PLASTIC)
+	blk(ctx, 0.2, 0.2, 0.05, at(0, 2.45, -1.07), GOLD, FOIL)
+	if ctx.body then
+		emitter(ctx.body, "sparkle", Color3.fromRGB(190, 230, 255), ctx.s * 0.6)
+	end
+end
+
+-- 8 선사시대: 티렉스 — 등 가시 4, 옆구리 줄무늬 4
+GUARD_EXTRAS.t_rex = function(ctx, a)
+	for i = 0, 3 do
+		blk(ctx, 0.15, 0.36, 0.3, at(0, 2.66 - i * 0.25, 0.17 + i * 0.75) * CFrame.Angles(rad(-15), 0, 0), ctx.c3)
+	end
+	for _, side in SIDES do
+		for _, z in { 0, 0.55 } do
+			blk(ctx, 0.06, 0.6, 0.18, at(side * 0.74, 2.0, z) * CFrame.Angles(rad(-12), 0, 0), ctx.c1:Lerp(BLACK, 0.35))
+		end
+	end
+	angryBrows(ctx, a)
+end
+
+-- 9 코스믹: 해골 보스 — 갈비뼈, 빛나는 지팡이, 보라 망토
+GUARD_EXTRAS.cosmic_skeleton_boss = function(ctx, a)
+	for i = 0, 2 do
+		blk(ctx, 0.9 - i * 0.1, 0.08, 0.06, at(0, 1.35 + i * 0.22, -0.64), BONE, PLASTIC)
+	end
+	blk(ctx, 0.1, 0.7, 0.06, at(0, 1.55, -0.65), BONE, PLASTIC)
+	local hand = handOf(a)
+	vcyl(ctx, 2.6, 0.14, hand * CFrame.new(0, 1.0, -0.1), ctx.c2, PLASTIC)
+	local orb = ball(ctx, 0.38, hand * CFrame.new(0, 2.4, -0.1), ctx.c3, NEON)
+	local l = Instance.new("PointLight")
+	l.Color = ctx.c3
+	l.Range = 6 * ctx.s
+	l.Brightness = 1.2
+	l.Parent = orb
+	blk(ctx, 1.4, 1.6, 0.1, at(0, 1.6, 0.6) * CFrame.Angles(rad(8), 0, 0), Color3.fromRGB(90, 40, 150))
+end
+
+-- 10 벚꽃: 오니 호랑이 — 금줄(시메나와) + 흰 종이, 위로 솟은 엄니, 붉은 불씨
+GUARD_EXTRAS.oni_tiger = function(ctx, a)
+	local hs = a.headSize
+	blk(ctx, 0.9, 0.22, 0.75, at(0, 1.9, -1.05), Color3.fromRGB(225, 200, 140))
+	for _, side in SIDES do
+		blk(ctx, 0.12, 0.38, 0.05, at(side * 0.22, 1.66, -1.44) * CFrame.Angles(0, 0, rad(side * 10)), WHITE, PLASTIC)
+		local m = a.head * CFrame.new(side * hs.X * 0.2, -hs.Y * 0.3, -hs.Z * 0.5 - 0.3)
+		blk(ctx, 0.1, 0.28, 0.08, m * CFrame.Angles(0, 0, rad(side * -10)), WHITE, PLASTIC)
+	end
+	if ctx.body then
+		emitter(ctx.body, "sparkle", Color3.fromRGB(255, 90, 80), ctx.s * 0.6)
+	end
+	angryBrows(ctx, a, BLACK)
+end
+
+-- 11 타이탄 사원: 고릴라 왕 — 빨간 망토 + 금 깃, 홀(지팡이), 가슴 문장
+GUARD_EXTRAS.gorilla_king = function(ctx, a)
+	blk(ctx, 1.6, 1.9, 0.12, at(0, 1.45, 0.62) * CFrame.Angles(rad(8), 0, 0), RED)
+	blk(ctx, 1.6, 0.18, 0.5, at(0, 2.25, 0.35), GOLD, FOIL)
+	local hand = handOf(a)
+	vcyl(ctx, 1.8, 0.12, hand * CFrame.new(0, 0.7, -0.1), GOLD, FOIL)
+	ball(ctx, 0.36, hand * CFrame.new(0, 1.65, -0.1), RED, NEON)
+	blk(ctx, 0.35, 0.35, 0.05, at(0, 1.6, -0.62) * CFrame.Angles(0, 0, rad(45)), GOLD, FOIL)
+	angryBrows(ctx, a)
+end
+
+-- 12 천사&악마: 천사 — 빛나는 창 / 악마 — 삼지창, 불씨
+GUARD_EXTRAS.angel = function(ctx, a)
+	local hand = handOf(a)
+	vcyl(ctx, 3.4, 0.12, hand * CFrame.new(0, 1.2, -0.1), GOLD, FOIL)
+	local tip = blk(ctx, 0.2, 0.55, 0.06, hand * CFrame.new(0, 3.05, -0.1) * CFrame.Angles(0, 0, rad(45)), WHITE, NEON)
+	local l = Instance.new("PointLight")
+	l.Color = Color3.fromRGB(255, 230, 150)
+	l.Range = 6 * ctx.s
+	l.Brightness = 1
+	l.Parent = tip
+	if ctx.body then
+		emitter(ctx.body, "sparkle", GOLD, ctx.s * 0.6)
+	end
+	angryBrows(ctx, a, Color3.fromRGB(150, 110, 40))
+end
+
+GUARD_EXTRAS.demon = function(ctx, a)
+	local hand = handOf(a)
+	vcyl(ctx, 3.2, 0.12, hand * CFrame.new(0, 1.1, -0.1), DARK, PLASTIC)
+	blk(ctx, 0.5, 0.08, 0.08, hand * CFrame.new(0, 2.7, -0.1), DARK, PLASTIC)
+	for i = -1, 1 do
+		blk(ctx, 0.08, 0.5, 0.08, hand * CFrame.new(i * 0.2, 2.95, -0.1), LAVA, NEON)
+	end
+	if ctx.body then
+		emitter(ctx.body, "sparkle", LAVA, ctx.s * 0.7)
+	end
+	angryBrows(ctx, a, RED)
+end
+
+-- 13 마법의 숲: 정령 — 둘레를 도는 빛 구슬 3, 잎사귀 관, 반짝이
+GUARD_EXTRAS.spirit = function(ctx, a)
+	for i = 1, 3 do
+		local t = i / 3 * math.pi * 2
+		ball(ctx, 0.3, at(math.cos(t) * 1.3, 1.6 + i * 0.45, math.sin(t) * 1.3), ctx.c3:Lerp(ctx.c2, 0.5), NEON)
+	end
+	for i = -1, 1 do
+		blk(
+			ctx,
+			0.3,
+			0.12,
+			0.45,
+			hf(a, i * 0.18, 0.5, -0.1) * CFrame.Angles(rad(-20), rad(i * 30), 0),
+			Color3.fromRGB(80, 200, 110)
+		)
+	end
+	if ctx.body then
+		emitter(ctx.body, "sparkle", ctx.c2, ctx.s * 0.6)
+	end
+	angryBrows(ctx, a, DARK)
+end
+
+-- 14 사탕 왕국: 생강빵 거인 — 사탕 지팡이 무기, 손목 아이싱, 머리 위 젤리
+GUARD_EXTRAS.gingerbread_giant = function(ctx, a)
+	local hand = handOf(a)
+	vcyl(ctx, 2.2, 0.16, hand * CFrame.new(0, 0.9, -0.1), WHITE, PLASTIC)
+	for _, y in { 0.5, 1.3 } do
+		blk(ctx, 0.19, 0.22, 0.19, hand * CFrame.new(0, y, -0.1), RED, PLASTIC)
+	end
+	blk(ctx, 0.16, 0.16, 0.55, hand * CFrame.new(0, 2.05, -0.32), RED, PLASTIC)
+	for _, side in SIDES do
+		blk(ctx, 0.5, 0.1, 0.5, at(side * 1.05, 1.08, 0), WHITE, PLASTIC)
+	end
+	ball(ctx, 0.35, hf(a, 0, 0.56, 0), Color3.fromRGB(120, 230, 130))
+	angryBrows(ctx, a, WHITE)
+end
+
+-- 15 유령 성: 사신 — 초록 유령불 등불, 쇠사슬 띠, 보랏빛 안개
+GUARD_EXTRAS.grim_reaper = function(ctx, a)
+	local x = -(a.bodySize.X / 2 + 0.4)
+	blk(ctx, 0.08, 0.8, 0.08, at(x, 1.85, -0.3), DARK, PLASTIC)
+	local lantern = blk(ctx, 0.32, 0.4, 0.32, at(x, 1.3, -0.3), Color3.fromRGB(120, 255, 140), NEON)
+	local l = Instance.new("PointLight")
+	l.Color = Color3.fromRGB(120, 255, 140)
+	l.Range = 6 * ctx.s
+	l.Brightness = 1.2
+	l.Parent = lantern
+	blk(ctx, a.bodySize.X * 1.04, 0.08, a.bodySize.Z * 1.04, at(0, 1.55, 0), SILVER, FOIL)
+	if ctx.body then
+		emitter(ctx.body, "smoke", Color3.fromRGB(150, 110, 200), ctx.s * 0.8)
+	end
+end
+
+-- 경비 얼굴 (사장님: 처음부터 화난 얼굴이면 안 됨)
+--   깨어 쫓을 때(State = "Chase")만 눈을 뜨고(EyeOpen) 화난 눈썹(Brow)이 보임.
+--   그 밖(Sleeping / Idle / Return)은 감은 눈 줄(EyeClosed)만 보임 (해골·두건의 빛 눈은 꺼짐).
+--   보일 때 투명도 = 처음 만든 값(Attribute FaceShown, 유령 반투명 유지), 숨길 때 = 1
+local FACE_AWAKE: { [string]: boolean } = { EyeOpen = true, Brow = true }
+local FACE_ASLEEP: { [string]: boolean } = { EyeClosed = true }
+
+local function setGuardFace(model: Model, awake: boolean)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and (FACE_AWAKE[d.Name] or FACE_ASLEEP[d.Name]) then
+			local shown = d:GetAttribute("FaceShown")
+			local visible = if FACE_AWAKE[d.Name] then awake else not awake
+			d.Transparency = if visible then (if typeof(shown) == "number" then shown else 0) else 1
+		end
+	end
+end
+
+-- build 끝에서: 기록한 눈에 이름 붙이고 감은 눈 줄을 만든 뒤 자는 얼굴로 시작
+local function setupGuardFace(ctx: Ctx)
+	local eyes: { EyeRec } = ctx.eyes or {}
+	for _, rec in eyes do
+		for _, p in rec.parts do
+			p.Name = "EyeOpen"
+		end
+		if rec.close then
+			local line =
+				blk(ctx, rec.e * 1.3, rec.e * 0.22, 0.1, rec.pos * CFrame.new(0, -rec.e * 0.15, 0), BLACK, PLASTIC)
+			line.Name = "EyeClosed"
+		end
+	end
+	for _, d in ctx.model:GetDescendants() do
+		if d:IsA("BasePart") and (FACE_AWAKE[d.Name] or FACE_ASLEEP[d.Name]) then
+			d:SetAttribute("FaceShown", d.Transparency)
+		end
+	end
+	setGuardFace(ctx.model, false)
+end
+
+------------------------------------------------------------------
 -- 모델 만들기 (공개)
 ------------------------------------------------------------------
 
@@ -1830,6 +2177,7 @@ function PetVisualService.build(id: string, scale: number, opts: BuildOptions?):
 		has = has,
 		body = nil,
 		bodyKind = v.body,
+		eyes = if opts and opts.guard then {} else nil,
 	}
 	local template = TEMPLATES[v.body] or TEMPLATES.blob
 	local a = template(ctx)
@@ -1843,6 +2191,10 @@ function PetVisualService.build(id: string, scale: number, opts: BuildOptions?):
 	if not a.skipEyes then
 		eyesAt(ctx, a.head, a.headSize)
 	end
+	local extras = if opts and opts.guard then GUARD_EXTRAS[id] else nil
+	if extras then
+		extras(ctx, a)
+	end
 	if v.ghostly or v.material == "Glass" then
 		local minimum = if v.ghostly then 0.35 else 0.2
 		for _, d in model:GetDescendants() do
@@ -1850,6 +2202,9 @@ function PetVisualService.build(id: string, scale: number, opts: BuildOptions?):
 				d.Transparency = math.max(d.Transparency, minimum)
 			end
 		end
+	end
+	if ctx.eyes then
+		setupGuardFace(ctx)
 	end
 	model:SetAttribute("PetId", id)
 	model:SetAttribute("Height", a.top * scale)
@@ -2283,6 +2638,7 @@ local function applyGuardState(guard: Model)
 	info.pose.C0 = if sleeping then info.sleep else info.stand
 	info.z.Enabled = sleeping
 	info.glow.Enabled = state == "Chase"
+	setGuardFace(info.visual, state == "Chase") -- 쫓을 때만 눈 뜨고 화난 눈썹
 end
 
 local function dressGuard(guard: Model)
@@ -2319,7 +2675,7 @@ local function dressGuard(guard: Model)
 	end
 	local targetHeight = spec.height or GUARD_HEIGHT
 	local scale = targetHeight / baseHeight(modelId)
-	local visual = PetVisualService.build(modelId, scale, { effects = false })
+	local visual = PetVisualService.build(modelId, scale, { effects = false, guard = true })
 	visual.Name = modelId
 	local h = height(visual)
 	local humanoid = guard:FindFirstChildOfClass("Humanoid")

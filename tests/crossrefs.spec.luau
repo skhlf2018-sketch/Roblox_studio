@@ -620,6 +620,33 @@ return function(T, Loader)
 	)
 
 	T.test(
+		"4판 비주얼: 가운데 작은 장식(scatter)이 MapBuilder 에 있고, 바닥 무늬·길·담장 장식·아치 이름이 MapBuilder 가 아는 것",
+		function()
+			local code = stripComments(MAPB)
+			local function known(name: string): boolean
+				return string.find(code, '"' .. name .. '"', 1, true) ~= nil
+			end
+			for _, biome in Biomes.list do
+				local theme = Visuals.biomes[biome.id] :: any
+				for _, spec in theme.scatter or {} do
+					T.truthy(decors[spec.kind], biome.id .. " 가운데 장식 '" .. spec.kind .. "' 구현 없음")
+					T.truthy(spec.count >= 1 and spec.count <= 40, biome.id .. " " .. spec.kind .. " 개수")
+				end
+				for _, field in { "pattern", "wallDecor", "arch" } do
+					local name = theme[field]
+					if name then
+						T.truthy(known(name), biome.id .. " " .. field .. " '" .. name .. "' 를 MapBuilder 가 모름")
+					end
+				end
+				if theme.path then
+					T.truthy(theme.path.kind == "road" or theme.path.kind == "stones", biome.id .. " 길 종류")
+					T.eq(#theme.path.color, 3, biome.id .. " 길 색")
+				end
+			end
+		end
+	)
+
+	T.test(
 		"돌연변이마다 알 껍데기 모양, 희귀도 효과 이름, 특별 알 3종, 베이스 색 7개",
 		function()
 			for _, mutation in Mutations.list do

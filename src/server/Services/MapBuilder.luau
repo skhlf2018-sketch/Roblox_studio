@@ -15,11 +15,26 @@
 
 	- 구역("Zone" 태그) 파트 = 복도 한 칸(220 × 240)을 덮는 투명 판. 서버 로직이 위치·크기로 구역을 판정합니다.
 	- 구역 테마(바닥·담장 색, 장식, 분위기 파티클)는 shared/Data/Visuals.luau 의 biomes 표.
-	- 장식은 둥지·경비 길을 피해 담장 쪽(|x| ≥ 88)에만 놓습니다. 복도 가운데는 비움 (경비가 직선으로 쫓아옴).
+	- 큰(부딪히는) 장식은 둥지·경비 길을 피해 담장 쪽(|x| ≥ 89)에만 놓습니다. 복도 가운데는 막지 않음
+	  (경비가 직선으로 쫓아옴) — 가운데에는 안 부딪히는 납작·작은 장식(scatter: 꽃밭·풀·조약돌 …)만.
+	- 4판 비주얼 (사장님 "원작처럼 고퀄로"):
+	    · 바닥 = 큰 스터드 판(왼쪽·오른쪽 1장씩) + 얇은 무늬 판(줄무늬·큰 체크·타일 줄눈·모래 물결·얼음·용암 금·
+	      물빛·별 격자·풀 얼룩) + 구불구불한 가운데 길(흙길/징검돌). 작은 바닥 칸 121개를 쓰던 2판보다 파트가 훨씬 적음.
+	    · 담장 = 긴 벽 1장 + 아래 띠 + 40 스터드마다 기둥(테마 색) + 위 띠, 담장 면에 테마 장식(덩굴·상형문자·고드름·
+	      둥근 창·횃불·등불·수정·사탕 줄무늬·고딕 창).
+	    · 구역 입구 아치 (구역 시작 z0+10): 양쪽 기둥 + 위 보 + 가운데 이름 현수막(앞뒤) + 테마 꼭대기 장식.
+	    · 둥지 = 태그 파트(알 높이 기준, 크기 그대로) + 바닥 그림자 + 짚 다발 링 6개 + 삐죽 나온 짚 2개 (구역별 색/재료).
+	    · 경비 잠자리 = 구역 가운데 납작한 깔개 2장. 베이스·허브: 지붕·간판·바닥 타일·등불 (buildPlot / buildHub).
+	- 파트 수 상한 (PART_BUDGET, 서버 시작 때 한 번 만들고 끝):  한 구역 ≤ 400, 맵 전체 ≤ 7,000.
+	    구역 하나 ≈ 고정 150 (판정·바닥·무늬·길·담장·아치·둥지 80·표지판) + 장식(남은 만큼, 구역마다 다름).
+	    buildDecor 가 구역 상한(ZONE_DECOR_CAP)을 넘기 전에 장식 놓기를 멈춤 → 상한은 코드로 보장.
+	    MapBuilder.countParts(inst) / MapBuilder.partCounts() 로 셈 (tests/smoke_visuals.luau 가 검사).
 	- 베이스: 나무 X자 울타리로 둘러싼 펫 우리(뒤 2/3) + 앞마당(스폰·러닝머신·퓨즈 머신·업그레이드 표지판).
 	  러닝머신 모양은 주인의 TreadmillLevel(1~10)마다 바뀌고, 표지판 숫자는 PenLevel/TreadmillLevel + Upgrades 표로 갱신.
+	  4판: 뒤 벽 헛간 그림, 우리 입구 아치("펫 우리"), 기둥 머리, 알 자리 짚 바닥, 앞마당 돌 타일 길, 등불,
+	  러닝머신·퓨즈 머신 받침 타일, 가판대 지붕 간판·등불.
 	- 이름이 "Map" 인 Instance 가 Workspace 에 이미 있으면 새로 만들지 않고 태그만 읽습니다.
-	- 큰 파트는 전부 한 변 2048 스터드 이하(로블록스 한계). 구역마다 task.wait() 로 나눠 만듦. 전체 파트 1만 2천 이하.
+	- 큰 파트는 전부 한 변 2048 스터드 이하(로블록스 한계). 구역마다 task.wait() 로 나눠 만듦.
 	- 동물(부모 동물·우리 펫·경비)과 알 겉모습은 PetVisualService / EggVisualService 가 붙입니다.
 
 	태그·Attribute 이름은 shared/Tags.luau 그대로 (서버 로직이 읽음). 배달 패드는 2판에서 없음
@@ -71,9 +86,36 @@ local L = {
 	MAX_PART = 2000, -- 2048 한계보다 조금 작게
 	FENCE_H = 5.5,
 	FENCE_GATE = 12, -- 우리 앞 울타리 가운데 출입구 폭
+	PILLAR_STEP = 40, -- 담장 기둥 간격
+	ARCH_DZ = 10, -- 구역 입구 아치 자리 (구역 시작 z0 + 이 값)
+	GUARD_CLEAR = 14, -- 경비 잠자리 둘레 (가운데 작은 장식 금지)
+	-- 바닥 무늬 층 윗면 높이 (같은 높이에 다른 색이 겹치면 깜빡이므로 층을 나눔)
+	Y_PATTERN = 0.04,
+	Y_PATH = 0.08,
+	Y_JOINT = 0.1,
+	Y_DETAIL = 0.12,
 }
 
 local MapBuilder = {}
+
+-- 파트 수 상한 (4판). 서버 시작 때 한 번 만드는 맵이라 task.wait() 로 쪼개지 않고 수만 지킴
+MapBuilder.PART_BUDGET = {
+	zone = 400, -- 구역 하나 (Zones/<id> 아래 BasePart 전부: 바닥·담장·아치·둥지·특수 장소·장식)
+	map = 7000, -- Workspace.Map 전체 (허브 + 구역 15 + 베이스 7, 러닝머신 모양 포함)
+}
+-- 장식은 구역이 이 수에 닿으면 더 안 놓음 (분위기 파티클 상자 1 + 여유를 남김)
+local ZONE_DECOR_CAP = MapBuilder.PART_BUDGET.zone - 8
+
+-- inst 아래 BasePart 개수 (inst 자신이 파트면 포함)
+function MapBuilder.countParts(inst: Instance): number
+	local n = if inst:IsA("BasePart") then 1 else 0
+	for _, d in inst:GetDescendants() do
+		if d:IsA("BasePart") then
+			n += 1
+		end
+	end
+	return n
+end
 
 local mapFolder: Instance? = nil
 local dynamicFolders: { [string]: Folder } = {}
@@ -377,7 +419,7 @@ DECOR.lilypad = function(parent, pos, rng, theme)
 end
 
 DECOR.reeds = function(parent, pos, rng, _theme)
-	for _ = 1, 5 do
+	for _ = 1, 3 do
 		local h = rng:NextNumber(2.5, 4.5)
 		local x, z = rng:NextNumber(-1.5, 1.5), rng:NextNumber(-1.5, 1.5)
 		P(parent, "VCyl", Vector3.new(0.2, h, 0), at(pos, x, h / 2, z), Color3.fromRGB(90, 160, 70))
@@ -1873,6 +1915,313 @@ DECOR.coralblock = function(parent, pos, rng, _theme)
 end
 
 ------------------------------------------------------------------
+-- 4판 장식 (파트 1~4개짜리 — 같은 파트 수로 물건 개수를 늘림)
+--   담장 쪽(decor) 용: stump · urn · tumbleweed · snowpile · satellite
+--   가운데 흩어 놓기(scatter, 안 부딪힘·무릎 아래) 용: flowerpatch · grasstuft · drygrass · seagrass · minishroom ·
+--     pebbles · puddle · bonebits · icechunk · ember · starfish · petals · goldcoin · glowmoss · candybits · skull · leafpile
+------------------------------------------------------------------
+
+-- 납작한 바닥 조각 (안 부딪힘). top = 윗면 높이(바닥 기준)
+local function flatAt(
+	parent: Instance,
+	shape: string,
+	sx: number,
+	sz: number,
+	cf: CFrame,
+	top: number,
+	color: Color3,
+	mat: Enum.Material?,
+	transparency: number?
+): Part
+	local t = 0.08
+	local place = cf * CFrame.new(0, top - t / 2, 0)
+	local p: Part
+	if shape == "Disc" then
+		p = P(parent, "VCyl", Vector3.new(sx, t, 0), place, color, mat or M.Plastic, false, transparency)
+	elseif shape == "Ell" then
+		p = P(parent, "Ell", Vector3.new(sx, t, sz), place, color, mat or M.Plastic, false, transparency)
+	else
+		p = P(parent, "Block", Vector3.new(sx, t, sz), place, color, mat or M.Plastic, false, transparency)
+	end
+	p.CastShadow = false
+	return p
+end
+
+DECOR.stump = function(parent, pos, rng, _theme)
+	local d = rng:NextNumber(2.4, 3.4)
+	local h = rng:NextNumber(1.2, 2)
+	P(parent, "VCyl", Vector3.new(d, h, 0), at(pos, 0, h / 2, 0), Color3.fromRGB(122, 80, 46), M.Wood, true)
+	P(parent, "VCyl", Vector3.new(d * 0.8, 0.1, 0), at(pos, 0, h + 0.03, 0), Color3.fromRGB(226, 186, 128), M.Wood)
+end
+
+DECOR.urn = function(parent, pos, rng, theme)
+	local clay = Color3.fromRGB(200, 120, 70):Lerp(rgb(theme.accent2), 0.25)
+	local h = rng:NextNumber(2.2, 3.2)
+	P(parent, "Ell", Vector3.new(h * 0.9, h, h * 0.9), at(pos, 0, h * 0.5, 0), clay, M.SmoothPlastic, true)
+	P(parent, "VCyl", Vector3.new(h * 0.45, h * 0.35, 0), at(pos, 0, h * 1.05, 0), clay:Lerp(BLACK, 0.15))
+end
+
+DECOR.tumbleweed = function(parent, pos, rng, _theme)
+	local d = rng:NextNumber(2.4, 3.6)
+	local c = Color3.fromRGB(170, 130, 75)
+	local cf = at(pos, 0, d * 0.45, 0) * CFrame.Angles(rng:NextNumber(0, 3), rng:NextNumber(0, 3), 0)
+	P(parent, "Ell", Vector3.new(d, d * 0.9, d), cf, c, M.Fabric, false, 0.35)
+	P(
+		parent,
+		"Ell",
+		Vector3.new(d * 0.7, d * 0.7, d * 0.7),
+		cf * CFrame.Angles(0.8, 0.6, 0),
+		c:Lerp(BLACK, 0.2),
+		M.Fabric
+	)
+end
+
+DECOR.snowpile = function(parent, pos, rng, _theme)
+	local w = rng:NextNumber(4, 8)
+	P(
+		parent,
+		"Ell",
+		Vector3.new(w, w * rng:NextNumber(0.3, 0.45), w * rng:NextNumber(0.6, 0.9)),
+		yawAt(pos, rng),
+		Color3.fromRGB(248, 251, 255),
+		M.Snow
+	)
+end
+
+DECOR.satellite = function(parent, pos, rng, _theme)
+	local cf = at(pos, 0, rng:NextNumber(20, 30), 0) * CFrame.Angles(0, rng:NextNumber(0, 6), 0.3)
+	B(parent, Vector3.new(2.4, 2.4, 3.2), cf, Color3.fromRGB(220, 220, 230))
+	for _, s in { -1, 1 } do
+		P(
+			parent,
+			"Block",
+			Vector3.new(5, 0.2, 2.4),
+			cf * CFrame.new(s * 3.8, 0, 0),
+			Color3.fromRGB(70, 130, 255),
+			M.Neon
+		)
+	end
+	P(parent, "Ell", Vector3.new(2.2, 0.5, 2.2), cf * CFrame.new(0, 1.4, 0), Color3.fromRGB(255, 255, 255))
+end
+
+DECOR.flowerpatch = function(parent, pos, rng, theme)
+	local colors = {
+		Color3.fromRGB(255, 120, 150),
+		Color3.fromRGB(255, 220, 80),
+		Color3.fromRGB(180, 130, 255),
+		Color3.fromRGB(255, 255, 255),
+		rgb(theme.accent2),
+	}
+	local base = yawAt(pos, rng)
+	flatAt(parent, "Ell", 5, 3.6, base, L.Y_DETAIL, rgb(theme.accent):Lerp(BLACK, 0.1), M.Grass)
+	for i = 1, 3 do
+		local a = i * 2.1
+		P(
+			parent,
+			"Ball",
+			Vector3.new(0.9, 0, 0),
+			base * CFrame.new(math.cos(a) * 1.3, 0.45, math.sin(a) * 0.9),
+			pick(rng, colors)
+		)
+	end
+end
+
+local function tuft(parent: Instance, pos: Vector3, rng: Random, color: Color3)
+	local base = yawAt(pos, rng)
+	local h = rng:NextNumber(1.2, 2)
+	for k = 0, 1 do
+		P(
+			parent,
+			"Ell",
+			Vector3.new(0.35, h, 1.4),
+			base * CFrame.Angles(0, k * math.pi / 2, 0) * CFrame.new(0, h * 0.4, 0),
+			color:Lerp(WHITE, k * 0.08),
+			M.Grass
+		)
+	end
+end
+
+DECOR.grasstuft = function(parent, pos, rng, theme)
+	tuft(parent, pos, rng, rgb(theme.accent):Lerp(Color3.fromRGB(90, 190, 60), 0.6))
+end
+
+DECOR.drygrass = function(parent, pos, rng, _theme)
+	tuft(parent, pos, rng, Color3.fromRGB(196, 166, 92))
+end
+
+DECOR.seagrass = function(parent, pos, rng, _theme)
+	tuft(parent, pos, rng, Color3.fromRGB(50, 190, 150))
+end
+
+DECOR.minishroom = function(parent, pos, rng, theme)
+	local h = rng:NextNumber(0.8, 1.4)
+	P(parent, "VCyl", Vector3.new(0.45, h, 0), at(pos, 0, h / 2, 0), Color3.fromRGB(250, 240, 220))
+	local glow = theme.wallGlow ~= nil
+	P(
+		parent,
+		"Ell",
+		Vector3.new(1.6, 0.8, 1.6),
+		at(pos, 0, h + 0.15, 0),
+		rgb(theme.accent2),
+		if glow then M.Neon else M.SmoothPlastic
+	)
+end
+
+DECOR.pebbles = function(parent, pos, rng, theme)
+	local c = Color3.fromRGB(150, 150, 155):Lerp(rgb(theme.floor), 0.25)
+	for k = 0, 1 do
+		local s = rng:NextNumber(0.9, 1.7)
+		P(
+			parent,
+			"Ell",
+			Vector3.new(s * 1.3, s * 0.6, s),
+			at(pos, k * 1.6 - 0.8, s * 0.15, rng:NextNumber(-0.6, 0.6)) * CFrame.Angles(0, rng:NextNumber(0, 3), 0),
+			c:Lerp(WHITE, k * 0.12),
+			M.Slate
+		)
+	end
+end
+
+DECOR.puddle = function(parent, pos, rng, _theme)
+	flatAt(
+		parent,
+		"Ell",
+		rng:NextNumber(5, 9),
+		rng:NextNumber(3, 6),
+		yawAt(pos, rng),
+		L.Y_DETAIL + 0.03, -- 다른 납작 장식과 겹쳐도 깜빡이지 않게 한 층 위
+		Color3.fromRGB(90, 175, 245),
+		M.Glass,
+		0.15
+	)
+end
+
+DECOR.bonebits = function(parent, pos, rng, _theme)
+	local bone = Color3.fromRGB(240, 235, 215)
+	local cf = yawAt(pos, rng) * CFrame.new(0, 0.2, 0)
+	P(parent, "Cyl", Vector3.new(1.8, 0.35, 0.35), cf, bone)
+	P(parent, "Ball", Vector3.new(0.6, 0, 0), cf * CFrame.new(0.9, 0, 0.15), bone)
+end
+
+DECOR.icechunk = function(parent, pos, rng, _theme)
+	local s = rng:NextNumber(1.4, 2.8)
+	P(
+		parent,
+		"Block",
+		Vector3.new(s, s * 0.8, s),
+		at(pos, 0, s * 0.3, 0)
+			* CFrame.Angles(rng:NextNumber(-0.4, 0.4), rng:NextNumber(0, 3), rng:NextNumber(-0.4, 0.4)),
+		Color3.fromRGB(175, 225, 255),
+		M.Ice,
+		false,
+		0.1
+	)
+end
+
+DECOR.ember = function(parent, pos, rng, _theme)
+	local base = yawAt(pos, rng)
+	flatAt(parent, "Ell", 3.4, 2.6, base, L.Y_DETAIL, Color3.fromRGB(40, 34, 34), M.Basalt)
+	P(
+		parent,
+		"Ball",
+		Vector3.new(rng:NextNumber(0.6, 1), 0, 0),
+		base * CFrame.new(0.3, 0.3, 0),
+		Color3.fromRGB(255, 120, 30),
+		M.Neon
+	)
+end
+
+DECOR.starfish = function(parent, pos, rng, _theme)
+	local base = yawAt(pos, rng)
+	local c = pick(rng, { Color3.fromRGB(255, 140, 70), Color3.fromRGB(255, 100, 140), Color3.fromRGB(255, 210, 90) })
+	for k = 0, 2 do
+		P(
+			parent,
+			"Ell",
+			Vector3.new(2.6, 0.3, 0.7),
+			base * CFrame.Angles(0, k * math.pi / 3, 0) * CFrame.new(0, 0.15, 0),
+			c,
+			M.SmoothPlastic
+		)
+	end
+end
+
+DECOR.petals = function(parent, pos, rng, _theme)
+	for k = 1, 3 do
+		flatAt(
+			parent,
+			"Ell",
+			1.3,
+			0.9,
+			at(pos, rng:NextNumber(-2, 2), 0, rng:NextNumber(-2, 2)) * CFrame.Angles(0, rng:NextNumber(0, 3), 0),
+			L.Y_DETAIL + k * 0.015,
+			Color3.fromRGB(255, 170, 205):Lerp(WHITE, rng:NextNumber(0, 0.4)),
+			M.SmoothPlastic
+		)
+	end
+end
+
+DECOR.goldcoin = function(parent, pos, rng, _theme)
+	local gold = Color3.fromRGB(255, 205, 60)
+	P(parent, "VCyl", Vector3.new(1.3, 0.2, 0), at(pos, 0, 0.1, 0), gold, M.Foil)
+	P(
+		parent,
+		"VCyl",
+		Vector3.new(1.3, 0.2, 0),
+		at(pos, 0.9, 0.45, 0.3) * CFrame.Angles(rng:NextNumber(0.6, 1.2), 0, 0),
+		gold,
+		M.Foil
+	)
+end
+
+DECOR.glowmoss = function(parent, pos, rng, theme)
+	flatAt(
+		parent,
+		"Ell",
+		rng:NextNumber(3, 5),
+		rng:NextNumber(2, 4),
+		yawAt(pos, rng),
+		L.Y_DETAIL,
+		rgb(theme.accent2),
+		M.Neon,
+		0.35
+	)
+end
+
+DECOR.candybits = function(parent, pos, rng, _theme)
+	local c = pick(rng, {
+		Color3.fromRGB(255, 90, 160),
+		Color3.fromRGB(110, 200, 255),
+		Color3.fromRGB(255, 210, 70),
+		Color3.fromRGB(150, 230, 120),
+	})
+	local cf = yawAt(pos, rng) * CFrame.new(0, 0.5, 0)
+	P(parent, "Ell", Vector3.new(1.6, 1, 1), cf, c, M.SmoothPlastic)
+	P(parent, "Block", Vector3.new(2.8, 0.5, 0.5), cf, c:Lerp(WHITE, 0.45), M.SmoothPlastic)
+end
+
+DECOR.skull = function(parent, pos, rng, _theme)
+	local cf = yawAt(pos, rng) * CFrame.new(0, 0.7, 0)
+	P(parent, "Ball", Vector3.new(1.5, 0, 0), cf, Color3.fromRGB(236, 230, 210))
+	P(parent, "Block", Vector3.new(1, 0.3, 0.2), cf * CFrame.new(0, 0.1, -0.68), BLACK)
+end
+
+DECOR.leafpile = function(parent, pos, rng, _theme)
+	local base = yawAt(pos, rng)
+	flatAt(parent, "Ell", 3.6, 2.6, base, L.Y_DETAIL, Color3.fromRGB(200, 110, 40), M.Fabric)
+	flatAt(
+		parent,
+		"Ell",
+		2.4,
+		1.8,
+		base * CFrame.new(1.2, 0, 0.6),
+		L.Y_DETAIL + 0.04,
+		Color3.fromRGB(150, 80, 45),
+		M.Fabric
+	)
+end
+
+------------------------------------------------------------------
 -- 테마 색
 ------------------------------------------------------------------
 
@@ -1902,54 +2251,272 @@ local function sideColors(theme: BiomeTheme, right: boolean): SideColors
 end
 
 ------------------------------------------------------------------
--- 복도 바닥·담장 (체크무늬 스터드 판)
+-- 복도 바닥·담장 (4판: 큰 스터드 판 + 얇은 무늬 판 — 파트를 아끼고 무늬는 늘림)
 ------------------------------------------------------------------
 
--- 바닥: x0~x1, z0~z1 을 tile 크기 칸으로 나눠 두 색 번갈아. colorAt(x) 로 칸마다 색 고르기 가능
-local function tiledFloor(
+-- 담장 안쪽 면 위치 (side 쪽 담장 표면에서 d 만큼 복도 쪽)
+local function wallFaceX(side: number, d: number): number
+	return side * (L.HALF - d)
+end
+
+-- 무늬·길 판 (안 부딪힘, 레이캐스트 안 맞음, 그림자 없음). top = 윗면 높이 (FLOOR_TOP 기준)
+local function patch(
 	parent: Instance,
-	x0: number,
-	x1: number,
-	z0: number,
-	z1: number,
-	colorsAt: (number) -> (Color3, Color3)
-)
-	local nx = math.max(1, math.floor((x1 - x0) / L.FLOOR_TILE + 0.5))
-	local nz = math.max(1, math.floor((z1 - z0) / L.FLOOR_TILE + 0.5))
-	local w = (x1 - x0) / nx
-	local d = (z1 - z0) / nz
-	for i = 0, nx - 1 do
-		local x = x0 + (i + 0.5) * w
-		local c1, c2 = colorsAt(x)
-		for j = 0, nz - 1 do
-			makePart({
-				name = "Floor",
-				size = Vector3.new(w, 1, d),
-				cframe = CFrame.new(x, FLOOR_TOP - 0.5, z0 + (j + 0.5) * d),
-				parent = parent,
-				color = if (i + j) % 2 == 0 then c1 else c2,
-				material = Enum.Material.Plastic,
-				studs = true,
-			})
+	shape: string,
+	sx: number,
+	sz: number,
+	x: number,
+	z: number,
+	top: number,
+	color: Color3,
+	mat: Enum.Material?,
+	yaw: number?,
+	transparency: number?
+): Part
+	local p = flatAt(
+		parent,
+		shape,
+		sx,
+		sz,
+		CFrame.new(x, FLOOR_TOP, z) * CFrame.Angles(0, yaw or 0, 0),
+		top,
+		color,
+		mat,
+		transparency
+	)
+	if shape == "Block" and (mat == nil or mat == M.Plastic) then
+		studify(p) -- 바닥처럼 스터드 (클래식 로블록스)
+	end
+	return p
+end
+
+-- 바닥: x0~x1, z0~z1 을 왼쪽(x<0)·오른쪽(x>0) 큰 스터드 판 1장씩 (같은 색이면 1장)
+local function zoneFloor(parent: Instance, x0: number, x1: number, z0: number, z1: number, left: Color3, right: Color3)
+	local function slab(a: number, b: number, color: Color3)
+		makePart({
+			name = "Floor",
+			size = Vector3.new(b - a, 1, z1 - z0),
+			cframe = CFrame.new((a + b) / 2, FLOOR_TOP - 0.5, (z0 + z1) / 2),
+			parent = parent,
+			color = color,
+			material = Enum.Material.Plastic,
+			studs = true,
+		})
+	end
+	if left == right then
+		slab(x0, x1, left)
+	else
+		slab(x0, 0, left)
+		slab(0, x1, right)
+	end
+end
+
+-- 바닥 무늬 (Visuals.biomes[..].pattern). 같은 무늬는 같은 색·같은 높이 → 겹쳐도 깜빡이지 않음
+--   avoidX: 가운데 길이 있으면 |x| < avoidX 에는 얼룩을 안 놓음 (길 위에 얼룩이 비치지 않게)
+local function floorPattern(parent: Instance, theme: BiomeTheme, fz0: number, fz1: number, rng: Random, avoidX: number)
+	local kind = theme.pattern
+	if not kind then
+		return
+	end
+	local base = rgb(theme.floor)
+	local c = if theme.floorTile
+		then rgb(theme.floorTile)
+		elseif theme.floor2 then rgb(theme.floor2)
+		else base:Lerp(BLACK, 0.08)
+	local top = L.Y_PATTERN
+	local len = fz1 - fz0
+	local function spot(margin: number): (number, number)
+		for _ = 1, 20 do
+			local x = rng:NextNumber(-L.HALF + margin, L.HALF - margin)
+			if math.abs(x) >= avoidX + margin * 0.5 then
+				return x, rng:NextNumber(fz0 + margin * 1.5, fz1 - margin * 1.5)
+			end
+		end
+		return (if rng:NextNumber() < 0.5 then -1 else 1) * (L.HALF - margin), (fz0 + fz1) / 2
+	end
+	if kind == "stripes" then
+		-- 잔디 깎은 줄 (복도를 가로지르는 넓은 띠)
+		local n = math.max(2, math.floor(len / 20 + 0.5))
+		local d = len / n
+		for j = 1, n - 1, 2 do
+			patch(parent, "Block", L.HALF * 2, d, 0, fz0 + (j + 0.5) * d, top, c)
+		end
+	elseif kind == "checker" then
+		-- 큰 체크무늬 (5 × 5 칸)
+		local nx, nz = 5, 5
+		local w, d = L.HALF * 2 / nx, len / nz
+		for i = 0, nx - 1 do
+			for j = 0, nz - 1 do
+				if (i + j) % 2 == 1 then
+					patch(parent, "Block", w, d, -L.HALF + (i + 0.5) * w, fz0 + (j + 0.5) * d, top, c)
+				end
+			end
+		end
+	elseif kind == "tiles" then
+		-- 돌 타일 줄눈 (20 스터드 격자) + 금 간 타일 몇 장 (줄눈보다 한 층 아래)
+		local grout = c:Lerp(BLACK, 0.25)
+		for i = -5, 5 do
+			patch(parent, "Block", 0.5, len, i * 20, (fz0 + fz1) / 2, top, grout, M.SmoothPlastic)
+		end
+		local n = math.floor(len / 20)
+		for j = 1, n do
+			patch(parent, "Block", L.HALF * 2, 0.5, 0, fz0 + j * (len / (n + 1)), top, grout, M.SmoothPlastic)
+		end
+		for _ = 1, 5 do
+			local ix = rng:NextInteger(-5, 4)
+			local jz = rng:NextInteger(0, n - 1)
+			patch(parent, "Block", 19.5, 19.5, ix * 20 + 10, fz0 + (jz + 0.5) * (len / (n + 1)), top - 0.02, c)
+		end
+	elseif kind == "dunes" or kind == "caustics" or kind == "ice" or kind == "patches" then
+		-- 모래 물결 / 바닷속 물빛 / 얼음판 / 풀·이끼 얼룩 (납작한 타원)
+		local color, mat, count, lo, hi = c:Lerp(BLACK, 0.06), M.Plastic, 12, 14, 34
+		if kind == "dunes" then
+			color, mat, count, lo, hi = base:Lerp(Color3.fromRGB(200, 150, 70), 0.3), M.Sand, 12, 26, 46
+		elseif kind == "caustics" then
+			color, count = base:Lerp(Color3.fromRGB(120, 200, 255), 0.35), 12
+		elseif kind == "ice" then
+			color, mat, count = Color3.fromRGB(196, 228, 252), M.Ice, 10
+		elseif kind == "patches" then
+			color, mat = rgb(theme.accent):Lerp(base, 0.35), M.Grass
+		end
+		for _ = 1, count do
+			local sx = rng:NextNumber(lo, hi)
+			local x, z = spot(sx * 0.35)
+			patch(parent, "Ell", sx, sx * rng:NextNumber(0.35, 0.65), x, z, top, color, mat, rng:NextNumber(-0.6, 0.6))
+		end
+	elseif kind == "cracks" then
+		-- 용암 금 (네온 주황, 3 마디씩 구불구불)
+		local lava = Color3.fromRGB(255, 110, 30)
+		for _ = 1, 8 do
+			local x, z = spot(14)
+			local yaw = rng:NextNumber(0, math.pi * 2)
+			for _ = 1, 3 do
+				local seg = rng:NextNumber(6, 12)
+				local ex, ez = x + math.sin(yaw) * seg, z + math.cos(yaw) * seg
+				if math.abs(ex) > L.HALF - 4 or ez < fz0 + 2 or ez > fz1 - 2 then
+					break -- 구역·담장 밖으로 나가는 금은 멈춤
+				end
+				local mx, mz = x + math.sin(yaw) * seg / 2, z + math.cos(yaw) * seg / 2
+				patch(parent, "Block", 0.6, seg, mx, mz, top, lava, M.Neon, yaw)
+				x, z = x + math.sin(yaw) * seg, z + math.cos(yaw) * seg
+				yaw += rng:NextNumber(-0.9, 0.9)
+			end
+		end
+	elseif kind == "grid" then
+		-- 우주 정거장 빛 격자 (반투명 네온)
+		local glow = rgb(theme.accent)
+		for i = -2, 2 do
+			patch(parent, "Block", 0.4, len, i * 44, (fz0 + fz1) / 2, top, glow, M.Neon, 0, 0.6)
+		end
+		for j = 1, 5 do
+			patch(parent, "Block", L.HALF * 2, 0.4, 0, fz0 + j * len / 6, top, glow, M.Neon, 0, 0.6)
 		end
 	end
 end
 
--- 담장 한 쪽: side = -1(왼쪽, x = -110) / 1(오른쪽). z0~z1. 아래위 2줄 체크무늬
-local function tiledWall(parent: Instance, side: number, z0: number, z1: number, c1: Color3, c2: Color3, cap: Color3?)
-	local n = math.max(1, math.floor((z1 - z0) / L.WALL_TILE + 0.5))
-	local d = (z1 - z0) / n
+-- 가운데 구불구불한 길 (Visuals.biomes[..].path). 반환: 길 위 점들 (가운데 작은 장식이 길을 피하게)
+local function floorPath(parent: Instance, theme: BiomeTheme, fz0: number, fz1: number, seed: number): { Vector3 }
+	local spec = theme.path
+	local points: { Vector3 } = {}
+	if not spec then
+		return points
+	end
+	local color = rgb(spec.color)
+	local n = 6
+	for k = 0, n do
+		local z = fz0 + 1 + (fz1 - fz0 - 2) * k / n
+		local x = 11 * math.sin(k * 1.35 + seed)
+		table.insert(points, Vector3.new(x, FLOOR_TOP, z))
+	end
+	if spec.kind == "stones" then
+		-- 징검돌: 길을 따라 돌 16개 (빛나는 길이면 네온)
+		local mat = if spec.glow then M.Neon else M.Slate
+		for k = 0, 15 do
+			local t = k / 15 * n
+			local i = math.min(n - 1, math.floor(t))
+			local a, b = points[i + 1], points[i + 2]
+			local p = a:Lerp(b, t - i)
+			local d = 4.2 + (k % 3) * 0.7
+			patch(
+				parent,
+				"Disc",
+				d,
+				d,
+				p.X + (if k % 2 == 0 then -2 else 2),
+				p.Z,
+				L.Y_PATH,
+				color:Lerp(WHITE, (k % 3) * 0.06),
+				mat,
+				0,
+				if spec.glow then 0.25 else nil
+			)
+		end
+	else
+		-- 흙길·모래길: 마디 6개 + 이음새 둥근 판 5개 (한 층 위라 깜빡이지 않음)
+		local width = 11
+		for k = 1, n do
+			local a, b = points[k], points[k + 1]
+			local mid = (a + b) / 2
+			local delta = b - a
+			local yaw = math.atan2(delta.X, delta.Z)
+			patch(parent, "Block", width, delta.Magnitude, mid.X, mid.Z, L.Y_PATH, color, nil, yaw)
+		end
+		for k = 2, n do
+			patch(parent, "Disc", width, width, points[k].X, points[k].Z, L.Y_JOINT, color)
+		end
+	end
+	return points
+end
+
+-- 담장 한 쪽 (4판): 긴 벽 1장 + 아래 띠 + 40 스터드마다 기둥(위로 살짝 솟음) + 위 띠(잔디·눈)
+--   side = -1(왼쪽, x = -110) / 1(오른쪽). z0~z1
+local function zoneWall(
+	parent: Instance,
+	side: number,
+	z0: number,
+	z1: number,
+	c1: Color3,
+	c2: Color3,
+	cap: Color3?,
+	pillar: Color3? -- nil 이면 기둥 없음 (허브: 베이스가 벽에 붙어 있음)
+)
 	local x = side * (L.HALF + L.WALL_T / 2)
-	local rows = 2
-	local h = L.WALL_H / rows
-	for j = 0, n - 1 do
-		for r = 0, rows - 1 do
+	local len = z1 - z0
+	local cz = (z0 + z1) / 2
+	makePart({
+		name = "Wall",
+		size = Vector3.new(L.WALL_T, L.WALL_H, len),
+		cframe = CFrame.new(x, FLOOR_TOP + L.WALL_H / 2, cz),
+		parent = parent,
+		color = c1,
+		material = Enum.Material.Plastic,
+		studs = true,
+	})
+	-- 아래 절반 띠 (원작 담장 2줄 느낌). 안쪽으로 0.4 나옴 → 담장 면 장식은 0.5 이상 앞에
+	local band = P(
+		parent,
+		"Block",
+		Vector3.new(0.4, L.WALL_H * 0.45, len),
+		CFrame.new(wallFaceX(side, 0.2), FLOOR_TOP + L.WALL_H * 0.225, cz),
+		c2,
+		M.Plastic
+	)
+	studify(band)
+	band.Name = "WallBand"
+	if pillar then
+		local n = math.max(1, math.floor(len / L.PILLAR_STEP + 0.5))
+		local step = len / n
+		for k = 0, n - 1 do
 			makePart({
-				name = "Wall",
-				size = Vector3.new(L.WALL_T, h, d),
-				cframe = CFrame.new(x, FLOOR_TOP + (r + 0.5) * h, z0 + (j + 0.5) * d),
+				name = "WallPillar",
+				size = Vector3.new(L.WALL_T + 1.5, L.WALL_H + 3, 4),
+				cframe = CFrame.new(
+					side * (L.HALF + L.WALL_T / 2 - 0.75),
+					FLOOR_TOP + (L.WALL_H + 3) / 2,
+					z0 + (k + 0.5) * step
+				),
 				parent = parent,
-				color = if (j + r) % 2 == 0 then c1 else c2,
+				color = pillar,
 				material = Enum.Material.Plastic,
 				studs = true,
 			})
@@ -1959,8 +2526,8 @@ local function tiledWall(parent: Instance, side: number, z0: number, z1: number,
 		-- 담장 위 잔디/눈 띠 (원작: 숲·호수 담장 꼭대기 초록 줄)
 		makePart({
 			name = "WallCap",
-			size = Vector3.new(L.WALL_T + 1, 2, z1 - z0),
-			cframe = CFrame.new(x - side * 0.5, FLOOR_TOP + L.WALL_H + 1, (z0 + z1) / 2),
+			size = Vector3.new(L.WALL_T + 1, 2, len),
+			cframe = CFrame.new(x - side * 0.5, FLOOR_TOP + L.WALL_H + 1, cz),
 			parent = parent,
 			color = cap,
 			material = Enum.Material.Plastic,
@@ -1969,13 +2536,492 @@ local function tiledWall(parent: Instance, side: number, z0: number, z1: number,
 	end
 end
 
--- 담장 안쪽 면 위치 (side 쪽 담장 표면에서 d 만큼 복도 쪽)
-local function wallFaceX(side: number, d: number): number
-	return side * (L.HALF - d)
+-- 담장 면 장식 (Visuals.biomes[..].wallDecor). 기둥 사이 가운데(z0+80, 120, 160, 200)에 한 쪽 4개
+--   z0+40 자리는 담장 이름판(ZoneSign)과 겹쳐서 비움
+local function wallDecor(parent: Instance, theme: BiomeTheme, z0: number, rng: Random)
+	local kind = theme.wallDecor
+	if not kind then
+		return
+	end
+	local accent, accent2 = rgb(theme.accent), rgb(theme.accent2)
+	for _, side in { -1, 1 } do
+		for k = 2, 5 do
+			local z = z0 + k * L.PILLAR_STEP
+			-- 담장 면 기준 (앞 = 복도 쪽)
+			local face = CFrame.lookAt(
+				Vector3.new(wallFaceX(side, 0.5), FLOOR_TOP, z),
+				Vector3.new(wallFaceX(side, 0.5) - side, FLOOR_TOP, z)
+			)
+			local function on(dx: number, y: number, out: number): CFrame
+				return face * CFrame.new(dx, y, -out)
+			end
+			if kind == "vines" then
+				local h = rng:NextNumber(16, 28)
+				local green = Color3.fromRGB(60, 150, 50):Lerp(accent, 0.3)
+				B(parent, Vector3.new(1.4, h, 0.6), on(rng:NextNumber(-6, 6), L.WALL_H - h / 2, 0.3), green)
+				B(
+					parent,
+					Vector3.new(3.2, 2.4, 1.2),
+					on(rng:NextNumber(-3, 3), L.WALL_H - h, 0.6),
+					green:Lerp(WHITE, 0.1)
+				)
+			elseif kind == "hiero" then
+				local panel = B(parent, Vector3.new(8, 11, 0.4), on(0, 22, 0.2), rgb(theme.wall):Lerp(BLACK, 0.18))
+				panel.Name = "Hieroglyph"
+				P(parent, "Ell", Vector3.new(4.6, 2.2, 0.3), on(0, 23, 0.5), accent2, M.Foil)
+			elseif kind == "icicles" then
+				for i = -1, 1, 2 do
+					local h = rng:NextNumber(5, 10)
+					P(
+						parent,
+						"Ell",
+						Vector3.new(1.4, h, 1.4),
+						on(i * 5 + rng:NextNumber(-2, 2), L.WALL_H - h * 0.4, 0.8),
+						Color3.fromRGB(190, 235, 255),
+						M.Ice,
+						false,
+						0.15
+					)
+				end
+			elseif kind == "portholes" then
+				P(
+					parent,
+					"Cyl",
+					Vector3.new(0.6, 7, 7),
+					on(0, 30, 0.3) * CFrame.Angles(0, math.pi / 2, 0),
+					Color3.fromRGB(205, 160, 80),
+					M.Foil
+				)
+				local glass = P(
+					parent,
+					"Cyl",
+					Vector3.new(0.7, 5.4, 5.4),
+					on(0, 30, 0.4) * CFrame.Angles(0, math.pi / 2, 0),
+					Color3.fromRGB(110, 220, 255),
+					M.Neon,
+					false,
+					0.35
+				)
+				glass.Name = "Porthole"
+			elseif kind == "torches" or kind == "lanterns" or kind == "windows" or kind == "crystals" then
+				local glowColor = if kind == "torches"
+					then Color3.fromRGB(255, 150, 40)
+					elseif kind == "lanterns" then accent2
+					elseif kind == "windows" then Color3.fromRGB(255, 200, 80)
+					else accent2
+				local lit: Part
+				if kind == "torches" then
+					B(parent, Vector3.new(1, 3, 1.4), on(0, 14, 0.7), DARKBROWN)
+					lit = P(parent, "Ball", Vector3.new(1.6, 0, 0), on(0, 16.2, 0.9), glowColor, M.Neon)
+					local fire = Instance.new("Fire")
+					fire.Size = 3
+					fire.Heat = 6
+					fire.Color = Color3.fromRGB(255, 120, 30)
+					fire.SecondaryColor = Color3.fromRGB(255, 220, 80)
+					fire.Parent = lit
+				elseif kind == "lanterns" then
+					B(parent, Vector3.new(0.3, 10, 0.3), on(0, 50, 1.6), BLACK)
+					lit = P(parent, "Ell", Vector3.new(2.6, 3.4, 2.6), on(0, 43.5, 1.6), glowColor, M.Neon, false, 0.1)
+				elseif kind == "windows" then
+					B(parent, Vector3.new(7, 13, 0.4), on(0, 30, 0.2), BLACK)
+					lit = P(parent, "Block", Vector3.new(5, 10.5, 0.3), on(0, 29.4, 0.5), glowColor, M.Neon)
+				else
+					lit = P(
+						parent,
+						"Ell",
+						Vector3.new(2, 6, 2),
+						on(-1, 24, 1) * CFrame.Angles(0.5, 0, 0.3),
+						glowColor,
+						M.Neon,
+						false,
+						0.15
+					)
+					P(
+						parent,
+						"Ell",
+						Vector3.new(1.4, 4, 1.4),
+						on(1.4, 22.5, 0.9) * CFrame.Angles(0.4, 0, -0.4),
+						accent,
+						M.Neon,
+						false,
+						0.15
+					)
+				end
+				lit.Name = "WallLight"
+				if k % 2 == 0 then
+					light(lit, glowColor, 16, 1.2)
+				end
+			elseif kind == "candystripes" then
+				for i = -1, 1, 2 do
+					P(
+						parent,
+						"Block",
+						Vector3.new(2.6, 34, 0.3),
+						on(i * 6, 30, 0.6) * CFrame.Angles(0, 0, math.rad(28)),
+						if i < 0 then Color3.fromRGB(255, 90, 140) else WHITE,
+						M.SmoothPlastic
+					)
+				end
+			end
+		end
+	end
+end
+
+-- 구역 입구 아치 (구역 시작 z0 + ARCH_DZ): 양쪽 기둥(받침·기둥·머리) + 위 보 + 이름 현수막 + 가운데 장식
+type ArchStyle = {
+	pillar: Color3,
+	pmat: Enum.Material,
+	base: Color3,
+	beam: Color3,
+	bmat: Enum.Material,
+	cap: string,
+	center: string,
+}
+
+local function archStyle(theme: BiomeTheme): ArchStyle
+	local style = theme.arch or "wood"
+	local pil = rgb(theme.pilaster or theme.trim)
+	local wood = Color3.fromRGB(150, 100, 55)
+	local stone = Color3.fromRGB(140, 140, 148)
+	if style == "sandstone" then
+		local sand = Color3.fromRGB(226, 192, 122)
+		return {
+			pillar = sand,
+			pmat = M.Sandstone,
+			base = sand:Lerp(BLACK, 0.2),
+			beam = sand,
+			bmat = M.Sandstone,
+			cap = "gold",
+			center = "sun",
+		}
+	elseif style == "ice" then
+		local ice = Color3.fromRGB(175, 225, 255)
+		return {
+			pillar = ice,
+			pmat = M.Ice,
+			base = WHITE,
+			beam = ice,
+			bmat = M.Ice,
+			cap = "crystal",
+			center = "snowflake",
+		}
+	elseif style == "basalt" then
+		local rock = Color3.fromRGB(48, 40, 42)
+		return {
+			pillar = rock,
+			pmat = M.Basalt,
+			base = rock:Lerp(BLACK, 0.3),
+			beam = rock,
+			bmat = M.Basalt,
+			cap = "lava",
+			center = "lava",
+		}
+	elseif style == "coral" then
+		return {
+			pillar = Color3.fromRGB(255, 130, 160),
+			pmat = M.Plastic,
+			base = Color3.fromRGB(226, 200, 140),
+			beam = Color3.fromRGB(60, 200, 160),
+			bmat = M.Plastic,
+			cap = "bubble",
+			center = "shell",
+		}
+	elseif style == "bone" then
+		local bone = Color3.fromRGB(240, 234, 212)
+		return {
+			pillar = bone,
+			pmat = M.Plastic,
+			base = wood,
+			beam = bone,
+			bmat = M.Plastic,
+			cap = "ball",
+			center = "skull",
+		}
+	elseif style == "space" then
+		return {
+			pillar = pil,
+			pmat = M.Plastic,
+			base = Color3.fromRGB(28, 28, 44),
+			beam = Color3.fromRGB(36, 34, 70),
+			bmat = M.Plastic,
+			cap = "star",
+			center = "planet",
+		}
+	elseif style == "torii" then
+		return {
+			pillar = Color3.fromRGB(205, 40, 40),
+			pmat = M.Plastic,
+			base = BLACK,
+			beam = BLACK,
+			bmat = M.Plastic,
+			cap = "none",
+			center = "torii",
+		}
+	elseif style == "marble" then
+		return {
+			pillar = WHITE,
+			pmat = M.Marble,
+			base = Color3.fromRGB(255, 205, 60),
+			beam = WHITE,
+			bmat = M.Marble,
+			cap = "gold",
+			center = "halo",
+		}
+	elseif style == "crystal" then
+		return {
+			pillar = pil,
+			pmat = M.Plastic,
+			base = pil:Lerp(BLACK, 0.3),
+			beam = rgb(theme.wall),
+			bmat = M.Plastic,
+			cap = "crystal",
+			center = "crystal",
+		}
+	elseif style == "candy" then
+		return {
+			pillar = WHITE,
+			pmat = M.SmoothPlastic,
+			base = Color3.fromRGB(255, 120, 180),
+			beam = Color3.fromRGB(255, 150, 200),
+			bmat = M.SmoothPlastic,
+			cap = "lollipop",
+			center = "candy",
+		}
+	elseif style == "gothic" then
+		return {
+			pillar = pil,
+			pmat = M.Slate,
+			base = pil:Lerp(BLACK, 0.3),
+			beam = pil,
+			bmat = M.Slate,
+			cap = "spire",
+			center = "pumpkin",
+		}
+	end
+	return {
+		pillar = wood,
+		pmat = M.WoodPlanks,
+		base = stone,
+		beam = wood,
+		bmat = M.WoodPlanks,
+		cap = "leaf",
+		center = "egg",
+	}
+end
+
+-- 아치 기둥 머리 / 가운데 장식 (pos = 놓을 자리 가운데)
+local function archOrnament(parent: Instance, kind: string, pos: Vector3, theme: BiomeTheme, big: boolean)
+	local s = if big then 1.6 else 1
+	local accent, accent2 = rgb(theme.accent), rgb(theme.accent2)
+	local cf = CFrame.new(pos)
+	if kind == "leaf" then
+		B(parent, Vector3.new(8, 4, 8) * s, cf, rgb(theme.accent))
+		B(parent, Vector3.new(4.5, 2.5, 4.5) * s, cf * CFrame.new(0, 3 * s, 0), accent:Lerp(WHITE, 0.12))
+	elseif kind == "gold" or kind == "ball" then
+		local mat = if kind == "gold" then M.Foil else M.Plastic
+		local color = if kind == "gold" then Color3.fromRGB(255, 205, 60) else Color3.fromRGB(240, 234, 212)
+		P(parent, "Ball", Vector3.new(4 * s, 0, 0), cf * CFrame.new(0, 1.5 * s, 0), color, mat)
+	elseif kind == "crystal" then
+		local c =
+			P(parent, "Ell", Vector3.new(2.6, 7, 2.6) * s, cf * CFrame.new(0, 3 * s, 0), accent2, M.Neon, false, 0.1)
+		if big then
+			light(c, accent2, 24, 1.5)
+		end
+	elseif kind == "lava" then
+		local orb = P(
+			parent,
+			"Ball",
+			Vector3.new(3.6 * s, 0, 0),
+			cf * CFrame.new(0, 1.5 * s, 0),
+			Color3.fromRGB(255, 110, 30),
+			M.Neon
+		)
+		light(orb, Color3.fromRGB(255, 120, 40), 20, 1.5)
+		if big then
+			local fire = Instance.new("Fire")
+			fire.Size = 6
+			fire.Heat = 8
+			fire.Parent = orb
+		end
+	elseif kind == "bubble" then
+		P(
+			parent,
+			"Ball",
+			Vector3.new(3.6 * s, 0, 0),
+			cf * CFrame.new(0, 1.5 * s, 0),
+			Color3.fromRGB(190, 235, 255),
+			M.Glass,
+			false,
+			0.4
+		)
+	elseif kind == "star" then
+		local c = Color3.fromRGB(255, 255, 200)
+		P(parent, "Block", Vector3.new(0.8, 5, 1.2) * s, cf * CFrame.new(0, 2 * s, 0), c, M.Neon)
+		P(parent, "Block", Vector3.new(5, 0.8, 1.2) * s, cf * CFrame.new(0, 2 * s, 0), c, M.Neon)
+	elseif kind == "lollipop" then
+		P(
+			parent,
+			"Cyl",
+			Vector3.new(0.8, 5 * s, 5 * s),
+			cf * CFrame.new(0, 2.5 * s, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			accent2
+		)
+		P(
+			parent,
+			"Cyl",
+			Vector3.new(0.9, 2.6 * s, 2.6 * s),
+			cf * CFrame.new(0, 2.5 * s, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			WHITE
+		)
+	elseif kind == "spire" then
+		P(parent, "Ell", Vector3.new(3, 9, 3) * s, cf * CFrame.new(0, 3.5 * s, 0), Color3.fromRGB(110, 60, 150))
+	elseif kind == "egg" then
+		-- 큰 알 (가운데 장식): 아래 받침 + 점박이 알
+		P(parent, "Ell", Vector3.new(5, 6.5, 5), cf * CFrame.new(0, 3.2, 0), Color3.fromRGB(255, 245, 225))
+		P(parent, "Ell", Vector3.new(5.1, 1.2, 5.1), cf * CFrame.new(0, 3.4, 0), accent2)
+	elseif kind == "sun" then
+		local gold = Color3.fromRGB(255, 205, 60)
+		P(
+			parent,
+			"Cyl",
+			Vector3.new(0.8, 9, 9),
+			cf * CFrame.new(0, 4.5, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			gold,
+			M.Foil
+		)
+		P(
+			parent,
+			"Cyl",
+			Vector3.new(1, 4.5, 4.5),
+			cf * CFrame.new(0, 4.5, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			Color3.fromRGB(255, 240, 160),
+			M.Neon
+		)
+	elseif kind == "snowflake" then
+		for k = 0, 2 do
+			P(
+				parent,
+				"Block",
+				Vector3.new(1, 9, 0.6),
+				cf * CFrame.new(0, 4.6, 0) * CFrame.Angles(0, 0, k * math.pi / 3),
+				Color3.fromRGB(220, 245, 255),
+				M.Neon
+			)
+		end
+	elseif kind == "shell" then
+		P(parent, "Ell", Vector3.new(8, 6, 2), cf * CFrame.new(0, 3, 0), Color3.fromRGB(255, 200, 190))
+		P(parent, "Ball", Vector3.new(2.4, 0, 0), cf * CFrame.new(0, 1.6, -0.8), WHITE, M.Foil)
+	elseif kind == "skull" then
+		local bone = Color3.fromRGB(240, 234, 212)
+		P(parent, "Ell", Vector3.new(7, 5, 8), cf * CFrame.new(0, 2.5, 0), bone)
+		for _, sx in { -1, 1 } do
+			P(parent, "Ball", Vector3.new(1.6, 0, 0), cf * CFrame.new(sx * 1.5, 3, -3.5), BLACK)
+		end
+	elseif kind == "planet" then
+		P(parent, "Ball", Vector3.new(7, 0, 0), cf * CFrame.new(0, 4, 0), Color3.fromRGB(255, 160, 90))
+		P(
+			parent,
+			"VCyl",
+			Vector3.new(12, 0.3, 0),
+			cf * CFrame.new(0, 4, 0) * CFrame.Angles(0.35, 0, 0.2),
+			Color3.fromRGB(255, 240, 200),
+			M.Neon,
+			false,
+			0.3
+		)
+	elseif kind == "halo" then
+		local ring = P(
+			parent,
+			"Cyl",
+			Vector3.new(0.6, 9, 9),
+			cf * CFrame.new(0, 5, 0) * CFrame.Angles(0, math.pi / 2, 0),
+			Color3.fromRGB(255, 220, 90),
+			M.Neon
+		)
+		light(ring, Color3.fromRGB(255, 220, 120), 20, 1.2)
+	elseif kind == "candy" then
+		local c = Color3.fromRGB(255, 90, 160)
+		P(parent, "Ell", Vector3.new(6, 4, 4), cf * CFrame.new(0, 2.5, 0), c)
+		P(parent, "Block", Vector3.new(10, 1.6, 1.6), cf * CFrame.new(0, 2.5, 0), c:Lerp(WHITE, 0.5))
+	elseif kind == "pumpkin" then
+		local pumpkin =
+			P(parent, "Ell", Vector3.new(7, 5.5, 6), cf * CFrame.new(0, 2.8, 0), Color3.fromRGB(255, 140, 30))
+		P(parent, "Block", Vector3.new(4, 1.2, 0.3), cf * CFrame.new(0, 2.6, -3), Color3.fromRGB(255, 230, 90), M.Neon)
+		light(pumpkin, Color3.fromRGB(255, 150, 50), 18, 1.2)
+	end
+end
+
+local function buildArch(parent: Instance, biome: Biomes.Biome, theme: BiomeTheme, z: number)
+	local a = archStyle(theme)
+	local arch = model("EntranceArch", parent)
+	local topY = FLOOR_TOP + 54 -- 경비(키 25~40)가 지나가도 머리가 안 닿게 높이
+	for _, side in { -1, 1 } do
+		local x = side * (L.HALF - 5)
+		B(arch, Vector3.new(9, 3, 9), CFrame.new(x, FLOOR_TOP + 1.5, z), a.base, true)
+		P(arch, "Block", Vector3.new(6, 50, 6), CFrame.new(x, FLOOR_TOP + 28, z), a.pillar, a.pmat, true)
+		if theme.arch == "candy" then
+			-- 사탕 지팡이 기둥: 빨간 띠 3개
+			for k = 1, 3 do
+				P(
+					arch,
+					"Block",
+					Vector3.new(6.4, 2.2, 6.4),
+					CFrame.new(x, FLOOR_TOP + 4 + k * 12, z) * CFrame.Angles(0, 0, math.rad(side * 18)),
+					Color3.fromRGB(235, 50, 70),
+					M.SmoothPlastic
+				)
+			end
+		end
+		if a.cap ~= "none" then
+			archOrnament(arch, a.cap, Vector3.new(x, topY + 2.5, z), theme, false)
+		end
+	end
+	-- 위 보 (높이 44, 안 부딪힘) — 도리이는 검은 위 보 + 빨간 아래 보
+	P(arch, "Block", Vector3.new(L.HALF * 2 - 4, 4, 5), CFrame.new(0, topY, z), a.beam, a.bmat)
+	if a.center == "torii" then
+		P(arch, "Block", Vector3.new(L.HALF * 2 - 14, 2.4, 3), CFrame.new(0, topY - 6, z), Color3.fromRGB(205, 40, 40))
+	else
+		archOrnament(arch, a.center, Vector3.new(0, topY + 2, z), theme, true)
+	end
+	-- 이름 현수막 (앞뒤 양면, 위 보에 매달림)
+	local bannerPos = Vector3.new(0, topY - 8.5, z)
+	local banner = makePart({
+		name = "ArchBanner",
+		size = Vector3.new(40, 10, 0.8),
+		cframe = CFrame.lookAt(bannerPos, bannerPos + Vector3.new(0, 0, -1)),
+		parent = arch,
+		color = rgb(theme.accent),
+		material = Enum.Material.SmoothPlastic,
+		canCollide = false,
+	})
+	banner.CanQuery = false
+	for _, face in { Enum.NormalId.Front, Enum.NormalId.Back } do
+		Gui.sign(banner, face, {
+			badge = tostring(biome.order),
+			title = biome.name .. " " .. theme.label,
+			subtitle = "추천 속도 " .. Format.number(biome.recommendedSpeed),
+			corner = if biome.isNew then "NEW!" else nil,
+			background = rgb(theme.accent):Lerp(BLACK, 0.2),
+			titleColor = WHITE,
+		})
+	end
+	for _, dx in { -14, 14 } do
+		P(arch, "Block", Vector3.new(0.5, 3.5, 0.5), CFrame.new(dx, topY - 3.6, z), a.beam:Lerp(BLACK, 0.3), M.Plastic)
+	end
+end
+
+-- 경비 잠자리 (구역 가운데): 큰 깔개 + 안쪽 깔개 (안 부딪힘, 테마 색)
+local function guardBed(parent: Instance, theme: BiomeTheme, x: number, z: number)
+	local base = rgb(theme.floor2 or theme.floor)
+	patch(parent, "Ell", 22, 17, x, z, L.Y_DETAIL, base:Lerp(BLACK, 0.18), M.Fabric)
+	patch(parent, "Ell", 16, 12, x, z, L.Y_DETAIL + 0.04, rgb(theme.accent):Lerp(WHITE, 0.25), M.Fabric)
 end
 
 ------------------------------------------------------------------
--- 둥지 (MapLayout.nestsFor 자리) — 건초 링 / 선사시대 통나무·뼈 / 코스믹 작은 둥근 둥지 / 눈 덮인 둥지
+-- 둥지 (MapLayout.nestsFor 자리) — 4판: 태그 파트(크기·높이 그대로 = 알 높이) + 바닥 그림자 + 짚 다발 링
+--   짚(기본) / 눈 덮인 짚(눈) / 모래·조개(심연의 바다) / 그을린 나뭇가지(화산) / 마른 가지(유령 성) /
+--   솜사탕(사탕 왕국) / 이끼(마법의 숲) / 꽃잎 섞인 짚(벚꽃) / 통나무·뼈 큰 둥지(선사시대) / 작은 둥근 그릇(코스믹)
+--   둥지 하나 = 10 파트 (그릇 4) → 구역마다 80
 ------------------------------------------------------------------
 
 local NEST_STYLE: { [string]: string } = {
@@ -1983,24 +3029,105 @@ local NEST_STYLE: { [string]: string } = {
 	cosmic = "pot",
 	snow = "snow",
 	abyss_ocean = "shell",
+	volcano = "charred",
+	haunted_castle = "twig",
+	candy_kingdom = "candy",
+	enchanted_forest = "moss",
+	cherry_blossom = "petal",
+}
+
+-- 스타일 → 다발 색 A, 다발 색 B, 삐죽 나온 짚 색, 둥지 안쪽(태그 파트) 색, 다발 재질
+type NestLook = { a: Color3, b: Color3, stick: Color3, inner: Color3, mat: Enum.Material }
+local HAY: NestLook = {
+	a = Color3.fromRGB(236, 196, 96),
+	b = Color3.fromRGB(206, 150, 62),
+	stick = Color3.fromRGB(176, 118, 56),
+	inner = Color3.fromRGB(128, 84, 44),
+	mat = M.Grass,
+}
+local NEST_LOOKS: { [string]: NestLook } = {
+	hay = HAY,
+	snow = {
+		a = Color3.fromRGB(246, 250, 255),
+		b = Color3.fromRGB(206, 150, 62),
+		stick = Color3.fromRGB(150, 100, 55),
+		inner = Color3.fromRGB(150, 110, 70),
+		mat = M.Snow,
+	},
+	shell = {
+		a = Color3.fromRGB(230, 206, 150),
+		b = Color3.fromRGB(246, 226, 186),
+		stick = Color3.fromRGB(255, 160, 175),
+		inner = Color3.fromRGB(190, 160, 110),
+		mat = M.Sand,
+	},
+	charred = {
+		a = Color3.fromRGB(72, 58, 52),
+		b = Color3.fromRGB(48, 40, 38),
+		stick = Color3.fromRGB(255, 120, 30),
+		inner = Color3.fromRGB(35, 28, 28),
+		mat = M.Basalt,
+	},
+	twig = {
+		a = Color3.fromRGB(122, 110, 118),
+		b = Color3.fromRGB(92, 82, 96),
+		stick = Color3.fromRGB(70, 60, 64),
+		inner = Color3.fromRGB(55, 48, 60),
+		mat = M.Wood,
+	},
+	candy = {
+		a = Color3.fromRGB(255, 176, 214),
+		b = Color3.fromRGB(176, 222, 255),
+		stick = Color3.fromRGB(235, 60, 80),
+		inner = Color3.fromRGB(150, 95, 60),
+		mat = M.SmoothPlastic,
+	},
+	moss = {
+		a = Color3.fromRGB(92, 168, 112),
+		b = Color3.fromRGB(70, 132, 96),
+		stick = Color3.fromRGB(110, 255, 225),
+		inner = Color3.fromRGB(60, 80, 70),
+		mat = M.Grass,
+	},
+	petal = {
+		a = Color3.fromRGB(236, 196, 96),
+		b = Color3.fromRGB(255, 176, 206),
+		stick = Color3.fromRGB(176, 118, 56),
+		inner = Color3.fromRGB(128, 84, 44),
+		mat = M.Grass,
+	},
 }
 
 local function buildNest(biomeId: string, index: number, pos: Vector3, parent: Instance)
 	local style = NEST_STYLE[biomeId] or "hay"
+	local look = NEST_LOOKS[style] or HAY
 	local big = style == "bones"
 	local d = if big then 9 else 7
+	-- 태그 파트: 서버가 윗면(높이 1.2)에 알을 놓음 → 크기·높이는 그대로
 	local nest = makePart({
 		name = "Nest" .. index,
 		size = Vector3.new(1.2, d, d),
 		cframe = CFrame.new(pos.X, FLOOR_TOP + 0.6, pos.Z) * CFrame.Angles(0, 0, math.rad(90)),
 		parent = parent,
-		color = if style == "pot" then Color3.fromRGB(70, 50, 90) else Color3.fromRGB(150, 100, 55),
+		color = if style == "pot" then Color3.fromRGB(70, 50, 90) else look.inner,
 		material = Enum.Material.Plastic,
 		shape = Enum.PartType.Cylinder,
 		tag = Tags.Nest,
 		attributes = { BiomeId = biomeId, NestIndex = index },
 	})
 	nest.CanQuery = true
+	-- 바닥 그림자 (둥지보다 조금 큰 반투명 검은 원)
+	flatAt(
+		parent,
+		"Disc",
+		d + 3.4,
+		d + 3.4,
+		CFrame.new(pos.X, FLOOR_TOP, pos.Z),
+		L.Y_DETAIL - 0.02,
+		BLACK,
+		M.SmoothPlastic,
+		0.6
+	)
 	local rng = Random.new(index * 131 + #biomeId * 17)
 	if style == "pot" then
 		-- 코스믹: 작은 둥근 그릇 + 보라 네온 테두리
@@ -2022,35 +3149,57 @@ local function buildNest(biomeId: string, index: number, pos: Vector3, parent: I
 		)
 		return
 	end
-	local count = if big then 12 else 10
-	local radius = d * 0.5
-	for i = 1, count do
-		local a = i / count * math.pi * 2
-		local cf = CFrame.new(
-			pos.X + math.cos(a) * radius,
-			FLOOR_TOP + 1.1 + (i % 2) * 0.35,
-			pos.Z + math.sin(a) * radius
-		) * CFrame.Angles(0, -a + rng:NextNumber(-0.35, 0.35), rng:NextNumber(-0.25, 0.25))
-		if style == "bones" then
-			if i % 3 == 0 then
+	if big then
+		-- 선사시대: 통나무와 큰 뼈를 번갈아 8개 쌓은 큰 둥지
+		for i = 1, 8 do
+			local a = i / 8 * math.pi * 2
+			local cf = CFrame.new(
+				pos.X + math.cos(a) * d * 0.5,
+				FLOOR_TOP + 1.2 + (i % 2) * 0.4,
+				pos.Z + math.sin(a) * d * 0.5
+			) * CFrame.Angles(0, -a + rng:NextNumber(-0.3, 0.3), rng:NextNumber(-0.2, 0.2))
+			if i % 2 == 0 then
 				P(
 					parent,
 					"Cyl",
-					Vector3.new(1.1, 4.4, 1.1),
-					cf * CFrame.Angles(0, math.pi / 2, 0),
+					Vector3.new(5.2, 1.2, 1.2),
+					cf * CFrame.Angles(0, math.pi / 2, 0), -- 원기둥 축(X)을 링 둘레 방향으로
 					Color3.fromRGB(242, 236, 214)
 				)
 			else
-				B(parent, Vector3.new(1.5, 1.5, 4.8), cf, Color3.fromRGB(150, 95, 55):Lerp(BLACK, (i % 2) * 0.15))
+				B(parent, Vector3.new(1.7, 1.7, 5.4), cf, Color3.fromRGB(150, 95, 55):Lerp(BLACK, (i % 3) * 0.08))
 			end
-		elseif style == "shell" then
-			B(parent, Vector3.new(1, 1, 3.4), cf, Color3.fromRGB(225, 200, 150):Lerp(WHITE, (i % 3) * 0.1))
+		end
+		return
+	end
+	-- 짚 다발 링 6개 (통통한 타원, 두 색 번갈아) — 알 아래쪽 1/3 쯤을 감쌈
+	local n = 6
+	local r = d * 0.5 - 0.35
+	local lenT = 2 * math.pi * r / n * 1.3
+	for i = 1, n do
+		local a = (i + 0.5) / n * math.pi * 2
+		local cf = CFrame.new(pos.X + math.cos(a) * r, FLOOR_TOP + 1.4 + (i % 2) * 0.12, pos.Z + math.sin(a) * r)
+			* CFrame.Angles(0, -a, rng:NextNumber(-0.12, 0.12))
+		P(parent, "Ell", Vector3.new(1.9, 1.35, lenT), cf, if i % 2 == 0 then look.a else look.b, look.mat)
+	end
+	-- 삐죽 나온 짚 2개 (조개 둥지는 분홍 조개, 화산은 불씨, 마법의 숲은 빛나는 새싹)
+	--   링 바깥쪽에 둘레 방향(접선)으로만 놓음 → 가운데 알 자리(반지름 ≈ 3.2)를 절대 가로지르지 않음
+	for k = 1, 2 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local ro = r + 0.7
+		local cf = CFrame.new(pos.X + math.cos(a) * ro, FLOOR_TOP + 1.9, pos.Z + math.sin(a) * ro)
+			* CFrame.Angles(0, -a + rng:NextNumber(-0.25, 0.25), 0)
+		if style == "shell" then
+			P(parent, "Ell", Vector3.new(1.6, 0.6, 1.3), cf, look.stick)
+		elseif style == "charred" or style == "moss" then
+			P(parent, "Ball", Vector3.new(0.7, 0, 0), cf, look.stick, M.Neon)
 		else
-			local stick = Color3.fromRGB(165, 105, 55):Lerp(Color3.fromRGB(120, 72, 38), (i % 3) * 0.3)
-			B(parent, Vector3.new(0.9, 0.9, 3.4), cf, stick)
-			if style == "snow" and i % 2 == 0 then
-				B(parent, Vector3.new(1.1, 0.4, 2.4), cf * CFrame.new(0, 0.6, 0), Color3.fromRGB(245, 250, 255))
-			end
+			B(
+				parent,
+				Vector3.new(0.35, 0.35, 2.6),
+				cf * CFrame.Angles(math.rad(if k == 1 then 22 else -18), 0, 0),
+				look.stick
+			)
 		end
 	end
 end
@@ -2109,12 +3258,25 @@ end
 -- 구역 장식 (담장 쪽 띠 |x| ≥ DECOR_MIN_X 에만, 둥지·특수 장소 피함)
 ------------------------------------------------------------------
 
-local function buildDecor(range: MapLayout.BiomeRange, theme: BiomeTheme, parent: Instance, reserved: { Hole })
+-- 반환: 놓은 장식 개수, 파트 상한 때문에 못 놓은 개수
+local function buildDecor(
+	range: MapLayout.BiomeRange,
+	theme: BiomeTheme,
+	parent: Instance,
+	reserved: { Hole },
+	pathPoints: { Vector3 }
+): (number, number)
 	local rng = Random.new(range.index * 7919)
 	local placed: { Hole } = table.clone(reserved)
 	local decorFolder = folder("Decor", parent)
 	local z0, z1 = range.zMin, range.zMax
 	local cz = range.centerZ
+	-- 파트 상한: 구역 폴더가 ZONE_DECOR_CAP 에 닿으면 더 안 놓음 (장식은 Decor 폴더 바로 아래 파트)
+	local before = MapBuilder.countParts(parent)
+	local items, skipped = 0, 0
+	local function full(): boolean
+		return before + #decorFolder:GetChildren() >= ZONE_DECOR_CAP
+	end
 
 	local function free(x: number, z: number, r: number): boolean
 		for _, h in placed do
@@ -2206,7 +3368,7 @@ local function buildDecor(range: MapLayout.BiomeRange, theme: BiomeTheme, parent
 				B(decorFolder, Vector3.new(4.4, 2.4, 4), CFrame.new(x, FLOOR_TOP + 19.2, z0 + 24 + i * 12.5), stone)
 			end
 			for _, dz in { -1, 1 } do
-				local tz = cz + dz * ((z1 - z0) / 2 - 16)
+				local tz = cz + dz * 64 -- 입구 아치·담장 이름판과 안 겹치게 안쪽으로
 				B(
 					decorFolder,
 					Vector3.new(12, 26, 12),
@@ -2303,7 +3465,7 @@ local function buildDecor(range: MapLayout.BiomeRange, theme: BiomeTheme, parent
 						decorFolder,
 						"Block",
 						Vector3.new(0.4, rng:NextNumber(30, 54), 1.2),
-						CFrame.new(wallFaceX(side, 0.2), FLOOR_TOP + 28, z),
+						CFrame.new(wallFaceX(side, 0.6), FLOOR_TOP + 28, z),
 						Color3.fromRGB(255, 110, 30),
 						M.Neon
 					)
@@ -2321,11 +3483,11 @@ local function buildDecor(range: MapLayout.BiomeRange, theme: BiomeTheme, parent
 		elseif kind == "wallstars" then
 			-- 코스믹: 담장에 하얀 네온 별 (원작 사진)
 			for _, side in { -1, 1 } do
-				for _ = 1, 14 do
+				for _ = 1, 8 do
 					local z = rng:NextNumber(z0 + 5, z1 - 5)
 					local y = rng:NextNumber(12, 56)
 					local s = rng:NextNumber(1.5, 3.2)
-					local cf = CFrame.new(wallFaceX(side, 0.25), FLOOR_TOP + y, z)
+					local cf = CFrame.new(wallFaceX(side, 0.6), FLOOR_TOP + y, z)
 					P(decorFolder, "Block", Vector3.new(0.3, s, s * 0.22), cf, WHITE, M.Neon)
 					P(decorFolder, "Block", Vector3.new(0.3, s * 0.22, s), cf, WHITE, M.Neon)
 				end
@@ -2342,20 +3504,61 @@ local function buildDecor(range: MapLayout.BiomeRange, theme: BiomeTheme, parent
 					elseif kind == "stars" then 1
 					else 3.5
 				local side: number? = nil
-				if kind == "cloud" or kind == "goldpillar" then
-					side = -1
-				elseif kind == "firepit" or kind == "darkspike" then
-					side = 1
+				if theme.rightSide and (kind == "cloud" or kind == "goldpillar") then
+					side = -1 -- 천사&악마: 천국(왼쪽)
+				elseif theme.rightSide and (kind == "firepit" or kind == "darkspike") then
+					side = 1 -- 지옥(오른쪽)
 				end
 				for _ = 1, math.max(0, math.floor(spec.count * Visuals.decorScale + 0.5)) do
+					if full() then
+						skipped += 1
+						continue
+					end
 					local pos = tryPlace(radius, side)
 					if pos then
 						fn(decorFolder, pos, rng, theme)
+						items += 1
 					end
 				end
 			end
 		end
 	end
+
+	-- 가운데 작은 장식 (scatter): 복도 어디든(담장 띠 안쪽), 둥지·부모 동물·경비 잠자리·길·특수 장소를 피함.
+	-- 안 부딪히고 무릎 아래라 경비 길을 막지 않음
+	reserve(0, cz, L.GUARD_CLEAR)
+	for _, p in pathPoints do
+		reserve(p.X, p.Z, 7)
+	end
+	local function tryAnywhere(radius: number): Vector3?
+		for _ = 1, 40 do
+			local x = rng:NextNumber(-L.DECOR_MIN_X + radius, L.DECOR_MIN_X - radius)
+			local z = rng:NextNumber(z0 + L.ARCH_DZ + 6, z1 - 8)
+			if free(x, z, radius) then
+				reserve(x, z, radius)
+				return Vector3.new(x, FLOOR_TOP, z)
+			end
+		end
+		return nil
+	end
+	local scatter: { Visuals.DecorSpec } = theme.scatter or {}
+	for _, spec in scatter do
+		local fn = DECOR[spec.kind]
+		if fn then
+			for _ = 1, math.max(0, math.floor(spec.count * Visuals.decorScale + 0.5)) do
+				if full() then
+					skipped += 1
+					continue
+				end
+				local pos = tryAnywhere(2.5)
+				if pos then
+					fn(decorFolder, pos, rng, theme)
+					items += 1
+				end
+			end
+		end
+	end
+	return items, skipped
 end
 
 ------------------------------------------------------------------
@@ -2372,6 +3575,7 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 	local first = range.index == 1
 	local last = range.index == MapLayout.BIOME_COUNT
 	local left, right = sideColors(theme, false), sideColors(theme, true)
+	local rng = Random.new(range.index * 4111 + 7)
 
 	-- 구역 판정 파트 (투명, 밟히지 않음). 서버 MapBuilder.getZone / 경비 / 알 처리가 크기를 읽음
 	local zonePart = makePart({
@@ -2387,13 +3591,12 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 	zonePart.CanQuery = false
 	zonePart.CanTouch = false
 
-	-- 바닥 (경계 모래띠 자리는 비움)
+	-- 바닥 (경계 모래띠 자리는 비움): 큰 스터드 판 + 무늬 + 가운데 길
 	local fz0 = if first then z0 else z0 + L.BAND / 2
 	local fz1 = if last then z1 else z1 - L.BAND / 2
-	tiledFloor(zoneFolder, -L.HALF, L.HALF, fz0, fz1, function(x: number): (Color3, Color3)
-		local c = if x > 0 then right else left
-		return c.floor, c.floor2
-	end)
+	zoneFloor(zoneFolder, -L.HALF, L.HALF, fz0, fz1, left.floor, right.floor)
+	local pathPoints = floorPath(zoneFolder, theme, fz0, fz1, range.index * 1.7)
+	floorPattern(zoneFolder, theme, fz0, fz1, rng, if theme.path then 22 else 0)
 	-- 다음 구역과의 경계: 베이지 모래띠 (가운데에 살짝 비스듬한 줄무늬)
 	if not last then
 		makePart({
@@ -2405,22 +3608,23 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 			material = Enum.Material.Plastic,
 			studs = true,
 		})
-		for k = -4, 4 do
+		for k = -2, 2 do
 			P(
 				zoneFolder,
 				"Block",
-				Vector3.new(14, 0.08, 2.2),
-				CFrame.new(k * 24, FLOOR_TOP + 0.04, z1) * CFrame.Angles(0, math.rad(18), 0),
+				Vector3.new(24, 0.08, 2.4),
+				CFrame.new(k * 44, FLOOR_TOP + 0.04, z1) * CFrame.Angles(0, math.rad(18), 0),
 				Color3.fromRGB(206, 186, 130),
 				M.Plastic
 			)
 		end
 	end
 
-	-- 양옆 담장 (구역 색 체크무늬 + 위 띠)
+	-- 양옆 담장 (긴 벽 + 아래 띠 + 기둥 + 위 띠) + 담장 면 장식
 	local cap = if theme.wallCap then rgb(theme.wallCap) else nil
-	tiledWall(zoneFolder, -1, z0, z1, left.wall, left.wall2, cap)
-	tiledWall(zoneFolder, 1, z0, z1, right.wall, right.wall2, cap)
+	local pillar = rgb(theme.pilaster or theme.trim)
+	zoneWall(zoneFolder, -1, z0, z1, left.wall, left.wall2, cap, pillar)
+	zoneWall(zoneFolder, 1, z0, z1, right.wall, right.wall2, cap, if theme.rightSide then right.wall2 else pillar)
 	if left.glow or right.glow then
 		-- 담장 아래 네온 띠 (화산 주황 / 코스믹 흰색 / 천사&악마 금·빨강 / 마법의 숲 청록 / 유령 성 주황)
 		for _, side in { -1, 1 } do
@@ -2429,18 +3633,20 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 				P(
 					zoneFolder,
 					"Block",
-					Vector3.new(0.4, 1.2, z1 - z0),
-					CFrame.new(wallFaceX(side, 0.2), FLOOR_TOP + 3, cz),
+					Vector3.new(0.5, 1.2, z1 - z0),
+					CFrame.new(wallFaceX(side, 0.45), FLOOR_TOP + 3, cz),
 					c,
 					M.Neon
 				)
 			end
 		end
 	end
+	wallDecor(zoneFolder, theme, z0, rng)
 
-	-- 담장 위 구역 이름판 (양쪽, 구역 시작 쪽) — 이름 + 추천 속도
+	-- 구역 입구 아치 (이름 현수막) + 담장 위 구역 이름판 (양쪽, 구역 시작 쪽) — 이름 + 추천 속도
+	buildArch(zoneFolder, biome, theme, z0 + L.ARCH_DZ)
 	for _, side in { -1, 1 } do
-		local pos = Vector3.new(wallFaceX(side, 0.35), FLOOR_TOP + 34, z0 + 26)
+		local pos = Vector3.new(wallFaceX(side, 0.65), FLOOR_TOP + 34, z0 + 40) -- 담장 기둥(z0+20, 60) 사이
 		local board = makePart({
 			name = "ZoneSign",
 			size = Vector3.new(30, 11, 0.6),
@@ -2475,15 +3681,8 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 			tag = Tags.GuardSpawn,
 			attributes = { BiomeId = biome.id },
 		})
-		-- 경비가 자는 자리 (살짝 어두운 둥근 자국)
-		P(
-			zoneFolder,
-			"VCyl",
-			Vector3.new(18, 0.06, 0),
-			CFrame.new(home.x, FLOOR_TOP + 0.03, home.z),
-			left.floor2:Lerp(BLACK, 0.12),
-			M.Plastic
-		)
+		-- 경비가 자는 자리 (테마 색 깔개)
+		guardBed(zoneFolder, theme, home.x, home.z)
 	end
 
 	-- 둥지 8개 + 부모 동물 자리 2개 (1번·8번 둥지 옆, 담장 쪽)
@@ -2512,14 +3711,22 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 			table.insert(holes, { x = px, z = spot.z, r = 6 })
 		end
 	end
+	-- 입구 아치 기둥 자리
+	for _, side in { -1, 1 } do
+		table.insert(holes, { x = side * (L.HALF - 5), z = z0 + L.ARCH_DZ, r = 7 })
+	end
 
 	for _, h in buildSpecials(biome.id, zoneFolder) do
 		table.insert(holes, h)
 	end
-	buildDecor(range, theme, zoneFolder, holes)
+	local items, skipped = buildDecor(range, theme, zoneFolder, holes, pathPoints)
 	if theme.ambient then
 		ambientEmitter(theme.ambient, Vector3.new(0, FLOOR_TOP, cz), L.HALF * 2 - 20, zoneFolder, biome.id)
 	end
+	-- 파트 수 기록 (테스트·스튜디오에서 확인용)
+	zoneFolder:SetAttribute("PartCount", MapBuilder.countParts(zoneFolder))
+	zoneFolder:SetAttribute("DecorItems", items)
+	zoneFolder:SetAttribute("DecorSkipped", skipped)
 end
 
 ------------------------------------------------------------------
@@ -2698,13 +3905,15 @@ local function twoLine(
 end
 
 -- 바닥 청록 링 (기계 아래, 판매 가게 앞)
-local function floorRing(parent: Instance, pos: Vector3, d: number, color: Color3)
-	P(parent, "VCyl", Vector3.new(d, 0.08, 0), CFrame.new(pos.X, FLOOR_TOP + 0.04, pos.Z), color, M.Neon)
+--   lift = 바닥보다 얼마나 위에 깔지 (베이스 앞마당 타일 바닥 위면 0.12)
+local function floorRing(parent: Instance, pos: Vector3, d: number, color: Color3, lift: number?)
+	local y = FLOOR_TOP + (lift or 0)
+	P(parent, "VCyl", Vector3.new(d, 0.08, 0), CFrame.new(pos.X, y + 0.04, pos.Z), color, M.Neon)
 	P(
 		parent,
 		"VCyl",
 		Vector3.new(d - 1.6, 0.1, 0),
-		CFrame.new(pos.X, FLOOR_TOP + 0.05, pos.Z),
+		CFrame.new(pos.X, y + 0.05, pos.Z),
 		Color3.fromRGB(80, 205, 70),
 		M.Plastic
 	)
@@ -2719,7 +3928,7 @@ local function buildFusionMachine(parent: Instance, pos: Vector3, facing: number
 	local function at3(x: number, y: number, z: number): CFrame
 		return cf0 * CFrame.new(x, FLOOR_TOP + y, z)
 	end
-	floorRing(m, pos, 15, Color3.fromRGB(60, 235, 220))
+	floorRing(m, pos, 15, Color3.fromRGB(60, 235, 220), 0.12)
 	B(m, Vector3.new(10, 1, 7), at3(0, 0.5, 0), dark, true)
 	local body = makePart({
 		name = "FusionMachine",
@@ -2777,7 +3986,21 @@ local function buildFusionMachine(parent: Instance, pos: Vector3, facing: number
 		tube.Name = "Tube" .. i
 	end
 	B(m, Vector3.new(1.4, 4.6, 1.4), at3(4.6, 3.8, -0.6), dark, true)
-	twoLine(body, 10.5, "퓨즈 머신", Color3.fromRGB(90, 220, 255), "0/3", "FuseLabel")
+	-- 4판: 안테나 + 빛 구슬, 받침 앞 노란 경고 줄무늬
+	P(m, "Block", Vector3.new(0.3, 3, 0.3), at3(1.8, 11, 0.6), dark, M.Plastic)
+	local beacon = P(m, "Ball", Vector3.new(1, 0, 0), at3(1.8, 12.8, 0.6), Color3.fromRGB(120, 230, 255), M.Neon)
+	light(beacon, Color3.fromRGB(120, 220, 255), 12, 1)
+	for k = -1, 1 do
+		P(
+			m,
+			"Block",
+			Vector3.new(1.4, 0.06, 0.5),
+			at3(k * 3, 1.03, -2.9) * CFrame.Angles(0, math.rad(35), 0),
+			Color3.fromRGB(255, 205, 40),
+			M.Plastic
+		)
+	end
+	twoLine(body, 12, "퓨즈 머신", Color3.fromRGB(90, 220, 255), "0/3", "FuseLabel")
 end
 
 ------------------------------------------------------------------
@@ -3132,8 +4355,174 @@ local function stall(
 			if k % 2 == 0 then Color3.fromRGB(225, 40, 50) else WHITE
 		)
 	end
-	twoLine(counter, 11, title, titleColor, nil, "StallTitle")
+	-- 4판: 뒤 판(가게 벽) + 천막 위 간판 + 등불 + 진열품 (판매 = 금화 더미, 트레일 = 신발)
+	B(m, Vector3.new(w, 6, 0.5), at3(0, 4.2, 3.6), Color3.fromRGB(245, 235, 220))
+	local signBoard = makePart({
+		name = "StallSign",
+		size = Vector3.new(math.max(6, w * 0.8), 2.4, 0.5),
+		cframe = at3(0, 12.4, 3.2),
+		parent = m,
+		color = titleColor:Lerp(BLACK, 0.25),
+		material = Enum.Material.SmoothPlastic,
+		canCollide = false,
+	})
+	signBoard.CanQuery = false
+	Gui.surface(signBoard, Enum.NormalId.Front, title, WHITE)
+	local lamp = P(m, "Ball", Vector3.new(1.2, 0, 0), at3(half - 0.6, 8.2, -2.2), Color3.fromRGB(255, 220, 140), M.Neon)
+	light(lamp, Color3.fromRGB(255, 210, 140), 14, 1.2)
+	if tag == Tags.SellStall then
+		local gold = Color3.fromRGB(255, 205, 60)
+		P(m, "Ell", Vector3.new(2.6, 1, 2), at3(-half * 0.45, 4.3, -1.2), gold, M.Foil)
+		P(m, "VCyl", Vector3.new(1.2, 0.3, 0), at3(-half * 0.45 + 1.6, 4.15, -1.6), gold, M.Foil)
+	else
+		P(m, "Ell", Vector3.new(1.4, 1, 2.4), at3(-half * 0.4, 4.4, -1.2), Color3.fromRGB(80, 160, 255))
+		P(m, "Ell", Vector3.new(1.4, 1, 2.4), at3(half * 0.3, 4.4, -1.2), Color3.fromRGB(255, 90, 140))
+	end
+	twoLine(counter, 13.5, title, titleColor, nil, "StallTitle")
 	return counter
+end
+
+-- 4판 베이스 꾸미기 (위치만 MapLayout 에서 읽고, 판정용 파트는 건드리지 않음)
+--   앞마당 돌 타일 바닥 · 러닝머신 받침 · 우리 앞쪽 짚 바닥(알 놓기 좋은 자리) · 뒤 벽 헛간 그림 ·
+--   우리 입구 아치("펫 우리" 간판 + 등불) · 울타리 모서리 기둥 머리 · 앞마당 가로등 2개   (≈ 30 파트)
+local function buildPlotDressing(p: MapLayout.Plot, plotFolder: Instance, fenceColor: Color3)
+	local f = p.facing
+	local cz = p.center.z
+	local w, d = p.size.w, p.size.d
+	local toFront = Vector3.new(f, 0, 0)
+	local frontX = p.center.x + f * d / 2
+	local backFaceX = p.center.x - f * d / 2
+	local pr = p.penRect
+	local penFrontX = if f > 0 then pr.xMax else pr.xMin
+	local yr = p.yardRect
+	-- 앞마당 타일 바닥 + 러닝머신 받침
+	patch(
+		plotFolder,
+		"Block",
+		MapLayout.YARD_DEPTH - 0.5,
+		w - 1,
+		(yr.xMin + yr.xMax) / 2,
+		cz,
+		0.1,
+		Color3.fromRGB(228, 222, 206)
+	)
+	local tp = MapLayout.TREADMILL_PAD
+	patch(
+		plotFolder,
+		"Block",
+		tp.sizeX + 4,
+		tp.sizeZ + 4,
+		p.treadmill.x,
+		p.treadmill.z,
+		0.16,
+		Color3.fromRGB(84, 88, 100)
+	)
+	-- 우리 앞쪽 짚 바닥 (알 자리)
+	patch(
+		plotFolder,
+		"Block",
+		MapLayout.EGG_AREA_DEPTH,
+		w - 4,
+		penFrontX - f * MapLayout.EGG_AREA_DEPTH / 2,
+		cz,
+		0.14,
+		Color3.fromRGB(238, 214, 140)
+	)
+
+	-- 뒤 벽 헛간 그림 (빨간 벽 + 베이스 색 지붕 + X 문 + 다락 창)
+	local bx = backFaceX + f * 0.9
+	local base = CFrame.lookAt(Vector3.new(bx, FLOOR_TOP, cz), Vector3.new(bx + f, FLOOR_TOP, cz))
+	local barn = Color3.fromRGB(200, 64, 52)
+	B(plotFolder, Vector3.new(32, 18, 0.8), base * CFrame.new(0, 9, 0), barn)
+	for _, s in { -1, 1 } do
+		P(
+			plotFolder,
+			"Wedge",
+			Vector3.new(1, 7, 17),
+			base * CFrame.new(s * 8.5, 21.5, 0) * CFrame.Angles(0, -s * math.pi / 2, 0),
+			fenceColor:Lerp(BLACK, 0.15),
+			M.Plastic
+		)
+	end
+	B(plotFolder, Vector3.new(10, 10, 0.4), base * CFrame.new(0, 5, -0.6), Color3.fromRGB(110, 50, 40))
+	for _, s in { -1, 1 } do
+		P(
+			plotFolder,
+			"Block",
+			Vector3.new(0.6, 13.4, 0.3),
+			base * CFrame.new(0, 5, -0.85) * CFrame.Angles(0, 0, s * 0.75),
+			WHITE
+		)
+	end
+	B(plotFolder, Vector3.new(6, 4.4, 0.4), base * CFrame.new(0, 14, -0.6), WHITE)
+	P(
+		plotFolder,
+		"Block",
+		Vector3.new(4.6, 3, 0.3),
+		base * CFrame.new(0, 14, -0.85),
+		Color3.fromRGB(255, 214, 120),
+		M.Neon
+	)
+
+	-- 우리 입구 아치 ("펫 우리" 간판 + 등불 2개)
+	local gate = L.FENCE_GATE / 2
+	for _, s in { -1, 1 } do
+		B(
+			plotFolder,
+			Vector3.new(1.8, 11, 1.8),
+			CFrame.new(penFrontX, FLOOR_TOP + 5.5, cz + s * (gate + 0.6)),
+			POST,
+			true
+		)
+	end
+	B(plotFolder, Vector3.new(1.4, 1.4, gate * 2 + 3), CFrame.new(penFrontX, FLOOR_TOP + 11.6, cz), fenceColor)
+	local signPos = Vector3.new(penFrontX + f * 0.8, FLOOR_TOP + 13.4, cz)
+	local gateSign = makePart({
+		name = "PenGateSign",
+		size = Vector3.new(9, 2.6, 0.5),
+		cframe = CFrame.lookAt(signPos, signPos + toFront),
+		parent = plotFolder,
+		color = fenceColor:Lerp(BLACK, 0.35),
+		material = Enum.Material.SmoothPlastic,
+		canCollide = false,
+	})
+	gateSign.CanQuery = false
+	Gui.surface(gateSign, Enum.NormalId.Front, "펫 우리", WHITE)
+	for i, s in { -1, 1 } do
+		local lamp = P(
+			plotFolder,
+			"Ball",
+			Vector3.new(1.1, 0, 0),
+			CFrame.new(penFrontX + f * 0.4, FLOOR_TOP + 10.2, cz + s * 3.6),
+			Color3.fromRGB(255, 220, 140),
+			M.Neon
+		)
+		if i == 1 then
+			light(lamp, Color3.fromRGB(255, 210, 140), 18, 1.1)
+		end
+	end
+	-- 울타리 모서리 기둥 머리 (베이스 색 공)
+	local zA, zB = cz - w / 2 + 0.75, cz + w / 2 - 0.75
+	local backX = if f > 0 then pr.xMin else pr.xMax
+	for _, x in { penFrontX, backX - f * 0.5 } do
+		for _, z in { zA, zB } do
+			P(plotFolder, "Ball", Vector3.new(1.9, 0, 0), CFrame.new(x, FLOOR_TOP + L.FENCE_H + 1.2, z), fenceColor)
+		end
+	end
+	-- 앞마당 가로등 2개 (앞 가장자리 양끝)
+	for _, s in { -1, 1 } do
+		local x, z = frontX - f * 1.5, cz + s * (w / 2 - 1.5)
+		B(plotFolder, Vector3.new(0.7, 9, 0.7), CFrame.new(x, FLOOR_TOP + 4.5, z), POST, true)
+		local lamp = P(
+			plotFolder,
+			"Ball",
+			Vector3.new(1.8, 0, 0),
+			CFrame.new(x, FLOOR_TOP + 9.6, z),
+			Color3.fromRGB(255, 226, 150),
+			M.Neon
+		)
+		light(lamp, Color3.fromRGB(255, 214, 150), 22, 1)
+	end
 end
 
 type PlotDyn = {
@@ -3232,7 +4621,7 @@ local function buildPlot(index: number, parent: Instance)
 		plotFolder,
 		"VCyl",
 		Vector3.new(7, 0.06, 0),
-		CFrame.new(p.spawn.x, FLOOR_TOP + 0.03, p.spawn.z),
+		CFrame.new(p.spawn.x, FLOOR_TOP + 0.17, p.spawn.z),
 		WHITE,
 		M.SmoothPlastic,
 		false,
@@ -3316,6 +4705,18 @@ local function buildPlot(index: number, parent: Instance)
 		)
 		table.insert(dyn.ownerLabels, parts.title)
 	end
+	-- 간판 지붕 + 기둥 머리
+	B(
+		plotFolder,
+		Vector3.new(1.6, 0.8, 13),
+		CFrame.new(s.owner.x, FLOOR_TOP + 13.4, ownerZ),
+		fenceColor:Lerp(BLACK, 0.25)
+	)
+	for _, dz in { -5.5, 5.5 } do
+		P(plotFolder, "Ball", Vector3.new(1.6, 0, 0), CFrame.new(s.owner.x, FLOOR_TOP + 14.2, ownerZ + dz), fenceColor)
+	end
+
+	buildPlotDressing(p, plotFolder, fenceColor)
 end
 
 ------------------------------------------------------------------
@@ -3353,31 +4754,35 @@ local function buildHub(map: Instance)
 	local hub = folder("Hub", map)
 	local hz0, hz1 = MapLayout.HUB.zMin, MapLayout.HUB.zMax
 	local grass, grass2 = Color3.fromRGB(88, 200, 58), Color3.fromRGB(78, 186, 52)
-	tiledFloor(hub, -L.HALF, L.HALF, hz0, hz1, function(_x: number): (Color3, Color3)
-		return grass, grass2
-	end)
-	-- 양옆 담장 (숲과 같은 황토색) + 뒤 흰 벽
-	local tan, tan2 = Color3.fromRGB(214, 150, 92), Color3.fromRGB(196, 136, 82)
-	tiledWall(hub, -1, hz0 - L.WALL_T, hz1, tan, tan2, Color3.fromRGB(85, 185, 55))
-	tiledWall(hub, 1, hz0 - L.WALL_T, hz1, tan, tan2, Color3.fromRGB(85, 185, 55))
-	local backZ = hz0 - L.WALL_T / 2
-	for r = 0, 1 do
-		for k = 0, 7 do
-			makePart({
-				name = "BackWall",
-				size = Vector3.new((L.HALF * 2 + L.WALL_T * 2) / 8, L.WALL_H / 2, L.WALL_T),
-				cframe = CFrame.new(
-					-L.HALF - L.WALL_T + (k + 0.5) * (L.HALF * 2 + L.WALL_T * 2) / 8,
-					FLOOR_TOP + (r + 0.5) * L.WALL_H / 2,
-					backZ
-				),
-				parent = hub,
-				color = if (k + r) % 2 == 0 then Color3.fromRGB(246, 246, 250) else Color3.fromRGB(232, 232, 240),
-				material = Enum.Material.Plastic,
-				studs = true,
-			})
+	-- 4판: 큰 잔디 판 1장 + 큰 체크무늬 + 가운데 돌길(스폰 광장 → 안전 구역 경계, 스폰 → 분수)
+	zoneFloor(hub, -L.HALF, L.HALF, hz0, hz1, grass, grass)
+	local nx, nz = 5, 6
+	local cw, cd = L.HALF * 2 / nx, (hz1 - hz0) / nz
+	for i = 0, nx - 1 do
+		for j = 0, nz - 1 do
+			if (i + j) % 2 == 1 then
+				patch(hub, "Block", cw, cd, -L.HALF + (i + 0.5) * cw, hz0 + (j + 0.5) * cd, L.Y_PATTERN, grass2)
+			end
 		end
 	end
+	local stone = Color3.fromRGB(214, 206, 190)
+	local ms0 = MapLayout.hubSpots.mainSpawn
+	patch(hub, "Block", 12, -ms0.z - 14, 0, (ms0.z + 14) / 2 - 1, L.Y_PATH, stone)
+	patch(hub, "Block", 10, 60, 0, ms0.z - 44, L.Y_PATH, stone)
+	patch(hub, "Disc", 26, 26, ms0.x, ms0.z, L.Y_JOINT, stone:Lerp(WHITE, 0.25))
+	-- 양옆 담장 (숲과 같은 황토색, 베이스가 붙어 있어 기둥은 없음) + 뒤 흰 벽
+	local tan, tan2 = Color3.fromRGB(214, 150, 92), Color3.fromRGB(196, 136, 82)
+	zoneWall(hub, -1, hz0 - L.WALL_T, hz1, tan, tan2, Color3.fromRGB(85, 185, 55), nil)
+	zoneWall(hub, 1, hz0 - L.WALL_T, hz1, tan, tan2, Color3.fromRGB(85, 185, 55), nil)
+	makePart({
+		name = "BackWall",
+		size = Vector3.new(L.HALF * 2 + L.WALL_T * 2, L.WALL_H, L.WALL_T),
+		cframe = CFrame.new(0, FLOOR_TOP + L.WALL_H / 2, hz0 - L.WALL_T / 2),
+		parent = hub,
+		color = Color3.fromRGB(244, 244, 249),
+		material = Enum.Material.Plastic,
+		studs = true,
+	})
 	cloudArt(
 		hub,
 		CFrame.lookAt(Vector3.new(-40, FLOOR_TOP + 30, hz0 + 0.2), Vector3.new(-40, FLOOR_TOP + 30, hz0 + 10)),
@@ -3536,6 +4941,94 @@ local function buildHub(map: Instance)
 		subtitle = "알을 훔쳐 베이스로 달려가요!",
 		background = Color3.fromRGB(60, 170, 235),
 	})
+
+	-- 4판 허브 꾸미기: 돌길 양옆 가로등 · 꽃 화분 · 벤치 (빨리 달려 돌아와도 걸리지 않게 안 부딪힘) · 스폰 뒤 분수 (≈ 45 파트)
+	local deco = folder("HubDecor", hub)
+	for k = 0, 4 do
+		local z = -26 - k * 24
+		local s = if k % 2 == 0 then -1 else 1
+		local x = s * 9
+		B(deco, Vector3.new(2, 0.8, 2), CFrame.new(x, FLOOR_TOP + 0.4, z), POST)
+		B(deco, Vector3.new(0.7, 9, 0.7), CFrame.new(x, FLOOR_TOP + 5, z), POST)
+		local lamp = P(
+			deco,
+			"Ball",
+			Vector3.new(1.8, 0, 0),
+			CFrame.new(x, FLOOR_TOP + 10, z),
+			Color3.fromRGB(255, 226, 150),
+			M.Neon
+		)
+		light(lamp, Color3.fromRGB(255, 214, 150), 24, 1)
+	end
+	local flowerColors = {
+		Color3.fromRGB(255, 120, 150),
+		Color3.fromRGB(255, 220, 80),
+		Color3.fromRGB(180, 130, 255),
+		Color3.fromRGB(255, 255, 255),
+	}
+	for i, spot in { { -12, -60 }, { 12, -86 }, { -12, -112 }, { 12, -34 } } do
+		local pos = Vector3.new(spot[1], FLOOR_TOP, spot[2])
+		B(deco, Vector3.new(4, 1.6, 4), CFrame.new(pos + Vector3.new(0, 0.8, 0)), Color3.fromRGB(190, 120, 70))
+		P(
+			deco,
+			"Ell",
+			Vector3.new(4.2, 2, 4.2),
+			CFrame.new(pos + Vector3.new(0, 2, 0)),
+			Color3.fromRGB(70, 170, 60),
+			M.Grass
+		)
+		for k = 1, 2 do
+			P(
+				deco,
+				"Ball",
+				Vector3.new(1.2, 0, 0),
+				CFrame.new(pos + Vector3.new(k * 1.6 - 2.4, 2.9, (k % 2) * 0.8 - 0.4)),
+				flowerColors[(i + k) % #flowerColors + 1]
+			)
+		end
+	end
+	for _, s in { -1, 1 } do
+		local cf = CFrame.lookAt(Vector3.new(s * 16, FLOOR_TOP, -128), Vector3.new(0, FLOOR_TOP, -128))
+		B(deco, Vector3.new(6, 0.6, 2.2), cf * CFrame.new(0, 1.6, 0), Color3.fromRGB(196, 120, 64), true)
+		B(deco, Vector3.new(6, 2, 0.5), cf * CFrame.new(0, 2.8, 1), Color3.fromRGB(176, 104, 54))
+		B(deco, Vector3.new(5, 1.3, 1.6), cf * CFrame.new(0, 0.65, 0), POST)
+	end
+	local fz = MapLayout.hubSpots.mainSpawn.z - 75
+	local water = Color3.fromRGB(90, 190, 250)
+	P(
+		deco,
+		"VCyl",
+		Vector3.new(18, 2, 0),
+		CFrame.new(0, FLOOR_TOP + 1, fz),
+		Color3.fromRGB(200, 196, 190),
+		M.Slate,
+		true
+	)
+	P(deco, "VCyl", Vector3.new(16, 0.3, 0), CFrame.new(0, FLOOR_TOP + 1.9, fz), water, M.Glass, false, 0.2)
+	P(
+		deco,
+		"VCyl",
+		Vector3.new(2, 6, 0),
+		CFrame.new(0, FLOOR_TOP + 4, fz),
+		Color3.fromRGB(210, 206, 200),
+		M.Slate,
+		true
+	)
+	P(deco, "VCyl", Vector3.new(6, 0.8, 0), CFrame.new(0, FLOOR_TOP + 7.2, fz), Color3.fromRGB(210, 206, 200), M.Slate)
+	local spout = P(deco, "Ball", Vector3.new(1.6, 0, 0), CFrame.new(0, FLOOR_TOP + 8, fz), water, M.Neon)
+	local spray = Instance.new("ParticleEmitter")
+	spray.Name = "FountainSpray"
+	spray.Texture = SPARKLE_TEX
+	spray.Color = ColorSequence.new(Color3.fromRGB(200, 235, 255))
+	spray.LightEmission = 0.5
+	spray.Rate = 30
+	spray.Lifetime = NumberRange.new(1, 1.4)
+	spray.Speed = NumberRange.new(8, 11)
+	spray.SpreadAngle = Vector2.new(18, 18)
+	spray.Acceleration = Vector3.new(0, -18, 0)
+	spray.Size = NumberSequence.new(0.5)
+	spray.EmissionDirection = Enum.NormalId.Top
+	spray.Parent = spout
 end
 
 ------------------------------------------------------------------
@@ -3555,22 +5048,34 @@ local function buildMap(): Folder
 	-- 맵 끝 벽 (마지막 구역 담장 색)
 	local lastTheme = Visuals.biomes[Biomes.list[#Biomes.list].id]
 	local endWall = rgb(lastTheme.wall)
-	for r = 0, 1 do
-		for k = 0, 7 do
-			makePart({
-				name = "EndWall",
-				size = Vector3.new((L.HALF * 2 + L.WALL_T * 2) / 8, L.WALL_H / 2, L.WALL_T),
-				cframe = CFrame.new(
-					-L.HALF - L.WALL_T + (k + 0.5) * (L.HALF * 2 + L.WALL_T * 2) / 8,
-					FLOOR_TOP + (r + 0.5) * L.WALL_H / 2,
-					MapLayout.MAP_END_Z + L.WALL_T / 2
-				),
-				parent = zonesFolder,
-				color = if (k + r) % 2 == 0 then endWall else endWall:Lerp(BLACK, 0.1),
-				material = Enum.Material.Plastic,
-				studs = true,
-			})
-		end
+	makePart({
+		name = "EndWall",
+		size = Vector3.new(L.HALF * 2 + L.WALL_T * 2, L.WALL_H, L.WALL_T),
+		cframe = CFrame.new(0, FLOOR_TOP + L.WALL_H / 2, MapLayout.MAP_END_Z + L.WALL_T / 2),
+		parent = zonesFolder,
+		color = endWall,
+		material = Enum.Material.Plastic,
+		studs = true,
+	})
+	local endBand = P(
+		zonesFolder,
+		"Block",
+		Vector3.new(L.HALF * 2, L.WALL_H * 0.45, 0.4),
+		CFrame.new(0, FLOOR_TOP + L.WALL_H * 0.225, MapLayout.MAP_END_Z - 0.2),
+		endWall:Lerp(BLACK, 0.1),
+		M.Plastic
+	)
+	studify(endBand)
+	for k = -2, 2 do
+		makePart({
+			name = "WallPillar",
+			size = Vector3.new(4, L.WALL_H + 3, L.WALL_T + 1.5),
+			cframe = CFrame.new(k * 44, FLOOR_TOP + (L.WALL_H + 3) / 2, MapLayout.MAP_END_Z + L.WALL_T / 2 - 0.75),
+			parent = zonesFolder,
+			color = rgb(lastTheme.pilaster or lastTheme.trim),
+			material = Enum.Material.Plastic,
+			studs = true,
+		})
 	end
 	-- 담장 위 투명 천장 벽 (높이 60 위로 넘어가지 못하게)
 	for _, side in { -1, 1 } do
@@ -3593,8 +5098,50 @@ local function buildMap(): Folder
 		buildPlot(i, plotsFolder)
 		task.wait()
 	end
+	-- 파트 수 상한 확인 (넘으면 출력 창에 경고 — 장식 개수를 줄이거나 Visuals.decorScale 을 낮추기)
+	local total = MapBuilder.countParts(map)
+	map:SetAttribute("PartCount", total)
+	if total > MapBuilder.PART_BUDGET.map then
+		warn(string.format("[MapBuilder] 맵 파트 %d 개 — 상한 %d 초과", total, MapBuilder.PART_BUDGET.map))
+	end
+	for _, zf in zonesFolder:GetChildren() do
+		local n = zf:GetAttribute("PartCount")
+		if typeof(n) == "number" and n > MapBuilder.PART_BUDGET.zone then
+			warn(
+				string.format(
+					"[MapBuilder] 구역 %s 파트 %d 개 — 상한 %d 초과",
+					zf.Name,
+					n,
+					MapBuilder.PART_BUDGET.zone
+				)
+			)
+		end
+	end
 	map.Parent = Workspace
 	return map
+end
+
+-- 파트 수 표 (테스트·디버그): 구역별 / 허브 / 베이스 / 전체
+function MapBuilder.partCounts(): { zones: { [string]: number }, hub: number, plots: number, total: number }
+	local result = { zones = {} :: { [string]: number }, hub = 0, plots = 0, total = 0 }
+	local map = mapFolder
+	if not map then
+		return result
+	end
+	result.total = MapBuilder.countParts(map)
+	local hub = map:FindFirstChild("Hub")
+	result.hub = if hub then MapBuilder.countParts(hub) else 0
+	local plotsFolder = map:FindFirstChild("Plots")
+	result.plots = if plotsFolder then MapBuilder.countParts(plotsFolder) else 0
+	local zonesFolder = map:FindFirstChild("Zones")
+	if zonesFolder then
+		for _, zf in zonesFolder:GetChildren() do
+			if zf:IsA("Folder") then
+				result.zones[zf.Name] = MapBuilder.countParts(zf)
+			end
+		end
+	end
+	return result
 end
 
 ------------------------------------------------------------------

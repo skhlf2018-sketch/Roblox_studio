@@ -7,6 +7,8 @@
 	검사: MapBuilder.start() (맵 15구역·베이스 7개·2단계 특수 장소 모델), PetVisualService.build(펫 전부),
 	      우리 진열, 경비 겉모습, EggVisualService (알 껍데기)
 	      + 특수 장소 태그 파트 개수/Attribute/구역 안에 있는지 (서버 Landmarks 가 임시 파트를 안 만들게)
+	      + 4판: 파트 수 상한 (구역 ≤ 400, 맵 ≤ 7,000, 러닝머신 7개가 모두 가장 큰 모양이어도), 입구 아치·큰 바닥 판,
+	        둥지 태그 파트 높이 그대로, 경비 전용 소품(키 그대로), 등급 10개 알 모양(매끈한 타원 + 띠·점, ≤ 8 파트, 희귀 이상 반짝이)
 ]]
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -241,6 +243,75 @@ local function body()
 	for _, z in { "Zones", "Plots", "Hub" } do
 		print("    " .. z, count(map:FindFirstChild(z)))
 	end
+	print("[4판 비주얼: 파트 수 상한]")
+	local budget = MapBuilder.PART_BUDGET
+	check(budget ~= nil and budget.zone == 400 and budget.map == 7000, "PART_BUDGET = 구역 400 / 맵 7,000")
+	local counts = MapBuilder.partCounts()
+	check(counts.total == count(map), "partCounts().total = 실제 맵 파트 수: " .. counts.total)
+	local zoneOver, zoneSeen, items, skippedAll = {}, 0, 0, 0
+	local Biomes0 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Biomes"))
+	for _, b in Biomes0.list do
+		local zf = map.Zones:FindFirstChild(b.id)
+		local n = counts.zones[b.id] or -1
+		zoneSeen += 1
+		local dec = zf and zf:FindFirstChild("Decor")
+		local floors, arch = 0, zf and zf:FindFirstChild("EntranceArch")
+		for _, d in (zf and zf:GetChildren() or {}) do
+			if d:IsA("BasePart") and d.Name == "Floor" then
+				floors += 1
+			end
+		end
+		local it, sk = zf and zf:GetAttribute("DecorItems") or 0, zf and zf:GetAttribute("DecorSkipped") or 0
+		items += it
+		skippedAll += sk
+		print(
+			string.format(
+				"    %-17s parts %3d  decor %3d  items %3d  skipped %d  floor %d",
+				b.id,
+				n,
+				dec and count(dec) or 0,
+				it,
+				sk,
+				floors
+			)
+		)
+		if n < 0 or n > budget.zone then
+			table.insert(zoneOver, b.id .. "=" .. n)
+		end
+		check(zf and zf:GetAttribute("PartCount") == n, b.id .. " PartCount Attribute = 실제 수")
+		check(floors >= 1 and floors <= 2, b.id .. " 바닥 = 큰 판 1~2장 (작은 칸 대신): " .. floors)
+		check(
+			arch ~= nil and arch:FindFirstChild("ArchBanner") ~= nil,
+			b.id .. " 입구 아치 + 이름 현수막 (EntranceArch/ArchBanner)"
+		)
+	end
+	print(
+		string.format(
+			"    hub %d  plots %d  total %d  (장식 물건 %d개, 상한 때문에 못 놓음 %d)",
+			counts.hub,
+			counts.plots,
+			counts.total,
+			items,
+			skippedAll
+		)
+	)
+	check(zoneSeen == 15 and #zoneOver == 0, "구역마다 파트 ≤ 400: " .. table.concat(zoneOver, ", "))
+	check(counts.total <= budget.map, "맵 전체 파트 ≤ 7,000: " .. counts.total)
+	check(
+		skippedAll == 0,
+		"장식이 상한에 막혀 빠진 것 없음 (Visuals 장식 개수가 상한 안): " .. skippedAll
+	)
+	-- 둥지 태그 파트는 크기·높이 그대로 (서버가 윗면에 알을 놓음): 윗면 = 바닥 + 1.2
+	local nestTopOk = true
+	for _, b in Biomes0.list do
+		for _, nest in MapBuilder.getNests(b.id) do
+			local top = nest.CFrame.Position.Y + 0.6
+			if math.abs(top - 1.2) > 0.01 or math.abs(nest.Size.X - 1.2) > 0.01 then
+				nestTopOk = false
+			end
+		end
+	end
+	check(nestTopOk, "둥지 태그 파트 윗면 높이 1.2 그대로 (알 놓는 높이)")
 	check(MapBuilder.plotCount() == 7, "베이스 7개")
 	check(#MapBuilder.getNests("forest") == 8, "숲 둥지 8개")
 
@@ -330,6 +401,11 @@ local function body()
 		return if id == 99 then kid else nil
 	end
 	local looksOk = true
+	local mapBefore, lookBefore, maxLook = count(map), 0, 0
+	for i = 1, 7 do
+		local look0 = MapBuilder.getPlot(i).treadmill.Parent:FindFirstChild("TreadmillLook")
+		lookBefore += if look0 then count(look0) else 0
+	end
 	for level = 0, 10 do
 		kidLevels.TreadmillLevel = level
 		MapBuilder.setPlotOwner(2, kid)
@@ -338,8 +414,15 @@ local function body()
 			looksOk = false
 			print("    러닝머신 레벨 " .. level .. " 모양 문제")
 		end
+		maxLook = math.max(maxLook, look and count(look) or 0)
 	end
 	check(looksOk, "러닝머신 레벨 0~10 모양 모델 (레벨마다 교체)")
+	-- 7 베이스 모두 가장 파트가 많은 러닝머신 모양이어도 맵 7,000 이하
+	local worst = mapBefore - lookBefore + 7 * maxLook
+	check(
+		worst <= 7000,
+		string.format("러닝머신 7개 모두 가장 큰 모양(%d)이어도 맵 ≤ 7,000: %d", maxLook, worst)
+	)
 	local sign = MapBuilder.getPlot(2).sign
 	local title = sign and sign:FindFirstChild("Title", true)
 	check(title and title.Text == "Kid의 베이스", "주인 이름 간판: " .. tostring(title and title.Text))
@@ -608,6 +691,39 @@ local function petsBody()
 		end
 	end
 	check(dressed == 15, "경비 겉모습 15구역 전부 붙음: " .. dressed)
+	-- 4판: 경비 전용 소품(GUARD_EXTRAS) — 기본 모양보다 파트가 늘고, 키(Height)는 그대로 (잡힘 거리)
+	local extraOk, heightSame, extraLine = 0, 0, {}
+	local guardIds = {}
+	for _, spec in Visuals.guards do
+		table.insert(guardIds, spec.model)
+		if spec.darkModel then
+			table.insert(guardIds, spec.darkModel)
+		end
+	end
+	for _, id in guardIds do
+		local plain = PVS.build(id, 1, nil)
+		local fancy = PVS.build(id, 1, { guard = true })
+		local np, nf = count(plain), count(fancy)
+		if nf > np then
+			extraOk += 1
+		end
+		if math.abs(plain:GetAttribute("Height") - fancy:GetAttribute("Height")) < 1e-6 then
+			heightSame += 1
+		end
+		table.insert(extraLine, string.format("%s %d→%d", id, np, nf))
+	end
+	print("  경비 파트 (기본→경비): " .. table.concat(extraLine, ", "))
+	check(extraOk == #guardIds, string.format("경비 %d종 모두 전용 소품이 붙음: %d", #guardIds, extraOk))
+	check(heightSame == #guardIds, "경비 소품을 붙여도 키(Height) 그대로: " .. heightSame)
+	local heightOk = true
+	for biomeId, g in guards do
+		local visual = g.guard:FindFirstChild(g.model)
+		local want = Visuals.guards[biomeId].height
+		if not visual or math.abs(visual:GetAttribute("Height") - want) > 0.01 then
+			heightOk = false
+		end
+	end
+	check(heightOk, "경비 겉모습 Height = Visuals.guards[..].height (GuardianService 잡힘 거리)")
 	check(tall == 15, string.format("경비 키 25~40 스터드: %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH))
 	local forest = guards.forest
 	if forest then
@@ -616,10 +732,49 @@ local function petsBody()
 		check(z ~= nil and z:IsA("BillboardGui") and z.Enabled == true, "Idle 이면 머리 위 Z (SleepZ 켜짐)")
 		local glow = visual and visual:FindFirstChild("GuardGlow")
 		check(glow ~= nil and glow.Enabled == false, "Idle 이면 빨간 테두리 꺼짐")
+		-- 얼굴: 처음(자는 중)엔 눈썹 안 보이고 감은 눈, Chase 면 눈썹·뜬 눈 보임, Return 이면 다시 감음
+		local function face(name)
+			local n, shown = 0, 0
+			for _, d in visual:GetDescendants() do
+				if d:IsA("BasePart") and d.Name == name then
+					n += 1
+					if d.Transparency < 1 then
+						shown += 1
+					end
+				end
+			end
+			return n, shown
+		end
+		local browN, browShown = face("Brow")
+		local closedN, closedShown = face("EyeClosed")
+		local _, openShown = face("EyeOpen")
+		check(
+			browN == 2 and browShown == 0 and closedN == 2 and closedShown == 2 and openShown == 0,
+			string.format(
+				"처음엔 눈썹 안 보임·눈 감김 (눈썹 %d/%d, 감은 눈 %d/%d)",
+				browShown,
+				browN,
+				closedShown,
+				closedN
+			)
+		)
 		forest.guard:SetAttribute("State", "Chase")
 		fire(forest.guard, "State")
 		check(z ~= nil and z.Enabled == false, "Chase 면 Z 숨김")
 		check(glow ~= nil and glow.Enabled == true, "Chase 면 빨간 테두리 켜짐")
+		local _, browChase = face("Brow")
+		local _, closedChase = face("EyeClosed")
+		local openN, openChase = face("EyeOpen")
+		check(
+			browChase == 2 and closedChase == 0 and openN > 0 and openChase == openN,
+			"Chase 면 화난 눈썹·뜬 눈 보이고 감은 눈 숨김"
+		)
+		forest.guard:SetAttribute("State", "Return")
+		fire(forest.guard, "State")
+		local _, browReturn = face("Brow")
+		check(browReturn == 0 and select(2, face("EyeClosed")) == 2, "Return 이면 다시 눈 감고 눈썹 숨김")
+		forest.guard:SetAttribute("State", "Chase")
+		fire(forest.guard, "State")
 		local pose = visual and visual.PrimaryPart and visual.PrimaryPart:FindFirstChild("GuardPose")
 		check(pose ~= nil and pose:IsA("Weld"), "경비 자세 Weld(GuardPose)")
 		if pose then
@@ -679,24 +834,35 @@ local function petsBody()
 	local EVS = requireNode(Loader.get("ServerScriptService/Server/Services/EggVisualService"))
 	EVS.started = false
 	EVS.start()
-	local shells, layered = 0, 0
+	-- 4판 수정: 매끈한 타원 알 = Ball 껍데기 1개(Shell) + SpecialMesh Sphere(Scale y 1.25), 층 쌓기 없음
+	local function smoothShell(v)
+		local shell = v and v:FindFirstChild("Shell")
+		if not (shell and shell:IsA("Part") and shell.Shape == roblox.Enum.PartType.Ball) then
+			return nil
+		end
+		local mesh = shell:FindFirstChildOfClass("SpecialMesh")
+		if not (mesh and mesh.MeshType == roblox.Enum.MeshType.Sphere and math.abs(mesh.Scale.Y - 1.25) < 1e-6) then
+			return nil
+		end
+		for _, c in v:GetChildren() do
+			if c.Name == "Layer" then
+				return nil
+			end
+		end
+		return shell
+	end
+	local shells, smooth = 0, 0
 	for _, e in eggs:GetChildren() do
 		local v = e:FindFirstChild("EggVisual")
 		if v then
 			shells += 1
-			local layers = 0
-			for _, c in v:GetChildren() do
-				if c.Name == "Layer" then
-					layers += 1
-				end
-			end
-			if layers >= 5 and layers <= 7 then
-				layered += 1
+			if smoothShell(v) and count(v) <= 8 then
+				smooth += 1
 			end
 		end
 	end
 	check(shells == 8, "알 껍데기 8개 (둥지 알 4 + 부화 중 4): " .. shells)
-	check(layered == 8, "알이 계단형 층 5~7개: " .. layered)
+	check(smooth == 8, "알이 매끈한 타원 하나(Ball + Sphere 메시), 층 없음, ≤ 8 파트: " .. smooth)
 	check(#(tagged.EggShell or {}) > 0, "EggShell 태그 붙음")
 	local weight = carriedEgg and carriedEgg:FindFirstChild("WeightTag")
 	check(weight ~= nil and weight.Enabled == true, "든 알 무게 이름표(WeightTag) 켜짐")
@@ -709,6 +875,54 @@ local function petsBody()
 	local nestWeight = nestEgg and nestEgg:FindFirstChild("WeightTag")
 	check(nestWeight == nil or nestWeight.Enabled == false, "둥지 알은 무게 이름표 숨김")
 	print("  egg visual parts:", count(eggs))
+
+	-- 4판: 등급 10개 모두 알 모양 (매끈한 타원 + 띠·점, 알 하나 ≤ 8 파트, 희귀 이상 반짝이)
+	local Rarities = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Rarities"))
+	local rarityEggs = Instance.new("Folder")
+	rarityEggs.Parent = Workspace
+	local made = {}
+	for i, r in Rarities.list do
+		local p = Instance.new("Part")
+		p.Shape = roblox.Enum.PartType.Ball
+		p.Size = roblox.Vector3.new(2, 2, 2)
+		p.CFrame = roblox.CFrame.new(i * 10, 1.25, 900)
+		p.Anchored = true
+		p:SetAttribute("PetId", "chicken")
+		p:SetAttribute("Mutations", "")
+		p:SetAttribute("Rarity", r.id)
+		p:SetAttribute("EggUid", "egg-r" .. i)
+		p:SetAttribute("EggState", "Nest")
+		p.Parent = rarityEggs
+		CollectionService:AddTag(p, "Egg")
+		made[r.id] = p
+	end
+	EVS.started = false
+	EVS.start()
+	local looksOk, glintOk, line = 0, 0, {}
+	for _, r in Rarities.list do
+		local p = made[r.id]
+		local v = p:FindFirstChild("EggVisual")
+		local n = v and count(v) or 0
+		local shell = smoothShell(v)
+		local lowest = if shell then shell.CFrame.Position.Y - shell.Size.Y / 2 * 1.25 else math.huge
+		check(Visuals.eggLooks[r.id] ~= nil, r.id .. " 알 모양 표(Visuals.eggLooks)")
+		if shell and n >= 3 and n <= 8 then
+			looksOk += 1
+		end
+		local glint = v and v:FindFirstChild("RarityGlint", true)
+		if (r.order >= 3) == (glint ~= nil) then
+			glintOk += 1
+		end
+		-- 껍데기 아래 = 파트 가운데 - 알 높이 절반 (바닥 위 거의 딱 붙음)
+		check(
+			math.abs(lowest - 0) < 0.01,
+			r.id .. " 알 바닥이 둥지 위에 붙음: " .. string.format("%.3f", lowest)
+		)
+		table.insert(line, r.id .. " " .. n)
+	end
+	print("  등급별 알 파트: " .. table.concat(line, ", "))
+	check(looksOk == #Rarities.list, "등급 10개 알: 매끈한 타원 + 무늬, 3~8 파트: " .. looksOk)
+	check(glintOk == #Rarities.list, "희귀(rare) 이상만 등급 반짝이(RarityGlint): " .. glintOk)
 end
 
 local mapOk, mapErr = pcall(body)

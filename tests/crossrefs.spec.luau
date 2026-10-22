@@ -157,8 +157,8 @@ return function(T, Loader)
 			for name in docServer do
 				T.truthy(codeServer[name], "코드(Remotes.ToServer)에 없음: " .. name)
 			end
-			T.eq(#sorted(codeClient), 22) -- 2판 +3: ZoneEntered, IncomeTick, TreadmillStep
-			T.eq(#sorted(codeServer), 20) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail · 2판 수정 +2: PlaceEgg, PickUpPlacedEgg
+			T.eq(#sorted(codeClient), 24) -- 2판 +3: ZoneEntered, IncomeTick, TreadmillStep · 5판 -1 QuestUpdate +3 TutorialUpdate, LeaderboardUpdate, PetPetted
+			T.eq(#sorted(codeServer), 20) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail · 2판 수정 +2: PlaceEgg, PickUpPlacedEgg · 5판 -1 ClaimFreeReward +1 PetPet
 		end
 	)
 
@@ -208,7 +208,7 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("서버→클라 Remote 22개 전부 서버 코드 어딘가에서 보냄 (Net.fire 에 쓰임)", function()
+	T.test("서버→클라 Remote 24개 전부 서버 코드 어딘가에서 보냄 (Net.fire 에 쓰임)", function()
 		local sent = scan(SERVER, "Remotes%.ToClient%.([%w_]+)")
 		for name in Remotes.ToClient do
 			T.truthy(sent[name], name .. " 를 보내는 코드가 서버에 없음 (죽은 Remote)")
@@ -225,7 +225,8 @@ return function(T, Loader)
 	--   (EquipTrail 은 선임이 붙여서 지움)
 	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
 	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
-	local AWAITING_CLIENT: { [string]: boolean } = {}
+	--   PetPet (5판): 내 우리 펫 쓰다듬기 — 선임이 펫 ProximityPrompt/클릭을 붙이면 지우기 (서버·REMOTES.md 는 완료)
+	local AWAITING_CLIENT: { [string]: boolean } = { PetPet = true }
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",
@@ -450,7 +451,7 @@ return function(T, Loader)
 			count += 1
 			T.truthy(registered[name], path .. ": 창 '" .. name .. "' 을 등록한 컨트롤러가 없음")
 		end
-		T.eq(count, 5)
+		T.eq(count, 4) -- 5판: 선물(Gift) 창 없앰
 	end)
 
 	T.test("Config 안에 NaN/음수/이상한 값 없음 (숫자는 유한, 시간·거리는 0 이상)", function()
@@ -724,7 +725,7 @@ return function(T, Loader)
 			end
 			T.truthy(indexOf("Net") < indexOf("MapBuilder"), "Net 이 가장 먼저")
 			T.truthy(indexOf("MapBuilder") < indexOf("EggService"), "맵이 알보다 먼저")
-			for _, special in { "SakuraService", "AltarService", "QuestService" } do
+			for _, special in { "SakuraService", "AltarService" } do
 				T.truthy(indexOf("MapBuilder") < indexOf(special), special .. " 는 MapBuilder 다음")
 			end
 			T.truthy(

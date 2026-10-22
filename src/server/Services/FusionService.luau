@@ -7,7 +7,7 @@
 	    (맵에 퓨전 머신 파트가 없으면 내 베이스 안이면 됨)
 	  - 같은 petId 3마리만. 장착 중이면 자동 해제 후 소모. 즉시, 비용 없음, 되돌릴 수 없음.
 	  - 결과 펫은 보관함에 들어감(빈 칸이면 자동 장착) + 도감 발견 처리
-	  - 성공하면 FusionResult 이벤트 + FusionService.fused:fire(player, pet) (퀘스트 "합성 1회")
+	  - 성공하면 FusionResult 이벤트 + FusionService.fused:fire(player, pet) (5판: 퀘스트가 없어져 지금은 듣는 곳 없음)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,7 +35,7 @@ type PetRecord = Types.PetRecord
 
 local FusionService = {}
 
--- 합성 성공 (player, 결과 PetRecord)
+-- 합성 성공 (player, 결과 PetRecord). 5판: 퀘스트 "합성 1회" 가 없어져 듣는 곳은 없지만 신호는 남김 (나중 업적 등)
 FusionService.fused = Signal.new()
 
 local rng = Random.new()

@@ -18,7 +18,7 @@ return function(T, Loader)
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 	local FusionRules = Loader.require("ReplicatedStorage/Shared/FusionRules")
 	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
-	local QuestRules = Loader.require("ReplicatedStorage/Shared/QuestRules")
+	local TutorialRules = Loader.require("ReplicatedStorage/Shared/TutorialRules")
 	local EggRules = Loader.require("ReplicatedStorage/Shared/EggRules")
 	local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
 	local Cycle = Loader.require("ReplicatedStorage/Shared/Cycle")
@@ -401,31 +401,33 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"퀘스트: 마법의 숲 알 20개 — 정확히 19개/20개 경계, 영원 알은 희귀도만 봄",
+		"5판 튜토리얼: 저장된 단계 값 경계 (0·7·2.9·NaN·글자 → 1~6 정수, 없으면 fallback)",
 		function()
-			local progress = {}
-			for _ = 1, 19 do
-				QuestRules.apply(progress, { kind = "deliver", biome = "enchanted_forest", rarity = "rare" })
-			end
-			T.eq(progress.deliver_eggs, 19)
-			T.falsy(QuestRules.isDone(progress, { id = "deliver_eggs", target = 20 }))
-			QuestRules.apply(progress, { kind = "deliver", biome = "enchanted_forest", rarity = "rare" })
-			T.eq(progress.deliver_eggs, 20)
-			T.eq(progress.deliver_eternal, nil)
-			QuestRules.apply(progress, { kind = "deliver", biome = "volcano", rarity = "eternal" })
-			T.eq(progress.deliver_eternal, 1)
-			T.falsy(QuestRules.allDone(progress), "합성이 남음")
-			QuestRules.apply(progress, { kind = "fuse" })
-			T.truthy(QuestRules.allDone(progress))
+			T.eq(TutorialRules.clean(0, 6), 1)
+			T.eq(TutorialRules.clean(-3, 6), 1)
+			T.eq(TutorialRules.clean(7, 1), 6)
+			T.eq(TutorialRules.clean(2.9, 1), 2)
+			T.eq(TutorialRules.clean(0 / 0, 4), 4)
+			T.eq(TutorialRules.clean("3", 6), 6)
+			T.eq(TutorialRules.clean(nil, 6), 6)
+			T.eq(TutorialRules.clean(math.huge, 1), 6)
 		end
 	)
 
-	T.test("퀘스트: 구역/희귀도가 없는 이벤트·모르는 종류는 무시", function()
-		local progress = {}
-		T.eq(#QuestRules.apply(progress, { kind = "deliver" }), 0)
-		T.eq(#QuestRules.apply(progress, { kind = "해킹", biome = "enchanted_forest" }), 0)
-		T.eq(next(progress), nil)
-	end)
+	T.test(
+		"5판 튜토리얼: 장착 0마리면 5단계가 안 끝남, 끝난 뒤에는 어떤 일도 단계를 안 바꿈",
+		function()
+			local ctx = { carrying = false, bagEggs = 0, placedEggs = 0, pets = 1, equipped = 0 }
+			T.eq(TutorialRules.advance(5, "equip", ctx), 5)
+			ctx.equipped = 1
+			T.eq(TutorialRules.advance(5, "equip", ctx), 6)
+			for _, event in { "steal", "lost", "deliver", "place", "unplace", "hatch", "equip" } do
+				T.eq(TutorialRules.advance(6, event, ctx), 6, event)
+				T.eq(TutorialRules.advance(99, event, ctx), 99, event)
+			end
+			T.eq(TutorialRules.advance(3, "해킹" :: any, ctx), 3, "모르는 일은 무시")
+		end
+	)
 
 	T.test(
 		"치트 경고: 정확히 5번째에 Kick, 120초에 하나씩 줄고 줄어든 뒤에는 처음부터",

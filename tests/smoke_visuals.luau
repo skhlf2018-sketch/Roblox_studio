@@ -483,14 +483,8 @@ local function body()
 	if shrine[1] then
 		check(shrine[1].Parent:FindFirstChild("Waterfall") ~= nil, "비밀 통로 옆 폭포")
 	end
-	local gates = tagged.QuestGate or {}
-	check(#gates == 1 and inZone(gates[1], "enchanted_forest"), "QuestGate 1개, 마법의 숲 구역 안")
-	if gates[1] then
-		check(gates[1].CanCollide == true, "퀘스트 문 CanCollide = true")
-		for i = 1, 3 do
-			check(gates[1].Parent:FindFirstChild("Rune" .. i) ~= nil, "룬 돌 Rune" .. i)
-		end
-	end
+	-- 5판: 마법의 숲 퀘스트 문(QuestGate)은 퀘스트와 함께 없앰 → 마법의 숲은 항상 열림
+	check(#(tagged.QuestGate or {}) == 0, "5판: QuestGate 태그 파트 없음 (마법의 숲 항상 열림)")
 	-- 서버 Landmarks 가 이 파트들을 찾으면 임시 파트를 안 만듦
 	local Landmarks = requireNode(Loader.get("ServerScriptService/Server/Util/Landmarks"))
 	check(#Landmarks.find("Altar", "Side", "light") == 1, "Landmarks.find(Altar, Side=light) = 1")

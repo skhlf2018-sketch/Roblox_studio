@@ -5,7 +5,7 @@
 	접속:
 	  1) 세션 만들기 → 2) 베이스 배정(바로, 가득 차면 0 = 누가 나갈 때 배정) → 3) 데이터 불러오기(기다림)
 	  4) 준비: 펫 수입 계산 → 속도 → 우리에 놓인 알(오프라인 성장) → 오프라인 수입 → 업그레이드 → 도구
-	          → 사쿠라·퀘스트 Attribute → Snapshot 전송
+	          → 사쿠라 Attribute → 튜토리얼 단계 맞춤(5판) → Snapshot 전송 → 랭킹판 한 번(5판)
 	     준비 단계는 하나씩 pcall 로 감쌈 (하나가 터져도 나머지·DataLoaded·Snapshot 은 진행)
 	나감:
 	  들고 있던 알 놓기 → 곰덫·제단 제물 정리 → 베이스 비우기 → 저장 + 세션 락 해제 → 세션 삭제
@@ -37,7 +37,8 @@ local ToolService = require(Services.ToolService)
 local RewardService = require(Services.RewardService)
 local SakuraService = require(Services.SakuraService)
 local AltarService = require(Services.AltarService)
-local QuestService = require(Services.QuestService)
+local TutorialService = require(Services.TutorialService)
+local LeaderboardService = require(Services.LeaderboardService)
 local AntiCheatService = require(Services.AntiCheatService)
 
 local Attr = Tags.PlayerAttributes
@@ -60,7 +61,6 @@ local function onCharacterAdded(player: Player, character: Model)
 	local session = Sessions.get(player)
 	if session and session.loaded then
 		task.spawn(ToolService.onCharacterAdded, player, character)
-		task.spawn(QuestService.onCharacterAdded, player, character)
 	end
 end
 
@@ -101,7 +101,7 @@ local function onPlayerAdded(player: Player)
 	safely("UpgradeService", UpgradeService.onPlayerReady, player)
 	safely("ToolService", ToolService.onPlayerReady, player)
 	safely("SakuraService", SakuraService.onPlayerReady, player)
-	safely("QuestService", QuestService.onPlayerReady, player)
+	safely("TutorialService", TutorialService.onPlayerReady, player)
 
 	player:SetAttribute(Attr.SaveEnabled, saveEnabled)
 	player:SetAttribute(Attr.DataLoaded, true)
@@ -119,6 +119,7 @@ local function onPlayerAdded(player: Player)
 		)
 	end
 	safely("Snapshot", Snapshot.send, player)
+	safely("LeaderboardService", LeaderboardService.onPlayerReady, player)
 end
 
 local function onPlayerRemoving(player: Player)
@@ -129,7 +130,6 @@ local function onPlayerRemoving(player: Player)
 	safely("EggService", EggService.onPlayerLeaving, player)
 	safely("ToolService", ToolService.onPlayerLeaving, player)
 	safely("AltarService", AltarService.onPlayerLeaving, player)
-	safely("QuestService", QuestService.onPlayerLeaving, player)
 	safely("BaseService", BaseService.onPlayerLeaving, player)
 	if session.loaded then
 		if not DataService.save(player, true) then

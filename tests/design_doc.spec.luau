@@ -210,9 +210,9 @@ return function(T, Loader)
 				local parts = splitDash(bullet)
 				local rawName = parts[1]
 				local tag = nil
-				if startsWith(rawName, "(퀘스트) ") then
-					rawName = string.sub(rawName, #"(퀘스트) " + 1)
-					tag = "quest"
+				if startsWith(rawName, "(특별) ") then -- 5판: 옛 "(퀘스트)" 알 → 초기화 특별 알
+					rawName = string.sub(rawName, #"(특별) " + 1)
+					tag = "special"
 				end
 				if string.find(rawName, "(합성)", 1, true) then
 					tag = "fusion"
@@ -262,7 +262,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"모든 펫: 문서 소제목의 구역·쪽(천국/지옥)·출처(퀘스트/합성)가 코드와 같음",
+		"모든 펫: 문서 소제목의 구역·쪽(천국/지옥)·출처(특별/합성)가 코드와 같음",
 		function()
 			for i, doc in docPets do
 				local pet = Pets.list[i]
@@ -272,8 +272,8 @@ return function(T, Loader)
 				else
 					T.eq(pet.side, nil, pet.id .. " 쪽 없음")
 				end
-				if doc.tag == "quest" then
-					T.eq(pet.source, "quest", pet.id)
+				if doc.tag == "special" then
+					T.eq(pet.source, "special", pet.id)
 				elseif doc.tag == "fusion" then
 					T.eq(pet.source, "fusion", pet.id)
 				end
@@ -471,7 +471,7 @@ return function(T, Loader)
 		T.eq(Config.NIGHT_GROWTH_MULTIPLIER, 30)
 	end)
 
-	T.test("서버 7명, 곰덫 5초, 성장 3배, 무료 보상 +10,000 속도, 퓨전 3마리", function()
+	T.test("서버 7명, 곰덫 5초, 성장 3배, 무료 보상은 5판에서 제거, 퓨전 3마리", function()
 		T.truthy(string.find(DOC, "서버당 최대 **7명**", 1, true))
 		T.eq(Config.MAX_PLAYERS, 7)
 		T.eq(Config.PLOT_COUNT, 7)
@@ -479,8 +479,8 @@ return function(T, Loader)
 		T.eq(Config.BEAR_TRAP_STUN_SECONDS, 5)
 		T.truthy(string.find(DOC, "**G = 3**", 1, true))
 		T.eq(Config.GROWTH_MULTIPLIER, 3)
-		T.truthy(string.find(DOC, "+10,000 속도", 1, true))
-		T.eq(Config.FREE_REWARD_SPEED, 10000)
+		T.truthy(string.find(DOC, "**무료 보상** — **(5판에서 제거됨", 1, true))
+		T.eq(Config.FREE_REWARD_SPEED, nil)
 		T.truthy(string.find(DOC, "같은 펫 3마리", 1, true))
 		T.eq(FusionRules.INPUT_COUNT, 3)
 	end)

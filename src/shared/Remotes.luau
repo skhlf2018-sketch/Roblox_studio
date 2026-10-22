@@ -33,12 +33,15 @@ local Remotes = {
 		SakuraResult = "SakuraResult",
 		AltarUpdate = "AltarUpdate",
 		ShrineResult = "ShrineResult",
-		QuestUpdate = "QuestUpdate",
 		PetsSold = "PetsSold",
 		-- 2판
 		ZoneEntered = "ZoneEntered", -- { biomeId, name, nameEn } 새 구역(z 범위)에 들어갈 때 1회
 		IncomeTick = "IncomeTick", -- { petUid, amount } 장착 펫마다 INCOME_POPUP_INTERVAL(3)초에 1번, 그만큼의 돈 (팝업용)
 		TreadmillStep = "TreadmillStep", -- { amount } 러닝머신 걸음(1초)마다 오른 속도
+		-- 5판 (퀘스트 QuestUpdate 는 없앰)
+		TutorialUpdate = "TutorialUpdate", -- TutorialView { step, total, text, hint, done, reward? } 튜토리얼 단계가 바뀔 때 (나에게만)
+		LeaderboardUpdate = "LeaderboardUpdate", -- { money = { {name, value, userId} }, speed = {...} } 10초마다 서버 전체 (상위 10명)
+		PetPetted = "PetPetted", -- (ownerUserId, petUid) 누가 자기 우리 펫을 쓰다듬음 → 하트·소리 (서버 전체)
 	},
 
 	-- 클라 → 서버 (전부 서버에서 인자 검증 + 레이트 리밋)
@@ -51,7 +54,6 @@ local Remotes = {
 		PurchaseUpgrade = "PurchaseUpgrade",
 		UseTool = "UseTool",
 		ClaimIndexReward = "ClaimIndexReward",
-		ClaimFreeReward = "ClaimFreeReward",
 		-- 2단계
 		FuseRequest = "FuseRequest",
 		SakuraOffer = "SakuraOffer",
@@ -66,6 +68,8 @@ local Remotes = {
 		-- 2판 수정 (알 가방)
 		PlaceEgg = "PlaceEgg", -- (eggUid, x, z) 가방의 알을 내 우리 안 그 자리(월드 x, z)에 놓음 → 부화 시작
 		PickUpPlacedEgg = "PickUpPlacedEgg", -- (eggUid) 우리에 놓은 알을 다시 가방으로 (진행도 유지, Config.ALLOW_EGG_PICKUP)
+		-- 5판 (무료 보상 ClaimFreeReward 는 없앰)
+		PetPet = "PetPet", -- (petUid) 내 우리 장착 펫 쓰다듬기 (우리 20 스터드 안, 1초 쿨다운) → PetPetted
 	},
 
 	-- 클라 → 서버 레이트 리밋: burst = 한 번에 허용, perSecond = 초당 회복
@@ -78,7 +82,6 @@ local Remotes = {
 		PurchaseUpgrade = { burst = 5, perSecond = 2 },
 		UseTool = { burst = 4, perSecond = 2 },
 		ClaimIndexReward = { burst = 5, perSecond = 1 },
-		ClaimFreeReward = { burst = 2, perSecond = 0.2 },
 		FuseRequest = { burst = 3, perSecond = 1 },
 		SakuraOffer = { burst = 2, perSecond = 0.5 },
 		SakuraApply = { burst = 5, perSecond = 2 },
@@ -90,6 +93,7 @@ local Remotes = {
 		EquipTrail = { burst = 5, perSecond = 2 },
 		PlaceEgg = { burst = 5, perSecond = 3 },
 		PickUpPlacedEgg = { burst = 5, perSecond = 3 },
+		PetPet = { burst = 3, perSecond = 2 },
 	} :: { [string]: { burst: number, perSecond: number } },
 
 	-- PurchaseUpgrade 의 kind

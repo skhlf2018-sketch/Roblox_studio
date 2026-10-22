@@ -1,5 +1,17 @@
 # Remote 목록 (서버 ↔ 클라)
 
+> **[5판] 퀘스트·선물 없앰 · 튜토리얼 · 랭킹판 · 쓰다듬기 (수석, 2026-10-22)** — 사장님 지시. 서버는 다 됨, **클라 화면은 선임** (아래 8절 체크리스트).
+> - **없앤 것:** `QuestUpdate`(서버→클라), `ClaimFreeReward`(클라→서버), Snapshot 의 `quests`·`questsDone`·`freeRewardClaimed`, DataUpdate 섹션 `"quests"`·`"flags"`, 플레이어 Attr `QuestsDone`, 태그 `QuestGate`(+ CollisionGroup `QuestGate`/`QuestPassed`), 알 파트 Attr `QuestOnly`, `Announce` 의 `questOnly`, `MapLayout.specials.questGate`, 소리 `QuestStep`·`GateOpen`. 마법의 숲은 **항상 열림**, **모든 알을 누구나 훔칠 수 있음**. 옛 퀘스트 알(지터버그·영혼 세계 수호자)은 초기화 때 마법의 숲 둥지에 나오는 **공지 특별 알** (`Announce` kind `"rareEgg"` 그대로, 지터버그 8% · 영혼 세계 수호자 1%, `EggSpawn.EXTRA_SPECIALS`). 도감 보상(`ClaimIndexReward`·`IndexRewarded`)은 **그대로**.
+> - **새 Remote 4개:**
+>   - `TutorialUpdate` (서버→나에게만) — 인자 1개 `TutorialView` = `{ step: number, total: number, text: string, hint: string, done: boolean, reward: number? }`. `step` 1~5 (= `total` 5), 끝나면 `step = 6`·`done = true`·`hint = ""`. `reward = 500` 은 **끝내는 순간의 한 번에만** 있음 ("튜토리얼 끝! 보상 $500" 축하 연출). 보내는 때: 접속 준비 때(튜토리얼이 안 끝난 사람만) · 단계가 바뀔 때 · `/tutorial reset`. 같은 모양이 `Snapshot.tutorial` 과 `DataUpdate("tutorial", { tutorial = TutorialView })` 에도 옴 (State 가 합침) → **끝난 사람은 `State.get().tutorial.done == true`, 패널을 숨기세요**.
+>     단계 글(`text`, 사장님 문장 그대로): 1 "숲에서 알 훔치기" · 2 "안전 구역으로 돌아오기" · 3 "핫바에서 알을 골라 우리에 놓기" · 4 "부화!" · 5 "펫 장착". `hint` = 작은 설명 (`shared/Data/Tutorial.luau`).
+>     진행: 알 줍기 1→2, 든 알을 놓침 2→1, 허브에 들어와 가방에 들어감 →3, `PlaceEgg` 성공 3→4, `PickUpPlacedEgg` 로 우리가 비면 4→3, 부화 →5, `EquipPet`/`EquipBest` 로 장착 펫 1마리 이상 5→끝(+$500 + `Notify` success). 건너뛰기 없음. **튜토리얼 중(끝나기 전)에는 부화한 펫이 자동 장착되지 않음** (`HatchResult.equipped = false` → 5단계에서 펫 창의 장착 버튼). 이미 놀던 사람은 처음부터 끝난 상태(스키마 4 → 5 마이그레이션).
+>   - `LeaderboardUpdate` (서버→전체, `Config.LEADERBOARD_INTERVAL` 10초마다 + 새로 온 사람에게는 준비되자마자 그 사람에게만 한 번) — 인자 1개 `{ money: { LeaderboardEntry }, speed: { LeaderboardEntry } }`, `LeaderboardEntry = { name: string (DisplayName), value: number, userId: number }`. 각각 큰 값부터 최대 `Config.LEADERBOARD_SIZE` 10줄 (같으면 이름 순). `money` = 돈(`Format.money`), `speed` = 실효 속도(Attr `Speed` 와 같은 숫자, `Format.number`). 데이터를 불러온 사람만.
+>   - `PetPet` (클라→서버) — 인자 `petUid: string` (내 우리에 서 있는 = **장착된** 펫 uid, PenPet 모델 Attr `PetUid`). 서버 검증: uid 형식 · 내 펫 · 장착 중 · 내 베이스가 있음 · 살아 있는 내 캐릭터가 **내 우리(`MapLayout.penRect`) 에서 `Config.PET_PET_RADIUS` 20 스터드 안** · 사람마다 `Config.PET_PET_COOLDOWN` 1초. 실패는 조용히 무시(알림 없음). 레이트 리밋 3 / 2.
+>   - `PetPetted` (서버→전체) — 인자 **2개** `(ownerUserId: number, petUid: string)` → 그 주인 우리의 그 펫 위에 하트·소리 (다른 사람 화면에도). 펫 모델 = `PetVisualService` 의 PenPet 태그 모델 (Attr `PetUid` 만 있음). **uid 는 사람마다 따로 매겨서(p1, p2 …) 겹칠 수 있으니** 주인으로 한 번 더 거르세요: 주인 Player 의 Attr `PlotIndex` == `MapLayout.plotAt(model:GetPivot().Position)` (또는 선임이 PenPet 에 `OwnerUserId` Attr 을 붙여도 됨).
+> - **저장 스키마 5:** + `tutorialStep` (1~5, 6 = 끝), `quests`·`questsRewarded`·`freeRewardClaimed` 칸 지움. 4 → 5: 펫·놓인 알·가방 알이 있거나 알을 훔친/배달한/부화한 적이 있으면 6(끝), 아니면 1. 무료 보상으로 받은 속도·퀘스트로 받은 알은 그대로.
+> - 개발 명령: `/quests` 없앰, **`/tutorial reset`** (1단계부터 다시, 보상도 다시). 개(dog) 알 부화 **3초**.
+
 > **[2판 수정] 알 가방 · 우리에 직접 놓기 · 속도 체감 · 떨어진 알 (수석, 2026-10-19)** — 사장님 지적 반영.
 > - **배달 = 알을 든 채 허브(z < 0, `MapLayout.isInHub`)에 들어오는 순간** (경비 `ChaseEnded` reason `"safe"` 와 같은 순간). 알은 우리에 저절로 놓이지 않고 **알 가방**(`snap.eggs`, 최대 `Config.EGG_INVENTORY_MAX` 50 [추정])으로. `EggDelivered` = "가방에 넣음"(BagEgg). 베이스 없는 8번째 사람도 받음.
 > - **부화 슬롯 없음.** 플레이어가 알 창에서 알을 고르고 **우리 바닥 아무 데나** 놓음 → 새 Remote **`PlaceEgg(eggUid, x, z)`** (월드 x, z). 놓은 알만 자람(밤 30배). 다시 가방으로: **`PickUpPlacedEgg(eggUid)`** (진행도 유지, `Config.ALLOW_EGG_PICKUP`). 우리에 놓을 수 있는 알 최대 `Config.PLACED_EGG_MAX` 8 [추정]. 규칙은 `shared/EggPlacement.luau` (클라 미리보기도 같은 함수로).
@@ -71,7 +83,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `nestsFor(biomeId)` | 8개 `{x,z}` (벽·구역 경계에서 20 이상, 경비 집에서 60 이상, 짝수 구역은 좌우 뒤집힘) | Nest 태그 파트 (NestIndex = 순서) |
 | `guardHome(biomeId)` | `{ x = 0, z = centerZ }` | 경비가 자는 자리 (서버가 경비를 여기 만듦) |
 | `hubSpots` | `mainSpawn (0,-140)`, `sellStall (60,-232)`, `trailShop (60,-268)`, `eventPortal (92,-250)`, `safeLine (0,0)` | 허브 시설 |
-| `specials` | `sakuraIncubator`(벚꽃), `altarLight`·`altarDark`·`shrine`(천사&악마), `questGate`(마법의 숲) 각 `{ biomeId, x, z }` | 2단계 특수 장소 (같은 태그로 지으면 서버 임시 파트 안 생김) |
+| `specials` | `sakuraIncubator`(벚꽃), `altarLight`·`altarDark`·`shrine`(천사&악마) 각 `{ biomeId, x, z }` (5판: 마법의 숲 `questGate` 없앰) | 2단계 특수 장소 (같은 태그로 지으면 서버 임시 파트 안 생김) |
 
 판정 함수 (위치는 `Vector3` 또는 `{x=, z=}` 둘 다 됨):
 
@@ -94,7 +106,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `Snapshot` | 접속해서 데이터를 불러온 직후, `RequestSnapshot` 요청 때, 늦게 베이스를 받았을 때 | `Types.Snapshot` 전체 (아래 4절) |
 | `DataUpdate` | 상태 일부가 바뀔 때 | `(section: string, payload: table)` — 5절 표. `State` 모듈이 자동으로 합쳐 줌 |
 | `Notify` | 성공/실패 안내 한 줄 | `{ kind: "info" \| "success" \| "error", text: string }` |
-| `Announce` | 서버 전체 공지 (채팅에도 표시됨) | `{ kind, text, ... }` — kind: `"reset"`("ALL EGG RESET!"), `"rareEgg"`(+ `biomeId, petId, rarity, eggUid, questOnly?`), `"night"`, `"day"` |
+| `Announce` | 서버 전체 공지 (채팅에도 표시됨) | `{ kind, text, ... }` — kind: `"reset"`("ALL EGG RESET!"), `"rareEgg"`(+ `biomeId, petId, rarity, eggUid` — 5판: `questOnly` 없앰), `"night"`, `"day"` |
 | `PhaseChanged` | 낮/밤/대기 바뀔 때 | `{ phase: "Day"\|"Night"\|"Intermission", endsAt: number, duration: number, cycleNumber: number, heavenSide: "light"\|"dark"\|nil }` — `endsAt` 은 `workspace:GetServerTimeNow()` 기준 |
 | `RunAlert` | 내가 알을 든 순간 ("달리기!!") | `{ egg: EggInfo, guardName: string, guardSpeed: number, yourSpeed: number, weightKg: number }` — `guardSpeed` = 추천 속도 × 0.9, `yourSpeed` = 알 무게까지 반영한 내 실효 속도, `weightKg` = 알 무게(표시용). **따돌림 조건: `SpeedMath.canEscape(guardSpeed, yourSpeed)`** (= `yourSpeed > guardSpeed × 0.99`) |
 | `ChaseEnded` | 나를 쫓던 경비가 멈춤 | `{ biomeId: string, reason: "safe"\|"caught"\|"dropped"\|"night"\|"other" }` — safe = 허브에 들어옴(= 배달, 2판 수정), dropped = 알을 놓음(DropEgg), other = 기절·죽음·다른 사람으로 대상 바뀜 |
@@ -104,15 +116,17 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `OfflineIncome` | 접속 때 오프라인 수입 지급 (60초 이상 비웠을 때) | `{ amount: number, seconds: number, perDay: number, text: string }` |
 | `IndexRewarded` | 도감 보상 수령 | `{ petIds: {string}, speed: number, money: number, completeBonus: boolean }` |
 | `FusionResult` | 퓨전 성공 | `{ consumed: {uid}, pet: PetRecord, upgraded: boolean, bonusMutation: string?, inputIncome: number, income: number, isNew: boolean, equipped: boolean }` |
-| `EggGranted` | 선물 알(제단·비밀 통로·퀘스트)이 **알 가방에 들어감** (2판 수정, 대기 줄 없음) | `{ egg: BagEgg, queued: false, source }` — source: `"altar"\|"shrine"\|"quest"`. `queued` 는 옛 클라 호환용으로 항상 false (지울 예정). 가방이 가득 차면 선물 알을 못 받음 (제단·비밀 통로는 미리 거부) |
+| `EggGranted` | 선물 알(제단·비밀 통로·개발 명령 `/egg`)이 **알 가방에 들어감** (2판 수정, 대기 줄 없음) | `{ egg: BagEgg, queued: false, source }` — source: `"altar"\|"shrine"\|"dev"` (5판: `"quest"` 없앰). `queued` 는 옛 클라 호환용으로 항상 false (지울 예정). 가방이 가득 차면 선물 알을 못 받음 (제단·비밀 통로는 미리 거부) |
 | `SakuraResult` | 사쿠라 인큐베이터 해금 / 블룸 부여 | 해금: `{ kind: "unlocked", consumed: petUid, crystals }` · 블룸: `{ kind: "bloom", targetUid, target: "egg"\|"pet", mutation: "bloom"\|"spirit_bloom", crystals }` |
 | `AltarUpdate` | 제단 제물 상태 | `{ status: "pending"\|"paired"\|"expired", side: "light"\|"dark", petId, partner?: string, eggPetId?: "ring_guard"\|"ringlord" }` |
 | `ShrineResult` | 비밀 통로 합성 성공 | `{ consumed: {uid, uid}, resultPetId: "equinox"\|"aetheron", size, mutations }` (알은 `EggGranted` 로도 옴) |
-| `QuestUpdate` | 마법의 숲 퀘스트 진행도가 바뀜 | `{ quests: { QuestView }, allDone: boolean, gateOpen: boolean }` — `QuestView = { id, name, progress, target, done }` |
 | `PetsSold` | 보관함이 500마리를 넘어 싼 펫이 **자동** 판매됨 | `{ pets: { PetRecord }, money: number }` (SellPet 으로 직접 판 것은 `Notify` 만) |
 | **`ZoneEntered`** (2판) | 새 구역(z 범위)에 들어갈 때 1번 (서버 0.2초 틱). 허브는 안 보냄 | `{ biomeId: string, name: string, nameEn: string }` → 화면 위 가운데 구역 이름 배너 ("Jungle 😬") |
 | **`IncomeTick`** (2판) | 장착 펫마다 3초(`Config.INCOME_POPUP_INTERVAL`)에 1번, 펫들은 1초씩 엇갈려 옴 | `{ petUid: string, amount: number }` — amount = 그 펫 3초치 돈 → 펫 머리 위 "+$34K" 초록 팝업. **돈은 1초마다 따로 들어옴** (팝업은 표시용) |
 | **`TreadmillStep`** (2판) | 러닝머신 위에서 걸음(1초)마다 | `{ amount: number }` — 오른 속도 → "+500" 분홍 팝업 |
+| **`TutorialUpdate`** (5판) | 나에게만: 접속 준비 때(튜토리얼이 안 끝난 사람만) · 단계가 바뀔 때 · `/tutorial reset` | `TutorialView = { step, total, text, hint, done, reward? }` — step 1~5 (total 5), 끝 = step 6·done true·`reward = 500`(끝내는 순간 한 번만). Snapshot `tutorial`·DataUpdate `"tutorial"` 도 같은 모양 (맨 위 [5판] 상자) |
+| **`LeaderboardUpdate`** (5판) | 10초마다 서버 전체 (`Config.LEADERBOARD_INTERVAL`) + 새로 온 사람에게 한 번 | `{ money: { LeaderboardEntry }, speed: { LeaderboardEntry } }` — `LeaderboardEntry = { name, value, userId }`, 큰 값부터 최대 10줄 (`Config.LEADERBOARD_SIZE`), speed = 실효 속도(Attr `Speed`) |
+| **`PetPetted`** (5판) | 누가 `PetPet` 으로 자기 우리 펫을 쓰다듬음 (서버 전체) | `(ownerUserId: number, petUid: string)` — 인자 2개 → 그 펫(PenPet 모델 Attr `PetUid` + 주인 `PlotIndex` == `MapLayout.plotAt(모델 위치)`) 위에 하트·소리 |
 
 `EggInfo` = `{ uid, petId, biomeId, rarity, size, mutations: {string}, special: boolean }`
 
@@ -133,7 +147,6 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `PurchaseUpgrade` | `kind: "Pen"\|"Treadmill"\|"Trail"`, `trailId: string?` (Trail 일 때만) | 종류·id 허용 목록, 다음 레벨 있는지, 돈 충분한지 (상점 화면 버튼이라 거리 검사 없음). **트레일은 사면 바로 장착** (2판 마무리) | 5 / 2 |
 | `UseTool` | `kind`: `"Bat"\|"BearTrap"\|"WaterBat"\|"Katana"\|"Axe"\|"AngelSpear"\|"Hammer"\|"CandyCane"\|"Scythe"` (`Remotes.ToolKinds`) | 그 도구를 손에 들고 있는지, 구역 무기는 해금했는지, 근접 무기 공용 쿨다운, **허브(안전 구역)가 아닌지**, 곰덫 개수. 대상·위치는 서버가 찾음 | 4 / 2 |
 | `ClaimIndexReward` | `"all"` 또는 `petId` | 발견했고 아직 안 받았는지 | 5 / 1 |
-| `ClaimFreeReward` | 없음 | 계정당 1번 (그룹 ID 설정 시 가입 확인) | 2 / 0.2 |
 | `FuseRequest` | `petUid1, petUid2, petUid3` | 내 베이스 퓨전 머신 12스터드 안(파트가 없으면 내 베이스 안), 서로 다른 내 펫 3마리, 같은 petId | 3 / 1 |
 | `SakuraOffer` | `petUid?` | 사쿠라 인큐베이터 14스터드 안, 아직 해금 안 함, 학(Crane) 펫 | 2 / 0.5 |
 | `SakuraApply` | `targetUid` (부화 중 알 `"i.."` 또는 보관 펫 `"p.."`) | 인큐베이터 14스터드 안, 해금함, 크리스탈 1개 이상, 블룸 계열이 아직 없음 | 5 / 2 |
@@ -143,8 +156,9 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`SellPet`** (2판) | `petUid: string` | **판매 가게 14스터드 안** (SellStall 태그 파트 표면 또는 `MapLayout.sellSpots()` 자리), 내 펫인지. 장착 중이면 해제 후 판매. 가격 = `Economy.recordIncome(pet) × Config.PET_SELL_SECONDS(60)`. 결과는 `Notify` | 10 / 4 |
 | **`TreadmillLeave`** (2판) | 없음 | 러닝머신 위인지. 내려서 벨트 앞(복도 쪽)으로 옮겨 줌. **클라가 러닝머신 위에서 점프할 때 보내세요** (`OnTreadmill` 이 true 일 때 Humanoid.Jumping / 점프 버튼). 안 보내도 점프로 몸이 바닥 + 8 위로 뜨면 서버가 그 자리에서 내려 줌 (벨트 윗면은 바닥 + 2 이하로 만들어 주세요) | 3 / 2 |
 | **`EquipTrail`** (2판 마무리) | `trailId: string` 또는 `"none"` (`Upgrades.NO_TRAIL`) | 허용 목록(트레일 id + `"none"`), **가진 트레일인지**. 바꾸면 `data.equippedTrail` 저장 + 속도 다시 계산 + `DataUpdate("upgrades")` + `Notify`. `"none"` = 해제(배율 1). 이미 장착한 것을 또 보내면 무시. 상점 창 버튼이라 거리 검사 없음 | 5 / 2 |
+| **`PetPet`** (5판) | `petUid: string` (내 우리의 **장착된** 펫, PenPet 모델 Attr `PetUid`) | uid 형식, 내 펫이고 장착 중, 내 베이스가 있음, 살아 있는 내 캐릭터가 **내 우리(`MapLayout.penRect`)에서 20 스터드 안**(`Config.PET_PET_RADIUS`), 사람마다 쿨다운 1초(`Config.PET_PET_COOLDOWN`). 통과하면 `PetPetted(ownerUserId, petUid)` 를 서버 전체에. 실패는 조용히 무시 | 3 / 2 |
 
-- **알 줍기**는 Remote 가 아니라 서버가 만든 `ProximityPrompt`(E 키, 알 파트 안의 `StealPrompt`)로 합니다. 서버가 거리·낮인지·이미 들고 있는지·(퀘스트 전용 알이면) 퀘스트 완료했는지 확인합니다.
+- **알 줍기**는 Remote 가 아니라 서버가 만든 `ProximityPrompt`(E 키, 알 파트 안의 `StealPrompt`)로 합니다. 서버가 거리·낮인지·이미 들고 있는지 확인합니다 (5판: 퀘스트 전용 알 없앰 → 모든 알을 누구나 주움).
 - **사쿠라 크리스탈 줍기**도 `ProximityPrompt`(크리스탈 파트 안의 `CrystalPrompt`). 서버가 거리 확인.
 - **배달** (2판 수정)도 Remote 없음: 알을 든 채 **허브(안전 구역, `MapLayout.isInHub` = z < 0)에 들어오는 순간** 서버가 자동 처리 → 알 가방으로 (`EggDelivered`). 내 베이스까지 갈 필요 없음, 베이스 없는 사람도 받음. 가방이 가득 차면 알은 손에 그대로 + 3초에 한 번 안내. 바닥에서 20 넘게 떠 있으면 내려올 때까지 기다림. (주운 곳에서 너무 빨리 왔으면 거부 → 알은 둥지로)
 - **우리에 알 놓기** (2판 수정): 클라가 할 일 = 알 창(오른쪽 주황 알 버튼, `snap.eggs`)에서 알 고르기 → 놓기 모드 → 내 우리 바닥 클릭/터치(마우스 레이캐스트 점) → `PlaceEgg(uid, hit.X, hit.Z)`. 미리보기는 `EggPlacement.check(MapLayout.toLocal(PlotIndex, hit).x, ...z, egg.size, 놓인 알들, nil)` 로 초록/빨강 (펫 간격은 서버만 봄).
@@ -175,7 +189,6 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`OnTreadmill`** (2판) | 러닝머신 위에 고정돼 달리는 중 → 제자리 달리기 애니메이션 + 점프하면 `TreadmillLeave` |
 | `DataLoaded`, `SaveEnabled` | 데이터 로딩 끝났는지, 저장되는 세션인지 |
 | `SakuraCrystals`, `SakuraUnlocked` | 사쿠라 크리스탈 개수 / 인큐베이터 해금 |
-| `QuestsDone` | 마법의 숲 퀘스트 3개 완료 → 퀘스트 문을 통과할 수 있음 |
 | `MoveWarnings` | 비정상 이동 경고 수 (5 = Kick, 시간이 지나면 줄어듦) |
 
 leaderstats 에는 `Money`, `Speed` 가 보기 좋은 글자(StringValue, 예 `"$1.5K"`)로 들어 있습니다.
@@ -193,12 +206,12 @@ leaderstats 에는 `Money`, `Speed` 가 보기 좋은 글자(StringValue, 예 `"
 ### 월드 오브젝트 Attribute / 태그 (UI·연출용, 이름은 `Tags`)
 
 - **경비 모델**(`Guardian` 태그): `BiomeId`, `GuardName`, **`State` = `"Sleeping"`(집에서 잠, Z 표시) / `"Chase"`(쫓는 중) / `"Return"`(집으로 걸어감)**, `TargetUserId`. 집 = `MapLayout.guardHome`. 경비 파트는 CollisionGroup `"Guardians"`(경비끼리 안 부딪힘 — 붙이는 겉모습 파트도 서버가 자동으로 같은 그룹으로 바꿈). 경비 거리 표시는 `TargetUserId == 내 UserId` 인 경비의 `HumanoidRootPart` 와 내 거리.
-- 알 파트(`Egg` 태그): `EggUid, PetId, BiomeId, Rarity, Size, Mutations("silver,bloom" 식), Special, QuestOnly, EggState("Nest"/"Carried"/"Dropped"), WeightKg`(2판). 들고 있을 때는 머리 위에 용접됨.
+- 알 파트(`Egg` 태그): `EggUid, PetId, BiomeId, Rarity, Size, Mutations("silver,bloom" 식), Special, EggState("Nest"/"Carried"/"Dropped"), WeightKg`(2판). 들고 있을 때는 머리 위에 용접됨.
   - **`DroppedAt`, `ExpiresAt`** (2판 수정, number, `workspace:GetServerTimeNow()` 기준): `EggState == "Dropped"` 일 때만 있음 (둥지·들고 있을 때는 nil). 머리 위 카운트다운 = `math.ceil(ExpiresAt - workspace:GetServerTimeNow())` 초 ("32초"). 0 이 되면 서버가 알을 지움.
 - **부화 중 알**(`IncubatingEgg` 태그): **2판 수정: 플레이어가 `PlaceEgg` 로 고른 우리 안 자리 바닥 위** (`MapLayout.toWorld(PlotIndex, record.x, record.z)`). `EggUid, OwnerUserId, PlotIndex, PetId, Size, Mutations, Special, Progress, Required, Ready` (1초마다 갱신, `SlotIndex` 없음) → 머리 위 "에그 1m 52s" = `(Required - Progress) / 성장속도`(밤 30배). 다 자라면 선임이 붙인 `ProximityPrompt`(E) → `HatchEgg(EggUid)`. 다시 줍기 프롬프트(선택) → `PickUpPlacedEgg(EggUid)`.
 - `IncubatorSlot` 태그(부화 알 받침): **2판 수정에서 안 씀** — 받침을 지우면 `MapLayout.incubatorSpots` 도 지웁니다.
 - **2단계 특수 장소** — 자리는 `MapLayout.specials`. 맵(`Workspace.Map`)에 같은 태그·Attribute 파트가 있으면 그걸 쓰고, 없으면 서버가 그 자리에 임시 파트를 `Workspace.Map.Specials` 에 만듦(Attribute `Placeholder = true`). 거리 판정은 파트 상자 표면 기준.
-  - `SakuraIncubator` (벚꽃) / `Altar` (천사&악마, Attr `Side` = `"light"`/`"dark"` 꼭 필요, 서버가 `PendingCount` 씀) / `Shrine` (비밀 통로) / `QuestGate` (마법의 숲, 서버가 `CollisionGroup = "QuestGate"`, 퀘스트 끝낸 사람은 `"QuestPassed"`)
+  - `SakuraIncubator` (벚꽃) / `Altar` (천사&악마, Attr `Side` = `"light"`/`"dark"` 꼭 필요, 서버가 `PendingCount` 씀) / `Shrine` (비밀 통로). (5판: 마법의 숲 `QuestGate` 와 CollisionGroup `QuestGate`/`QuestPassed` 없앰)
   - `SakuraCrystal` (서버가 만듦): 초기화 때 벚꽃 둥지 근처 3개, 안에 `CrystalPrompt`.
 - `FusionMachine` (Attr `PlotIndex`, 자리 `plot.fusion`), **`SellStall`** (2판, 자리 `hubSpots.sellStall` 또는 `plot.sellStall`), `Treadmill` (Attr `PlotIndex`, 자리·크기 `MapLayout.treadmillRect` — 서버 판정은 MapLayout 숫자로 함).
 - `NightWall`: 2판은 허브 경계 z = 0 에 1장 (`MapLayout.NIGHT_WALL`). 서버가 밤·대기에 `MapBuilder.setNightWalls(true)`.
@@ -218,10 +231,11 @@ tools: { bearTrap = n },
 incubators: { IncubatorRecord },   -- 우리에 놓인 알 (x, z = 베이스 기준 좌표, 최대 placedEggMax = 8)
 eggs: { BagEgg },                  -- 2판 수정: 알 가방 (최대 eggInventoryMax = 50). eggQueue 는 없어짐
 eggInventoryMax, placedEggMax,
-freeRewardClaimed, plotIndex, saveEnabled,
+plotIndex, saveEnabled,
 sakuraCrystals, sakuraUnlocked, shrineUsed: { [resultPetId]: true },
-quests: { QuestView }, questsDone,
-petInventoryMax
+petInventoryMax,
+tutorial: TutorialView             -- 5판: { step, total, text, hint, done } (끝난 사람은 done = true, step 6)
+                                   -- 5판에서 없앰: freeRewardClaimed, quests, questsDone
 ```
 
 ## 5. DataUpdate 섹션
@@ -234,9 +248,8 @@ petInventoryMax
 | `"index"` | `{ indexDiscovered, indexClaimed, indexCompleteClaimed, unlockedWeapons }` |
 | `"upgrades"` | `{ penLevel, penSlots, treadmillLevel, trails, equippedTrail, trailMultiplier }` (트레일 구매·`EquipTrail` 때도) |
 | `"tools"` | `{ tools }` |
-| `"flags"` | `{ freeRewardClaimed }` |
 | `"special"` | `{ sakuraCrystals, sakuraUnlocked, shrineUsed }` |
-| `"quests"` | `{ quests, questsDone }` |
+| **`"tutorial"`** (5판) | `{ tutorial = TutorialView }` — 튜토리얼 단계가 바뀔 때 (`TutorialUpdate` 와 같이 옴). 5판에서 `"flags"`(무료 보상)·`"quests"` 섹션 없앰 |
 
 ## 6. 화면별로 필요한 것 (2판 F)
 
@@ -259,7 +272,10 @@ petInventoryMax
 | 펫 보관함 + Equip Best | `State.get().pets/equipped/penSlots`, `EquipPet`, `UnequipPet`, `EquipBest`, `n / petInventoryMax`, `PetsSold` |
 | 도감(인덱스) + 모두 획득 | `indexDiscovered/indexClaimed`, `Progression.biomeProgress`, `ClaimIndexReward("all")` |
 | 상점(우리/러닝머신/트레일) + 표지판 가격 | `Upgrades` 데이터 + `Economy.nextPenCost/nextTreadmillCost`, `PurchaseUpgrade(kind, id)` |
-| 퓨전 머신 / 사쿠라 / 제단 / 비밀 통로 / 퀘스트 | 2단계와 같음 (`FuseRequest`·`FusionResult`, `SakuraOffer`·`SakuraApply`·`SakuraResult`, `AltarOffer`·`AltarUpdate`, `ShrineFuse`·`ShrineResult`, `QuestUpdate`) |
+| 퓨전 머신 / 사쿠라 / 제단 / 비밀 통로 | 2단계와 같음 (`FuseRequest`·`FusionResult`, `SakuraOffer`·`SakuraApply`·`SakuraResult`, `AltarOffer`·`AltarUpdate`, `ShrineFuse`·`ShrineResult`). 5판: 퀘스트 창·문 없앰 |
+| **튜토리얼 패널 (5판)** | `TutorialUpdate` / `State.get().tutorial` (`TutorialView`): "n / 5" + `text` 큰 글씨 + `hint` 작은 글씨, `done` 이면 숨김. 끝내는 순간 `reward`(500) 축하 연출. 화살표·강조는 선임 자유 (1 숲 둥지 · 2 허브 경계 `MapLayout.SAFE_ZONE_Z` · 3 핫바/알 창 + 내 우리 · 4 우리 안 알 · 5 펫 창 장착 버튼) |
+| **랭킹판 (5판)** — 오른쪽 위 / 허브 판 | `LeaderboardUpdate { money, speed }` → 이름 + `Format.money(value)` / `Format.number(value)`, 내 줄(`userId == LocalPlayer.UserId`) 강조. 처음 들어오면 바로 한 번 옴 |
+| **펫 쓰다듬기 (5판)** | 내 우리 PenPet 모델(Attr `PetUid`)에 ProximityPrompt/클릭 → `PetPet(petUid)` (서버가 20 스터드·1초 쿨다운 확인). `PetPetted(ownerUserId, petUid)` 받으면 그 펫 위 하트 + 소리 (모두의 화면) |
 | 채팅 공지 / 잡힘 / 부화 / 오프라인 | `Announce`, `Caught`, `HatchResult`, `OfflineIncome` |
 
 ## 7. 2판 규칙 요약 (자세한 건 코드 맨 위 주석)
@@ -273,7 +289,9 @@ petInventoryMax
 - **러닝머신** (`TreadmillService`): 내 베이스 벨트에 올라서면 고정(WalkSpeed 0, 가운데로, 복도 쪽을 봄). 1초마다 속도 += 걸음당 속도 × 3 + `TreadmillStep`. 점프(`TreadmillLeave`)·벨트 이탈·알 듦·기절이면 내림. 내린 뒤엔 벨트 밖으로 한 번 나가야 다시 탐. 0레벨이면 안 타고 5초에 한 번 안내.
 - **밤**: 허브 경계 벽 1장. 밤 시작 때 허브 밖(z ≥ 0)에 있던 사람(알을 들었든 아니든)은 내 베이스 앞마당으로 순간이동 (베이스가 없으면 `hubSpots.mainSpawn`) → 알을 들고 있었으면 허브라 바로 가방으로 배달.
 - **판매**: 판매 가게 14 안, 가격 = 초당 수입 × 60 [추정].
-- 퓨전·구역 무기·사쿠라·제단·퀘스트 규칙은 2단계 그대로 (`FusionRules`, `Data/Weapons`, `SakuraRules`, `AltarRules`, `Data/Quests`).
+- 퓨전·구역 무기·사쿠라·제단 규칙은 2단계 그대로 (`FusionRules`, `Data/Weapons`, `SakuraRules`, `AltarRules`). 5판: 퀘스트(`Data/Quests`·`QuestRules`) 없앰.
+- **5판 튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 저장 `tutorialStep` 1~5 / 6 = 끝. 진행·되돌림은 맨 위 [5판] 상자. 튜토리얼 중엔 부화 펫 자동 장착 안 함 (`Data/Tutorial.HOLD_AUTO_EQUIP`).
+- **5판 랭킹판** (`LeaderboardService`): 10초마다 돈·실효 속도 상위 10명 fireAll. **5판 쓰다듬기** (`PetService.petPet`): 내 우리 20 안 · 장착 펫 · 1초 쿨다운.
 
 ## 8. 선임이 붙여야 할 것 (2판 체크리스트)
 
@@ -289,6 +307,10 @@ petInventoryMax
 - [x] ~~`tests/crossrefs.spec.luau` 의 `PENDING_UI`(DropEgg·SellPet·TreadmillLeave)~~ — 지움 (2판 마무리, 클라가 셋 다 보냄)
 - [ ] **알 창 + 우리에 놓기 (2판 수정)**: 오른쪽 알 버튼 창에 `snap.eggs`(가방) 목록 → 알 고르면 놓기 모드 → 내 우리 바닥 클릭/터치 → `PlaceEgg(uid, hit.X, hit.Z)` (미리보기 `EggPlacement.check`). 놓인 알 다시 줍기 프롬프트/버튼 → `PickUpPlacedEgg(uid)`. 다 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `PlaceEgg`·`PickUpPlacedEgg` 지우기
 - [ ] **2판 수정 클라 정리**: `EggDelivered` 토스트는 "가방에 넣었어요" 뜻으로, `EggGranted` 토스트 "부화 슬롯에 들어갔어요/기다리는 중" → "가방에 들어갔어요", `DebugController` 의 `EggDelivered` 출력(`record.slot` %d — 이제 nil 이라 에러), `IncubatorController` 의 `record.slot` 대신 순서, MapBuilder 받침(`IncubatorSlot`, `incubatorSpots`) 지우기, 바닥 알 "32초" 카운트다운(`ExpiresAt`)
+- [ ] **5판 튜토리얼 패널**: `TutorialUpdate` / `State.get().tutorial` 로 "n/5 + 글" 패널, `done` 이면 숨김, 끝내는 순간 `reward` 축하 (6절). 튜토리얼 중엔 부화 펫이 자동 장착 안 되니 5단계에서 펫 창 장착 버튼을 눈에 띄게
+- [ ] **5판 랭킹판**: `LeaderboardUpdate` → 오른쪽 위 리더보드(이름 / 돈 / 속도) + 허브 판(선택)
+- [ ] **5판 쓰다듬기**: PenPet 모델에 프롬프트/클릭 → `PetPet(uid)`, `PetPetted(ownerUserId, uid)` → 하트·소리. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `PetPet` 지우기
+- [ ] **5판 정리**: `Theme.Menu` 의 `quest`·`gift` 색(이제 안 씀), `NotifyController` 선물 알 출처 글, `docs/UI.md` 의 퀘스트·선물 설명
 - [ ] **트레일 창 장착/장착 해제 버튼 → `EquipTrail(id)` / `EquipTrail("none")`** (2판 마무리). 버튼 글자는 `snap.equippedTrail == id` 이면 "장착 해제", 가졌으면 "장착", 아니면 가격. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `EquipTrail` 지우기 (안 지우면 테스트가 알려 줌)
 
 **서버가 계속 부르는 MapBuilder 공개 함수 (이름·모양 유지 부탁):** `start()`, `getFolder(name)` ("Eggs"/"Guardians"/"Traps"/"Incubating"), `getNests(biomeId): {BasePart}` (없으면 빈 표 → 서버가 `nestsFor` 자리 바닥에 놓음), `groundY(position, ignore): number`, `setNightWalls(on)`, `setPlotOwner(index, player?)`, `plotCount()`, `getPlot(index)` (서버는 이제 안 씀). **더 이상 안 부름:** `isInSafeZone`, `isInPlot`, `findBiomeAt`, `getZone`, `getZonePart`, `getGuardSpawn`.

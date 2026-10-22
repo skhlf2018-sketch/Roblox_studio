@@ -19,10 +19,12 @@
 
 	대기(Intermission) 때: 둥지·바닥 알 전부 지우고 새로 놓음 + "ALL EGG RESET!" + 희귀 알 추첨/공지.
 	들고 있는 알은 지우지 않음 (밤에 베이스로 텔레포트되어 배달 가능).
-	초기화가 끝나면 EggService.resetDone:fire(cycleNumber) → 사쿠라 크리스탈·퀘스트 비밀 알이 이어서 놓임.
+	초기화가 끝나면 EggService.resetDone:fire(cycleNumber) → 사쿠라 크리스탈이 이어서 놓임.
+	5판: 초기화 때 둥지 풀 밖 특별 알(옛 퀘스트 알 지터버그 8%·영혼 세계 수호자 1%, EggSpawn.EXTRA_SPECIALS)도 굴려서 공지.
+	     퀘스트 전용 알(questOnly)은 없앰 → 모든 알을 누구나 훔칠 수 있음.
 
 	2단계:
-	  - spawnSpecialEgg: 다른 서비스가 특별 알을 둥지에 놓음 (예: 영혼 세계 수호자, questOnly = 퀘스트 끝낸 사람만 줍기)
+	  - spawnSpecialEgg: 특별 알을 그 구역 둥지에 놓음 (5판: 초기화 추가 특별 알이 씀, 다른 특별 알이 있는 둥지는 되도록 피함)
 	  - 순간이동 방지: 주운 위치·시각(pickedPosition/pickedAt)을 기억 → BaseService 가 배달 때 확인.
 	    서버가 순간이동시키면 resetCarryOrigin 으로 기준점을 옮김.
 	  - confiscate: 치트 의심 배달은 알을 원래 둥지로 돌려보냄 (그 자리에 떨어뜨리면 다시 주워 배달 가능하므로)
@@ -34,6 +36,9 @@
 	  - DropEgg(): 스스로 알을 버림 → 항상 그 자리에 떨어짐 (경비 추격 끝). 다시 주우면 경비가 또 쫓음.
 	  - 경비 잡힘 유예(GUARD_CATCH_GRACE_SECONDS)는 둥지에서 주울 때만 (바닥 알 다시 줍기는 유예 없음 → 버렸다 줍기 반복으로 못 버팀)
 	  - 플레이어 Attr CarryWeightKg = 든 알 무게 (Sizes.carryKg, 표시용), 알 파트 Attr WeightKg 도 같음.
+
+	5판 신호 (튜토리얼): pickedUp(player, EggInfo) = 알을 들었음 / lost(player) = 든 알을 놓침
+	  (잡힘·무기·곰덫·DropEgg·죽음·나감·치트 의심 압수 — 배달(takeCarried)은 lost 아님)
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -79,7 +84,6 @@ export type Egg = {
 	size: string,
 	mutations: { string },
 	special: boolean,
-	questOnly: boolean, -- 퀘스트 3개를 끝낸 사람만 주울 수 있음
 	part: BasePart,
 	prompt: ProximityPrompt,
 	state: EggState,
@@ -94,7 +98,6 @@ export type Egg = {
 }
 
 export type SpecialEggOptions = {
-	questOnly: boolean?,
 	announce: boolean?,
 }
 
@@ -121,6 +124,9 @@ local EggService = {}
 
 -- 초기화(대기 단계) 알 배치가 끝난 뒤 (cycleNumber)
 EggService.resetDone = Signal.new()
+-- 5판: 누가 알을 들었음 (player, EggInfo) / 든 알을 놓침 (player) — TutorialService
+EggService.pickedUp = Signal.new()
+EggService.lost = Signal.new()
 
 local EGG_HEIGHT_SCALE = 1.25 -- 알은 옆보다 위아래로 1.25배 김 (SpecialMesh Scale)
 
@@ -178,7 +184,6 @@ type EggSeed = {
 	size: string,
 	mutations: { string },
 	special: boolean,
-	questOnly: boolean,
 }
 
 local function eggTitle(egg: EggSeed): string
@@ -243,7 +248,6 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	part:SetAttribute("Size", egg.size)
 	part:SetAttribute("Mutations", table.concat(egg.mutations, ","))
 	part:SetAttribute("Special", egg.special)
-	part:SetAttribute("QuestOnly", egg.questOnly)
 	part:SetAttribute("WeightKg", carryKg(egg.size))
 	part:SetAttribute("EggState", "Nest")
 	CollectionService:AddTag(part, Tags.Egg)
@@ -252,7 +256,6 @@ local function makeEggPart(egg: EggSeed): (BasePart, ProximityPrompt)
 	prompt.Name = "StealPrompt"
 	prompt.ActionText = "훔치기"
 	prompt.ObjectText = eggTitle(egg)
-		.. (if egg.questOnly then "\n(마법의 숲 퀘스트를 끝낸 사람만)" else "")
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = Config.PROMPT_DISTANCE
@@ -316,13 +319,7 @@ local function connectPrompt(prompt: ProximityPrompt, uid: string)
 	end)
 end
 
-local function spawnEgg(
-	slot: NestSlot,
-	pet: Pets.Pet,
-	traits: EggRoll.EggTraits,
-	special: boolean,
-	questOnly: boolean?
-): Egg
+local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits, special: boolean): Egg
 	eggCounter += 1
 	local seed: EggSeed = {
 		uid = "e" .. tostring(eggCounter),
@@ -332,7 +329,6 @@ local function spawnEgg(
 		size = traits.size,
 		mutations = traits.mutations,
 		special = special,
-		questOnly = questOnly == true,
 	}
 	local part, prompt = makeEggPart(seed)
 	local egg: Egg = {
@@ -343,7 +339,6 @@ local function spawnEgg(
 		size = seed.size,
 		mutations = seed.mutations,
 		special = seed.special,
-		questOnly = seed.questOnly,
 		part = part,
 		prompt = prompt,
 		state = "Nest",
@@ -470,6 +465,10 @@ function EggService.resetAll(cycleNumber: number)
 			end
 		end
 	end
+	-- 5판: 둥지 풀 밖 특별 알 (옛 퀘스트 알) — 그 펫 구역 둥지에 놓고 공지, 누구나 훔침
+	for _, pet in EggRoll.rollExtraSpecials(rand) do
+		EggService.spawnSpecialEgg(pet.biome, pet.id, { announce = true })
+	end
 	EggService.resetDone:fire(cycleNumber)
 end
 
@@ -481,12 +480,19 @@ function EggService.spawnSpecialEgg(biomeId: string, petId: string, options: Spe
 		return nil
 	end
 	-- 누가 들고 있거나 바닥에 떨어진 알의 예약 둥지는 피함 (둥지 위에 놓인 알·빈 둥지만)
+	-- 5판: 다른 특별 알이 놓인 둥지는 되도록 피함 (같은 초기화의 희귀 알 공지를 지우지 않게)
 	local free: { NestSlot } = {}
+	local fallback: { NestSlot } = {}
 	for _, slot in slots do
 		local current = if slot.eggUid then eggs[slot.eggUid] else nil
-		if not current or current.state == "Nest" then
+		if not current or (current.state == "Nest" and not current.special) then
 			table.insert(free, slot)
+		elseif current.state == "Nest" then
+			table.insert(fallback, slot)
 		end
+	end
+	if #free == 0 then
+		free = fallback
 	end
 	if #free == 0 then
 		return nil
@@ -496,25 +502,22 @@ function EggService.spawnSpecialEgg(biomeId: string, petId: string, options: Spe
 	if old then
 		destroyEgg(old)
 	end
-	local questOnly = options ~= nil and options.questOnly == true
-	local egg = spawnEgg(slot, pet, EggRoll.rollTraits(rand), true, questOnly)
+	local egg = spawnEgg(slot, pet, EggRoll.rollTraits(rand), true)
 	if options and options.announce then
 		local biome = Biomes.get(biomeId)
 		local rarity = Rarities.get(pet.rarity)
 		Net.fireAll(Remotes.ToClient.Announce, {
 			kind = "rareEgg",
 			text = string.format(
-				"%s 구역에 %s %s 알 등장!%s",
+				"%s 구역에 %s %s 알 등장!",
 				if biome then biome.name else biomeId,
 				if rarity then rarity.name else pet.rarity,
-				pet.name,
-				if questOnly then " (퀘스트를 끝낸 사람만 주울 수 있어요)" else ""
+				pet.name
 			),
 			biomeId = biomeId,
 			petId = pet.id,
 			rarity = pet.rarity,
 			eggUid = egg.uid,
-			questOnly = questOnly,
 		})
 	end
 	return egg.uid
@@ -570,16 +573,6 @@ function EggService.tryPickup(player: Player, uid: string)
 		Net.notify(player, "error", "이미 알을 들고 있어요!")
 		return
 	end
-	if egg.questOnly and not data.questsRewarded then
-		if Sessions.useCooldown(session, "questOnlyNotice", 3, os.clock()) then
-			Net.notify(
-				player,
-				"error",
-				"마법의 숲 퀘스트를 모두 끝낸 사람만 주울 수 있는 알이에요!"
-			)
-		end
-		return
-	end
 	local now = os.clock()
 	if Sessions.isStunned(session, now) then
 		return
@@ -624,6 +617,7 @@ function EggService.tryPickup(player: Player, uid: string)
 		yourSpeed = session.carrySpeed,
 		weightKg = carryKg(egg.size),
 	})
+	EggService.pickedUp:fire(player, EggService.info(egg))
 end
 
 function EggService.getCarried(player: Player): Egg?
@@ -703,6 +697,7 @@ function EggService.dropCarried(player: Player, cause: CatchCause): EggOutcome?
 	clearCarry(player)
 	ensurePart(egg)
 
+	EggService.lost:fire(player)
 	local outcome = EggRules.dropOutcome(cause, egg.biomeId, MapLayout.zoneAt(position.Z))
 	if outcome == "ReturnToNest" and returnToNest(egg) then
 		return "ReturnToNest"
@@ -719,6 +714,7 @@ function EggService.dropCarriedAt(player: Player, position: Vector3): EggOutcome
 	end
 	local character = player.Character
 	clearCarry(player)
+	EggService.lost:fire(player)
 	ensurePart(egg)
 	placeDropped(egg, position, if character then { character } else {})
 	return "DropHere"
@@ -731,6 +727,7 @@ function EggService.confiscate(player: Player)
 		return
 	end
 	clearCarry(player)
+	EggService.lost:fire(player)
 	ensurePart(egg)
 	if not returnToNest(egg) then
 		destroyEgg(egg)

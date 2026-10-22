@@ -34,10 +34,10 @@ local Tags = {
 	SakuraIncubator = "SakuraIncubator", -- 벚꽃 구역 사쿠라 인큐베이터
 	Altar = "Altar", -- 천사&악마 제단 2개. Attr: Side ("light" = 천국 / "dark" = 지옥), PendingCount(대기 중인 제물 수)
 	Shrine = "Shrine", -- 천사&악마 비밀 통로(폭포 옆) 합성 제단
-	QuestGate = "QuestGate", -- 마법의 숲 퀘스트 문 (퀘스트 3개 끝낸 사람만 통과: CollisionGroup "QuestGate")
+	-- (5판: 마법의 숲 퀘스트 문 QuestGate 는 퀘스트와 함께 없앰 → 마법의 숲은 항상 열림)
 
 	-- 동적 오브젝트 (서버가 만듦)
-	Egg = "Egg", -- 둥지/바닥/머리 위 알. Attr: EggUid, PetId, BiomeId, Rarity, Size, Mutations, Special, EggState, QuestOnly, WeightKg
+	Egg = "Egg", -- 둥지/바닥/머리 위 알. Attr: EggUid, PetId, BiomeId, Rarity, Size, Mutations, Special, EggState, WeightKg
 	IncubatingEgg = "IncubatingEgg", -- 우리에 놓인 부화 중 알 (PlaceEgg 한 자리). Attr: EggUid, OwnerUserId, PlotIndex, PetId, Size, Mutations, Special, Progress, Required, Ready
 	BearTrap = "BearTrap", -- 설치된 곰덫. Attr: OwnerUserId
 	SakuraCrystal = "SakuraCrystal", -- 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 (ProximityPrompt "CrystalPrompt" 로 줍기)
@@ -67,18 +67,11 @@ Tags.PlayerAttributes = {
 	-- 2단계
 	SakuraCrystals = "SakuraCrystals", -- 사쿠라 크리스탈 개수
 	SakuraUnlocked = "SakuraUnlocked", -- 사쿠라 인큐베이터 해금했나
-	QuestsDone = "QuestsDone", -- 마법의 숲 퀘스트 3개 완료 (문 통과 가능)
 	MoveWarnings = "MoveWarnings", -- 비정상 이동 경고 수 (저장 안 함, 5 = Kick)
 	-- 2판
 	OnTreadmill = "OnTreadmill", -- 러닝머신 위에 고정돼 달리는 중 (bool)
 	CurrentZone = "CurrentZone", -- 지금 있는 곳: 구역 id | "hub" | "" (맵 밖)
 	CarryWeightKg = "CarryWeightKg", -- 들고 있는 알 무게(kg, 표시용). 0 = 안 듦
-}
-
--- 서버가 만드는 CollisionGroup 이름 (QuestService)
-Tags.CollisionGroups = {
-	QuestGate = "QuestGate", -- 퀘스트 문 파트
-	QuestPassed = "QuestPassed", -- 퀘스트 끝낸 플레이어 캐릭터 → 문과 안 부딪힘
 }
 
 -- ReplicatedStorage.GameState 폴더 Attribute

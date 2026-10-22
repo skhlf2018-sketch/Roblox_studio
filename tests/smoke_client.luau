@@ -6,7 +6,7 @@
 
 	하는 일: 클라 컨트롤러 전부 start() → Snapshot → 창 전부 열기·버튼 누르기
 	        → 2단계: 퓨전 머신·사쿠라·제단·비밀 통로 프롬프트 누르기 → 펫 고르기 창에서 카드 고르고 확인
-	          → 보낸 Remote 이름·인자 확인 → 결과 이벤트(FusionResult/SakuraResult/AltarUpdate/ShrineResult/QuestUpdate)
+	          → 보낸 Remote 이름·인자 확인 → 결과 이벤트(FusionResult/SakuraResult/AltarUpdate/ShrineResult) (5판: 퀘스트·선물 창 없앰)
 	        → 무기 손 모양 붙이기·휘두르기, 폰 화면에서 버튼 크기(46px 이상) 계산 확인
 	task.wait 는 바로 멈추고(무한 루프 방지), task.delay 는 바로 실행합니다.
 ]]
@@ -482,14 +482,7 @@ altarDark:SetAttribute("PendingCount", 1)
 tag(altarDark, "Altar")
 local shrine = worldPart("SecretShrine", roblox.Vector3.new(0, 2, -5))
 tag(shrine, "Shrine")
-local gateModel = Instance.new("Model")
-gateModel.Name = "QuestGateModel"
-gateModel.Parent = Workspace
-local door = worldPart("Door", roblox.Vector3.new(0, 6, 30), roblox.Vector3.new(1, 12, 10), gateModel)
-for i = 1, 3 do
-	worldPart("Rune" .. i, roblox.Vector3.new(i, 1, 26), nil, gateModel)
-end
-tag(door, "QuestGate")
+-- (5판: 마법의 숲 퀘스트 문 QuestGate 없앰)
 local crystal = worldPart("SakuraCrystal_c1", roblox.Vector3.new(3, 1, 3))
 tag(crystal, "SakuraCrystal")
 -- 2판 월드 흉내: 우리 펫(PenPet) · 우리 안 부화 중 알 · 업그레이드 표지판 · 판매 가게(가까이) · 트레일 상점
@@ -569,14 +562,12 @@ local function body()
 			"IndexController",
 			"PetsController",
 			"ShopController",
-			"GiftController",
 			"SettingsController",
 			"HotbarController",
 			"WorldFxController",
 			"FusionController",
 			"SakuraController",
 			"AltarController",
-			"QuestController",
 			"WeaponController",
 			"TreadmillController",
 			"TrailController",
@@ -662,31 +653,20 @@ local function body()
 		},
 		eggInventoryMax = 50,
 		placedEggMax = 8,
-		freeRewardClaimed = false,
 		plotIndex = 1,
 		saveEnabled = true,
 		sakuraCrystals = 3,
 		sakuraUnlocked = false,
 		shrineUsed = {},
-		quests = {
-			{
-				id = "deliver_eggs",
-				name = "마법의 숲 알 20개 배달하기",
-				progress = 4,
-				target = 20,
-				done = false,
-			},
-			{
-				id = "fuse_once",
-				name = "퓨전 머신으로 동물 합성하기",
-				progress = 0,
-				target = 1,
-				done = false,
-			},
-			{ id = "deliver_eternal", name = "영원 알 1개 배달하기", progress = 0, target = 1, done = false },
-		},
-		questsDone = false,
 		petInventoryMax = 500,
+		-- 5판: 튜토리얼 (퀘스트 quests/questsDone·무료 보상 freeRewardClaimed 는 없어짐)
+		tutorial = {
+			step = 1,
+			total = 5,
+			text = "숲에서 알 훔치기",
+			hint = "둥지의 알 가까이에서 E",
+			done = false,
+		},
 	}
 	fire("Snapshot", snapshot)
 	check(true, "Snapshot 처리")
@@ -747,7 +727,7 @@ local function body()
 	end
 
 	print("[창 (2판 원작 스타일)]")
-	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "Trail" } do
+	for _, w in { "Index", "Pets", "Shop", "Settings", "Trail" } do
 		Windows.open(w)
 		check(Windows.isOpen(w), "창 열기 " .. w)
 	end
@@ -844,7 +824,7 @@ local function body()
 		local s = Ui.fitScale(roblox.Vector2.new(holder.Size.X.Offset, holder.Size.Y.Offset))
 		return (button and button.Size.Y.Offset or 0) * s
 	end
-	for _, w in { "Index", "Pets", "Shop", "Gift", "Settings", "PetPicker", "Trail" } do
+	for _, w in { "Index", "Pets", "Shop", "Settings", "PetPicker", "Trail" } do
 		local holder = windowsLayer and windowsLayer:FindFirstChild(w)
 		local header = holder and holder:FindFirstChild("Header", true)
 		local x = header and header:FindFirstChild("Button")
@@ -1267,43 +1247,11 @@ local function body()
 	trigger(shrinePrompt)
 	check(not Windows.isOpen("PetPicker") and #sent == before, "이미 사용함이면 창 안 열림")
 
-	print("[퀘스트]")
-	local questPanel = playerGui:FindFirstChild("QuestPanel", true)
-	check(questPanel ~= nil, "퀘스트 패널 있음")
-	check(findButton("") ~= nil and playerGui:FindFirstChild("quest", true) ~= nil, "왼쪽 메뉴 '퀘스트' 버튼")
-	click(playerGui:FindFirstChild("quest", true))
-	check(questPanel.Visible == true, "메뉴 버튼으로 패널 열림")
-	fire("QuestUpdate", {
-		quests = {
-			{
-				id = "deliver_eggs",
-				name = "마법의 숲 알 20개 배달하기",
-				progress = 20,
-				target = 20,
-				done = true,
-			},
-			{
-				id = "fuse_once",
-				name = "퓨전 머신으로 동물 합성하기",
-				progress = 1,
-				target = 1,
-				done = true,
-			},
-			{ id = "deliver_eternal", name = "영원 알 1개 배달하기", progress = 0, target = 1, done = false },
-		},
-		allDone = false,
-		gateOpen = false,
-	})
-	local rune2 = gateModel:FindFirstChild("Rune2")
-	local rune3 = gateModel:FindFirstChild("Rune3")
-	check(
-		rune2.Material == roblox.Enum.Material.Neon and rune3.Material ~= roblox.Enum.Material.Neon,
-		"룬 2개 빛남 (끝낸 퀘스트 2개)"
-	)
-	player:SetAttribute("QuestsDone", true)
-	sigOf(player, "Attr_QuestsDone"):Fire()
-	check(rune3.Material == roblox.Enum.Material.Neon, "문 열림: 룬 전부 빛남")
-	check(door.LocalTransparencyModifier > 0, "문이 내 화면에서 반투명")
+	print("[5판: 퀘스트·선물 없앰]")
+	check(playerGui:FindFirstChild("QuestPanel", true) == nil, "퀘스트 패널 없음")
+	check(playerGui:FindFirstChild("quest", true) == nil, "왼쪽 메뉴 '퀘스트' 버튼 없음")
+	check(playerGui:FindFirstChild("gift", true) == nil, "왼쪽 메뉴 '선물' 버튼 없음")
+	check(not Windows.isOpen("Gift"), "선물 창 없음")
 
 	print("[무기 손 모양]")
 	local tool = Instance.new("Tool")
@@ -1398,7 +1346,6 @@ local function body()
 	local hudLayer = screen:FindFirstChild("Hud")
 	local menu = hudLayer:FindFirstChild("LeftMenu")
 	local bar = hudLayer:FindFirstChild("Hotbar")
-	local questPanelNode = playerGui:FindFirstChild("QuestPanel", true)
 
 	-- 핫바 칸 채우기 (도구를 가방에)
 	local function setTools(kinds)
@@ -1497,7 +1444,7 @@ local function body()
 
 		local rects = menuRects()
 		local plan = Hud.menuPlan()
-		check(#rects == 6, tag .. " 메뉴 버튼 6개")
+		check(#rects == 4, tag .. " 메뉴 버튼 4개 (5판: 퀘스트·선물 버튼 없앰)")
 		local joy = Layout.joystickZone(area)
 		local inside, big, clearJoy, badgeOk = true, true, true, true
 		local parts = {}
@@ -1563,10 +1510,6 @@ local function body()
 		for _, r in rects do
 			check(not Layout.overlaps(r, hb), tag .. " 메뉴 " .. r.name .. " 와 핫바 안 겹침")
 		end
-		check(
-			questPanelNode and questPanelNode.Position.X.Offset >= Hud.menuRight(),
-			tag .. " 퀘스트 패널이 메뉴 오른쪽에서 시작"
-		)
 	end
 	-- 원래대로 (폰 가로)
 	UIS.TouchEnabled, UIS.MouseEnabled, UIS.KeyboardEnabled = true, false, false

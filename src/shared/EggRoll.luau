@@ -181,6 +181,18 @@ function EggRoll.rollSpecials(biomeId: string, side: string?, rand: RandomFn): {
 	return result
 end
 
+-- 5판: 둥지 풀 밖 특별 알(EggSpawn.EXTRA_SPECIALS, 옛 퀘스트 알) 추첨 — 이번 초기화에 놓일 펫 목록 (모르는 펫은 건너뜀)
+function EggRoll.rollExtraSpecials(rand: RandomFn): { Pet }
+	local result: { Pet } = {}
+	for _, entry in EggSpawn.EXTRA_SPECIALS do
+		local pet = Pets.get(entry.petId)
+		if pet and rand() < entry.chance then
+			table.insert(result, pet)
+		end
+	end
+	return result
+end
+
 -- 1..count 중 서로 다른 칸 n 개를 무작위로 (특별 알 둥지 위치 고르기)
 function EggRoll.pickDistinct(count: number, n: number, rand: RandomFn): { number }
 	local indices: { number } = table.create(count)

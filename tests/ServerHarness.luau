@@ -12,7 +12,10 @@
 	  - Players / CollectionService / DataStoreService 등 서비스, 가짜 플레이어·캐릭터
 	  - 맵(MapBuilder)·알(EggService)·월드 UI(Gui, Landmarks)·주기(CycleService) 서비스는 아래 mockModules 에서 가짜로 교체
 	진짜 그대로 쓰는 것: Sessions, Snapshot, Wallet, SpeedService, PetService, IndexService, UpgradeService, RewardService,
-	  BaseService, FusionService, AltarService, SakuraService, QuestService, AntiCheatService, DataService, DevCommands, Net ...
+	  BaseService, FusionService, AltarService, SakuraService, TutorialService, LeaderboardService, AntiCheatService,
+	  DataService, DevCommands, Net ...
+	5판: H.login 의 기본 데이터는 튜토리얼을 끝낸 사람 (튜토리얼 중엔 부화한 펫을 자동 장착하지 않으므로 옛 테스트가 그대로 돌게).
+	     튜토리얼 테스트는 H.login(player, { tutorialStep = 1 }). 가짜 EggService 도 pickedUp / lost 신호를 냄.
 
 	사용:
 	  local H = ServerHarness.install(Loader, T)        -- 가짜 세상 켜기 (모듈 캐시를 비움)
@@ -682,8 +685,17 @@ function ServerHarness.install(Loader, T, options)
 	-- 알(EggService): 누가 알을 들고 있는지 H.carry(player, egg) 로 정함
 	H.eggs = { carried = {}, taken = 0, confiscated = 0, droppedAt = {}, specials = {}, knockouts = {}, dropped = {} }
 	if not options.realEgg then
+		H.eggs.pickedUp = Signal.new()
+		H.eggs.lost = Signal.new()
+		local function lose(player, had)
+			if had then
+				H.eggs.lost:fire(player)
+			end
+		end
 		Loader.mock(SERVER .. "Services/EggService", {
 			resetDone = Signal.new(),
+			pickedUp = H.eggs.pickedUp,
+			lost = H.eggs.lost,
 			carriers = function()
 				return table.clone(H.eggs.carried)
 			end,
@@ -699,12 +711,16 @@ function ServerHarness.install(Loader, T, options)
 				return egg
 			end,
 			confiscate = function(player)
+				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil
 				H.eggs.confiscated += 1
+				lose(player, had)
 			end,
 			dropCarriedAt = function(player, position)
+				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil
 				table.insert(H.eggs.droppedAt, position)
+				lose(player, had)
 			end,
 			resetCarryOrigin = function() end,
 			nestPositions = function(biomeId)
@@ -718,6 +734,7 @@ function ServerHarness.install(Loader, T, options)
 				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil
 				table.insert(H.eggs.dropped, { player = player, cause = "drop", hadEgg = had ~= nil })
+				lose(player, had)
 				return had ~= nil
 			end,
 			spawnSpecialEgg = function(biomeId, petId, specialOptions)
@@ -728,10 +745,13 @@ function ServerHarness.install(Loader, T, options)
 				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil
 				table.insert(H.eggs.dropped, { player = player, cause = cause, hadEgg = had ~= nil })
+				lose(player, had)
 				return if had then "DropHere" else nil
 			end,
 			knockOut = function(player, fromPosition, cause, byName, power)
+				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil -- 진짜처럼 알을 놓침
+				lose(player, had)
 				table.insert(H.eggs.knockouts, {
 					player = player,
 					from = fromPosition,
@@ -751,6 +771,9 @@ function ServerHarness.install(Loader, T, options)
 		egg.pickedAt = egg.pickedAt or nowClock() - 1000 -- 경비 유예(1.5초)가 이미 지남
 		egg.graceUntil = egg.graceUntil or egg.pickedAt + 1.5 -- 둥지에서 주운 것처럼 (EggService 와 같은 규칙)
 		H.eggs.carried[player] = egg
+		if H.eggs.pickedUp then
+			H.eggs.pickedUp:fire(player, egg) -- 진짜 EggService.tryPickup 처럼 (튜토리얼 1 → 2)
+		end
 	end
 
 	-- 월드 이름표 (Util/Gui)
@@ -1038,6 +1061,8 @@ function ServerHarness.install(Loader, T, options)
 		local DataSchema = H.server("Logic/DataSchema")
 		local session = Sessions.create(player)
 		local data = DataSchema.default(H.time())
+		-- 5판: 기본은 튜토리얼을 끝낸 사람 (튜토리얼 테스트는 overrides.tutorialStep = 1)
+		data.tutorialStep = H.shared("Data/Tutorial").DONE
 		for key, value in overrides or {} do
 			data[key] = value
 		end

@@ -135,11 +135,15 @@ local Config = {
 	OFFLINE_INCOME_RATE = 1, -- 오프라인 수입 비율 (1 = 100%)
 	OFFLINE_POPUP_MIN_SECONDS = 60, -- 이보다 짧게 나갔다 오면 팝업 안 띄움
 
+	-- (5판: 무료 보상(선물) FREE_REWARD_SPEED·FREE_REWARD_GROUP_ID 없앰 — 사장님 지시)
+
 	------------------------------------------------------------------
-	-- 무료 보상 (설계문서 11장)
+	-- 5판: 랭킹판 (LeaderboardService) · 펫 쓰다듬기 (PetService PetPet)
 	------------------------------------------------------------------
-	FREE_REWARD_SPEED = 10000,
-	FREE_REWARD_GROUP_ID = 0, -- 0 = 그룹 확인 안 함. 그룹을 만들면 ID를 넣으세요.
+	LEADERBOARD_INTERVAL = 10, -- 이 초마다 LeaderboardUpdate (서버 전체)
+	LEADERBOARD_SIZE = 10, -- 돈·속도 각각 상위 몇 명
+	PET_PET_RADIUS = 20, -- 내 우리(울타리 사각형)에서 이 거리 안이어야 쓰다듬기
+	PET_PET_COOLDOWN = 1, -- 쓰다듬기 쿨다운(초, 사람마다)
 
 	------------------------------------------------------------------
 	-- 개발 명령 (DevCommands) 허용 목록
@@ -189,10 +193,7 @@ local Config = {
 	SHRINE_RADIUS = 14,
 	-- (선물 알 대기 줄 EGG_QUEUE_MAX 는 2판 수정에서 없앰: 선물 알도 가방으로, 상한 EGG_INVENTORY_MAX)
 
-	------------------------------------------------------------------
-	-- 마법의 숲 퀘스트 (설계문서 4장, QuestService / shared/Data/Quests)
-	------------------------------------------------------------------
-	QUEST_SECRET_EGG_CHANCE = 0.01, -- 퀘스트를 끝낸 사람이 서버에 있으면 초기화마다 영혼 세계 수호자 알 등장 확률
+	-- (5판: 마법의 숲 퀘스트 QUEST_SECRET_EGG_CHANCE 없앰 — 옛 퀘스트 알 2종은 Data/EggSpawn.EXTRA_SPECIALS)
 
 	------------------------------------------------------------------
 	-- 치트 방지 2단계: 서버 위치 검증 (AntiCheatService / Logic/MoveCheck)
@@ -217,7 +218,7 @@ local Config = {
 	------------------------------------------------------------------
 	DATASTORE_NAME = "StealAnEgg_PlayerData",
 	DATASTORE_KEY_PREFIX = "player_",
-	SCHEMA_VERSION = 4, -- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰
+	SCHEMA_VERSION = 5, -- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰 · 5 (5판): + tutorialStep, 퀘스트·무료 보상 칸 없앰
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

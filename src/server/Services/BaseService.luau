@@ -6,7 +6,7 @@
 	  - 배달 = 알을 든 채 허브(안전 구역, MapLayout.isInHub = z < 0)에 들어오는 순간 자동.
 	      경비 추격 끝(ChaseEnded reason "safe")과 같은 순간. 베이스가 없는 사람(8번째)도 똑같이 받음.
 	      → 알은 알 가방(data.eggs, 최대 EGG_INVENTORY_MAX, 저장)으로 → EggDelivered(BagEgg) + DataUpdate("eggs")
-	        + BaseService.delivered:fire(player, bagEgg) (퀘스트·사쿠라 크리스탈)
+	        + BaseService.delivered:fire(player, bagEgg) (사쿠라 크리스탈·튜토리얼)
 	      가방이 가득 차면 배달 안 됨: 알은 손에 그대로, 안내는 3초에 한 번 (가방을 비우면 다음 틱에 배달).
 	  - 가방의 알은 플레이어가 우리(penRect) 안 원하는 자리에 놓음: Remote PlaceEgg(eggUid, x, z) (월드 x, z)
 	      검증: 내 베이스가 있음 · 가방에 그 알 · 놓인 알 < PLACED_EGG_MAX · 내가 내 베이스 안(또는 그 자리 14 안)
@@ -16,12 +16,15 @@
 	      (부화 버튼처럼 거리 검사 없음 — 가방으로 옮기는 것뿐이라 이득이 없음)
 	  - 1초마다 자람: 우리에 놓인 알만 (진행 += 1 × 성장 속도, 밤 30배, 게임패스 2배 플래그). 가방 속 알은 안 자람
 	  - 다 자라면 클라가 HatchEgg(eggUid) 요청 (우리 안 알 ProximityPrompt / 성장하는 달걀 패널) → 펫 생성
-	  - 선물 알(grantEgg: 제단·비밀 통로 합성·퀘스트)도 가방으로 (2단계 대기 줄 eggQueue 없앰). 가방이 차면 못 받음
+	  - 선물 알(grantEgg: 제단·비밀 통로 합성·개발 명령)도 가방으로 (2단계 대기 줄 eggQueue 없앰). 가방이 차면 못 받음
 	  - 0.2초마다 구역 표시: 플레이어 Attr CurrentZone(구역 id | "hub" | ""), InSafeZone(허브 안),
 	      새 구역에 들어가면 ZoneEntered { biomeId, name, nameEn } 1회 (허브는 안 보냄)
 	  - 밤이 되면: 허브 밖(z ≥ 0)에 있던 사람(알을 들었든 아니든) → 자기 베이스로 순간이동 (밤 벽에 안 갇히게).
 	      알을 들고 있었으면 허브라 다음 틱에 가방으로 배달. 베이스가 없으면 허브 기본 스폰.
 	오프라인 동안에도 놓인 알은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간).
+
+	5판 (튜토리얼): 신호 placed(player, record) / unplaced(player, bagEgg) / hatched(player, petRecord) → TutorialService.
+	  튜토리얼 중(끝나기 전)에는 부화한 펫을 자동 장착하지 않음 (TutorialRules.holdsAutoEquip → 5단계 "펫 장착" 을 직접)
 
 	2단계 (그대로):
 	  - 순간이동 치트 방지:
@@ -47,6 +50,7 @@ local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Types = require(Shared.Types)
+local TutorialRules = require(Shared.TutorialRules)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
@@ -83,8 +87,12 @@ local Attr = Tags.PlayerAttributes
 
 local BaseService = {}
 
--- 알을 들고 허브에 들어와 가방에 들어감 (player, egg: BagEgg) → 퀘스트·사쿠라 크리스탈
+-- 알을 들고 허브에 들어와 가방에 들어감 (player, egg: BagEgg) → 사쿠라 크리스탈·튜토리얼
 BaseService.delivered = Signal.new()
+-- 5판 (튜토리얼): 우리에 알을 놓음 (player, IncubatorRecord) / 놓인 알을 다시 가방으로 (player, BagEgg) / 부화 (player, PetRecord)
+BaseService.placed = Signal.new()
+BaseService.unplaced = Signal.new()
+BaseService.hatched = Signal.new()
 
 local plotOwners: { [number]: Player? } = {}
 local visuals: { [Player]: { [string]: Visual } } = {}
@@ -395,7 +403,7 @@ function BaseService.canReceiveEgg(player: Player): boolean
 	return data ~= nil and #data.eggs < Config.EGG_INVENTORY_MAX
 end
 
--- 선물 알 (제단·비밀 통로·퀘스트): 가방으로. 가방이 가득 찼거나 모르는 펫이면 nil
+-- 선물 알 (제단·비밀 통로·개발 명령): 가방으로. 가방이 가득 찼거나 모르는 펫이면 nil
 function BaseService.grantEgg(
 	player: Player,
 	petId: string,
@@ -501,6 +509,7 @@ function BaseService.placeEgg(player: Player, uid: string, x: number, z: number)
 	createVisual(player, record)
 	Snapshot.section(player, "eggs")
 	Snapshot.section(player, "incubators")
+	BaseService.placed:fire(player, record)
 	return true
 end
 
@@ -520,7 +529,7 @@ function BaseService.pickUpEgg(player: Player, uid: string): boolean
 	end
 	local record = table.remove(data.incubators, index) :: IncubatorRecord
 	destroyVisual(player, record.uid)
-	table.insert(data.eggs, {
+	local bagEgg: BagEgg = {
 		uid = record.uid,
 		petId = record.petId,
 		size = record.size,
@@ -529,9 +538,11 @@ function BaseService.pickUpEgg(player: Player, uid: string): boolean
 		special = record.special,
 		progress = record.progress,
 		required = record.required,
-	})
+	}
+	table.insert(data.eggs, bagEgg)
 	Snapshot.section(player, "eggs")
 	Snapshot.section(player, "incubators")
+	BaseService.unplaced:fire(player, bagEgg)
 	return true
 end
 
@@ -559,7 +570,8 @@ function BaseService.hatch(player: Player, uid: string)
 		mutations = record.mutations,
 	}
 	local isNew = IndexService.discover(player, record.petId)
-	local kept = PetService.addPet(player, pet)
+	-- 5판: 튜토리얼 중에는 자동 장착 안 함 (5단계 "펫 장착" 에서 직접)
+	local kept = PetService.addPet(player, pet, not TutorialRules.holdsAutoEquip(data.tutorialStep))
 	data.stats.eggsHatched = (data.stats.eggsHatched or 0) + 1
 	Net.fire(player, Remotes.ToClient.HatchResult, {
 		pet = pet,
@@ -569,6 +581,7 @@ function BaseService.hatch(player: Player, uid: string)
 		sold = not kept, -- 보관함이 가득 차서 바로 팔렸나
 	})
 	Snapshot.section(player, "incubators")
+	BaseService.hatched:fire(player, pet)
 end
 
 ------------------------------------------------------------------

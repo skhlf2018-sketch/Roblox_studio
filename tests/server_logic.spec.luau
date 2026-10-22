@@ -203,20 +203,25 @@ return function(T, Loader)
 		return discovered
 	end
 
-	T.test("버전 4 기본값 (2단계 필드 + 장착 트레일 none + 빈 알 가방, 대기 줄 없음)", function()
-		T.eq(Config.SCHEMA_VERSION, 4)
-		local d = DataSchema.default(0)
-		T.eq(d.version, 4)
-		T.eq(d.sakuraCrystals, 0)
-		T.falsy(d.sakuraUnlocked)
-		T.falsy(d.questsRewarded)
-		T.eq(#d.weapons, 0)
-		T.eq(#d.eggs, 0)
-		T.eq(d.eggQueue, nil, "2판 수정: 대기 줄 없앰")
-		T.eq(next(d.shrineUsed), nil)
-		T.eq(next(d.quests), nil)
-		T.eq(d.equippedTrail, "none")
-	end)
+	T.test(
+		"버전 5 기본값 (2단계 필드 + 장착 트레일 none + 빈 알 가방 + 튜토리얼 1단계, 퀘스트·무료 보상 칸 없음)",
+		function()
+			T.eq(Config.SCHEMA_VERSION, 5)
+			local d = DataSchema.default(0)
+			T.eq(d.version, 5)
+			T.eq(d.sakuraCrystals, 0)
+			T.falsy(d.sakuraUnlocked)
+			T.eq(d.questsRewarded, nil, "5판: 퀘스트 칸 없앰")
+			T.eq(d.freeRewardClaimed, nil, "5판: 무료 보상 칸 없앰")
+			T.eq(d.tutorialStep, 1, "5판: 새 사람은 튜토리얼 1단계")
+			T.eq(#d.weapons, 0)
+			T.eq(#d.eggs, 0)
+			T.eq(d.eggQueue, nil, "2판 수정: 대기 줄 없앰")
+			T.eq(next(d.shrineUsed), nil)
+			T.eq(d.quests, nil)
+			T.eq(d.equippedTrail, "none")
+		end
+	)
 
 	T.test("마이그레이션 1 → 2: 도감 기록으로 무기 채움 (천사&악마 18종 규칙)", function()
 		local v1 = {
@@ -225,26 +230,28 @@ return function(T, Loader)
 			indexDiscovered = discoverAll("angels_demons", { equinox = true, aetheron = true }),
 		}
 		local migrated = DataSchema.migrate(v1)
-		T.eq(migrated.version, 4)
+		T.eq(migrated.version, 5)
 		T.eq(migrated.weapons[1], "angel_spear")
 		local d = DataSchema.reconcile(migrated, 0)
-		T.eq(d.version, 4)
+		T.eq(d.version, 5)
 		T.eq(d.money, 500)
 		T.eq(d.weapons[1], "angel_spear")
 		T.eq(d.sakuraCrystals, 0)
 		-- version 이 없던 아주 옛 데이터도 1 로 보고 변환
-		T.eq(DataSchema.migrate({ money = 1 }).version, 4)
+		T.eq(DataSchema.migrate({ money = 1 }).version, 5)
 	end)
 
 	T.test("새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음", function()
-		T.truthy(DataSchema.isNewerVersion({ version = 5 }))
+		T.truthy(DataSchema.isNewerVersion({ version = 6 }))
+		T.falsy(DataSchema.isNewerVersion({ version = 5 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 4 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 3 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 2 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 1 }))
 		T.falsy(DataSchema.isNewerVersion(nil))
-		T.eq(DataSchema.migrate({ version = 5 }).version, 5)
-		T.eq(DataSchema.migrate({ version = 5 }).equippedTrail, nil, "새 버전 데이터는 안 건드림")
+		T.eq(DataSchema.migrate({ version = 6 }).version, 6)
+		T.eq(DataSchema.migrate({ version = 6 }).equippedTrail, nil, "새 버전 데이터는 안 건드림")
+		T.eq(DataSchema.migrate({ version = 6 }).tutorialStep, nil, "새 버전 데이터는 안 건드림")
 	end)
 
 	T.test(
@@ -262,11 +269,11 @@ return function(T, Loader)
 				eggQueue = {
 					{ petId = "ring_guard", size = "big", mutations = { "golden" }, source = "altar" },
 					{ petId = "없는펫", size = "big", mutations = {}, source = "altar" },
-					{ petId = "jitterbug", size = "이상함", mutations = {}, source = "quest" },
+					{ petId = "jitterbug", size = "이상함", mutations = {}, source = "quest" }, -- 옛 퀘스트 선물 알도 가방으로
 				},
 			}
 			local migrated = DataSchema.migrate(v3)
-			T.eq(migrated.version, 4)
+			T.eq(migrated.version, 5)
 			local s3, s8 = MapLayout.eggGridLocal(3), MapLayout.eggGridLocal(8)
 			T.eq(migrated.incubators[1].x, s3.x)
 			T.eq(migrated.incubators[1].z, s3.z)
@@ -312,7 +319,7 @@ return function(T, Loader)
 		function()
 			local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 			local migrated = DataSchema.migrate({ version = 2, trails = { "grey", "purple", "blue", "가짜", 7 } })
-			T.eq(migrated.version, 4)
+			T.eq(migrated.version, 5)
 			T.eq(migrated.equippedTrail, "purple")
 			local d = DataSchema.reconcile(migrated, 0)
 			T.eq(d.equippedTrail, "purple")
@@ -360,7 +367,7 @@ return function(T, Loader)
 			sakuraCrystals = -3,
 			sakuraUnlocked = "yes",
 			shrineUsed = { equinox = true, chicken = true },
-			quests = { deliver_eggs = 999, fuse_once = 0.5, ["가짜"] = 3 },
+			quests = { deliver_eggs = 999, fuse_once = 0.5, ["가짜"] = 3 }, -- 5판: 옛 퀘스트 칸은 버려짐
 			questsRewarded = true,
 			weapons = { "katana", "baseball_bat", "가짜무기", "katana" },
 			eggQueue = queue,
@@ -369,10 +376,8 @@ return function(T, Loader)
 		T.falsy(d.sakuraUnlocked)
 		T.truthy(d.shrineUsed.equinox)
 		T.eq(d.shrineUsed.chicken, nil)
-		T.eq(d.quests.deliver_eggs, 20, "목표까지")
-		T.eq(d.quests.fuse_once, nil, "0 은 안 적음")
-		T.eq(d.quests["가짜"], nil)
-		T.truthy(d.questsRewarded)
+		T.eq(d.quests, nil, "5판: 퀘스트 칸은 reconcile 결과에 없음")
+		T.eq(d.questsRewarded, nil)
 		T.eq(#d.weapons, 1)
 		T.eq(d.weapons[1], "katana")
 		T.eq(#d.eggs, Config.EGG_INVENTORY_MAX)

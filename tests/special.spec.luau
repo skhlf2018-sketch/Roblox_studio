@@ -1,11 +1,12 @@
 --!nocheck
--- 구역 특수 요소: 사쿠라 인큐베이터, 천사&악마 제단·비밀 통로, 마법의 숲 퀘스트, 무기 표
+-- 구역 특수 요소: 사쿠라 인큐베이터, 천사&악마 제단·비밀 통로, 무기 표 (5판: 마법의 숲 퀘스트 없앰 → 옛 퀘스트 알은 특별 알)
 
 return function(T, Loader)
 	local SakuraRules = Loader.require("ReplicatedStorage/Shared/SakuraRules")
 	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
-	local QuestRules = Loader.require("ReplicatedStorage/Shared/QuestRules")
-	local Quests = Loader.require("ReplicatedStorage/Shared/Data/Quests")
+	local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
+	local EggSpawn = Loader.require("ReplicatedStorage/Shared/Data/EggSpawn")
+	local Progression = Loader.require("ReplicatedStorage/Shared/Progression")
 	local Weapons = Loader.require("ReplicatedStorage/Shared/Data/Weapons")
 	local Biomes = Loader.require("ReplicatedStorage/Shared/Data/Biomes")
 	local Pets = Loader.require("ReplicatedStorage/Shared/Data/Pets")
@@ -143,41 +144,48 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("QuestRules")
+	T.suite("5판: 퀘스트 없앰 → 옛 퀘스트 알 2종은 초기화 특별 알")
 
-	T.test("퀘스트 3개, 목표·보상 알이 데이터와 맞음", function()
-		T.eq(#Quests.list, 3)
-		T.eq(Quests.get("deliver_eggs").target, 20)
-		T.eq(Pets.get(Quests.REWARD_EGG).source, "quest")
-		T.eq(Pets.get(Quests.SECRET_EGG).source, "quest")
-	end)
-
-	T.test("마법의 숲 알만 20개, 영원 알은 아무 구역, 합성 1회", function()
-		local progress = {}
-		T.eq(#QuestRules.apply(progress, { kind = "deliver", biome = "forest", rarity = "common" }), 0)
-		for _ = 1, 25 do
-			QuestRules.apply(progress, { kind = "deliver", biome = "enchanted_forest", rarity = "legendary" })
+	T.test(
+		"지터버그·영혼 세계 수호자: source = special, 둥지 풀에는 없음, EXTRA_SPECIALS 확률 8% / 1%",
+		function()
+			T.eq(Pets.get("jitterbug").source, "special")
+			T.eq(Pets.get("spirit_world_guardian").source, "special")
+			for _, pet in EggRoll.nestPool("enchanted_forest", nil) do
+				T.truthy(pet.source == "nest", pet.id .. " 는 둥지 펫이어야 함")
+			end
+			local chances = {}
+			for _, entry in EggSpawn.EXTRA_SPECIALS do
+				local pet = Pets.get(entry.petId)
+				T.truthy(pet and pet.source == "special", entry.petId)
+				T.truthy(entry.chance > 0 and entry.chance < 1, entry.petId)
+				chances[entry.petId] = entry.chance
+			end
+			T.eq(chances.jitterbug, 0.08)
+			T.eq(chances.spirit_world_guardian, 0.01)
+			-- source = special 인 펫은 전부 EXTRA_SPECIALS 에 있음 (못 얻는 펫이 없게)
+			for _, pet in Pets.list do
+				if pet.source == "special" then
+					T.truthy(chances[pet.id], pet.id .. " 를 얻을 길이 없음")
+				end
+			end
 		end
-		T.eq(progress.deliver_eggs, 20, "목표에서 멈춤")
-		T.falsy(QuestRules.allDone(progress))
-		local changed = QuestRules.apply(progress, { kind = "deliver", biome = "snow", rarity = "eternal" })
-		T.eq(#changed, 1)
-		T.eq(progress.deliver_eternal, 1)
-		QuestRules.apply(progress, { kind = "fuse" })
-		T.truthy(QuestRules.allDone(progress))
-		local view = QuestRules.view(progress)
-		T.eq(#view, 3)
-		for _, q in view do
-			T.truthy(q.done, q.id)
-		end
-		T.eq(#QuestRules.apply(progress, { kind = "fuse" }), 0, "끝난 뒤에는 안 바뀜")
-	end)
+	)
 
-	T.test("마법의 숲 영원 알 하나는 두 퀘스트를 같이 올림", function()
-		local progress = {}
-		local changed = QuestRules.apply(progress, { kind = "deliver", biome = "enchanted_forest", rarity = "eternal" })
-		T.eq(#changed, 2)
-	end)
+	T.test(
+		"마법의 숲 망치는 여전히 10종 전부 (옛 퀘스트 알 포함), 퀘스트 모듈·상수는 없음",
+		function()
+			local need = Progression.weaponRequirement("enchanted_forest")
+			T.eq(#need, 10)
+			T.eq(Config.QUEST_SECRET_EGG_CHANCE, nil)
+			T.falsy(pcall(Loader.require, "ReplicatedStorage/Shared/QuestRules"), "QuestRules 모듈이 남아 있음")
+			T.falsy(
+				pcall(Loader.require, "ReplicatedStorage/Shared/Data/Quests"),
+				"Data/Quests 모듈이 남아 있음"
+			)
+			T.eq(Pets.get("dog").hatchSeconds, 3, "5판: 개 알 3초")
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("Weapons")
@@ -235,9 +243,10 @@ return function(T, Loader)
 			T.truthy(Remotes.RateLimits[name], name)
 		end
 		T.eq(Remotes.ToServer.FuseRequest, "FuseRequest")
-		T.eq(Remotes.ToClient.QuestUpdate, "QuestUpdate")
+		T.eq(Remotes.ToClient.QuestUpdate, nil, "5판: 퀘스트 Remote 없앰")
+		T.eq(Remotes.ToServer.ClaimFreeReward, nil, "5판: 무료 보상 Remote 없앰")
 		T.eq(Tags.Altar, "Altar")
-		T.eq(Tags.QuestGate, "QuestGate")
+		T.eq(Tags.QuestGate, nil, "5판: 퀘스트 문 태그 없앰")
 		T.eq(Tags.SakuraIncubator, "SakuraIncubator")
 	end)
 end

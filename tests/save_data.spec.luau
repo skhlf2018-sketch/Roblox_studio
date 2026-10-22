@@ -1,7 +1,8 @@
 --!nocheck
 --[[
 	저장 데이터 안전성:
-	  - 버전 1 → 2 → 3 → 4 마이그레이션이 옛 데이터를 하나도 안 잃는지 (4: 슬롯 알 → 우리 자리, 대기 줄 → 알 가방)
+	  - 버전 1 → 2 → 3 → 4 → 5 마이그레이션이 옛 데이터를 하나도 안 잃는지 (4: 슬롯 알 → 우리 자리, 대기 줄 → 알 가방,
+	    5: 튜토리얼 단계 추가 — 놀던 사람은 끝, 퀘스트·무료 보상 칸 지움)
 	  - 엉터리 데이터(nil, 문자열, 음수, 거대 수, NaN, inf, 이상한 표 ...)를 넣어도 터지지 않고 올바른 기본값/보정값이 나오는지
 	  - 무작위 쓰레기 데이터(퍼징)로 수천 번 돌려도 항상 "올바른 PlayerData" 규칙을 지키는지
 ]]
@@ -14,7 +15,7 @@ return function(T, Loader)
 	local Sizes = Loader.require("ReplicatedStorage/Shared/Data/Sizes")
 	local Upgrades = Loader.require("ReplicatedStorage/Shared/Data/Upgrades")
 	local Weapons = Loader.require("ReplicatedStorage/Shared/Data/Weapons")
-	local Quests = Loader.require("ReplicatedStorage/Shared/Data/Quests")
+	local Tutorial = Loader.require("ReplicatedStorage/Shared/Data/Tutorial")
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
 	local EggPlacement = Loader.require("ReplicatedStorage/Shared/EggPlacement")
@@ -57,10 +58,20 @@ return function(T, Loader)
 		then
 			return "treadmillLevel " .. tostring(d.treadmillLevel)
 		end
-		for _, key in { "freeRewardClaimed", "indexCompleteClaimed", "sakuraUnlocked", "questsRewarded" } do
+		for _, key in { "indexCompleteClaimed", "sakuraUnlocked" } do
 			if type(d[key]) ~= "boolean" then
 				return key .. " 이 boolean 이 아님"
 			end
+		end
+		-- 5판: 퀘스트·무료 보상 칸은 없어야 함, 튜토리얼 단계는 1 ~ DONE 정수
+		for _, key in { "quests", "questsRewarded", "freeRewardClaimed" } do
+			if d[key] ~= nil then
+				return "5판: 없앤 칸 " .. key .. " 이 남음"
+			end
+		end
+		local step = d.tutorialStep
+		if type(step) ~= "number" or step % 1 ~= 0 or step < 1 or step > Tutorial.DONE then
+			return "tutorialStep " .. tostring(step)
 		end
 		local uids = {}
 		local maxNumber = 0
@@ -216,12 +227,6 @@ return function(T, Loader)
 				return "shrineUsed " .. tostring(id)
 			end
 		end
-		for id, value in d.quests do
-			local quest = Quests.get(id)
-			if not quest or type(value) ~= "number" or value % 1 ~= 0 or value < 1 or value > quest.target then
-				return "quests " .. tostring(id)
-			end
-		end
 		if d.eggQueue ~= nil then
 			return "2판 수정: 대기 줄(eggQueue)이 남음"
 		end
@@ -305,7 +310,8 @@ return function(T, Loader)
 		"옛 데이터가 하나도 안 사라지고, 새 필드는 기본값, 호수 도감 완성이라 물 방망이가 자동 해금",
 		function()
 			local migrated = DataSchema.migrate(v1Save())
-			T.eq(migrated.version, 4, "1 → 2 → 3 → 4 한 번에")
+			T.eq(migrated.version, 5, "1 → 2 → 3 → 4 → 5 한 번에")
+			T.eq(migrated.tutorialStep, Tutorial.DONE, "4 → 5: 펫이 있는 사람은 튜토리얼 끝")
 			T.eq(migrated.equippedTrail, "blue", "2 → 3: 가진 것(grey·blue) 중 최고 배율 장착")
 			local d = DataSchema.reconcile(migrated, 1700001000)
 			T.eq(checkValid(d), nil)
@@ -325,7 +331,8 @@ return function(T, Loader)
 			T.eq(d.indexClaimed.frog, nil)
 			T.eq(d.tools.bearTrap, 7)
 			T.eq(d.lastSaveTime, 1700000000)
-			T.eq(d.freeRewardClaimed, true)
+			T.eq(d.freeRewardClaimed, nil, "5판: 무료 보상 칸 지움")
+			T.eq(d.tutorialStep, Tutorial.DONE)
 			T.eq(d.stats.eggsStolen, 40)
 			T.eq(d.stats.eggsDelivered, 4)
 			-- 부화 슬롯 알: 필요 시간은 지금 규칙으로 다시 계산 (저장된 30 → 원작 90, 2판 수정: ÷3 없음)
@@ -341,8 +348,8 @@ return function(T, Loader)
 			T.eq(d.sakuraCrystals, 0)
 			T.falsy(d.sakuraUnlocked)
 			T.eq(next(d.shrineUsed), nil)
-			T.eq(next(d.quests), nil)
-			T.falsy(d.questsRewarded)
+			T.eq(d.quests, nil, "5판: 퀘스트 칸 지움")
+			T.eq(d.questsRewarded, nil)
 			T.eq(#d.eggs, 0)
 			T.eq(d.eggQueue, nil)
 			T.eq(#d.weapons, 1)
@@ -371,13 +378,15 @@ return function(T, Loader)
 			local kept = DataSchema.reconcile(DataSchema.migrate(v2), 0)
 			T.eq(kept.sakuraCrystals, 50)
 			T.truthy(kept.sakuraUnlocked)
-			T.truthy(kept.questsRewarded)
-			T.eq(kept.quests.fuse_once, 1)
+			T.eq(kept.questsRewarded, nil, "5판: 퀘스트 칸 지움")
+			T.eq(kept.quests, nil)
 			T.truthy(kept.shrineUsed.equinox)
 			T.eq(#kept.eggs, 1, "옛 대기 줄 알 → 가방")
 			T.eq(kept.eggs[1].petId, "ringlord")
-			-- 이미 4 인 데이터의 가방·놓인 알은 그대로
+			-- 이미 4 인 데이터의 가방·놓인 알은 그대로 (4 → 5: 알이 있으니 튜토리얼 끝)
 			local v4 = DataSchema.default(0)
+			v4.version = 4
+			v4.tutorialStep = nil
 			v4.nextUid = 9
 			v4.eggs = {
 				{ uid = "i3", petId = "ghost_king", size = "big", mutations = {}, special = true, progress = 7 },
@@ -392,6 +401,7 @@ return function(T, Loader)
 			T.eq(again.incubators[1].x, -20.5)
 			T.eq(again.incubators[1].z, 13.2)
 			T.eq(again.nextUid, 9)
+			T.eq(again.tutorialStep, Tutorial.DONE)
 		end
 	)
 
@@ -409,15 +419,71 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("더 새 버전(5, 4.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
-		for _, v in { 5, 4.5, 1e9 } do
+	T.test("더 새 버전(6, 5.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
+		for _, v in { 6, 5.5, 1e9 } do
 			T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
 			T.eq(DataSchema.migrate({ version = v, money = 1 }).version, v)
 		end
 		T.falsy(DataSchema.isNewerVersion({ version = math.huge * 0 }))
 		T.falsy(DataSchema.isNewerVersion("version=3"))
-		T.falsy(DataSchema.isNewerVersion({ version = 4 }), "지금 버전")
+		T.falsy(DataSchema.isNewerVersion({ version = 5 }), "지금 버전")
+		T.falsy(DataSchema.isNewerVersion({ version = 4 }))
 	end)
+
+	T.test(
+		"5판 마이그레이션 4 → 5: 놀던 사람은 튜토리얼 끝, 아무것도 안 한 사람은 1단계, 퀘스트·무료 보상 칸 지움 (받은 보상은 그대로)",
+		function()
+			local function v4(extra)
+				local raw = {
+					version = 4,
+					money = 777,
+					speed = 10020, -- 무료 보상 +10,000 을 받았던 사람
+					freeRewardClaimed = true,
+					quests = { deliver_eggs = 20, fuse_once = 1, deliver_eternal = 1 },
+					questsRewarded = true,
+					stats = { eggsStolen = 0, eggsHatched = 0 },
+				}
+				for k, v in extra or {} do
+					raw[k] = v
+				end
+				return raw
+			end
+			-- 아무것도 안 한 사람 → 1단계
+			local fresh = DataSchema.migrate(v4())
+			T.eq(fresh.version, 5)
+			T.eq(fresh.tutorialStep, 1)
+			T.eq(fresh.quests, nil)
+			T.eq(fresh.questsRewarded, nil)
+			T.eq(fresh.freeRewardClaimed, nil)
+			local d = DataSchema.reconcile(fresh, 0)
+			T.eq(checkValid(d), nil)
+			T.eq(d.tutorialStep, 1)
+			T.eq(d.speed, 10020, "무료 보상으로 받은 속도는 그대로")
+			T.eq(d.money, 777)
+			-- 펫·놓인 알·가방 알·통계 중 하나라도 있으면 → 끝
+			local played = {
+				{ pets = { { uid = "p1", petId = "chicken", size = "normal", mutations = {} } } },
+				{ incubators = { { uid = "i1", petId = "dog", size = "normal", mutations = {}, x = -20, z = 0 } } },
+				{ eggs = { { uid = "i2", petId = "jitterbug", size = "normal", mutations = {} } } },
+				{ stats = { eggsStolen = 1 } },
+				{ stats = { eggsDelivered = 3 } },
+				{ stats = { eggsHatched = 2 } },
+			}
+			for i, extra in played do
+				local m = DataSchema.migrate(v4(extra))
+				T.eq(m.tutorialStep, Tutorial.DONE, "놀던 사람 #" .. i)
+				T.eq(DataSchema.reconcile(m, 0).tutorialStep, Tutorial.DONE)
+			end
+			-- 빈 표·이상한 통계는 "안 놀았음"
+			T.eq(DataSchema.migrate(v4({ pets = {}, eggs = "x", stats = { eggsStolen = "9" } })).tutorialStep, 1)
+			-- 이미 5 인 데이터의 단계는 그대로 (3단계에서 나갔다 들어옴)
+			local v5 = DataSchema.reconcile(DataSchema.migrate(v4()), 0)
+			v5.tutorialStep = 3
+			T.eq(DataSchema.reconcile(DataSchema.migrate(v5), 0).tutorialStep, 3)
+			-- 새 사람(저장 없음) = 기본값 1단계
+			T.eq(DataSchema.reconcile(DataSchema.migrate(nil), 0).tutorialStep, 1)
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("저장 데이터: 엉터리 입력")
@@ -446,7 +512,16 @@ return function(T, Loader)
 		function()
 			local garbage = { -1, -1e300, NAN, math.huge, -math.huge, "123", "abc", {}, { 1 }, true, false }
 			for _, key in
-				{ "money", "speed", "lastSaveTime", "penLevel", "treadmillLevel", "nextUid", "sakuraCrystals" }
+				{
+					"money",
+					"speed",
+					"lastSaveTime",
+					"penLevel",
+					"treadmillLevel",
+					"nextUid",
+					"sakuraCrystals",
+					"tutorialStep",
+				}
 			do
 				for _, bad in garbage do
 					local ok, d = pcall(DataSchema.reconcile, { [key] = bad }, 0)
@@ -493,6 +568,9 @@ return function(T, Loader)
 				"weapons",
 				"shrineUsed",
 				"quests",
+				"questsRewarded",
+				"freeRewardClaimed",
+				"tutorialStep",
 				"eggQueue",
 				"eggs",
 				"equippedTrail",
@@ -605,7 +683,7 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("v2 필드 쓰레기: 퀘스트·제단·옛 대기 줄(→ 가방)·무기", function()
+	T.test("v2 필드 쓰레기: 옛 퀘스트(5판: 버림)·제단·옛 대기 줄(→ 가방)·무기", function()
 		local d = DataSchema.reconcile({
 			quests = { deliver_eggs = -5, fuse_once = 2.7, deliver_eternal = "1", ["가짜"] = 3 },
 			shrineUsed = { equinox = 1, aetheron = true, chicken = true },
@@ -618,9 +696,7 @@ return function(T, Loader)
 			weapons = { 5, "katana", "baseball_bat", "scythe", "scythe" },
 		}, 0)
 		T.eq(checkValid(d), nil)
-		T.eq(d.quests.deliver_eggs, nil)
-		T.eq(d.quests.fuse_once, 1, "2.7 → 내림 2 → 목표 1 로 제한")
-		T.eq(d.quests.deliver_eternal, nil)
+		T.eq(d.quests, nil, "5판: 옛 퀘스트 진행도는 버림")
 		T.eq(d.shrineUsed.equinox, nil, "true 가 아니면 무시")
 		T.truthy(d.shrineUsed.aetheron)
 		T.eq(#d.eggs, 2, "알려진 펫 2개만 가방으로")
@@ -775,7 +851,13 @@ return function(T, Loader)
 			for i = 1, 5000 do
 				local raw = {
 					version = maybe(function()
-						return pick({ 1, 2, 3, 4 })
+						return pick({ 1, 2, 3, 4, 5 })
+					end),
+					tutorialStep = maybe(function()
+						return pick({ 0, 1, 2, 3, 4, 5, 6, 7, 2.5, -1, "3", true })
+					end),
+					freeRewardClaimed = maybe(function()
+						return rand() < 0.5
 					end),
 					money = maybe(function()
 						return rand() * 1e12

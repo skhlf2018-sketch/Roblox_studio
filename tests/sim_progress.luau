@@ -41,6 +41,7 @@ local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
 local Cycle = Loader.require("ReplicatedStorage/Shared/Cycle")
 local Format = Loader.require("ReplicatedStorage/Shared/Format")
 local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
+local Tutorial = Loader.require("ReplicatedStorage/Shared/Data/Tutorial")
 
 local HOURS = 100
 local SEEDS = 9
@@ -73,8 +74,9 @@ end
 
 local function simulate(seed, indexSpeed)
 	local rand = makeRng(seed)
-	local money = Config.STARTING_MONEY
-	local base = Config.STARTING_SPEED + Config.FREE_REWARD_SPEED
+	-- 5판: 무료 보상(+10,000 속도) 없앰, 대신 튜토리얼 보상 $500
+	local money = Config.STARTING_MONEY + Tutorial.REWARD_MONEY
+	local base = Config.STARTING_SPEED
 	local tread = 0
 	local trailIndex = 0
 	local trailMult = 1

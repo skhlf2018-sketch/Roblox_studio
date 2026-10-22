@@ -41,7 +41,7 @@
 	(자기 베이스 영역에 들어가면 자동 배달).
 
 	2단계 특수 장소 진짜 모델: 벚꽃 = 사쿠라 인큐베이터, 천사&악마 = 천국/지옥 제단 + 폭포 옆 비밀 통로,
-	마법의 숲 = 퀘스트 문 + 비밀 정원 (자리 = MapLayout.specials). 태그 파트가 맵에 있으므로 서버 Util/Landmarks 는
+	(5판: 마법의 숲 퀘스트 문·비밀 정원은 퀘스트와 함께 없앰) (자리 = MapLayout.specials). 태그 파트가 맵에 있으므로 서버 Util/Landmarks 는
 	임시 파트를 안 만듦. 베이스 퓨즈 머신은 파란 기계 모델(Core = "?" 화면, Tube1~3 = 옆 표시등) — 클라 연출이 이 이름들을 찾음.
 ]]
 
@@ -1598,103 +1598,6 @@ local function buildShrine(center: Vector3, toward: number, parent: Instance): {
 	return { { x = back * 72, z = 0, r = 17 }, { x = back * 66, z = 10.5, r = 8 } }
 end
 
--- 퀘스트 문 (마법의 숲 뒤쪽): 덤불 울타리로 둘러싼 비밀 정원 + 문틀 + 문(태그 QuestGate) + 룬 돌 3개(Rune1~3)
-local function buildQuestGate(center: Vector3, toward: number, parent: Instance): { Hole }
-	local m = model("QuestGateModel", parent)
-	local back = -toward
-	local function at2(d: number, y: number, z: number): Vector3
-		return Vector3.new(center.X + back * d, FLOOR_TOP + y, center.Z + z)
-	end
-	local hedge = Color3.fromRGB(40, 110, 80)
-	local stone = Color3.fromRGB(95, 80, 130)
-	local glow = Color3.fromRGB(110, 255, 220)
-	-- 덤불 울타리 (높이 10: 점프로 못 넘음)
-	P(m, "Block", Vector3.new(2, 10, 28), CFrame.new(at2(79, 5, 0)), hedge, M.LeafyGrass, true)
-	for _, z in { -13, 13 } do
-		P(m, "Block", Vector3.new(19, 10, 2), CFrame.new(at2(69.5, 5, z)), hedge, M.LeafyGrass, true)
-	end
-	for _, z in { -9.5, 9.5 } do
-		P(m, "Block", Vector3.new(2, 10, 7), CFrame.new(at2(60, 5, z)), hedge, M.LeafyGrass, true)
-	end
-	-- 문틀
-	for _, z in { -6, 6 } do
-		P(m, "Block", Vector3.new(2.4, 13, 2), CFrame.new(at2(60, 6.5, z)), stone, M.Slate, true)
-		P(m, "Ball", Vector3.new(1.6, 0, 0), CFrame.new(at2(60, 13.6, z)), glow, M.Neon)
-	end
-	P(m, "Block", Vector3.new(2.6, 2, 14), CFrame.new(at2(60, 13.5, 0)), stone, M.Slate, true)
-	local crown = P(
-		m,
-		"Ell",
-		Vector3.new(1.6, 3, 1.6),
-		CFrame.new(at2(60, 15.8, 0)),
-		Color3.fromRGB(190, 110, 255),
-		M.Neon,
-		false,
-		0.1
-	)
-	light(crown, Color3.fromRGB(190, 120, 255), 16, 1.5)
-	-- 문 (태그 QuestGate, CanCollide true. 서버가 CollisionGroup 을 바꿈)
-	local door = makePart({
-		name = "Door",
-		size = Vector3.new(1, 12, 10),
-		cframe = CFrame.new(at2(60, 6, 0)),
-		parent = m,
-		color = Color3.fromRGB(80, 220, 180),
-		material = Enum.Material.ForceField,
-		transparency = 0.15,
-		canCollide = true,
-		tag = Tags.QuestGate,
-	})
-	m.PrimaryPart = door
-	Gui.billboard(door, "퀘스트 문\n(퀘스트 3개를 끝내면 열려요)", 9, 100).TextColor3 =
-		Color3.fromRGB(200, 255, 240)
-	-- 룬 돌 3개 (끝낸 퀘스트만큼 클라에서 빛남)
-	for i, z in { -4, 0, 4 } do
-		P(m, "Block", Vector3.new(1.6, 0.6, 1.6), CFrame.new(at2(55, 0.3, z)), stone, M.Slate, true)
-		local rune = P(
-			m,
-			"Block",
-			Vector3.new(0.6, 2.4, 1.4),
-			CFrame.new(at2(55, 1.8, z)),
-			Color3.fromRGB(70, 60, 90),
-			M.Slate,
-			true
-		)
-		rune.Name = "Rune" .. i
-	end
-	-- 정원 안: 요정 샘 + 크리스탈
-	P(m, "VCyl", Vector3.new(7, 1, 0), CFrame.new(at2(70, 0.5, 0)), stone, M.Slate, true)
-	local water = P(m, "VCyl", Vector3.new(5.8, 0.3, 0), CFrame.new(at2(70, 1.05, 0)), glow, M.Neon, false, 0.2)
-	light(water, glow, 20, 1.5)
-	P(m, "Ell", Vector3.new(1.4, 4, 1.4), CFrame.new(at2(70, 3, 0)), Color3.fromRGB(190, 120, 255), M.Neon, false, 0.15)
-	local sparkle = Instance.new("ParticleEmitter")
-	sparkle.Texture = SPARKLE_TEX
-	sparkle.Rate = 10
-	sparkle.Lifetime = NumberRange.new(1.5, 3)
-	sparkle.Speed = NumberRange.new(1, 3)
-	sparkle.SpreadAngle = Vector2.new(40, 40)
-	sparkle.EmissionDirection = Enum.NormalId.Top
-	sparkle.LightEmission = 1
-	sparkle.Color = ColorSequence.new(glow)
-	sparkle.Size = NumberSequence.new(0.4)
-	sparkle.Parent = water
-	for i, z in { -9, -5, 6, 9 } do
-		local h = 1.5 + (i % 2)
-		P(m, "VCyl", Vector3.new(0.6, h, 0), CFrame.new(at2(64 + i * 3, h / 2, z)), Color3.fromRGB(230, 230, 255))
-		P(
-			m,
-			"Ell",
-			Vector3.new(2.4, 1.1, 2.4),
-			CFrame.new(at2(64 + i * 3, h + 0.2, z)),
-			if i % 2 == 0 then glow else Color3.fromRGB(190, 110, 255),
-			M.Neon,
-			false,
-			0.1
-		)
-	end
-	return { { x = back * 68, z = 0, r = 17 }, { x = back * 55, z = 0, r = 6 } }
-end
-
 ------------------------------------------------------------------
 -- 2판 블록 장식 (원작: 각진 블록 + 스터드). 구역 장식 표(Visuals.biomes[..].decor)에서 이름으로 씀
 ------------------------------------------------------------------
@@ -3244,12 +3147,6 @@ local function buildSpecials(biomeId: string, parent: Instance): { Hole }
 	if biomeId == S.altarDark.biomeId then
 		buildAltar("dark", Vector3.new(S.altarDark.x, FLOOR_TOP, S.altarDark.z), parent)
 		table.insert(holes, { x = S.altarDark.x, z = S.altarDark.z, r = 9 })
-	end
-	if biomeId == S.questGate.biomeId then
-		local center, toward = centerFor(S.questGate, 60, 0)
-		for _, h in worldHoles(buildQuestGate(center, toward, parent), center) do
-			table.insert(holes, h)
-		end
 	end
 	return holes
 end

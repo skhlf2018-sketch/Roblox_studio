@@ -278,22 +278,29 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("/quests: 마법의 숲 퀘스트 3개를 한 번에 끝냄 (문 열림 + 지터버그 알)", function()
-		local w = devWorld()
-		chat(w, "/quests")
-		T.truthy(w.data.questsRewarded)
-		T.eq(w.data.quests.deliver_eggs, 20)
-		T.eq(w.data.quests.fuse_once, 1)
-		T.eq(w.data.quests.deliver_eternal, 1)
-		local gotEgg = false
-		for _, record in w.data.eggs do
-			if record.petId == "jitterbug" then
-				gotEgg = true
-			end
+	T.test(
+		"/tutorial reset (5판): 튜토리얼을 1단계부터 다시 + TutorialUpdate, /quests 는 없어짐",
+		function()
+			local w = devWorld()
+			T.eq(w.data.tutorialStep, 6, "하네스 기본 = 튜토리얼 끝낸 사람")
+			chat(w, "/tutorial")
+			T.eq(w.data.tutorialStep, 6, "reset 을 안 쓰면 무시")
+			chat(w, "/tutorial reset")
+			T.eq(w.data.tutorialStep, 1)
+			local updates = w.H.sent(w.player, "TutorialUpdate")
+			T.eq(#updates, 1)
+			T.eq(updates[1][1].step, 1)
+			T.eq(updates[1][1].total, 5)
+			T.eq(updates[1][1].text, "숲에서 알 훔치기")
+			T.falsy(updates[1][1].done)
+			T.truthy(w.H.hasNotify(w.player, "info", "[개발] /tutorial reset"))
+			local before = #w.H.notifications(w.player)
+			chat(w, "/quests")
+			T.eq(#w.H.notifications(w.player), before, "/quests 는 없는 명령")
+			T.eq(w.data.quests, nil)
+			w.H.uninstall()
 		end
-		T.truthy(gotEgg)
-		w.H.uninstall()
-	end)
+	)
 
 	T.test("스튜디오가 아니면 (DEV_USER_IDS 도 비었으면) 명령이 아예 안 켜짐", function()
 		local w = devWorld(false)
@@ -351,8 +358,9 @@ return function(T, Loader)
 		local data, saveEnabled, newer = load(w, p)
 		T.truthy(saveEnabled)
 		T.falsy(newer)
-		T.eq(data.version, 4)
+		T.eq(data.version, 5)
 		T.eq(data.money, w.Config.STARTING_MONEY)
+		T.eq(data.tutorialStep, 1, "5판: 새 사람은 튜토리얼 1단계부터")
 		local stored = w.H.store.data["player_7"]
 		T.eq(stored._lock.jobId, "job-A")
 		w.H.uninstall()
@@ -449,11 +457,11 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"더 새 버전(5) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
+		"더 새 버전(6) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
 		function()
 			local w = dataWorld()
 			w.H.store.data["player_11"] = {
-				data = { version = 5, money = 999, futureField = "중요" },
+				data = { version = 6, money = 999, futureField = "중요" },
 			}
 			local p = w.H.newPlayer(11, "Future")
 			local data, saveEnabled, newer = load(w, p)
@@ -464,14 +472,14 @@ return function(T, Loader)
 			local stored = w.H.store.data["player_11"]
 			T.eq(stored._lock, nil)
 			T.eq(stored.data.futureField, "중요")
-			T.eq(stored.data.version, 5)
+			T.eq(stored.data.version, 6)
 			-- 이 세션의 저장은 막혀 있음
 			local session = openSession(w, p, data)
 			session.saveEnabled = saveEnabled
 			T.falsy(w.H.run(function()
 				return w.DataService.save(p, true)
 			end))
-			T.eq(w.H.store.data["player_11"].data.version, 5, "저장 안 됨")
+			T.eq(w.H.store.data["player_11"].data.version, 6, "저장 안 됨")
 			w.H.uninstall()
 		end
 	)

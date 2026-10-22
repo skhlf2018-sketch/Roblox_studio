@@ -375,7 +375,7 @@ MapLayout.specials = {
 	altarLight = special("angels_demons", -55, 0), -- Tag Altar, Side = "light"
 	altarDark = special("angels_demons", 55, 0), -- Tag Altar, Side = "dark"
 	shrine = special("angels_demons", -96, 30), -- Tag Shrine (폭포 옆 비밀 통로, 왼쪽 벽 가까이)
-	questGate = special("enchanted_forest", -62, 0), -- Tag QuestGate (문 뒤 = 비밀 정원, 왼쪽 벽 쪽)
+	-- (5판: 마법의 숲 퀘스트 문 questGate 는 퀘스트와 함께 없앰)
 }
 
 ------------------------------------------------------------------

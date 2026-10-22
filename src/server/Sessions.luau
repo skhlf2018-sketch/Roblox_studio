@@ -34,7 +34,7 @@ export type Session = {
 	inSafeZone: boolean,
 	cooldowns: { [string]: number },
 	moveExemptUntil: number, -- 이 시각(os.clock)까지 위치 검증 쉼 (서버 순간이동·래그돌)
-	busy: { [string]: boolean }, -- yield 하는 요청 중복 방지 (예: 무료 보상 그룹 확인)
+	busy: { [string]: boolean }, -- yield 하는 요청 중복 방지 (5판: 무료 보상 그룹 확인이 없어져 지금은 쓰는 곳 없음)
 	-- 2판
 	currentZone: string, -- 지금 있는 곳 (MapLayout.zoneAt: 구역 id | "hub" | "")
 	onTreadmill: boolean, -- 러닝머신 위에 고정됨 (WalkSpeed 0, 서버가 위치 고정)

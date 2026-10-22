@@ -1,12 +1,11 @@
 --!strict
 --[[
-	RewardService — 오프라인 수입 + 무료 보상 (+10,000 속도)
+	RewardService — 오프라인 수입
 
 	오프라인 수입: (접속 시각 - 마지막 저장 시각) × 지금 장착 펫 초당 수입, 상한 24시간
 	  → 접속 때 지급하고 OfflineIncome Remote 로 팝업 정보 전송 ("You earn $16M/Day offline!")
-	무료 보상: 게임 좋아요 + 즐겨찾기 + 그룹 가입 → +10,000 속도 (계정당 1번)
-	  좋아요/즐겨찾기는 서버가 확인할 방법이 없어서 확인하지 않음.
-	  Config.FREE_REWARD_GROUP_ID 를 넣으면 그룹 가입은 서버가 확인함 (player:IsInGroup).
+	5판: 무료 보상(선물, ClaimFreeReward +10,000 속도)은 사장님 지시로 없앰. 도감 보상은 IndexService 그대로.
+	Remote 를 받지 않아서 start() 가 없음 (PlayerLifecycle 이 onPlayerReady 만 부름).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,7 +18,6 @@ local Remotes = require(Shared.Remotes)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
-local Snapshot = require(Server.Snapshot)
 local Wallet = require(script.Parent.Wallet)
 local PetService = require(script.Parent.PetService)
 
@@ -44,39 +42,6 @@ function RewardService.onPlayerReady(player: Player)
 			text = "오프라인 동안 " .. Format.money(amount) .. " 벌었어요!",
 		})
 	end
-end
-
-function RewardService.claimFree(player: Player)
-	local session, data = Sessions.getLoaded(player)
-	if not session or not data or data.freeRewardClaimed or session.busy.freeReward then
-		return
-	end
-	local groupId = Config.FREE_REWARD_GROUP_ID
-	if groupId > 0 then
-		-- IsInGroup 은 기다림(yield) → 그 사이 두 번째 요청이 들어와도 중복 지급 안 되게 표시
-		session.busy.freeReward = true
-		local ok, inGroup = pcall(function(): boolean
-			return player:IsInGroup(groupId)
-		end)
-		session.busy.freeReward = false
-		if not ok or not inGroup then
-			Net.notify(player, "error", "그룹에 가입한 뒤 다시 눌러 주세요!")
-			return
-		end
-		if data.freeRewardClaimed or player.Parent == nil then
-			return -- 기다리는 사이 이미 받았거나 나감
-		end
-	end
-	data.freeRewardClaimed = true
-	Wallet.addSpeed(player, Config.FREE_REWARD_SPEED)
-	Net.notify(player, "success", "무료 보상! 속도 +" .. Format.number(Config.FREE_REWARD_SPEED))
-	Snapshot.section(player, "flags")
-end
-
-function RewardService.start()
-	Net.on(Remotes.ToServer.ClaimFreeReward, function(player: Player)
-		RewardService.claimFree(player)
-	end)
 end
 
 return RewardService

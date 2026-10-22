@@ -109,7 +109,11 @@ return function(T, Loader)
 				for _, egg in eggParts(w.H) do
 					local pet = w.Pets.get(egg:GetAttribute("PetId"))
 					T.eq(pet.biome, egg:GetAttribute("BiomeId"))
-					T.eq(pet.source, "nest")
+					-- 5판: 둥지 풀 밖 특별 알(옛 퀘스트 알, source = special)은 초기화 특별 알로만
+					T.truthy(
+						pet.source == "nest" or (pet.source == "special" and egg:GetAttribute("Special") == true),
+						pet.id
+					)
 					if not egg:GetAttribute("Special") then
 						-- 일반 스폰은 가중치가 있는 펫만 (비밀 이상은 그 구역 중심 ±2 안일 때만)
 						T.truthy(EggRoll.nestWeight(pet) > 0, pet.id)
@@ -250,19 +254,54 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("퀘스트 전용 알(영혼 세계 수호자): 퀘스트를 끝낸 사람만 주움", function()
-		local w = eggWorld()
-		local uid = w.EggService.spawnSpecialEgg("enchanted_forest", "spirit_world_guardian", { questOnly = true })
-		local egg = findEgg(w.H, uid)
-		T.truthy(egg and egg:GetAttribute("QuestOnly") and egg:GetAttribute("Special"))
-		pressE(w, egg)
-		T.eq(egg:GetAttribute("EggState"), "Nest")
-		T.truthy(w.H.hasNotify(w.player, "error", "퀘스트를 모두 끝낸 사람만"))
-		w.data.questsRewarded = true
-		pressE(w, egg)
-		T.eq(egg:GetAttribute("EggState"), "Carried")
-		w.H.uninstall()
-	end)
+	T.test(
+		"5판: 옛 퀘스트 알(영혼 세계 수호자)도 공지 특별 알로 놓이고, 퀘스트 없이 누구나 바로 주움",
+		function()
+			local w = eggWorld()
+			local uid = w.EggService.spawnSpecialEgg("enchanted_forest", "spirit_world_guardian", { announce = true })
+			local egg = findEgg(w.H, uid)
+			T.truthy(egg and egg:GetAttribute("Special"))
+			T.eq(egg:GetAttribute("QuestOnly"), nil, "퀘스트 전용 표시 없음")
+			T.eq(egg:GetAttribute("BiomeId"), "enchanted_forest")
+			local rare = announces(w.H, "rareEgg")
+			T.eq(rare[#rare].petId, "spirit_world_guardian")
+			T.eq(rare[#rare].eggUid, uid)
+			T.eq(rare[#rare].questOnly, nil)
+			T.falsy(string.find(rare[#rare].text, "퀘스트", 1, true))
+			pressE(w, egg)
+			T.eq(egg:GetAttribute("EggState"), "Carried")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"5판: 초기화 100번 — EXTRA_SPECIALS(지터버그 8%)가 마법의 숲에 공지되며 놓이고, 같은 초기화의 다른 특별 알을 안 지움",
+		function()
+			local w = eggWorld()
+			local seen = #announces(w.H, "rareEgg")
+			local jitter = 0
+			for cycle = 2, 101 do
+				w.H.setPhase("Intermission", cycle)
+				local rare = announces(w.H, "rareEgg")
+				for i = seen + 1, #rare do
+					local a = rare[i]
+					local egg = findEgg(w.H, a.eggUid)
+					T.truthy(egg and egg:GetAttribute("Special"), "공지한 알이 그대로 있음 " .. a.petId)
+					if a.petId == "jitterbug" or a.petId == "spirit_world_guardian" then
+						T.eq(a.biomeId, "enchanted_forest")
+						T.eq(egg:GetAttribute("BiomeId"), "enchanted_forest")
+						if a.petId == "jitterbug" then
+							jitter += 1
+						end
+					end
+				end
+				seen = #rare
+				T.eq(#eggParts(w.H), 120, "알 수는 그대로 " .. cycle)
+			end
+			T.truthy(jitter >= 2 and jitter <= 20, "지터버그 공지 " .. jitter .. "번 (100번 × 8% ≈ 8)")
+			w.H.uninstall()
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("서비스: EggService 놓치기 (잡힘 규칙: 구역 안 → 둥지로, 밖 → 그 자리)")

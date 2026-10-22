@@ -1,6 +1,6 @@
 --!nocheck
 --[[
-	서비스 테스트 1: Net, PetService, IncomeService, IndexService, UpgradeService(+러닝머신), RewardService
+	서비스 테스트 1: Net, PetService, IncomeService, IndexService, UpgradeService(+러닝머신), RewardService(오프라인 수입)
 	진짜 서비스 코드를 ServerHarness(가짜 엔진 + 가상 시간) 위에서 돌립니다.
 ]]
 
@@ -702,7 +702,7 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("서비스: RewardService (오프라인 수입·무료 보상)")
+	T.suite("서비스: RewardService (오프라인 수입, 5판: 무료 보상 없앰)")
 
 	T.test("오프라인 수입: 비운 시간 × 초당 수입, 60초 이상이면 팝업", function()
 		local w = world()
@@ -748,31 +748,24 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("무료 보상: 계정당 한 번 +10,000 속도", function()
-		local w = world()
-		local RewardService = w.H.server("Services/RewardService")
-		RewardService.start()
-		w.H.client(w.player, "ClaimFreeReward")
-		T.eq(w.data.speed, w.Config.STARTING_SPEED + w.Config.FREE_REWARD_SPEED)
-		T.truthy(w.data.freeRewardClaimed)
-		w.H.client(w.player, "ClaimFreeReward")
-		T.eq(w.data.speed, w.Config.STARTING_SPEED + w.Config.FREE_REWARD_SPEED, "두 번째는 무시")
-		w.H.uninstall()
-	end)
-
-	T.test("무료 보상: 그룹 ID 를 켜면 그룹 가입자만 (가입 안 했으면 안내)", function()
-		local w = world()
-		local RewardService = w.H.server("Services/RewardService")
-		w.Config.FREE_REWARD_GROUP_ID = 12345
-		RewardService.claimFree(w.player)
-		T.falsy(w.data.freeRewardClaimed)
-		T.truthy(w.H.hasNotify(w.player, "error", "그룹에 가입"))
-		w.player.groups[12345] = true
-		RewardService.claimFree(w.player)
-		T.truthy(w.data.freeRewardClaimed)
-		w.Config.FREE_REWARD_GROUP_ID = 0
-		w.H.uninstall()
-	end)
+	T.test(
+		"5판: 무료 보상(선물)은 없어짐 — Remote·처리기·저장 칸·상수가 없음, 도감 보상은 그대로",
+		function()
+			local w = world()
+			local RewardService = w.H.server("Services/RewardService")
+			T.eq(RewardService.claimFree, nil)
+			T.eq(RewardService.start, nil, "받는 Remote 가 없어서 start() 도 없음")
+			T.eq(w.Remotes.ToServer.ClaimFreeReward, nil)
+			T.eq(w.H.remotes.ClaimFreeReward, nil, "RemoteEvent 도 안 만듦")
+			T.eq(w.Config.FREE_REWARD_SPEED, nil)
+			T.eq(w.data.freeRewardClaimed, nil)
+			T.truthy(
+				w.Remotes.ToServer.ClaimIndexReward and w.Remotes.ToClient.IndexRewarded,
+				"도감 보상은 남김"
+			)
+			w.H.uninstall()
+		end
+	)
 
 	ServerHarness.install(Loader, T).uninstall()
 end

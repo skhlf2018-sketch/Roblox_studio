@@ -17,6 +17,11 @@
 	   구역마다, 그 구역 풀에 해당 희귀도 펫이 있으면 SPECIAL_CHANCE_PER_RESET 확률로
 	   그 희귀도 펫 1마리를 무작위 둥지 하나에 놓고 서버 전체에 공지 ("희귀 알 레이스").
 	   신성 0.2% 는 설계문서 3장 값.
+
+	3) 5판 추가 특별 알 (초기화 때만): EXTRA_SPECIALS — 둥지 풀에 없는 펫(source = "special")을 이 확률로
+	   그 펫 구역의 무작위 둥지에 놓고 공지 (누구나 훔침). 옛 마법의 숲 퀘스트 알 2종:
+	     지터버그(비밀) = 비밀 특별 알과 같은 8% [추정], 영혼 세계 수호자(신성) = 옛 퀘스트 비밀 알 확률 1% 그대로
+	   (퀘스트를 없애도 마법의 숲 도감 10종·망치 무기를 모을 수 있게)
 ]]
 
 local EggSpawn = {
@@ -40,6 +45,12 @@ local EggSpawn = {
 
 	-- 한 구역에 한 번의 초기화로 놓일 수 있는 특별 알 최대 개수
 	MAX_SPECIALS_PER_BIOME = 2,
+
+	-- 5판: 둥지 풀 밖의 특별 알 (옛 퀘스트 알). 초기화마다 따로 굴림 (MAX_SPECIALS_PER_BIOME 과 별개)
+	EXTRA_SPECIALS = {
+		{ petId = "jitterbug", chance = 0.08 }, -- [추정] 비밀 특별 알과 같은 확률
+		{ petId = "spirit_world_guardian", chance = 0.01 }, -- 옛 Config.QUEST_SECRET_EGG_CHANCE 그대로
+	} :: { { petId: string, chance: number } },
 }
 
 return EggSpawn

@@ -15,7 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Economy = require(Shared.Economy)
-local QuestRules = require(Shared.QuestRules)
+local TutorialRules = require(Shared.TutorialRules)
 local Remotes = require(Shared.Remotes)
 local Types = require(Shared.Types)
 local Net = require(script.Parent.Net)
@@ -24,7 +24,8 @@ local Sessions = require(script.Parent.Sessions)
 local Snapshot = {}
 
 -- "eggs" (2판 수정) = 알 가방 / "incubators" = 우리에 놓인 알. 알을 놓거나 다시 주우면 둘 다 보냄
-export type Section = "pets" | "incubators" | "eggs" | "index" | "upgrades" | "tools" | "flags" | "special" | "quests"
+-- 5판: "tutorial" 추가 · "flags"(무료 보상)·"quests"(퀘스트) 없앰
+export type Section = "pets" | "incubators" | "eggs" | "index" | "upgrades" | "tools" | "special" | "tutorial"
 
 function Snapshot.build(player: Player): Types.Snapshot?
 	local session, data = Sessions.getLoaded(player)
@@ -53,15 +54,13 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		eggs = data.eggs,
 		eggInventoryMax = Config.EGG_INVENTORY_MAX,
 		placedEggMax = Config.PLACED_EGG_MAX,
-		freeRewardClaimed = data.freeRewardClaimed,
 		plotIndex = session.plotIndex,
 		saveEnabled = session.saveEnabled,
 		sakuraCrystals = data.sakuraCrystals,
 		sakuraUnlocked = data.sakuraUnlocked,
 		shrineUsed = data.shrineUsed,
-		quests = QuestRules.view(data.quests),
-		questsDone = data.questsRewarded,
 		petInventoryMax = Config.PET_INVENTORY_MAX,
+		tutorial = TutorialRules.view(data.tutorialStep),
 	}
 end
 
@@ -113,10 +112,8 @@ function Snapshot.section(player: Player, section: Section)
 			sakuraUnlocked = data.sakuraUnlocked,
 			shrineUsed = data.shrineUsed,
 		}
-	elseif section == "quests" then
-		payload = { quests = QuestRules.view(data.quests), questsDone = data.questsRewarded }
-	else
-		payload = { freeRewardClaimed = data.freeRewardClaimed }
+	else -- "tutorial"
+		payload = { tutorial = TutorialRules.view(data.tutorialStep) }
 	end
 	Net.fire(player, Remotes.ToClient.DataUpdate, section, payload)
 end

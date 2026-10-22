@@ -2,7 +2,7 @@
 --[[
 	HudController — 항상 보이는 화면 (2판: 원작 Steal An Egg HUD 그대로)
 
-	  왼쪽 가운데   : 상점(초록·카트) · 인덱스(하늘·책) · [다른 컨트롤러가 더한 버튼(퀘스트)] · 선물(받을 게 있을 때)
+	  왼쪽 가운데   : 상점(초록·카트) · 인덱스(하늘·책) · [다른 컨트롤러가 더한 버튼] (5판: 퀘스트·선물 버튼 없앰)
 	                  · 슬로우 모드 토글(초록 네모) · 설정(톱니)
 	  왼쪽 아래     : 신발 + 속도(빨강 큰 글씨) / 돈다발 + $돈(초록) / "친구 부스트: +10%"
 	  오른쪽 가운데 : 주황 알 버튼(알 창 = 성장하는 달걀 패널, 배지 = 가방 알 + 부화 가능 수) · 주황 발바닥 버튼(펫 창)
@@ -67,8 +67,6 @@ local WIDE_W = 150 -- 넓은 버튼 기준 너비 (높이 = MENU_BASE * 0.72)
 local ICONS: { [string]: string } = {
 	shop = "cart",
 	index = "book",
-	quest = "scroll",
-	gift = "gift",
 	slow = "shoe",
 	settings = "gear",
 }
@@ -572,9 +570,6 @@ function HudController.start()
 	local indexButton = menuButton("index", "인덱스", 2, menu, function()
 		Windows.toggle("Index")
 	end)
-	local giftButton = menuButton("gift", "선물", 4, menu, function()
-		Windows.toggle("Gift")
-	end)
 	local slowButton: TextButton
 	slowButton = menuButton("slow", "슬로우 모드", 8, menu, function()
 		HudController.setSlow(not slowOn)
@@ -639,14 +634,9 @@ function HudController.start()
 		local ids = Progression.pendingRewards(snap.indexDiscovered or {}, snap.indexClaimed or {})
 		indexBadge.Visible = #ids > 0
 		indexBadge.Text = if #ids > 99 then "99+" else tostring(#ids)
-		local giftVisible = snap.freeRewardClaimed ~= true
-		if giftButton.Visible ~= giftVisible then
-			giftButton.Visible = giftVisible
-			layoutMenu()
-		end
 	end
 	State.onChanged(function(section: string)
-		if section == "snapshot" or section == "index" or section == "flags" then
+		if section == "snapshot" or section == "index" then
 			refreshBadges()
 		end
 	end)

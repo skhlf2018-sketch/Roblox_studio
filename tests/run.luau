@@ -32,6 +32,9 @@ local specs = {
 	require("./save_data.spec"),
 	require("./crossrefs.spec"),
 	require("./maplayout.spec"),
+	-- 5판
+	require("./tutorial.spec"),
+	require("./social.spec"),
 }
 
 for _, spec in specs do

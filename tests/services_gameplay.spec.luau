@@ -1,6 +1,7 @@
 --!nocheck
 --[[
-	서비스 테스트 2: BaseService(배달 → 알 가방·우리에 알 놓기·부화·성장), FusionService, AltarService, QuestService, SakuraService
+	서비스 테스트 2: BaseService(배달 → 알 가방·우리에 알 놓기·부화·성장), FusionService, AltarService, SakuraService
+	(5판: QuestService 는 없앰 — 튜토리얼은 tests/tutorial.spec, 랭킹판·쓰다듬기는 tests/social.spec)
 	진짜 서비스 코드 + 진짜 shared 규칙을 ServerHarness 위에서 돌립니다 (가상 시간).
 ]]
 
@@ -111,7 +112,7 @@ return function(T, Loader)
 		T.eq(#update[#update][2].eggs, 1)
 		fillBag(w, w.Config.EGG_INVENTORY_MAX - 1)
 		T.eq(#w.data.eggs, 50)
-		T.eq(B.grantEgg(w.player, "jitterbug", "normal", {}, "quest"), nil, "51번째는 자리 없음")
+		T.eq(B.grantEgg(w.player, "jitterbug", "normal", {}, "dev"), nil, "51번째는 자리 없음")
 		T.falsy(B.canReceiveEgg(w.player))
 		T.eq(#w.data.eggs, 50)
 		T.eq(B.grantEgg(w.player, "없는펫", "normal", {}, "altar"), nil)
@@ -644,7 +645,7 @@ return function(T, Loader)
 			T.eq(#w.data.pets, 0)
 			-- 가방 속 알은 다 자랐어도 부화 안 됨 (우리에 놓아야 함)
 			w.H.advance(3)
-			B.grantEgg(w.player, "jitterbug", "normal", {}, "quest")
+			B.grantEgg(w.player, "jitterbug", "normal", {}, "dev")
 			w.data.eggs[1].progress = w.data.eggs[1].required
 			w.H.client(w.player, "HatchEgg", w.data.eggs[1].uid)
 			T.eq(#w.data.pets, 0)
@@ -1032,108 +1033,6 @@ return function(T, Loader)
 		T.eq(#w.da.pets, 3)
 		w.H.uninstall()
 	end)
-
-	------------------------------------------------------------------
-	T.suite("서비스: QuestService (마법의 숲 퀘스트 3개)")
-
-	local function questWorld()
-		local w = world()
-		w.FusionService = w.H.server("Services/FusionService")
-		w.QuestService = w.H.server("Services/QuestService")
-		w.FusionService.start()
-		w.QuestService.start()
-		local x, z = w.H.plotSpot(1) -- 퓨전은 내 베이스에서
-		w.H.spawn(w.player, x, 3, z)
-		return w
-	end
-
-	local function deliverEvent(w, biomeId, petId)
-		w.BaseService.delivered:fire(w.player, { biomeId = biomeId, petId = petId })
-	end
-
-	T.test("마법의 숲 알만 20개 센다 (다른 구역 알은 안 셈), 19개까지는 완료 아님", function()
-		local w = questWorld()
-		for _ = 1, 30 do
-			deliverEvent(w, "forest", "chicken")
-		end
-		T.eq(w.data.quests.deliver_eggs, nil, "다른 구역은 안 셈")
-		for _ = 1, 19 do
-			deliverEvent(w, "enchanted_forest", "prism_gecko")
-		end
-		T.eq(w.data.quests.deliver_eggs, 19)
-		T.falsy(w.data.questsRewarded)
-		deliverEvent(w, "enchanted_forest", "prism_gecko")
-		T.eq(w.data.quests.deliver_eggs, 20)
-		for _ = 1, 5 do
-			deliverEvent(w, "enchanted_forest", "prism_gecko")
-		end
-		T.eq(w.data.quests.deliver_eggs, 20, "목표에서 멈춤")
-		w.H.uninstall()
-	end)
-
-	T.test("영원 알은 아무 구역이나 1개, 일반 알은 안 셈", function()
-		local w = questWorld()
-		deliverEvent(w, "snow", "yeti") -- 비밀
-		T.eq(w.data.quests.deliver_eternal, nil)
-		deliverEvent(w, "snow", "ice_dragon") -- 영원
-		T.eq(w.data.quests.deliver_eternal, 1)
-		w.H.uninstall()
-	end)
-
-	T.test(
-		"진짜 퓨전 1번이 퀘스트 '합성'을 올림, 3개 다 끝나면 문 열림 + 지터버그 알",
-		function()
-			local w = questWorld()
-			for _ = 1, 20 do
-				deliverEvent(w, "enchanted_forest", "prism_gecko")
-			end
-			deliverEvent(w, "cosmic", "unicorn")
-			deliverEvent(w, "snow", "ice_dragon")
-			T.eq(w.data.quests.deliver_eternal, 1)
-			T.falsy(w.data.questsRewarded, "퓨전이 아직")
-			local a, b, c = addPet(w, "chicken"), addPet(w, "chicken"), addPet(w, "chicken")
-			w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-			T.eq(w.data.quests.fuse_once, 1)
-			T.truthy(w.data.questsRewarded)
-			T.truthy(w.player.attrs.QuestsDone)
-			local gotEgg = false
-			for _, record in w.data.eggs do
-				if record.petId == "jitterbug" then
-					gotEgg = true
-				end
-			end
-			T.truthy(gotEgg, "지터버그 알 지급")
-			local updates = w.H.sent(w.player, "QuestUpdate")
-			local last = updates[#updates][1]
-			T.truthy(last.allDone and last.gateOpen)
-			-- 끝난 뒤에는 더 안 올라감
-			deliverEvent(w, "enchanted_forest", "prism_gecko")
-			T.eq(w.data.quests.deliver_eggs, 20)
-			w.H.uninstall()
-		end
-	)
-
-	T.test(
-		"영혼 세계 수호자 알: 퀘스트 끝낸 사람이 없으면 절대 안 나옴, 있으면 초기화마다 약 1%",
-		function()
-			local w = questWorld()
-			local EggService = w.H.server("Services/EggService")
-			for _ = 1, 2000 do
-				EggService.resetDone:fire(1)
-			end
-			T.eq(#w.H.eggs.specials, 0)
-			w.data.questsRewarded = true
-			for _ = 1, 3000 do
-				EggService.resetDone:fire(1)
-			end
-			local n = #w.H.eggs.specials
-			T.truthy(n >= 10 and n <= 60, "3000번 중 약 30번 (실제 " .. n .. ")")
-			T.eq(w.H.eggs.specials[1].petId, "spirit_world_guardian")
-			T.eq(w.H.eggs.specials[1].biomeId, "enchanted_forest")
-			T.truthy(w.H.eggs.specials[1].options.questOnly)
-			w.H.uninstall()
-		end
-	)
 
 	------------------------------------------------------------------
 	T.suite("서비스: SakuraService (사쿠라 인큐베이터·크리스탈)")

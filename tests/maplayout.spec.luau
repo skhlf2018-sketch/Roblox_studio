@@ -287,7 +287,7 @@ return function(T, Loader)
 			T.truthy(math.abs(s.x) < 110, name)
 		end
 		T.eq(MapLayout.specials.sakuraIncubator.biomeId, "cherry_blossom")
-		T.eq(MapLayout.specials.questGate.biomeId, "enchanted_forest")
+		T.eq(MapLayout.specials.questGate, nil, "5판: 마법의 숲 퀘스트 문 없앰")
 		for name, s in MapLayout.hubSpots do
 			if name ~= "safeLine" then
 				T.truthy(MapLayout.isInHub(s), name)

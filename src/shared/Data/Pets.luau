@@ -5,16 +5,18 @@
 	숫자는 전부 "원본" 값입니다.
 	- income: 기본 수입/초 (원본). 실제 수입은 Economy.petIncome (× GROWTH_MULTIPLIER × 크기 × 돌연변이)
 	- hatchSeconds: 부화 시간(원본, 초). 실제 시간 Economy.hatchSeconds 도 이 값 그대로 (2판 수정: ÷ GROWTH_MULTIPLIER 없앰, 밤 30배만)
+	    5판 예외 (사장님 지시): 개(dog) 15초 → 3초 (첫 알을 빨리 부화해 보게)
 	- source: 어디서 나오나
 	    "nest"   = 둥지에서 훔침
 	    "altar"  = 천사&악마 제단 제물 (2단계 이후)
 	    "fusion" = 비밀 통로 합성 (2단계 이후)
-	    "quest"  = 마법의 숲 퀘스트 알 (2단계 이후)
+	    "special" = 초기화 때 낮은 확률로만 나오는 특별 알 (둥지 일반 추첨에는 안 나옴, Data/EggSpawn.EXTRA_SPECIALS)
+	               5판: 옛 마법의 숲 퀘스트 알(지터버그·영혼 세계 수호자) — 퀘스트를 없애서 누구나 훔칠 수 있는 공지 특별 알로
 	- side: 천사&악마 구역에서 천국(light)/지옥(dark) 쪽 둥지 풀
 	- estimated: 설계문서에 숫자가 빠져 있어 수석이 정한 값 (링 가드·링로드 부화 시간)
 ]]
 
-export type PetSource = "nest" | "altar" | "fusion" | "quest"
+export type PetSource = "nest" | "altar" | "fusion" | "special"
 
 export type Pet = {
 	id: string,
@@ -86,7 +88,7 @@ end
 -- 1. 숲 Forest
 biome("forest")
 pet("chicken", "닭", "Chicken", "common", 1, 10)
-pet("dog", "개", "Dog", "common", 2, 15)
+pet("dog", "개", "Dog", "common", 2, 3) -- 5판: 15초 → 3초 (사장님 지시)
 pet("bird", "새", "Bird", "uncommon", 8, 25)
 pet("burrowing_owl", "굴 올빼미", "Burrowing Owl", "rare", 35, 40)
 pet("raccoon", "라쿤", "Raccoon", "rare", 45, 50)
@@ -255,7 +257,7 @@ pet("spirit_panda", "정령 판다", "Spirit Panda", "cosmic", 90 * M, mins(37))
 pet("starry_fox", "별 여우", "Starry Fox", "secret", 750 * M, hours(3))
 pet("celestial_sunlion", "천상의 사자", "Celestial Sunlion", "eternal", 2 * B, hours(11))
 pet("royal_skywhale", "왕의 하늘고래", "Royal Skywhale", "divine", 8 * B, hours(20))
-pet("jitterbug", "지터버그", "Jitterbug", "secret", 130 * M, 20, { source = "quest" })
+pet("jitterbug", "지터버그", "Jitterbug", "secret", 130 * M, 20, { source = "special" })
 pet(
 	"spirit_world_guardian",
 	"영혼 세계 수호자",
@@ -263,7 +265,7 @@ pet(
 	"divine",
 	26 * B,
 	hours(20),
-	{ source = "quest" }
+	{ source = "special" }
 )
 
 -- 14. 사탕 왕국 Candy Kingdom (신규)

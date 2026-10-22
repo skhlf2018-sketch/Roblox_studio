@@ -2,7 +2,7 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 4. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 5. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 펫 id, 잘못된 숫자, 중복 uid, 칸 수 초과 장착 등은 고치거나 버림)
 
 	버전 기록:
@@ -14,6 +14,9 @@
 	  4 (2판 수정) + eggs (알 가방, 최대 EGG_INVENTORY_MAX). 놓인 알(incubators)은 슬롯 번호 대신 베이스 기준 x, z
 	     3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 MapLayout.eggGridLocal(n) (1~8 = 옛 슬롯 자리 그대로)
 	     옛 선물 알 대기 줄(eggQueue)은 reconcile 이 가방 뒤에 새 uid 로 붙임 (저장 데이터에 남지 않음)
+	  5 (5판) + tutorialStep (튜토리얼 단계 1~5, 6 = 끝). 퀘스트(quests, questsRewarded)·무료 보상(freeRewardClaimed) 칸 없앰
+	     4 → 5: 이미 놀던 사람(펫·놓인 알·가방 알이 있거나 알을 훔친/배달한/부화한 적 있음)은 튜토리얼 끝(6),
+	            아무것도 안 한 사람은 1단계부터 (TutorialRules.migratedStep). 옛 칸 3개는 지움 (보상으로 받은 속도·알은 그대로)
 	  놓인 알 보정: 위치가 없거나 우리 밖·다른 알과 겹치면 빈 격자 자리로, PLACED_EGG_MAX 를 넘거나 자리가 없으면 가방으로
 	  (알은 버리지 않음 — 가방까지 가득 찰 때만 버림)
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
@@ -30,11 +33,11 @@ local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
 local Upgrades = require(Shared.Data.Upgrades)
 local Weapons = require(Shared.Data.Weapons)
-local Quests = require(Shared.Data.Quests)
 local Economy = require(Shared.Economy)
 local EggPlacement = require(Shared.EggPlacement)
 local Progression = require(Shared.Progression)
 local AltarRules = require(Shared.AltarRules)
+local TutorialRules = require(Shared.TutorialRules)
 local Types = require(Shared.Types)
 
 type PlayerData = Types.PlayerData
@@ -63,17 +66,15 @@ function DataSchema.default(_now: number): PlayerData
 		tools = { bearTrap = Config.STARTING_BEAR_TRAPS },
 		incubators = {},
 		lastSaveTime = 0,
-		freeRewardClaimed = false,
 		nextUid = 1,
 		stats = { eggsStolen = 0, eggsHatched = 0 },
 		weapons = {},
 		sakuraCrystals = 0,
 		sakuraUnlocked = false,
 		shrineUsed = {},
-		quests = {},
-		questsRewarded = false,
 		equippedTrail = Upgrades.NO_TRAIL,
 		eggs = {},
+		tutorialStep = 1, -- 5판: 처음 온 사람은 튜토리얼 1단계부터
 	}
 end
 
@@ -224,7 +225,6 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	data.penLevel = integerIn(src.penLevel, 1, Upgrades.PEN_MAX_LEVEL, 1)
 	data.treadmillLevel = integerIn(src.treadmillLevel, 0, Upgrades.TREADMILL_MAX_LEVEL, 0)
 	data.lastSaveTime = finiteNonNegative(src.lastSaveTime, 0)
-	data.freeRewardClaimed = src.freeRewardClaimed == true
 	data.indexCompleteClaimed = src.indexCompleteClaimed == true
 
 	local maxUid = 0
@@ -443,16 +443,12 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		end
 	end
 
-	if typeof(src.quests) == "table" then
-		local quests = src.quests :: { [unknown]: unknown }
-		for _, quest in Quests.list do
-			local value = integerIn(quests[quest.id], 0, quest.target, 0)
-			if value > 0 then
-				data.quests[quest.id] = value
-			end
-		end
-	end
-	data.questsRewarded = src.questsRewarded == true
+	------------------------------------------------------------------
+	-- 버전 5 필드
+	------------------------------------------------------------------
+
+	-- 튜토리얼 단계 (1 ~ DONE 정수). 저장 데이터에 칸이 없으면 끝난 것으로 (이미 놀던 사람에게 다시 안 뜨게)
+	data.tutorialStep = TutorialRules.clean(src.tutorialStep, TutorialRules.DONE)
 
 	-- uid 카운터는 기존 uid 보다 항상 크게
 	data.nextUid = math.max(integerIn(src.nextUid, 1, 2 ^ 52, 1), maxUid + 1)
@@ -499,8 +495,6 @@ function DataSchema.migrate(raw: unknown): unknown
 		src.sakuraCrystals = 0
 		src.sakuraUnlocked = false
 		src.shrineUsed = {}
-		src.quests = {}
-		src.questsRewarded = false
 		src.eggQueue = {}
 		version = 2
 	end
@@ -534,6 +528,14 @@ function DataSchema.migrate(raw: unknown): unknown
 			end
 		end
 		version = 4
+	end
+	if version < 5 then
+		-- 4 → 5 (5판): 튜토리얼 단계 추가 (놀던 사람은 끝, 아무것도 안 한 사람은 1단계), 퀘스트·무료 보상 칸 지움
+		src.tutorialStep = TutorialRules.migratedStep(src)
+		src.quests = nil
+		src.questsRewarded = nil
+		src.freeRewardClaimed = nil
+		version = 5
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

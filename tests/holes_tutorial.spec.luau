@@ -603,22 +603,16 @@ return function(T, Loader)
 		end
 	)
 
-	-- 알려진 약점 (Low): PetService.addPet 이 빈 칸에 펫을 "자동 장착"해도 equipChanged 신호는 EquipPet / EquipBest 때만 나감.
-	-- 그래서 5단계에서 퓨전(FusionService)·개발 명령 /pet 으로 펫이 자동 장착되면 장착 펫이 있는데도 튜토리얼이 안 끝남
-	-- (펫 창에서 한 번 해제했다 다시 장착하거나 '모두 장착'을 눌러야 끝남). 고치는 법: addPet 이 자동 장착했으면 equipChanged:fire.
-	T.skip(
-		"5단계에서 펫이 자동 장착되면(퓨전·/pet) 바로 튜토리얼 끝 ($500)",
-		"PetService.addPet 의 자동 장착은 equipChanged 를 안 내서 5단계가 안 끝남",
-		function()
-			local w = world()
-			local player, _, data = join(w, 5009, "Auto")
-			data.tutorialStep = 5
-			w.PetService.addPet(player, { uid = "p9", petId = "chicken", size = "normal", mutations = {} }) -- 자동 장착
-			w.H.uninstall()
-			T.eq(#data.equipped, 1, "자동 장착은 됨")
-			T.eq(data.tutorialStep, 6, "장착 펫이 있는데 아직 " .. data.tutorialStep .. "단계")
-		end
-	)
+	-- (주임 B-2, 본부장이 고침) addPet 이 자동 장착하면 equipChanged 를 내서 5단계가 끝남
+	T.test("5단계에서 펫이 자동 장착되면(퓨전·/pet) 바로 튜토리얼 끝 ($500)", function()
+		local w = world()
+		local player, _, data = join(w, 5009, "Auto")
+		data.tutorialStep = 5
+		w.PetService.addPet(player, { uid = "p9", petId = "chicken", size = "normal", mutations = {} }) -- 자동 장착
+		w.H.uninstall()
+		T.eq(#data.equipped, 1, "자동 장착은 됨")
+		T.eq(data.tutorialStep, 6, "장착 펫이 있는데 아직 " .. data.tutorialStep .. "단계")
+	end)
 
 	T.test("튜토리얼 중 EquipPet 이 거부돼도(우리 가득·없는 펫) 단계는 안 오름", function()
 		local w = world()

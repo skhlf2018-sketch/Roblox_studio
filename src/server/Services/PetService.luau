@@ -128,8 +128,10 @@ function PetService.addPet(player: Player, record: PetRecord, autoEquip: boolean
 		return false
 	end
 	table.insert(data.pets, record)
+	local equipped = false
 	if autoEquip ~= false and #data.equipped < Economy.penSlots(data.penLevel) then
 		table.insert(data.equipped, record.uid)
+		equipped = true
 	end
 	local kept = true
 	for _, sold in enforceCap(player, data) do
@@ -139,6 +141,10 @@ function PetService.addPet(player: Player, record: PetRecord, autoEquip: boolean
 	end
 	PetService.recalc(player)
 	Snapshot.section(player, "pets")
+	if equipped and kept then
+		-- 자동 장착도 "장착" 이므로 튜토리얼 5단계가 끝나게 알림 (주임 B-2)
+		PetService.equipChanged:fire(player)
+	end
 	return kept
 end
 

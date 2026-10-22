@@ -43,6 +43,10 @@ local function signal()
 				h(...)
 			end
 		end,
+		-- 5판 주임 검수: 연결(Connect) 수 보기 (연결이 새는지 재려고)
+		Count = function()
+			return #handlers
+		end,
 	}
 end
 
@@ -1501,6 +1505,149 @@ local function body()
 	check(m10 ~= nil and moreSlot.Count.Text == "+4", "새로 얻은 알(m10)이 바로 핫바에 (+4)")
 	fire("DataUpdate", "eggs", { eggs = savedEggs })
 
+	-- 5판 주임 검수: 핫바 알 칸 경계 · 칸 재사용 · 놓기 흐름 · 놓인 알은 핫바에 없음
+	print("[5판 주임 검수: 핫바 알 칸 경계]")
+	local function bagOf(n)
+		local list = {}
+		for i = 1, n do
+			table.insert(list, {
+				uid = "h" .. i,
+				petId = if i % 2 == 0 then "dog" else "chicken",
+				size = "normal",
+				mutations = {},
+				biomeId = "forest",
+				special = false,
+				progress = 0,
+				required = 10,
+			})
+		end
+		return list
+	end
+	local function eggSlotCount()
+		local n = 0
+		for _, child in hotbar:GetChildren() do
+			if string.find(child.Name, "BagEgg_", 1, true) then
+				n += 1
+			end
+		end
+		return n
+	end
+	local moreHB = hotbar:FindFirstChild("MoreEggs")
+	for _, n in { 0, 1, 5, 6, 7, 8, 12, 50 } do
+		fire("DataUpdate", "eggs", { eggs = bagOf(n) })
+		local want = math.min(n, 6)
+		check(
+			eggSlotCount() == want,
+			string.format("가방 알 %d개 → 핫바 알 칸 %d개: %d", n, want, eggSlotCount())
+		)
+		if n <= 6 then
+			check(not moreHB.Visible, string.format("알 %d개: '+n' 칸 없음", n))
+		else
+			check(
+				moreHB.Visible and moreHB.Count.Text == "+" .. (n - 6),
+				string.format("알 %d개: '+%d' 칸 (%s)", n, n - 6, moreHB.Count.Text)
+			)
+		end
+	end
+	fire("DataUpdate", "eggs", { eggs = bagOf(7) })
+	check(moreHB.Visible and moreHB.Count.Text == "+1", "알 7개 = 6칸 + '+1'")
+	check(
+		hotbar:FindFirstChild("BagEgg_h7") ~= nil and hotbar:FindFirstChild("BagEgg_h1") == nil,
+		"새 알(h7)이 맨 앞, 가장 오래된 알(h1)이 '+1' 로 밀림"
+	)
+	-- 같은 목록이 100번 와도 칸을 새로 만들지 않음 (같은 인스턴스) · 핫바 자손 수도 그대로
+	local keep5 = hotbar:FindFirstChild("BagEgg_h5")
+	local before = #hotbar:GetDescendants()
+	for _ = 1, 100 do
+		fire("DataUpdate", "eggs", { eggs = bagOf(7) })
+	end
+	check(
+		hotbar:FindFirstChild("BagEgg_h5") == keep5,
+		"같은 알 칸은 다시 안 만들고 그대로 씀 (State 가 100번 바뀌어도)"
+	)
+	check(
+		#hotbar:GetDescendants() == before,
+		"핫바 자손 수 그대로: " .. before .. " → " .. #hotbar:GetDescendants()
+	)
+	-- 눌러서 놓기: 보이는 칸 중 가장 오래된 알(h2) → 놓기 모드 → PlaceEgg(h2, x, z)
+	root.Position = roblox.Vector3.new(spawnSpot.x, 3, spawnSpot.z)
+	check(
+		click(hotbar:FindFirstChild("BagEgg_h2")) and Inc.placingUid() == "h2",
+		"6번째 알 칸 → h2 놓기 모드"
+	)
+	local spotH = MapLayout.toWorld(1, -24, 0)
+	Inc.previewAt(spotH.x, spotH.z)
+	local sentBefore = #sent
+	check(Inc.confirmPlace() and #sent == sentBefore + 1, "놓기 확인")
+	local ph = lastSent("PlaceEgg")
+	check(ph and ph.args[1] == "h2", "PlaceEgg(h2, x, z): " .. tostring(ph and ph.args[1]))
+	check(
+		not Inc.isPlacing() and Workspace:FindFirstChild("EggPlacePreview") == nil,
+		"놓은 뒤 미리보기가 사라짐"
+	)
+	-- 서버가 받아 주면: 가방에서 빠지고 우리(놓인 알)로 → 핫바에서 사라지고 가려져 있던 h1 이 칸으로 올라옴
+	local afterPlace = bagOf(7)
+	table.remove(afterPlace, 2)
+	fire("DataUpdate", "eggs", { eggs = afterPlace })
+	fire("DataUpdate", "incubators", {
+		incubators = {
+			{
+				uid = "h2",
+				petId = "dog",
+				size = "normal",
+				mutations = {},
+				biomeId = "forest",
+				special = false,
+				x = -24,
+				z = 0,
+				progress = 0,
+				required = 3,
+			},
+		},
+	})
+	check(hotbar:FindFirstChild("BagEgg_h2") == nil, "놓인 알(h2)은 핫바에 없음")
+	check(hotbar:FindFirstChild("BagEgg_h1") ~= nil, "가려져 있던 h1 이 칸으로 올라옴")
+	check(eggSlotCount() == 6 and not moreHB.Visible, "6개 남음 → 6칸, '+n' 없음")
+	-- 다시 가방으로 주우면 (진행도 유지) 맨 앞 칸으로 돌아오지 않아도 가방 순서대로 보임
+	fire("DataUpdate", "incubators", { incubators = {} })
+	fire("DataUpdate", "eggs", { eggs = bagOf(7) })
+	check(
+		hotbar:FindFirstChild("BagEgg_h2") ~= nil and moreHB.Visible,
+		"다시 가방에 돌아오면 칸이 다시 생김"
+	)
+	-- 놓기 모드 중에 도구를 쓰는 숫자키가 아니라 알 칸 숫자키: 칸 번호 = 보이는 순서
+	local slotH7 = hotbar:FindFirstChild("BagEgg_h7")
+	local numberH7 = tonumber(slotH7 and slotH7:FindFirstChild("Key") and slotH7.Key.Text)
+	check(numberH7 ~= nil and numberH7 >= 3, "알 칸 번호는 도구 칸(2) 다음부터: " .. tostring(numberH7))
+	-- 연결이 새는지: 곰덫을 손에 들었다 내렸다 50번 → Count 신호 연결 수 (Tool 한 개당)
+	do
+		local trap = backpack:FindFirstChild("BearTrap")
+		local id = trap and trap:GetAttribute("__sid")
+		local counter = id and signalCache[id] and signalCache[id]["Attr_Count"]
+		check(counter ~= nil, "곰덫 도구의 Count 신호 연결을 읽을 수 있음")
+		if counter then
+			local c0 = counter.Count()
+			for _ = 1, 50 do
+				trap.Parent = character
+				sigOf(character, "ChildAdded"):Fire(trap)
+				trap.Parent = backpack
+				sigOf(backpack, "ChildAdded"):Fire(trap)
+			end
+			local c1 = counter.Count()
+			-- 알려진 약점 (HotbarController.watch, Low): 도구가 가방 ↔ 손을 오갈 때마다 같은 도구의 Count 신호에 연결이 또 붙음.
+			-- 고쳐지면 아래 한 줄을 check 로 바꾸세요.  기대: c1 - c0 == 0
+			print(
+				string.format(
+					"  [알려진 약점 BUG-H1] 곰덫 50번 들었다 내리면 Count 신호 연결 %d → %d (+%d)",
+					c0,
+					c1,
+					c1 - c0
+				)
+			)
+		end
+	end
+	fire("DataUpdate", "eggs", { eggs = savedEggs })
+
 	print("[5판: 튜토리얼 패널]")
 	local Tut = ctrl("TutorialController")
 	local tutPanel = playerGui:FindFirstChild("TutorialPanel", true)
@@ -1697,6 +1844,95 @@ local function body()
 	-- 폴짝 (서버 자리 위로만): Heartbeat 한 번 돌려도 오류 없음
 	fakeServices.RunService.Heartbeat:Fire(1 / 60)
 	check(true, "폴짝 한 프레임")
+
+	-- 5판 주임 검수: 서버가 엉터리 모양을 보내도(옛 서버·버그) 새 화면 3개가 안 터지고, 그 뒤 정상 신호는 그대로 처리
+	print("[5판 주임 검수: 엉터리 신호가 와도 안 터짐]")
+	do
+		local prevView = Tut.view()
+		local longName = string.rep("가", 500)
+		local cases = {
+			TutorialUpdate = {
+				{ n = 0 },
+				{ "x", n = 1 },
+				{ 5, n = 1 },
+				{ {}, n = 1 },
+				{ { step = 0 }, n = 1 },
+				{ { step = 99 }, n = 1 },
+				{ { step = 0 / 0 }, n = 1 },
+				{ { step = -3, total = 5, text = "t", hint = "h" }, n = 1 },
+				{ { step = 3 }, n = 1 },
+				{ { step = 3, text = 5, hint = {} }, n = 1 },
+				{ { step = 1, total = 0, text = "t", hint = "h" }, n = 1 },
+				{ { step = 1, total = "x", text = "t", hint = "h" }, n = 1 },
+				{ { step = 6, total = 5, done = true, reward = "500" }, n = 1 },
+				{ { step = 6, total = 5, done = true, reward = -1 }, n = 1 },
+				{ { step = 6, total = 5, done = true, reward = 0 / 0 }, n = 1 },
+			},
+			LeaderboardUpdate = {
+				{ n = 0 },
+				{ "x", n = 1 },
+				{ {}, n = 1 },
+				{ { money = "x", speed = 5 }, n = 1 },
+				{
+					{
+						money = {
+							{},
+							{ name = 5, value = "a" },
+							{ name = "n", value = 0 / 0 },
+							{ value = 1 / 0 },
+						},
+					},
+					n = 1,
+				},
+				{ { money = { { name = longName, value = 1e300, userId = 1 } }, speed = {} }, n = 1 },
+			},
+			PetPetted = {
+				{ n = 0 },
+				{ nil, nil, n = 2 },
+				{ "x", 5, n = 2 },
+				{ 5, nil, n = 2 },
+				{ 0 / 0, "p1", n = 2 },
+				{ 77, "", n = 2 },
+				{ 77, string.rep("p", 1000), n = 2 },
+				{ {}, {}, n = 2 },
+			},
+		}
+		local broke = {}
+		local total = 0
+		for name, list in cases do
+			for i, args in list do
+				total += 1
+				local ok, err = pcall(fire, name, table.unpack(args, 1, args.n))
+				if not ok then
+					table.insert(broke, string.format("%s #%d: %s", name, i, tostring(err)))
+				end
+			end
+		end
+		-- 알려진 약점 (Low, BUG-L1): 랭킹 줄이 표가 아니면(서버는 절대 안 보냄) LeaderboardController.renderBoards 가 e.name 에서 터짐
+		local okRaw, errRaw = pcall(fire, "LeaderboardUpdate", { money = { 5, "x" }, speed = {} })
+		print(
+			"  [알려진 약점 BUG-L1] 랭킹 줄이 숫자·글이면: "
+				.. (if okRaw then "안 터짐 (고쳐졌어요)" else tostring(errRaw))
+		)
+		check(#broke == 0, string.format("엉터리 신호 %d개 모두 무사: %s", total, table.concat(broke, " | ")))
+		-- 그 뒤 정상 신호는 그대로 처리
+		fire("TutorialUpdate", {
+			step = 3,
+			total = 5,
+			text = "핫바에서 알을 골라 우리에 놓기",
+			hint = "작은 설명",
+			done = false,
+		})
+		check(
+			tutPanel and tutPanel.Visible and Tut.view().step == 3,
+			"엉터리 뒤 정상 튜토리얼 신호 처리: " .. tostring(Tut.view() and Tut.view().step)
+		)
+		fire("LeaderboardUpdate", { money = ten, speed = ten })
+		check(rowsFrame:FindFirstChild("Row10") ~= nil, "엉터리 뒤 정상 랭킹 신호 처리")
+		if prevView then
+			fire("TutorialUpdate", prevView)
+		end
+	end
 
 	------------------------------------------------------------------
 	-- 반응형 HUD: 왼쪽 메뉴 · 핫바 자리 (화면 영역 좌표 = 위 인셋 58px 아래부터 0)

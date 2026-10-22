@@ -7,6 +7,7 @@ local TestKit = {}
 
 local passed = 0
 local failed = 0
+local skipped = 0
 local failures = {}
 local currentSuite = ""
 
@@ -32,6 +33,34 @@ function TestKit.test(name, fn)
 		table.insert(failures, currentSuite .. " > " .. name .. "\n      " .. tostring(err))
 		print("  FAIL " .. name .. "\n      " .. tostring(err))
 	end
+end
+
+-- 진짜 버그를 잡았지만 아직 고쳐지지 않은 테스트 ("알려진 버그" — 실패해도 전체를 빨갛게 만들지 않음).
+--   fn 이 있으면 돌려 봄: 아직 실패하면 SKIP(버그 그대로), 통과하면 "고쳐졌어요" 안내 (그때 T.skip 을 T.test 로 바꾸세요).
+--   fn 이 없으면 이유만 남김. 어느 쪽이든 통과/실패 개수에는 안 셈.
+function TestKit.skip(name, reason, fn)
+	skipped += 1
+	if fn then
+		local ok, err = pcall(fn)
+		if ok then
+			print(
+				"  FIXED? "
+					.. name
+					.. "\n      (이제 통과해요! 고쳐진 것 같으니 T.skip 을 T.test 로 바꿔 주세요)"
+			)
+			return
+		end
+		print(
+			"  SKIP "
+				.. name
+				.. "\n      (알려진 버그 재현됨 — "
+				.. tostring(reason)
+				.. ")\n      그때 실패 내용: "
+				.. tostring(err)
+		)
+		return
+	end
+	print("  SKIP " .. name .. "\n      (알려진 버그 — " .. tostring(reason) .. ")")
 end
 
 function TestKit.eq(actual, expected, msg)
@@ -82,6 +111,9 @@ end
 
 function TestKit.summary()
 	print(string.format("\n결과: %d 통과, %d 실패", passed, failed))
+	if skipped > 0 then
+		print(string.format("건너뜀(알려진 버그, T.skip): %d", skipped))
+	end
 	if failed > 0 then
 		print("\n실패 목록:")
 		for _, f in failures do

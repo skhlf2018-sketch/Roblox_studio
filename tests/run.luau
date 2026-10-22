@@ -35,6 +35,10 @@ local specs = {
 	-- 5판
 	require("./tutorial.spec"),
 	require("./social.spec"),
+	-- 5판 주임 검수 (구멍 찾기)
+	require("./holes_tutorial.spec"),
+	require("./holes_social.spec"),
+	require("./holes_world.spec"),
 }
 
 for _, spec in specs do

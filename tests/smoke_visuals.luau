@@ -64,12 +64,16 @@ for _, class in CLASSES do
 		return noopSignal()
 	end)
 end
+-- 5판 주임 검수: PivotTo 호출·옮긴 파트 수를 세어 둠 (펫 126마리 부하 측정용)
+local pivotCalls, pivotParts = 0, 0
 roblox.implementMethod("Model", "PivotTo", function(model, cf)
+	pivotCalls += 1
 	local primary = model.PrimaryPart
 	local pivot = if primary then primary.CFrame else roblox.CFrame.new()
 	local delta = cf * pivot:Inverse()
 	for _, d in model:GetDescendants() do
 		if d:IsA("BasePart") then
+			pivotParts += 1
 			d.CFrame = delta * d.CFrame
 		end
 	end
@@ -485,6 +489,56 @@ local function body()
 	end
 	-- 5판: 마법의 숲 퀘스트 문(QuestGate)은 퀘스트와 함께 없앰 → 마법의 숲은 항상 열림
 	check(#(tagged.QuestGate or {}) == 0, "5판: QuestGate 태그 파트 없음 (마법의 숲 항상 열림)")
+	-- 5판 주임 검수: 눈에 보이는 문·잠금도 없어야 함 — 구역 경계(마법의 숲 입구 포함)를 가로막는 단단한 파트가 없음
+	--   (캐릭터 높이 y 3~4 에서 복도 폭의 40 이상을 막는 CanCollide 파트. 바닥·모래띠(낮음)·담장(얇음)·아치 현수막(높음)은 해당 없음)
+	do
+		local function corners(part)
+			local h = part.Size / 2
+			local list = {}
+			for _, sx in { -1, 1 } do
+				for _, sy in { -1, 1 } do
+					for _, sz in { -1, 1 } do
+						table.insert(list, part.CFrame * roblox.Vector3.new(sx * h.X, sy * h.Y, sz * h.Z))
+					end
+				end
+			end
+			return list
+		end
+		local blockers = {}
+		local gateZ = {}
+		for _, b in MapLayout.biomes do
+			if b.index > 1 then
+				gateZ[b.id] = b.zMin
+			end
+		end
+		for _, d in map:GetDescendants() do
+			if d:IsA("BasePart") and d.CanCollide then
+				local minX, maxX, minY, maxY, minZ, maxZ =
+					math.huge, -math.huge, math.huge, -math.huge, math.huge, -math.huge
+				for _, c in corners(d) do
+					minX, maxX = math.min(minX, c.X), math.max(maxX, c.X)
+					minY, maxY = math.min(minY, c.Y), math.max(maxY, c.Y)
+					minZ, maxZ = math.min(minZ, c.Z), math.max(maxZ, c.Z)
+				end
+				if maxX - minX >= 40 and minY <= 4 and maxY >= 3 then
+					for id, z in gateZ do
+						if minZ <= z + 3 and maxZ >= z - 3 and minX <= 100 and maxX >= -100 then
+							table.insert(blockers, id .. ":" .. d.Name)
+						end
+					end
+				end
+			end
+		end
+		check(
+			#blockers == 0,
+			"구역 경계 14곳 어디에도 복도를 가로막는 단단한 파트(문·잠금)가 없음: "
+				.. table.concat(blockers, ", ")
+		)
+		check(
+			gateZ.enchanted_forest ~= nil,
+			"마법의 숲 입구도 검사 대상에 들어 있음 (z=" .. tostring(gateZ.enchanted_forest) .. ")"
+		)
+	end
 	-- 서버 Landmarks 가 이 파트들을 찾으면 임시 파트를 안 만듦
 	local Landmarks = requireNode(Loader.get("ServerScriptService/Server/Util/Landmarks"))
 	check(#Landmarks.find("Altar", "Side", "light") == 1, "Landmarks.find(Altar, Side=light) = 1")
@@ -820,6 +874,199 @@ local function petsBody()
 	check(again == 0, "주인이 그대로 있으면 다시 안 폴짝")
 	fakePlayer.Character = nil
 
+	-- 5판 주임 검수: 베이스 7개 × 18마리 = 126마리(서버 최대) 부하 · 나간 사람 정리 · 메모리 새는지
+	print("[5판 주임 검수: 펫 126마리 · 나간 사람 정리 · 메모리]")
+	do
+		local plotFloors, plotPens, owners = {}, {}, {}
+		for _, inst in CollectionService:GetTagged("Plot") do
+			local idx = inst:GetAttribute("PlotIndex")
+			if typeof(idx) == "number" and idx >= 1 and idx <= 7 then
+				plotFloors[idx] = inst
+			end
+		end
+		for _, inst in CollectionService:GetTagged("PenArea") do
+			local idx = inst:GetAttribute("PlotIndex")
+			if typeof(idx) == "number" and idx >= 1 and idx <= 7 then
+				plotPens[idx] = inst
+			end
+		end
+		local function makeOwner(i, round)
+			local list, eq = {}, {}
+			for k = 1, 18 do
+				local pet = Pets.list[(k * 5 + i * 11 + round) % #Pets.list + 1]
+				table.insert(list, { uid = "q" .. round .. "_" .. k, petId = pet.id, size = "normal", mutations = {} })
+				table.insert(eq, "q" .. round .. "_" .. k)
+			end
+			local player = owners[i] and owners[i].player
+				or { UserId = 200 + i, Name = "Owner" .. i, DisplayName = "Owner" .. i }
+			local s = Sessions.get(player) or Sessions.create(player)
+			s.data = { pets = list, equipped = eq }
+			s.loaded = true
+			owners[i] = { player = player, session = s }
+		end
+		for i = 1, 7 do
+			makeOwner(i, 0)
+		end
+		Players.GetPlayerByUserId = function(_, id)
+			if id == 77 then
+				return fakePlayer
+			end
+			local i = id - 200
+			return if owners[i] then owners[i].player else nil
+		end
+		for i = 1, 7 do
+			plotFloors[i]:SetAttribute("OwnerUserId", 200 + i)
+		end
+		PVS.refreshPens()
+		-- (Lune 에서는 Destroy 된 인스턴스의 Attribute 를 읽으면 오류라서 Parent 부터 확인. 지금까지 본 모델은 seen 에 기억)
+		local seen = {}
+		local function livePets()
+			local list = {}
+			for _, m in CollectionService:GetTagged("PenPet") do
+				if m.Parent ~= nil then
+					local owner = m:GetAttribute("OwnerUserId")
+					if typeof(owner) == "number" and owner >= 201 and owner <= 207 then
+						table.insert(list, m)
+						seen[m] = true
+					end
+				end
+			end
+			return list
+		end
+		local live = livePets()
+		check(#live == 126, "7개 우리 × 18마리 = 126마리 (서버 최대): " .. #live)
+		local registered = 0
+		for _, m in live do
+			if PVS.walkerOf(m) then
+				registered += 1
+			end
+		end
+		check(registered == 126, "126마리 모두 걷기 등록: " .. registered)
+		local partsPerPet = 0
+		for _, m in live do
+			partsPerPet += count(m)
+		end
+		partsPerPet = partsPerPet / #live
+
+		-- 15초 (60fps): 프레임당 PivotTo 호출·옮긴 파트 수, 걸리는 시간
+		local dt = 1 / 60
+		local t0 = os.clock() + 1000
+		for f = 1, 120 do
+			PVS.stepPens(dt, t0 + f * dt)
+		end
+		-- (Lune 은 collectgarbage("count") 만 됨: 강제 정리 대신 60프레임마다 재서 앞 절반·뒤 절반의 최대값을 비교)
+		local memFirst, memSecond, memStart = 0, 0, collectgarbage("count")
+		pivotCalls, pivotParts = 0, 0
+		local frames = 900
+		local worst = 0
+		local cpuStart = os.clock()
+		for f = 1, frames do
+			local a = os.clock()
+			PVS.stepPens(dt, t0 + 2 + f * dt)
+			worst = math.max(worst, os.clock() - a)
+			if f % 60 == 0 then
+				local m = collectgarbage("count")
+				if f <= frames / 2 then
+					memFirst = math.max(memFirst, m)
+				else
+					memSecond = math.max(memSecond, m)
+				end
+			end
+		end
+		local cpu = os.clock() - cpuStart
+		print(
+			string.format(
+				"  [정보] 126마리 15초(900프레임): PivotTo 호출 프레임당 평균 %.1f (펫 %d마리 중), 옮긴 파트 프레임당 평균 %.0f (초당 %.0f), 파트/펫 %.1f",
+				pivotCalls / frames,
+				#live,
+				pivotParts / frames,
+				pivotParts / frames * 60,
+				partsPerPet
+			)
+		)
+		print(
+			string.format(
+				"  [정보] Lune 에서 stepPens 1프레임 평균 %.2f ms / 최악 %.2f ms (Lune 의 PivotTo 는 느린 흉내라 진짜 로블록스보다 훨씬 무거움)",
+				cpu / frames * 1000,
+				worst * 1000
+			)
+		)
+		print(
+			string.format(
+				"  [정보] 메모리(KB): 시작 %.0f, 앞 7.5초 최대 %.0f, 뒤 7.5초 최대 %.0f",
+				memStart,
+				memFirst,
+				memSecond
+			)
+		)
+		check(pivotCalls / frames <= 126, "프레임당 PivotTo 는 펫 수 이하")
+		check(
+			memSecond - memFirst < 1024,
+			string.format(
+				"900프레임 걷기 동안 메모리가 계속 늘지 않음 (뒤 절반 최대 - 앞 절반 최대 = %.0f KB)",
+				memSecond - memFirst
+			)
+		)
+
+		-- 장착을 바꿔 우리를 8번 다시 만들어도 걷기 등록이 새지 않음
+		for round = 1, 8 do
+			for i = 1, 7 do
+				makeOwner(i, round)
+			end
+			PVS.refreshPens()
+			livePets() -- 새 모델을 seen 에 기억
+			PVS.stepPens(dt, t0 + 5000 + round)
+		end
+		local liveNow = livePets()
+		local ghosts, registeredNow, destroyedSeen = 0, 0, 0
+		for m in seen do
+			if m.Parent == nil then
+				destroyedSeen += 1
+				if PVS.walkerOf(m) then
+					ghosts += 1
+				end
+			elseif PVS.walkerOf(m) then
+				registeredNow += 1
+			end
+		end
+		check(
+			destroyedSeen >= 126 * 8,
+			"다시 만들면서 없어진 모델이 많음 (검사가 의미 있음): " .. destroyedSeen
+		)
+		check(
+			#liveNow == 126 and registeredNow == 126,
+			"8번 다시 만든 뒤에도 126마리 · 걷기 등록 126: " .. #liveNow .. "/" .. registeredNow
+		)
+		check(ghosts == 0, "없어진 펫 모델이 걷기 목록에 남지 않음 (유령 " .. ghosts .. ")")
+
+		-- 베이스 3개 주인이 나감 (OwnerUserId = 0): 그 펫들이 사라지고 걷기 등록도 없어짐
+		for _, i in { 2, 4, 6 } do
+			plotFloors[i]:SetAttribute("OwnerUserId", 0)
+			owners[i].session.loaded = false
+		end
+		PVS.refreshPens()
+		PVS.stepPens(dt, t0 + 6000)
+		local afterLeave = livePets()
+		check(#afterLeave == 72, "3명이 나가면 4 × 18 = 72마리만 남음: " .. #afterLeave)
+		local leftGhosts = 0
+		for m in seen do
+			if m.Parent == nil and PVS.walkerOf(m) then
+				leftGhosts += 1
+			end
+		end
+		check(leftGhosts == 0, "나간 사람 펫의 걷기 등록이 남지 않음: " .. leftGhosts)
+		-- 새 사람이 빈 베이스를 받으면 그 우리에 다시 펫이 생김
+		makeOwner(2, 50)
+		plotFloors[2]:SetAttribute("OwnerUserId", 202)
+		PVS.refreshPens()
+		check(#livePets() == 90, "새 주인이 오면 다시 18마리: " .. #livePets())
+		-- 정리: 다음 검사(경비)에 영향이 없게 되돌림
+		for i = 1, 7 do
+			plotFloors[i]:SetAttribute("OwnerUserId", 0)
+		end
+		PVS.refreshPens()
+	end
+
 	-- 경비 겉모습 (Lune 에는 Attribute 변경 신호가 없어서 State 를 바꾼 뒤 refreshGuard 를 직접 부름)
 	local function fire(inst, _name)
 		PVS.refreshGuard(inst)
@@ -1098,12 +1345,16 @@ local function petsBody()
 	check(glintOk == #Rarities.list, "희귀(rare) 이상만 등급 반짝이(RarityGlint): " .. glintOk)
 end
 
-local mapOk, mapErr = pcall(body)
+local mapOk, mapErr = xpcall(body, function(e)
+	return tostring(e) .. "\n" .. debug.traceback()
+end)
 if not mapOk then
 	failures += 1
 	print("ERROR (맵): " .. tostring(mapErr))
 end
-local ok, err = pcall(petsBody)
+local ok, err = xpcall(petsBody, function(e)
+	return tostring(e) .. "\n" .. debug.traceback()
+end)
 if not ok then
 	print("ERROR: " .. tostring(err))
 	process.exit(1)

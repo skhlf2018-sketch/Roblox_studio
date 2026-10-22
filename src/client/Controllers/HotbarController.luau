@@ -563,22 +563,90 @@ function HotbarController.start()
 		end)
 	end
 
+	-- B-3: 도구마다 Count 연결은 한 번만 (가방 ↔ 손을 오가도 안 늘어남), 도구가 내 가방·손을 떠나면 끊음.
+	-- 가방·캐릭터도 한 번만 지켜봄 (같은 가방을 두 곳에서 watch 해도 연결이 2배가 되지 않게)
+	-- (몇 개 안 돼서 목록 + == 로 찾음. 인스턴스를 표 열쇠로 쓰지 않아 Lune 테스트에서도 같은 도구로 알아봄)
+	type Tracked = { inst: Instance, conns: { RBXScriptConnection } }
+	local tools: { Tracked } = {}
+	local watched: { Tracked } = {}
+
+	local function find(list: { Tracked }, inst: Instance): number?
+		for i, t in list do
+			if t.inst == inst then
+				return i
+			end
+		end
+		return nil
+	end
+	local function mine(tool: Tool): boolean
+		local parent = tool.Parent
+		return parent ~= nil and (parent:IsA("Backpack") or parent == player.Character)
+	end
+	local function track(tool: Tool)
+		if find(tools, tool) == nil then
+			table.insert(
+				tools,
+				{ inst = tool :: Instance, conns = { tool:GetAttributeChangedSignal("Count"):Connect(refresh) } }
+			)
+		end
+	end
+	local function untrack(tool: Tool)
+		local i = find(tools, tool)
+		if i and not mine(tool) then
+			for _, c in tools[i].conns do
+				c:Disconnect()
+			end
+			table.remove(tools, i)
+		end
+	end
+
 	local function watch(container: Instance?)
-		if not container then
+		if not container or find(watched, container) then
 			return
 		end
-		container.ChildAdded:Connect(function(child: Instance)
-			if child:IsA("Tool") then
-				child:GetAttributeChangedSignal("Count"):Connect(refresh)
-			end
-			task.defer(refresh)
-		end)
-		container.ChildRemoved:Connect(function()
-			task.defer(refresh)
-		end)
+		local conns: { RBXScriptConnection } = {}
+		local entry: Tracked = { inst = container, conns = conns }
+		table.insert(watched, entry)
+		table.insert(
+			conns,
+			container.ChildAdded:Connect(function(child: Instance)
+				if child:IsA("Tool") then
+					track(child)
+				end
+				task.defer(refresh)
+			end)
+		)
+		table.insert(
+			conns,
+			container.ChildRemoved:Connect(function(child: Instance)
+				if child:IsA("Tool") then
+					-- 옮겨 가는 중이면(가방 → 손) 새 부모가 정해진 뒤에 확인
+					task.defer(untrack, child)
+				end
+				task.defer(refresh)
+			end)
+		)
+		-- 가방·캐릭터가 없어지면(죽어서 다시 생김) 그 연결도 끊음
+		table.insert(
+			conns,
+			container.Destroying:Connect(function()
+				for _, c in conns do
+					c:Disconnect()
+				end
+				local i = table.find(watched, entry)
+				if i then
+					table.remove(watched, i)
+				end
+				for _, child in container:GetChildren() do
+					if child:IsA("Tool") then
+						task.defer(untrack, child)
+					end
+				end
+			end)
+		)
 		for _, child in container:GetChildren() do
 			if child:IsA("Tool") then
-				child:GetAttributeChangedSignal("Count"):Connect(refresh)
+				track(child)
 			end
 		end
 	end

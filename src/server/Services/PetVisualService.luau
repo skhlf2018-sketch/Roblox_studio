@@ -10,9 +10,11 @@
 	    2) 둥지 근처 부모 동물 (ParentAnimalSpot 태그 자리, 크기 1.8 + 희귀도 빛 + 작은 이름표)
 	    3) 우리(PenArea)에 장착 펫 진열 (최대 18마리, 처음엔 우리 뒤쪽 2/3 에 격자, 모두 PenArea LookVector 쪽을 봄)
 	       머리 위 BillboardGui "PetTag": TextLabel "Rarity"(희귀도 색) / "PetName"(흰) / "Income"($수입/s, 초록) / "Extra"(크기·돌연변이, 있을 때)
-	       5판: 우리 안을 천천히 돌아다님 (stepPens — Heartbeat 한 루프에서 모든 펫): 랜덤 목표로 2~5초 걷고 1~3초 쉼,
+	       5판: 우리 안을 천천히 돌아다님 (stepPens — Heartbeat 한 루프에서 모든 펫, 이동 갱신은 20Hz): 랜덤 목표로 2~5초 걷고 1~3초 쉼,
 	       걷는 동안 통통(bob), 방향을 돌려 걸음, 울타리(PenArea 가장자리)·놓인 알(IncubatingEgg)·다른 펫과 안 겹침.
-	       주인이 우리 10 스터드 안에 오면 주인 쪽을 보고 한 번 폴짝. 모델 Attr PetUid·OwnerUserId·Footprint,
+	       주인이 우리 10 스터드 안에 오면 주인 쪽을 보고 한 번 폴짝. 주인이 없거나 우리 100 스터드 안에 아무도 없으면 그 우리 펫은 멈춤.
+	       펫 파트는 모두 Root 에 WeldConstraint 로 붙어 있어(Root 만 Anchored) 걸을 때 Root.CFrame 하나만 씀.
+	       장착이 바뀌면 바뀐 펫만 만들고 지움 (uid·모양이 같은 펫은 걷던 자리 그대로). 모델 Attr PetUid·OwnerUserId·Footprint,
 	       Root 의 Attachment "PromptAttach" 에 ProximityPrompt "PetPrompt"("쓰다듬기", 0.3초, F) — 클라 PetFxController 가
 	       내 펫이면 Triggered → PetPet(uid), 남의 펫이면 내 화면에서 끔 (서버는 Triggered 를 안 받음 = 판정은 PetService)
 	    4) 경비(Guardian 태그) 겉모습 — 키 25~40 스터드, HumanoidRootPart 에 Weld "GuardPose" (Humanoid·HumanoidRootPart 이름은 그대로)
@@ -2385,7 +2387,9 @@ local PEN_SCALE = 1.3
 local PEN_FOOTPRINT = 3.4 -- 크기 1 펫 한 마리가 차지하는 폭(스터드, 대략). 칸이 좁으면 이것에 맞춰 줄임
 local SIZE_SCALE: { [string]: number } = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 }
 
-type PenState = { signature: string, models: { Model } }
+-- signature: 우리 전체 (같으면 할 일 없음) / byUid: 펫마다 모델과 모양 열쇠 (바뀐 펫만 다시 만듦)
+type PenPetState = { model: Model, key: string }
+type PenState = { signature: string, models: { Model }, byUid: { [string]: PenPetState } }
 local pens: { [number]: PenState } = {}
 local penParts: { [number]: BasePart } = {}
 
@@ -2475,10 +2479,28 @@ local function mutationText(record: Types.PetRecord): string
 	return table.concat(parts, " · ")
 end
 
-local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, parent: Instance, owner: number): Model
+-- 우리 펫 크기 (칸 크기 cell 에 맞춤 + 크기 등급 배수)
+local function penScale(record: Types.PetRecord, cell: number): number
 	local mult = SIZE_SCALE[record.size] or 1
 	local fit = if cell > 0 then cell / PEN_FOOTPRINT else PEN_SCALE
-	local scale = math.max(0.6, math.min(PEN_SCALE, fit) * mult)
+	return math.max(0.6, math.min(PEN_SCALE, fit) * mult)
+end
+
+-- 펫 한 마리의 "모양 열쇠": 이것이 같으면 다시 만들 필요 없음 (주인·종류·크기·돌연변이·실제 크기 배율)
+local function penPetKey(owner: number, record: Types.PetRecord, scale: number): string
+	return string.format(
+		"%d|%s|%s|%s|%s|%.3f",
+		owner,
+		record.uid,
+		record.petId,
+		record.size,
+		table.concat(record.mutations, "+"),
+		scale
+	)
+end
+
+local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, parent: Instance, owner: number): Model
+	local scale = penScale(record, cell)
 	local model = PetVisualService.build(record.petId, scale, { effects = true })
 	model:PivotTo(spot)
 	local pet = Pets.get(record.petId)
@@ -2544,7 +2566,7 @@ end
 
 ------------------------------------------------------------------
 -- 5판: 우리 펫 돌아다니기 (사장님 지시 "제자리에 서 있지 말고")
---   서버가 Root 를 옮기면(PivotTo) 모두에게 복제됨. BaseService·클라 알 놓기 미리보기(penPetSpots)는 지금 자리를 읽음.
+--   서버가 Root.CFrame 을 20Hz 로 옮기면(용접된 파트가 따라옴) 모두에게 복제됨. BaseService·클라 알 놓기 미리보기(penPetSpots)는 지금 자리를 읽음.
 --   상태: 쉼(rest) → 목표 고르기 → 걷기(walk, 2~5초, 다 가면 쉼) → 쉼(1~3초) … 길이 막히면 잠깐 쉬고 다른 목표.
 --   막힘 = 우리(PenArea) 가장자리 FENCE_MARGIN + 몸 반지름 밖 · 놓인 알과 max(알 간격 4, 몸+알+여유) 안 · 다른 펫과 몸끼리 닿음
 --   (이미 가까운 것에서 "멀어지는" 걸음은 허용 → 바로 옆에 알을 놓아도 갇히지 않음)
@@ -2562,9 +2584,12 @@ local FACE_TIME = 1.4
 local FENCE_MARGIN = 1.5
 local EGG_EXTRA = 0.6
 local SENSE_INTERVAL = 0.25 -- 놓인 알 자리·주인 거리는 이 초마다만
+local STEP_INTERVAL = 0.05 -- 이동 갱신 20Hz (Heartbeat dt 를 모아서). 로블록스 복제도 이 정도라 눈에 큰 차이 없음
+local ACTIVE_RANGE = 100 -- 우리에서 이 거리 안에 플레이어가 하나도 없으면 그 우리 펫은 멈춤 (보는 사람이 없음)
 
 type Walker = {
 	model: Model,
+	root: BasePart, -- 모델 PrimaryPart (다른 파트는 여기에 용접) — 걸을 때 이것의 CFrame 만 씀
 	pen: BasePart,
 	penIndex: number,
 	owner: number,
@@ -2589,6 +2614,10 @@ local walkers: { [Model]: Walker } = {}
 local penEggs: { [number]: { EggSpot } } = {}
 local ownerNear: { [number]: boolean } = {}
 local senseClock = 0
+local penActive: { [number]: boolean } = {} -- 우리마다: 주인 접속 중 + 100 스터드 안에 누군가 있음 (sense 가 정함)
+local stepAcc = 0
+-- 테스트·측정용: Root.CFrame 쓰기 수, 이동 갱신(20Hz 틱) 수
+PetVisualService.moveStats = { rootWrites = 0, ticks = 0 }
 local walkRng = Random.new()
 
 local function between(range: { number }): number
@@ -2710,6 +2739,10 @@ end
 
 -- 우리 펫 하나를 돌아다니게 등록 (refreshPens 가 만들 때마다). 처음엔 격자 자리에서 잠깐 쉼
 function PetVisualService.addWalker(model: Model, pen: BasePart, penIndex: number, owner: number)
+	local root = model.PrimaryPart
+	if not root then
+		return
+	end
 	local pivot = model:GetPivot()
 	local look = pivot.LookVector
 	local h = height(model)
@@ -2718,6 +2751,7 @@ function PetVisualService.addWalker(model: Model, pen: BasePart, penIndex: numbe
 	local top = pen.CFrame.Position.Y + pen.Size.Y / 2
 	walkers[model] = {
 		model = model,
+		root = root,
 		pen = pen,
 		penIndex = penIndex,
 		owner = owner,
@@ -2741,6 +2775,16 @@ end
 -- 놓인 알 자리 (우리마다) + 주인이 다가왔는지 (SENSE_INTERVAL 마다)
 local function sense(now: number)
 	table.clear(penEggs)
+	table.clear(penActive)
+	-- 접속한 플레이어들의 몸 위치 (우리 근처에 누가 있는지)
+	local bodies: { Vector3 } = {}
+	for _, p in Players:GetPlayers() do
+		local character = p.Character
+		local hrp = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if hrp and hrp:IsA("BasePart") then
+			table.insert(bodies, hrp.CFrame.Position)
+		end
+	end
 	local pensSeen: { [number]: BasePart } = {}
 	for _, w in walkers do
 		pensSeen[w.penIndex] = w.pen
@@ -2776,6 +2820,17 @@ local function sense(now: number)
 			where = p
 			near = penDistance(pen, p) <= OWNER_NEAR
 		end
+		-- 주인이 접속 중이고 우리 ACTIVE_RANGE 안에 누군가(주인이든 다른 사람이든) 있을 때만 움직임
+		local active = false
+		if player then
+			for _, b in bodies do
+				if penDistance(pen, b) <= ACTIVE_RANGE then
+					active = true
+					break
+				end
+			end
+		end
+		penActive[index] = active
 		if near and not ownerNear[index] and where then
 			-- 주인이 왔다! → 모두 주인 쪽을 보고 차례로 한 번 폴짝
 			for _, w in walkers do
@@ -2858,12 +2913,15 @@ local function stepWalker(w: Walker, dt: number, now: number)
 		moved = true
 	end
 	if moved or math.abs(y - w.lastY) > 1e-3 then
-		w.model:PivotTo(CFrame.new(w.pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, w.yaw, 0))
+		-- 다른 파트는 Root 에 용접(WeldConstraint)돼 있어 같이 움직임 → 파트 45개를 하나씩 쓰는 PivotTo 대신 Root 하나만
+		w.root.CFrame = CFrame.new(w.pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, w.yaw, 0)
+		PetVisualService.moveStats.rootWrites += 1
 		w.lastY = y
 	end
 end
 
--- 모든 우리 펫 한 프레임 (Heartbeat 하나에서). 테스트는 dt·now 를 직접 줌
+-- 모든 우리 펫 (Heartbeat 마다 불림). dt 를 모아 STEP_INTERVAL(20Hz)마다 한 번만 움직임.
+-- 주인이 없거나 근처(ACTIVE_RANGE)에 아무도 없는 우리의 펫은 그 자리에 멈춤. 테스트는 dt·now 를 직접 줌
 function PetVisualService.stepPens(dt: number, now: number)
 	for model in walkers do
 		if model.Parent == nil then
@@ -2874,8 +2932,17 @@ function PetVisualService.stepPens(dt: number, now: number)
 		senseClock = now
 		sense(now)
 	end
+	stepAcc += dt
+	if stepAcc < STEP_INTERVAL - 1e-4 then
+		return
+	end
+	local step = math.min(stepAcc, 0.1)
+	stepAcc = 0
+	PetVisualService.moveStats.ticks += 1
 	for _, w in walkers do
-		stepWalker(w, math.min(dt, 0.1), now)
+		if penActive[w.penIndex] then
+			stepWalker(w, step, now)
+		end
 	end
 end
 
@@ -2910,20 +2977,61 @@ local function refreshPens()
 				local signature = signatureOf(owner, records)
 				local state = pens[index]
 				if not state or state.signature ~= signature then
-					if state then
-						for _, m in state.models do
-							m:Destroy()
-						end
-					end
-					local models: { Model } = {}
+					-- B-7: 장착이 조금 바뀌면 바뀐 펫만 만들고 지움. uid·모양이 같은 펫은 그대로 두어 걷던 자리에서 계속 걸음
+					local old: { [string]: PenPetState } = if state then state.byUid else {}
 					local places, cell = penSpots(pen, #records)
 					local parent = pen.Parent or pen
+					local keep: { [string]: PenPetState } = {}
+					local keys: { string } = {}
 					for i, record in records do
-						local model = buildPenPet(record, places[i], cell, parent, owner)
-						table.insert(models, model)
-						PetVisualService.addWalker(model, pen, index, owner)
+						local key = penPetKey(owner, record, penScale(record, cell))
+						keys[i] = key
+						local prev = old[record.uid]
+						if prev and prev.key == key and prev.model.Parent ~= nil and keep[record.uid] == nil then
+							keep[record.uid] = prev
+						end
 					end
-					pens[index] = { signature = signature, models = models }
+					-- 없어진 펫·모양이 바뀐 펫 지우기
+					for uid, prev in old do
+						if keep[uid] ~= prev then
+							walkers[prev.model] = nil
+							prev.model:Destroy()
+						end
+					end
+					-- 새 펫은 남은 펫(지금 걷는 자리)에서 가장 먼 격자 칸에 놓음
+					local taken: { Vector3 } = {}
+					for _, prev in keep do
+						local w = walkers[prev.model]
+						table.insert(taken, if w then w.pos else prev.model:GetPivot().Position)
+					end
+					local free: { CFrame } = table.clone(places)
+					local models: { Model } = {}
+					local byUid: { [string]: PenPetState } = {}
+					for i, record in records do
+						local kept = keep[record.uid]
+						if kept and byUid[record.uid] == nil then
+							table.insert(models, kept.model)
+							byUid[record.uid] = kept
+						elseif byUid[record.uid] == nil then
+							local bestIndex, bestDist = 1, -1
+							for j, candidate in free do
+								local d = math.huge
+								for _, p in taken do
+									d = math.min(d, flat(candidate.Position - p).Magnitude)
+								end
+								if d > bestDist then
+									bestIndex, bestDist = j, d
+								end
+							end
+							local place = table.remove(free, bestIndex) or places[i]
+							table.insert(taken, place.Position)
+							local model = buildPenPet(record, place, cell, parent, owner)
+							table.insert(models, model)
+							byUid[record.uid] = { model = model, key = keys[i] }
+							PetVisualService.addWalker(model, pen, index, owner)
+						end
+					end
+					pens[index] = { signature = signature, models = models, byUid = byUid }
 				end
 			end
 		end

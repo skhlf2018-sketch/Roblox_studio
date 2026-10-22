@@ -111,6 +111,10 @@ local Players = {
 	GetPlayerByUserId = function()
 		return nil
 	end,
+	-- (선임 B-1) 우리 펫은 우리 100 스터드 안에 누군가 있을 때만 걸음 → 테스트가 바꿔 끼움
+	GetPlayers = function()
+		return {}
+	end,
 }
 
 local sharedNode = Loader.get("ReplicatedStorage")
@@ -767,6 +771,39 @@ local function petsBody()
 			minPair[i .. ":" .. j] = math.min(flatDist(starts[i], starts[j]), radii[i] + radii[j]) - 0.05
 		end
 	end
+	-- (선임 B-1) 펫 파트는 모두 Root 에 WeldConstraint 로 붙어 있고 Root 만 Anchored → 걸을 때 Root.CFrame 하나만 씀
+	do
+		local weldedPets = 0
+		for _, m in wanderPets do
+			local root = m.PrimaryPart
+			local ok = root ~= nil and root.Anchored
+			for _, d in m:GetDescendants() do
+				if ok and d:IsA("BasePart") and d ~= root then
+					local weld = d:FindFirstChildOfClass("WeldConstraint")
+					if d.Anchored or not weld or weld.Part0 ~= root or weld.Part1 ~= d then
+						ok = false
+					end
+				end
+			end
+			if ok then
+				weldedPets += 1
+			end
+		end
+		check(
+			weldedPets == #wanderPets,
+			"펫마다 Root 만 Anchored, 나머지 파트는 모두 Root 에 용접: " .. weldedPets
+		)
+	end
+	-- (선임 B-1) 우리 100 스터드 안에 누가 있어야 걸음: 주인이 우리 앞 40 스터드(폴짝 거리 10 밖)에 서 있음
+	local watcherChar = Instance.new("Model")
+	local watcherRoot = Instance.new("Part")
+	watcherRoot.Name = "HumanoidRootPart"
+	watcherRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 40)
+	watcherRoot.Parent = watcherChar
+	fakePlayer.Character = watcherChar
+	Players.GetPlayers = function()
+		return { fakePlayer }
+	end
 	local t0 = os.clock()
 	local dt = 1 / 30
 	local outside, nearEgg, overlap, bobbed, walking = 0, 0, 0, false, 0
@@ -872,6 +909,192 @@ local function petsBody()
 		end
 	end
 	check(again == 0, "주인이 그대로 있으면 다시 안 폴짝")
+
+	-- (선임 B-1 ③) 아무도 근처에 없거나 주인이 접속해 있지 않으면 그 우리 펫은 멈춤 (Root 쓰기 0)
+	do
+		local tFreeze = t1 + 100
+		local function snapshot()
+			local list = {}
+			for i, m in wanderPets do
+				list[i] = m:GetPivot()
+			end
+			return list
+		end
+		local function run(seconds, from)
+			for frame = 1, math.floor(seconds * 30) do
+				PVS.stepPens(dt, from + frame * dt)
+			end
+		end
+		local function same(a, b)
+			local n = 0
+			for i in a do
+				if
+					(a[i].Position - b[i].Position).Magnitude < 1e-6
+					and a[i].LookVector:Dot(b[i].LookVector) > 0.999
+				then
+					n += 1
+				end
+			end
+			return n
+		end
+		local function movedCount(a, b)
+			return #wanderPets - same(a, b)
+		end
+		-- ① 주인이 우리에서 150 스터드 (100 밖), 다른 사람도 없음
+		ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 150)
+		run(0.5, tFreeze) -- 다음 감지(0.25초)까지 (그 사이 몇 걸음은 됨)
+		local before = snapshot()
+		local w0 = PVS.moveStats.rootWrites
+		run(4, tFreeze + 0.5)
+		check(
+			same(before, snapshot()) == #wanderPets,
+			"우리 100 스터드 안에 아무도 없으면 펫이 멈춤: "
+				.. same(before, snapshot())
+				.. "/"
+				.. #wanderPets
+		)
+		check(PVS.moveStats.rootWrites == w0, "멈춘 동안 Root.CFrame 쓰기 0: " .. (PVS.moveStats.rootWrites - w0))
+		-- ② 주인 말고 다른 사람이 우리 옆에 오면 다시 걸음 (주인은 접속 중)
+		local visitor = { UserId = 88, Name = "Visitor", DisplayName = "Visitor" }
+		local visitorChar = Instance.new("Model")
+		local visitorRoot = Instance.new("Part")
+		visitorRoot.Name = "HumanoidRootPart"
+		visitorRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, pen1.Size.Z / 2 + 30)
+		visitorRoot.Parent = visitorChar
+		visitor.Character = visitorChar
+		Players.GetPlayers = function()
+			return { fakePlayer, visitor }
+		end
+		local a = snapshot()
+		run(6, tFreeze + 5)
+		check(
+			movedCount(a, snapshot()) >= #wanderPets / 2,
+			"다른 사람이 30 스터드 안에 오면 다시 걸음: " .. movedCount(a, snapshot())
+		)
+		-- ③ 주인이 나감 (접속 안 함) → 손님이 옆에 있어도 멈춤
+		local realGet = Players.GetPlayerByUserId
+		Players.GetPlayerByUserId = function(_, id)
+			if id == 77 then
+				return nil
+			end
+			return realGet(_, id)
+		end
+		Players.GetPlayers = function()
+			return { visitor }
+		end
+		run(0.5, tFreeze + 11)
+		local b = snapshot()
+		local w1 = PVS.moveStats.rootWrites
+		run(4, tFreeze + 11.5)
+		check(same(b, snapshot()) == #wanderPets, "주인이 접속해 있지 않으면 손님이 있어도 멈춤")
+		check(PVS.moveStats.rootWrites == w1, "주인 없는 우리는 Root.CFrame 쓰기 0")
+		Players.GetPlayerByUserId = realGet
+		Players.GetPlayers = function()
+			return { fakePlayer }
+		end
+		ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 40)
+		local c = snapshot()
+		run(6, tFreeze + 16)
+		check(
+			movedCount(c, snapshot()) >= #wanderPets / 2,
+			"주인이 돌아오면 다시 걸음: " .. movedCount(c, snapshot())
+		)
+	end
+
+	-- (선임 B-7) 장착이 조금 바뀌면 바뀐 펫만 다시 만듦: 나머지는 같은 모델·걷던 자리 그대로 (순간이동 없음)
+	do
+		local function penModels()
+			local list = {}
+			for _, m in pen1.Parent:GetChildren() do
+				if m:IsA("Model") and m:GetAttribute("PetUid") then
+					table.insert(list, m)
+				end
+			end
+			return list
+		end
+		local function findSame(list, m)
+			for _, x in list do
+				if x == m then
+					return true
+				end
+			end
+			return false
+		end
+		local byUid, pivots = {}, {}
+		for _, m in wanderPets do
+			byUid[m:GetAttribute("PetUid")] = m
+			pivots[m:GetAttribute("PetUid")] = m:GetPivot()
+		end
+		local function keptCount(list, skip)
+			local kept, stayed = 0, 0
+			for uid, m in byUid do
+				if not skip[uid] and m.Parent ~= nil and findSame(list, m) then
+					kept += 1
+					if (m:GetPivot().Position - pivots[uid].Position).Magnitude < 1e-6 then
+						stayed += 1
+					end
+				end
+			end
+			return kept, stayed
+		end
+		-- ① p1 장착 해제 (장착 20개 중 앞 18개가 우리에 → p2~p19): p1 만 사라지고 p19 만 새로 생김
+		local eq = session.data.equipped
+		table.remove(eq, table.find(eq, "p1"))
+		PVS.refreshPens()
+		local now1 = penModels()
+		local kept, stayed = keptCount(now1, { p1 = true })
+		check(#now1 == 18, "장착 해제 뒤에도 우리에 18마리: " .. #now1)
+		check(byUid.p1.Parent == nil, "해제한 펫(p1) 모델만 없어짐")
+		check(kept == 17, "나머지 17마리는 같은 모델 그대로 (다시 안 만듦): " .. kept)
+		check(stayed == 17, "그대로인 펫은 걷던 자리 그대로 (격자로 순간이동 안 함): " .. stayed)
+		local newOne
+		for _, m in now1 do
+			if m:GetAttribute("PetUid") == "p19" then
+				newOne = m
+			end
+		end
+		check(
+			newOne ~= nil and PVS.walkerOf(newOne) ~= nil,
+			"새로 들어온 펫(p19)만 만들어지고 걷기 등록"
+		)
+		if newOne then
+			local np = newOne:GetPivot().Position
+			local lp = pen1.CFrame:PointToObjectSpace(np)
+			check(
+				math.abs(lp.X) <= pen1.Size.X / 2 and math.abs(lp.Z) <= pen1.Size.Z / 2,
+				"새 펫은 우리 안 빈 칸에 생김"
+			)
+		end
+		-- ② 펫 하나(p5)의 모양(돌연변이)이 바뀌면 그 펫만 다시 만듦
+		for _, r in session.data.pets do
+			if r.uid == "p5" then
+				r.mutations = { "golden" }
+			end
+		end
+		PVS.refreshPens()
+		local now2 = penModels()
+		local kept2 = keptCount(now2, { p1 = true, p5 = true })
+		check(#now2 == 18 and byUid.p5.Parent == nil, "모양이 바뀐 펫(p5)은 다시 만듦")
+		check(kept2 == 16, "모양이 안 바뀐 나머지 16마리는 그대로: " .. kept2)
+		-- ③ 아무것도 안 바뀌면 아무것도 안 만듦
+		local same3 = penModels()
+		PVS.refreshPens()
+		local untouched = 0
+		for _, m in penModels() do
+			if findSame(same3, m) then
+				untouched += 1
+			end
+		end
+		check(untouched == 18, "장착이 그대로면 18마리 모두 그대로: " .. untouched)
+		-- 원래대로 (p1 다시 맨 앞, p5 돌연변이 없음)
+		table.insert(eq, 1, "p1")
+		for _, r in session.data.pets do
+			if r.uid == "p5" then
+				r.mutations = {}
+			end
+		end
+		PVS.refreshPens()
+	end
 	fakePlayer.Character = nil
 
 	-- 5판 주임 검수: 베이스 7개 × 18마리 = 126마리(서버 최대) 부하 · 나간 사람 정리 · 메모리 새는지
@@ -906,6 +1129,22 @@ local function petsBody()
 		end
 		for i = 1, 7 do
 			makeOwner(i, 0)
+			-- (선임 B-1) 주인마다 자기 우리 앞 30 스터드에 서 있음 → 7개 우리 모두 "보는 사람 있음"(걷는 중)
+			local char = Instance.new("Model")
+			local hrp = Instance.new("Part")
+			hrp.Name = "HumanoidRootPart"
+			hrp.CFrame = plotPens[i].CFrame * roblox.CFrame.new(0, 3, -plotPens[i].Size.Z / 2 - 30)
+			hrp.Parent = char
+			owners[i].player.Character = char
+		end
+		Players.GetPlayers = function()
+			local list = {}
+			for i = 1, 7 do
+				if owners[i] then
+					table.insert(list, owners[i].player)
+				end
+			end
+			return list
 		end
 		Players.GetPlayerByUserId = function(_, id)
 			if id == 77 then
@@ -957,6 +1196,11 @@ local function petsBody()
 		-- (Lune 은 collectgarbage("count") 만 됨: 강제 정리 대신 60프레임마다 재서 앞 절반·뒤 절반의 최대값을 비교)
 		local memFirst, memSecond, memStart = 0, 0, collectgarbage("count")
 		pivotCalls, pivotParts = 0, 0
+		local writes0, ticks0 = PVS.moveStats.rootWrites, PVS.moveStats.ticks
+		local startPos = {}
+		for i, m in live do
+			startPos[i] = m:GetPivot().Position
+		end
 		local frames = 900
 		local worst = 0
 		local cpuStart = os.clock()
@@ -974,23 +1218,68 @@ local function petsBody()
 			end
 		end
 		local cpu = os.clock() - cpuStart
+		local writes = PVS.moveStats.rootWrites - writes0
+		local ticks = PVS.moveStats.ticks - ticks0
+		local writesPerSec = writes / frames * 60
+		-- 고치기 전(5판 주임 검수 14-4): 60Hz 로 걷는 펫마다 PivotTo → 파트 CFrame 쓰기 초당 약 169,900 (이 PC 173,419)
+		local BEFORE_PER_SEC = 169900
+		-- 같은 걸음을 예전 방식(매 프레임 PivotTo = 파트 전부)으로 했다면: 틱당 걷는 펫 수 × 60프레임 × 파트/펫
+		local oldStylePerSec = (if ticks > 0 then writes / ticks else 0) * 60 * partsPerPet
+		local movedPets = 0
+		for i, m in live do
+			if (m:GetPivot().Position - startPos[i]).Magnitude > 2 then
+				movedPets += 1
+			end
+		end
 		print(
 			string.format(
-				"  [정보] 126마리 15초(900프레임): PivotTo 호출 프레임당 평균 %.1f (펫 %d마리 중), 옮긴 파트 프레임당 평균 %.0f (초당 %.0f), 파트/펫 %.1f",
-				pivotCalls / frames,
-				#live,
-				pivotParts / frames,
-				pivotParts / frames * 60,
+				"  [정보] 126마리 15초(900프레임, 60fps): 이동 갱신 %d번(20Hz), Root.CFrame 쓰기 프레임당 평균 %.1f (초당 %.0f), PivotTo %d번 (옮긴 파트 %d), 파트/펫 %.1f",
+				ticks,
+				writes / frames,
+				writesPerSec,
+				pivotCalls,
+				pivotParts,
 				partsPerPet
 			)
 		)
 		print(
 			string.format(
-				"  [정보] Lune 에서 stepPens 1프레임 평균 %.2f ms / 최악 %.2f ms (Lune 의 PivotTo 는 느린 흉내라 진짜 로블록스보다 훨씬 무거움)",
+				"  [정보] 파트 CFrame 쓰기 초당: 고치기 전 약 %d → 지금 %.0f (1/%.0f). 같은 걸음을 예전 방식으로 했다면 %.0f. 15초 동안 2 스터드 넘게 걸은 펫 %d/%d",
+				BEFORE_PER_SEC,
+				writesPerSec,
+				BEFORE_PER_SEC / math.max(1, writesPerSec),
+				oldStylePerSec,
+				movedPets,
+				#live
+			)
+		)
+		print(
+			string.format(
+				"  [정보] Lune 에서 stepPens 1프레임 평균 %.2f ms / 최악 %.2f ms (Lune 흉내라 ms 는 참고만)",
 				cpu / frames * 1000,
 				worst * 1000
 			)
 		)
+		check(pivotCalls == 0, "걷는 동안 PivotTo 0번 (Root.CFrame 만 씀): " .. pivotCalls)
+		check(math.abs(ticks - 300) <= 1, "60fps 900프레임 → 이동 갱신 300번 (20Hz): " .. ticks)
+		check(writes <= ticks * 126, "갱신 한 번에 Root 쓰기는 펫 수 이하")
+		check(
+			writesPerSec <= BEFORE_PER_SEC / 10,
+			string.format(
+				"초당 파트 CFrame 쓰기가 고치기 전의 1/10 이하: %.0f ≤ %d",
+				writesPerSec,
+				BEFORE_PER_SEC / 10
+			)
+		)
+		check(
+			writesPerSec <= oldStylePerSec / 10,
+			string.format(
+				"같은 걸음을 예전 방식으로 한 것의 1/10 이하: %.0f ≤ %.0f",
+				writesPerSec,
+				oldStylePerSec / 10
+			)
+		)
+		check(movedPets >= 100, "20Hz 로 바꿔도 펫들이 돌아다님: " .. movedPets .. "/126")
 		print(
 			string.format(
 				"  [정보] 메모리(KB): 시작 %.0f, 앞 7.5초 최대 %.0f, 뒤 7.5초 최대 %.0f",
@@ -999,7 +1288,6 @@ local function petsBody()
 				memSecond
 			)
 		)
-		check(pivotCalls / frames <= 126, "프레임당 PivotTo 는 펫 수 이하")
 		check(
 			memSecond - memFirst < 1024,
 			string.format(
@@ -1007,6 +1295,79 @@ local function petsBody()
 				memSecond - memFirst
 			)
 		)
+
+		-- (선임 B-1 ③) 주인 3명이 맵 밖 멀리 가면, 100 스터드 안에 아무도 없는 우리의 펫만 멈추고 쓰기도 그만큼 줄어듦
+		do
+			for _, i in { 1, 2, 3 } do
+				local hrp = owners[i].player.Character:FindFirstChild("HumanoidRootPart")
+				hrp.CFrame = roblox.CFrame.new(0, 3, 5000 + i * 500)
+			end
+			for f = 1, 30 do
+				PVS.stepPens(dt, t0 + 20 + f * dt)
+			end
+			-- 어느 우리에 100 스터드 안에 아무도 없나 (이웃 베이스 주인이 100 안이면 그 우리는 계속 걸음 — 규칙대로)
+			local function penDist(pen, pos)
+				local lp = pen.CFrame:PointToObjectSpace(pos)
+				local dx = math.max(math.abs(lp.X) - pen.Size.X / 2, 0)
+				local dz = math.max(math.abs(lp.Z) - pen.Size.Z / 2, 0)
+				return math.sqrt(dx * dx + dz * dz)
+			end
+			local empty = {}
+			local emptyPens = 0
+			for i = 1, 7 do
+				local nearest = math.huge
+				for j = 1, 7 do
+					local hrp = owners[j].player.Character:FindFirstChild("HumanoidRootPart")
+					nearest = math.min(nearest, penDist(plotPens[i], hrp.CFrame.Position))
+				end
+				empty[200 + i] = nearest > 100
+				if empty[200 + i] then
+					emptyPens += 1
+				end
+			end
+			local far = {}
+			local snap = {}
+			for k, m in live do
+				far[k] = empty[m:GetAttribute("OwnerUserId")] == true
+				snap[k] = m:GetPivot().Position
+			end
+			local w0 = PVS.moveStats.rootWrites
+			for f = 1, 600 do
+				PVS.stepPens(dt, t0 + 21 + f * dt)
+			end
+			local frozen, farCount, nearMoved = 0, 0, 0
+			for k, m in live do
+				local d = (m:GetPivot().Position - snap[k]).Magnitude
+				if far[k] then
+					farCount += 1
+					if d < 1e-6 then
+						frozen += 1
+					end
+				elseif d > 1e-6 then
+					nearMoved += 1
+				end
+			end
+			print(
+				string.format(
+					"  [정보] 주인 3명이 맵 밖으로 가니 100 스터드 안에 아무도 없는 우리 %d개 → Root 쓰기 초당 %.0f (7개 모두 볼 때 %.0f)",
+					emptyPens,
+					(PVS.moveStats.rootWrites - w0) / 600 * 60,
+					writesPerSec
+				)
+			)
+			check(
+				emptyPens >= 1 and farCount == emptyPens * 18 and frozen == farCount,
+				string.format("아무도 없는 우리 %d개(%d마리)는 멈춤: %d", emptyPens, farCount, frozen)
+			)
+			check(
+				nearMoved >= (126 - farCount) * 0.75,
+				string.format("사람이 있는 우리 펫은 계속 걸음: %d/%d", nearMoved, 126 - farCount)
+			)
+			for _, i in { 1, 2, 3 } do
+				local hrp = owners[i].player.Character:FindFirstChild("HumanoidRootPart")
+				hrp.CFrame = plotPens[i].CFrame * roblox.CFrame.new(0, 3, -plotPens[i].Size.Z / 2 - 30)
+			end
+		end
 
 		-- 장착을 바꿔 우리를 8번 다시 만들어도 걷기 등록이 새지 않음
 		for round = 1, 8 do

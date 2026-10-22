@@ -16,7 +16,8 @@
 	      4 부화!               → 내 우리에 놓인 알 노란 Highlight + 머리 위 "부화!" (아직 자라는 중이면 "자라는 중…")
 	      5 펫 장착             → 오른쪽 발바닥(펫) 버튼 반짝, 펫 창이 열려 있으면 "장착" 버튼들 반짝
 	  - 끝(reward): 색종이 + 팡파레(TutorialDone) + "튜토리얼 끝! / $500 받았어요!" (3.6초)
-	공개: TutorialController.view() / update() / celebrate(reward) / panelRect() (테스트도 씀)
+	  - 매 프레임 연출(RenderStepped)·0.25초 갱신 루프는 튜토리얼 중일 때만 돎. 끝나면 둘 다 끊고, /tutorial reset 으로 다시 시작되면 다시 연결
+	공개: TutorialController.view() / update() / celebrate(reward) / panelRect() / running() (테스트도 씀)
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -502,6 +503,120 @@ function TutorialController.update()
 	setGlows(glowList)
 end
 
+------------------------------------------------------------------
+-- 매 프레임 (RenderStepped): 표시 통통 · 반짝 테두리 맥박 · 화면 가장자리 화살표
+-- B-6: 튜토리얼 중(active)일 때만 연결. 끝나면 이것과 0.25초 루프를 둘 다 끊고, /tutorial reset 으로 다시 시작되면 다시 연결
+------------------------------------------------------------------
+
+local function onRender()
+	local now = os.clock()
+	local gui = markerGui
+	if gui and gui.Enabled then
+		gui.StudsOffset = Vector3.new(0, 7 + math.abs(math.sin(now * 3)) * 1.5, 0)
+	end
+	for _, f in glows do
+		local stroke = f:FindFirstChildOfClass("UIStroke")
+		local k = (math.sin(now * 6) + 1) / 2
+		if stroke then
+			stroke.Transparency = 0.6 * (1 - k)
+			stroke.Thickness = 3 + k * 3
+		end
+		f.Size = UDim2.new(1, 8 + k * 8, 1, 8 + k * 8)
+	end
+	local a = arrow
+	local camera = Workspace.CurrentCamera
+	local goal = if targetPart and targetPart.Parent then targetPart.Position else target
+	if not a then
+		return
+	end
+	if not (active() and goal and camera) then
+		a.Visible = false
+		return
+	end
+	local ok, point, onScreen = pcall(function(): (Vector3, boolean)
+		return camera:WorldToViewportPoint(goal :: Vector3)
+	end)
+	if not ok or (onScreen and point.Z > 0) then
+		a.Visible = false
+		return
+	end
+	local view = camera.ViewportSize
+	local area = Ui.area()
+	local inset = view.Y - area.Y
+	local cx, cy = area.X / 2, area.Y / 2
+	local dx, dy = point.X - cx, point.Y - inset - cy
+	if point.Z < 0 then
+		dx, dy = -dx, -dy
+	end
+	local len = math.sqrt(dx * dx + dy * dy)
+	if len < 1 then
+		a.Visible = false
+		return
+	end
+	dx, dy = dx / len, dy / len
+	local margin = 48
+	local sx = if math.abs(dx) > 1e-3 then (cx - margin) / math.abs(dx) else math.huge
+	local sy = if math.abs(dy) > 1e-3 then (cy - margin) / math.abs(dy) else math.huge
+	local s = math.min(sx, sy)
+	a.Position = UDim2.fromOffset(cx + dx * s, cy + dy * s)
+	a.Rotation = math.deg(math.atan2(dy, dx))
+	a.Visible = true
+end
+
+local started = false
+local renderConn: RBXScriptConnection? = nil
+local loopGen = 0 -- 0.25초 루프 번호 (바뀌면 돌던 루프는 다음 차례에 멈춤)
+local loopOn = false
+
+-- 튜토리얼 중이면 매 프레임 연결 + 0.25초 루프를 켜고, 아니면(끝남·아직 모름) 둘 다 끔
+local function syncLoops()
+	if not started then
+		return
+	end
+	if active() then
+		if not renderConn then
+			renderConn = RunService.RenderStepped:Connect(onRender)
+		end
+		if not loopOn then
+			loopOn = true
+			loopGen += 1
+			local gen = loopGen
+			-- 가리킬 곳은 0.25초마다 (내가 움직이거나 알이 생기고 없어짐)
+			task.spawn(function()
+				while loopGen == gen do
+					local ok, err = pcall(function(): ...any
+						TutorialController.update()
+						return
+					end)
+					if not ok then
+						warn("[TutorialController] " .. tostring(err))
+					end
+					task.wait(0.25)
+				end
+			end)
+		end
+	else
+		local conn = renderConn
+		if conn then
+			conn:Disconnect()
+			renderConn = nil
+		end
+		if loopOn then
+			loopOn = false
+			loopGen += 1
+		end
+		local a = arrow
+		if a then
+			a.Visible = false
+		end
+	end
+end
+
+-- 테스트용: 매 프레임 연결·0.25초 루프가 켜져 있나
+function TutorialController.running(): (boolean, boolean)
+	return renderConn ~= nil, loopOn
+end
+
 local function setView(v: any, fromRemote: boolean)
 	if not validView(v) then
 		return
@@ -519,6 +634,7 @@ local function setView(v: any, fromRemote: boolean)
 	end
 	lastStep = step
 	TutorialController.update()
+	syncLoops()
 	local reward = view.reward
 	if fromRemote and view.done and typeof(reward) == "number" and reward > 0 then
 		TutorialController.celebrate(reward)
@@ -667,6 +783,7 @@ function TutorialController.start()
 	})
 
 	Ui.onLayout(layoutPanel)
+	started = true -- 이제부터 setView 가 매 프레임 연결·0.25초 루프를 켜고 끔 (syncLoops)
 
 	Net.on(Remotes.ToClient.TutorialUpdate, function(v: any)
 		setView(v, true)
@@ -684,75 +801,8 @@ function TutorialController.start()
 		setView(snap.tutorial, false)
 	end
 
-	-- 매 프레임: 표시 통통 · 반짝 테두리 맥박 · 화면 가장자리 화살표
-	RunService.RenderStepped:Connect(function()
-		local now = os.clock()
-		local gui = markerGui
-		if gui and gui.Enabled then
-			gui.StudsOffset = Vector3.new(0, 7 + math.abs(math.sin(now * 3)) * 1.5, 0)
-		end
-		for _, f in glows do
-			local stroke = f:FindFirstChildOfClass("UIStroke")
-			local k = (math.sin(now * 6) + 1) / 2
-			if stroke then
-				stroke.Transparency = 0.6 * (1 - k)
-				stroke.Thickness = 3 + k * 3
-			end
-			f.Size = UDim2.new(1, 8 + k * 8, 1, 8 + k * 8)
-		end
-		local a = arrow
-		local camera = Workspace.CurrentCamera
-		local goal = if targetPart and targetPart.Parent then targetPart.Position else target
-		if not a then
-			return
-		end
-		if not (active() and goal and camera) then
-			a.Visible = false
-			return
-		end
-		local ok, point, onScreen = pcall(function(): (Vector3, boolean)
-			return camera:WorldToViewportPoint(goal :: Vector3)
-		end)
-		if not ok or (onScreen and point.Z > 0) then
-			a.Visible = false
-			return
-		end
-		local view = camera.ViewportSize
-		local area = Ui.area()
-		local inset = view.Y - area.Y
-		local cx, cy = area.X / 2, area.Y / 2
-		local dx, dy = point.X - cx, point.Y - inset - cy
-		if point.Z < 0 then
-			dx, dy = -dx, -dy
-		end
-		local len = math.sqrt(dx * dx + dy * dy)
-		if len < 1 then
-			a.Visible = false
-			return
-		end
-		dx, dy = dx / len, dy / len
-		local margin = 48
-		local sx = if math.abs(dx) > 1e-3 then (cx - margin) / math.abs(dx) else math.huge
-		local sy = if math.abs(dy) > 1e-3 then (cy - margin) / math.abs(dy) else math.huge
-		local s = math.min(sx, sy)
-		a.Position = UDim2.fromOffset(cx + dx * s, cy + dy * s)
-		a.Rotation = math.deg(math.atan2(dy, dx))
-		a.Visible = true
-	end)
-
-	-- 가리킬 곳은 0.25초마다 (내가 움직이거나 알이 생기고 없어짐)
-	task.spawn(function()
-		while true do
-			local ok, err = pcall(function(): ...any
-				TutorialController.update()
-				return
-			end)
-			if not ok then
-				warn("[TutorialController] " .. tostring(err))
-			end
-			task.wait(0.25)
-		end
-	end)
+	-- 매 프레임 연결·0.25초 루프는 튜토리얼 중일 때만 (syncLoops — 끝난 사람은 아무것도 안 돎)
+	syncLoops()
 end
 
 return TutorialController

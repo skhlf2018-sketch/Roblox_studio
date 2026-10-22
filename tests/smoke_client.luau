@@ -34,8 +34,19 @@ local function signal()
 	local handlers = {}
 	return {
 		Connect = function(_, fn)
-			table.insert(handlers, fn)
-			return { Disconnect = function() end }
+			-- (선임 B-3) 끊으면 진짜로 빠짐 → Count() 로 연결이 새는지·끊기는지 잴 수 있음
+			local box = function(...)
+				return fn(...)
+			end
+			table.insert(handlers, box)
+			return {
+				Disconnect = function()
+					local i = table.find(handlers, box)
+					if i then
+						table.remove(handlers, i)
+					end
+				end,
+			}
 		end,
 		Wait = function() end,
 		Fire = function(_, ...)
@@ -1629,21 +1640,30 @@ local function body()
 			local c0 = counter.Count()
 			for _ = 1, 50 do
 				trap.Parent = character
+				sigOf(backpack, "ChildRemoved"):Fire(trap)
 				sigOf(character, "ChildAdded"):Fire(trap)
 				trap.Parent = backpack
+				sigOf(character, "ChildRemoved"):Fire(trap)
 				sigOf(backpack, "ChildAdded"):Fire(trap)
 			end
 			local c1 = counter.Count()
-			-- 알려진 약점 (HotbarController.watch, Low): 도구가 가방 ↔ 손을 오갈 때마다 같은 도구의 Count 신호에 연결이 또 붙음.
-			-- 고쳐지면 아래 한 줄을 check 로 바꾸세요.  기대: c1 - c0 == 0
-			print(
-				string.format(
-					"  [알려진 약점 BUG-H1] 곰덫 50번 들었다 내리면 Count 신호 연결 %d → %d (+%d)",
-					c0,
-					c1,
-					c1 - c0
-				)
+			-- (B-3 고침, 선임) 예전: 도구가 가방 ↔ 손을 오갈 때마다 같은 도구의 Count 신호에 연결이 또 붙음 (50번 → +100)
+			check(
+				c0 == 1,
+				"곰덫 도구의 Count 신호 연결은 처음부터 1개 (가방을 두 번 watch 해도): " .. c0
 			)
+			check(
+				c1 - c0 == 0,
+				string.format("곰덫 50번 들었다 내려도 Count 연결 수가 늘지 않음: %d → %d", c0, c1)
+			)
+			-- 도구가 내 가방·손을 떠나면(버림·없어짐) 연결을 끊고, 다시 들어오면 한 번만 다시 연결
+			trap.Parent = nil
+			sigOf(backpack, "ChildRemoved"):Fire(trap)
+			check(counter.Count() == 0, "도구가 사라지면 Count 연결 끊김: " .. counter.Count())
+			trap.Parent = backpack
+			sigOf(backpack, "ChildAdded"):Fire(trap)
+			sigOf(backpack, "ChildAdded"):Fire(trap)
+			check(counter.Count() == 1, "다시 가방에 오면 연결 1개: " .. counter.Count())
 		end
 	end
 	fire("DataUpdate", "eggs", { eggs = savedEggs })
@@ -1753,12 +1773,34 @@ local function body()
 		"패널이 숨으면 위 가운데 것들 제자리"
 	)
 	check(playerGui:FindFirstChild("TutorialGlow", true) == nil, "끝나면 반짝 테두리 없음")
-	-- 이미 끝낸 사람 (Snapshot.tutorial.done) → 안 보임
-	fire("DataUpdate", "tutorial", { tutorial = { step = 6, total = 5, text = "", hint = "", done = true } })
-	check(not tutPanel.Visible, "State.tutorial.done → 패널 숨김")
-	-- 다시 처음부터 (/tutorial reset)
-	tut(1, "숲에서 알 훔치기")
-	check(tutPanel.Visible and tutPanel.StepBadge.Step.Text == "1/5", "/tutorial reset → 1/5 다시 보임")
+	-- (B-6 고침, 선임) 끝난 사람은 매 프레임 연결·0.25초 루프를 안 돌림
+	do
+		local renderSig = fakeServices.RunService.RenderStepped
+		local rDone, lDone = Tut.running()
+		local renderDone = renderSig.Count()
+		check(not rDone and not lDone, "튜토리얼이 끝나면 RenderStepped·0.25초 루프 둘 다 꺼짐")
+		-- 이미 끝낸 사람 (Snapshot.tutorial.done) → 안 보임
+		fire("DataUpdate", "tutorial", { tutorial = { step = 6, total = 5, text = "", hint = "", done = true } })
+		check(not tutPanel.Visible, "State.tutorial.done → 패널 숨김")
+		check(
+			renderSig.Count() == renderDone and not (Tut.running()),
+			"끝난 상태가 또 와도 다시 연결 안 함 (RenderStepped 연결 " .. renderSig.Count() .. ")"
+		)
+		-- 다시 처음부터 (/tutorial reset)
+		tut(1, "숲에서 알 훔치기")
+		check(tutPanel.Visible and tutPanel.StepBadge.Step.Text == "1/5", "/tutorial reset → 1/5 다시 보임")
+		local rAgain, lAgain = Tut.running()
+		check(
+			rAgain and lAgain and renderSig.Count() == renderDone + 1,
+			"/tutorial reset → RenderStepped 1개·0.25초 루프 다시 켜짐 (연결 " .. renderSig.Count() .. ")"
+		)
+		tut(2, "안전 구역으로 돌아오기")
+		tut(3, "핫바에서 알을 골라 우리에 놓기")
+		check(renderSig.Count() == renderDone + 1, "단계가 바뀌어도 RenderStepped 연결은 1개 그대로")
+		fire("DataUpdate", "tutorial", { tutorial = { step = 6, total = 5, text = "", hint = "", done = true } })
+		check(renderSig.Count() == renderDone and not (Tut.running()), "다시 끝나면 또 끊김")
+		tut(1, "숲에서 알 훔치기")
+	end
 
 	print("[5판: 랭킹판]")
 	local lb = playerGui:FindFirstChild("Leaderboard", true)

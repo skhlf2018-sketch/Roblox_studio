@@ -36,7 +36,13 @@ function SpeedFxController.start()
 		end
 		local character = player.Character
 		local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
-		local moving = humanoid ~= nil and humanoid.MoveDirection.Magnitude > 0.1
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		-- "달리는 중" = 실제로 수평으로 움직이는 중 (MoveDirection 은 MoveTo 로 움직일 땐 0 이라 속도로 판단)
+		local moving = false
+		if root and root:IsA("BasePart") then
+			local v = root.AssemblyLinearVelocity
+			moving = Vector3.new(v.X, 0, v.Z).Magnitude > 2
+		end
 		local target = SpeedFxController.targetFov(if humanoid then humanoid.WalkSpeed else 0, moving)
 		current += (target - current) * math.min(1, dt * LERP_PER_SECOND)
 		camera.FieldOfView = current

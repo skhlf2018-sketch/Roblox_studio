@@ -46,14 +46,12 @@ Theme.Colors = {
 
 Theme.FontBold = Enum.Font.FredokaOne -- 굵은 외곽선 숫자 (원작 HUD)
 
--- 메뉴 버튼 색
+-- 메뉴 버튼·창 색 (5판: 왼쪽 메뉴 = 상점·인덱스·슬로우 모드·설정 4개. 퀘스트·선물 색은 버튼과 함께 없앰)
 Theme.Menu = {
 	index = Theme.Colors.indexCyan,
-	gift = Theme.Colors.yellow,
 	shop = Theme.Colors.shopGreen,
 	pets = Theme.Colors.pawOrange,
 	settings = Theme.Colors.purple,
-	quest = Theme.Colors.mint,
 	trail = Theme.Colors.trailPurple,
 }
 

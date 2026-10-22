@@ -1,6 +1,7 @@
 # 화면·소리·생김새 (UI.md)
 
 작성: 선임, 2026-10-18 · **5차 전면 갱신 (2판, 원작 스타일)** — 맵을 한 줄 복도로, 베이스·펫·경비·알을 원작 블록 스타일로, HUD·창을 원작 화면 그대로 다시 만듦.
+**6차 (5판, 2026-10-22)**: 얻은 알은 핫바에 바로(알 칸 → 놓기 모드), 우리 펫 돌아다니기·쓰다듬기, 튜토리얼 패널·가리키기, 랭킹판(오른쪽 위 + 허브 판). 퀘스트·선물 화면은 없앰 → 4-3장.
 (1~4차 기록은 git 이력에.) 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다.
 외부 에셋(메시·이미지·소리)을 올릴 계정이 없어서 **모든 모양은 기본 도형**(Block/Ball/Cylinder/Wedge + SpecialMesh)과 **UI 기본 요소(Frame)**로 코드에서 만듭니다.
 원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드(SurfaceType.Studs)** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨.
@@ -42,11 +43,14 @@
 | `Controllers/IndexController.luau` | **다시 씀.** 원작 "펫 인덱스" 창 |
 | `Controllers/ShopController.luau` | **다시 씀.** 원작 초록 상점 창 + 오른쪽 세로 탭 + 베이스 업그레이드 표지판 프롬프트 |
 | `Controllers/PetsController.luau` | 진한 카드 + **판매 버튼**(판매 가게 근처) + 판매 가게 프롬프트 |
-| `Controllers/HotbarController.luau` | 아래 가운데 작은 어두운 칸 + 알 칸 |
+| `Controllers/HotbarController.luau` | 아래 가운데 작은 어두운 칸 + 든 알 칸 + **5판: 가방 알 칸(최대 6 + "…n") → 누르면 바로 알 놓기 모드** |
+| `Controllers/PetFxController.luau` | **새 파일 (5판).** 우리 펫 "쓰다듬기" 프롬프트(내 펫만) → `PetPet`, `PetPetted` → 하트 ♥·반짝·소리·폴짝 |
+| `Controllers/TutorialController.luau` | **새 파일 (5판).** 위 가운데 "n/5" 패널 + 단계별 가리키기(3D 빔·▼ 표시·가장자리 화살표·반짝 테두리·Highlight) + 끝 축하(색종이·$500) |
+| `Controllers/LeaderboardController.luau` | **새 파일 (5판).** 오른쪽 위 랭킹판(돈/속도 탭, 접기, 내 줄 강조) + 허브 3D 판 글 |
 | `Controllers/NotifyController.luau` | 원작 글씨 토스트("에그를 훔쳤어요!")·공지(색 조각 RichText) |
 | `Controllers/WorldFxController.luau` | + 펫 돈 팝업 "+$34K"(IncomeTick), 자는 경비 Z 둥실둥실, 배달 반짝은 내 베이스 스폰 자리 |
 | `Controllers/ZoneController.luau` | 구역 = `CurrentZone` Attribute 또는 `MapLayout.zoneAt(z)` ("hub" → "base") |
-| 나머지 (Gift·Settings·Hatch·Fusion·Sakura·Altar·Quest·Weapon·Sound·Lighting·Debug 등) | 그대로 (새 창 스타일만 자동 적용) |
+| 나머지 (Settings·Hatch·Fusion·Sakura·Altar·Weapon·Sound·Lighting·SpeedFx·Debug 등, 5판: Gift·Quest 없앰) | 그대로 (새 창 스타일만 자동 적용) |
 
 ---
 
@@ -71,7 +75,7 @@
 - **둥지**: `MapLayout.nestsFor` 자리 8개. 건초 링(막대 10개) / 선사시대 통나무·뼈 큰 둥지 / 코스믹 작은 둥근 그릇 / 눈 덮인 둥지 / 심연 조개 둥지. `Nest` 태그 파트(원기둥)는 1판과 같은 크기라 서버가 알을 그 위에 놓음.
 - **경비 집**: 구역 가운데(`guardHome`) 살짝 어두운 둥근 자국 + `GuardSpawn` 파트(표시용).
 - **부모 동물 자리**: 1번·8번 둥지 옆 담장 쪽 2곳 (`ParentAnimalSpot`).
-- **특수 장소**: `MapLayout.specials` 자리 — 사쿠라 인큐베이터(벚꽃 왼쪽), 천국/지옥 제단(천사&악마 x=∓55), 비밀 통로+폭포(왼쪽 담장), 퀘스트 문+비밀 정원(마법의 숲 왼쪽).
+- **특수 장소**: `MapLayout.specials` 자리 — 사쿠라 인큐베이터(벚꽃 왼쪽), 천국/지옥 제단(천사&악마 x=∓55), 비밀 통로+폭포(왼쪽 담장) (5판: 마법의 숲 퀘스트 문·비밀 정원은 없앰).
 - **허브**: 잔디 체크무늬, 양옆 황토 담장, 뒤 흰 벽 + 구름·달 그림 2개, z=0 "안전 구역" 글씨·빨간 점선·파란 반원, 판매 가게(빨강·흰 천막 + "판매" + 청록 링, `SellStall`), 트레일 상점(천막 + "트레일 상점", `TrailShop`), 이벤트 포털(검붉은 바위 아치 + 주황 소용돌이, "HALLOWEEN DIMENSION / 오픈"), 기본 스폰, 인덱스 보드.
 - **베이스(7개)** — `MapLayout.plot(i)`:
   - 우리(뒤 46, `PenArea` 파트가 우리 전체를 덮고 LookVector = 복도 쪽) + 앞마당(24).
@@ -92,7 +96,9 @@
 | `TrailShop` 태그 (허브) | TrailController "열기" 프롬프트 |
 | `PlotSpawn` 태그 | WorldFx 배달 반짝 |
 | 경비 겉모습 `SleepZ` 빌보드(`Z1~Z3`), `GuardPose` 용접, `GuardGlow` | WorldFx Z 둥실둥실 |
-| 우리 펫 `PetUid` Attr + `PenPet` 태그, 빌보드 `PetTag`(`Rarity`/`PetName`/`Income`/`Extra`) | WorldFx 돈 팝업·통통 |
+| 우리 펫 `PetUid`·`OwnerUserId`·`Footprint` Attr + `PenPet` 태그, 빌보드 `PetTag`(`Rarity`/`PetName`/`Income`/`Extra`), 5판 `Root > PromptAttach > PetPrompt`("쓰다듬기") | WorldFx 돈 팝업 · PetFxController 쓰다듬기 (통통은 5판부터 서버가 걸을 때) |
+| 5판 허브 랭킹판 `LeaderboardBoard` 태그(Visuals.Tags) 파트, Front 면 `LeaderboardGui`(`Column_money`/`Column_speed` > `Line1~10`) | LeaderboardController |
+| 5판 화면 이름: 핫바 `BagEgg_<uid>`·`MoreEggs`, `TutorialPanel`(`StepBadge.Step`/`Title`/`Hint`)·`TutorialArrow`·`TutorialGlow`·`TutorialDone`, Workspace `TutorialGuide`(`TutorialTarget` > `TutorialMarker`·`TutorialBeam`, `TutorialHighlight`), `Leaderboard`(`LbTab_money`/`LbTab_speed`/`LbToggle`/`Rows`), 펫 위 `PetHearts` | Hotbar · Tutorial · Leaderboard · PetFx |
 | 알 `EggVisual` 폴더(`Layer`·`Spot1~2`), 빌보드 `WeightTag`(`Gender`/`Kg`) | WorldFx 레인보우 순환 |
 | 부화 중 알 프롬프트 `HatchPrompt`("부화!")·`PickUpPrompt`("집기") (클라가 내 알에만 붙임, 이름표는 서버 `Label`) · 놓기 미리보기 `EggPlacePreview`(+`EggPlaceRing`, 내 화면만) · 떨어진 알 `DropTimer`(`Time`) | IncubatorController · WorldFxController |
 
@@ -105,6 +111,7 @@
 - 체형 17종(quad·bird·fish·snake·bug·spider·dragon·ghost·humanoid·frog·turtle·whale·jelly·lizard·blob·dino·penguin)을 블록 디테일로 보강 → **134종 평균 44.6 파트(최소 31, 최대 73)**.
 - 희귀도 외곽 빛(Highlight, 전설 금 · 신화 빨강 · 코스믹 보라 …) + 전설 이상 반짝이.
 - **우리 진열**: `PenArea` 사각형 뒤쪽 2/3 에 격자(앞줄부터), 모두 앞(복도)을 봄. 머리 위 3줄 **[희귀도 색 글씨] / 이름 / $수입/s** (+크기·돌연변이 한 줄).
+- **5판 돌아다니기** (`PetVisualService.stepPens`, 서버 Heartbeat 한 루프): 격자에서 시작해 우리 안 랜덤 목표로 2~5초 걷고(초당 2.6~3.8) 1~3초 쉼. 많이 돌아야 하면 제자리에서 먼저 돌고 걸음, 걷는 동안 통통(bob). 울타리 1.5+몸 반지름 안쪽, 놓인 알과 max(4, 몸+알+0.6), 다른 펫과 몸끼리 안 닿음 (이미 가까우면 멀어지는 걸음만). 막히면 0.4~1.2초 쉬고 다른 곳으로. 주인이 우리 10 스터드 안에 들어오면 모두 주인을 보고(1.4초) 한 번 폴짝. 쉬는 펫은 CFrame 을 안 바꿔서 복제가 가벼움.
 - **경비**: 높이 25~40 스터드(캐릭터 5~8배). `State = "Sleeping"`(또는 Idle) 이면 엎드린 자세 + 머리 위 파란 "Z" 세 개, `"Chase"` 면 일어서고 빨간 테두리.
 
 ### 알 (EggVisualService)
@@ -118,23 +125,22 @@
 
 ```
  ┌─────────────────────────────────────────────────────────────────┐
- │                  [ 달리기!! ]   ← 알 들었을 때 (빨간 배너 + 빨간 비네트)
- │                  Jungle 😬      ← 구역 배너 (ZoneEntered)
- │                  Jungle에 비밀 킹 스네이크 에그 등장!  ← 공지
+ │             [1/5 숲에서 알 훔치기 · 작은 설명]   ← 5판 튜토리얼 [🏆 랭킹 −]│
+ │                  [ 달리기!! ]   ← 알 들었을 때      [돈][속도]   │
+ │                  Jungle 😬      ← 구역 배너          1 부자 $5B  │
+ │                  Jungle에 비밀 킹 스네이크 에그 등장!  2 나 $12K  │
  │ [🛒 상점    ]                                             [🥚]① │
  │ [📘 인덱스  ]                                             [🐾]  │
- │ [ (퀘스트)  ]        성장하는 달걀 패널 (알 버튼으로 열기) →      │
- │ [ (선물)    ]                                                   │
  │ [■ 슬로우 모드]                                                 │
  │ [⚙ 설정     ]                                                   │
  │ 👟 5.7M         (빨강)               에그를 훔쳤어요!            │
  │ 💵 $18.7B       (초록)               [ 🗑 드롭 ]                │
- │ 친구 부스트: +10%            [1 방망이][2 곰덫 x3][3 알]   🌙 3분 58초 │
+ │ 친구 부스트: +10%   [1 방망이][2 곰덫 x3][3 🥚][4 🥚][5 +3]   🌙 3분 58초 │
  └─────────────────────────────────────────────────────────────────┘
 ```
 | 화면 | 파일 | 데이터 |
 |---|---|---|
-| 왼쪽 메뉴 (넓은 버튼: 아이콘 + 글자) | HudController | 상점 → Shop 창, 인덱스 → Index 창(배지 = 받을 보상 수), 퀘스트(QuestController 가 `addMenuButton`), 선물(받을 게 있을 때만), 슬로우 모드, 설정 |
+| 왼쪽 메뉴 (넓은 버튼: 아이콘 + 글자) | HudController | 상점 → Shop 창, 인덱스 → Index 창(배지 = 받을 보상 수), 슬로우 모드, 설정 — 5판: 이 4개뿐 (퀘스트·선물 버튼 없앰) |
 | 슬로우 모드 | HudController | 켜면 `Humanoid.WalkSpeed` = 플레이어 Attr `WalkSpeed` ÷ 2 (서버가 속도를 바꿔도 다시 절반으로). 느려지기만 하므로 치트 검사와 충돌 없음 |
 | 왼쪽 아래 속도·돈·친구 부스트 | HudController | Attr `Speed`(빨강), `Money`(초록, 숫자 올라가는 애니메이션). "친구 부스트" 는 장식 |
 | 오른쪽 알 버튼 / 발바닥 버튼 | HudController + IncubatorController | 알 → 알 창("성장하는 달걀" 패널) 열고 닫기, 초록 배지 = 가방 속 알 수 + 지금 부화 가능 수(할 일 수). 새 알이 들어오면 버튼 통통 + 다음에 열 때 "가방" 탭. 발바닥 → Pets 창 |
@@ -151,14 +157,14 @@
 | 떨어진 알 카운트다운 | WorldFxController | `Egg` 파트 Attribute `ExpiresAt`(서버 시각)이 있으면 머리 위 빨간 "32초" (`ceil(ExpiresAt - workspace:GetServerTimeNow())`, 0.25초마다), 10초부터 노랑/빨강 깜빡. Attribute 가 없어지면(다시 주움) 지움 |
 | 러닝머신 | TreadmillController | Attr `OnTreadmill` 동안 이동 입력 끔 + "점프하면 내려와요"(터치 "내리기" 버튼). 점프 → `TreadmillLeave`. `TreadmillStep{amount}` → 분홍 "+500" |
 | 돈 팝업 | WorldFxController | `IncomeTick{petUid, amount}` → 그 펫 위 큰 초록 "+$34K" 떠오름 |
-| 핫바 | HotbarController | PC 아래 가운데, 작은 어두운 칸(번호·그림·"x3"), 알 들면 마지막 칸에 알 |
+| 핫바 | HotbarController | PC 아래 가운데, 작은 어두운 칸(번호·그림·"x3"), 알 들면 도구 다음 칸에 알. **5판: 가방 알 칸 `BagEgg_<uid>`** (4-3장) |
 
 ### 창 (진한 창 + 줄무늬 제목 + 빨간 X)
 - **펫 인덱스**(하늘): 왼쪽 구역 그림 탭 15개(받을 보상 "!") · 가운데 희귀도 색 카드(미발견 검은 실루엣 "???") + 진행바 "1/8" · 오른쪽 큰 펫 + 이름/희귀도/수입 + 빨간 ">" + 보상(돈·속도) + **획득!** · 아래 **모두 획득 (n)!** 또는 "잠금 해제: n/134" · 창 밖 **월드** 버튼(준비 중 안내).
 - **상점**(초록): 카드 2장(펫 우리 / 러닝머신 업그레이드, 다음 러닝머신 모양 이름·스텝당 속도) + 창 밖 오른쪽 세로 탭(업그레이드·트레일·추천·속도·돈). 로벅스 탭은 "준비 중"(살 수 없음).
 - **트레일 상점**(보라): 가로로 넘기는 카드 11장 — 이름·등급·캐릭터 그림·"x4 스피드" 배지·버튼: 안 가짐 = 가격(초록, `PurchaseUpgrade("Trail", id)`, 산 뒤 서버가 자동 장착) / 가졌음 = "장착"(파랑, `EquipTrail(id)`) / 장착 중(`snap.equippedTrail`, 없으면 Attr `EquippedTrail`) = "장착 해제"(노랑, `EquipTrail("none")`). `DataUpdate("upgrades")`·Attr 바뀌면 카드 다시 그림. 캐릭터 꾸밈: 모든 플레이어 HumanoidRootPart 에 `EquippedTrailFx` Trail(Attr `EquippedTrail` 색, "none" 이면 지움).
 - **펫**(주황): 진한 카드, 장착/해제, 최고 펫 장착, **판매 가게 근처면 "판매 $가격"**(`SellPet`, 가격 = 수입 × 60초).
-- 선물·설정·펫 고르기·부화 카드는 그대로(새 창 스타일만).
+- 설정·펫 고르기·부화 카드는 그대로(새 창 스타일만). 5판: 선물 창 없앰.
 
 ### 4-1. 펫 고르기 창 (`UI/PetPicker.luau`)
 ```lua
@@ -189,6 +195,14 @@ PetPicker.open({
 - 창 버튼(닫기 X·획득!·사기·장착·판매·탭)은 `Ui.touch` 로 폰에서도 46px 이상.
 - 측정 (스모크): 750×381 폰 = 메뉴 2열 45px, 844×390 = 2열 48px, 1428×750 PC = 1열 53px 높이, 핫바 칸 44.8~66.7px.
 
+### 4-3. 5판 화면 (사장님 지시, 2026-10-22)
+- **얻은 알은 핫바에 바로** (HotbarController): 가방 알(`snap.eggs`)이 도구 칸 뒤에 `BagEgg_<uid>` 칸으로 — **가장 최근 알이 맨 앞**, 칸 테두리 = 희귀도 색, 알 그림 = 펫 색, 특별 알 ★. 최대 6칸 + `MoreEggs` "+n"(누르면 알 창 가방 탭). 자리가 모자라면(무기가 많은 폰) 알 칸 수를 줄이고 마지막엔 "+n" 칸 하나만 (`Layout.hotbarCapacity`/`hotbarEggs`, 칸 44px 이상 유지).
+  알 칸을 **누르면(PC 클릭·숫자키 / 폰 톡) 바로 알 놓기 모드** (`IncubatorController.beginPlace` — 초록/빨강 미리보기, PC 클릭 / 폰 "여기 놓기" → `PlaceEgg`). 놓는 중인 칸은 흰 두꺼운 테두리, 같은 칸 한 번 더 = 취소, 손에 든 도구는 내려놓음. 놓인(부화 중) 알은 가방에서 빠져 핫바에 안 보임 — 성장 중 확인은 오른쪽 알 버튼 창(그대로).
+- **쓰다듬기** (PetFxController + 서버 PetVisualService): 우리 펫마다 "쓰다듬기" 프롬프트(F, 0.3초 누르기, 10 스터드). 내 펫만 켜지고 → `PetPet(uid)`. `PetPetted(owner, uid)` → 그 주인 우리 그 펫(모델 Attr `OwnerUserId`, 없으면 주인 `PlotIndex` == `MapLayout.plotAt`) 위에 ♥ 5개 떠오름 + 분홍 반짝 + 소리 `Pet` + 폴짝(서버가 보낸 마지막 자리 위로만 — 걷는 펫이 끌려오지 않음). 서버는 프롬프트 Triggered 를 안 받음(판정은 PetService).
+- **튜토리얼** (TutorialController): `TutorialUpdate` / `State.get().tutorial` → 위 가운데 패널 `[n/5] 큰 글씨 / 작은 설명` (PC 맨 위, 터치는 위 한 줄 속도·돈 아래 — `Layout.tutorialPanel`). 패널이 보이면 위 가운데 것들(달리기!! 배너·구역 배너·공지 배너·알 놓기 안내 줄)을 패널 아래로 같이 내림(원래 y 는 Attr `TutorialBaseY`). 가리키기: 1 노란 빔 + "▼ 숲으로!"(허브) / "알 훔치기!"(숲: 가장 가까운 둥지·떨어진 알) · 2 "안전 구역"(z < 0) · 3 핫바 알 칸 노란 테두리 반짝(알이 없으면 알 버튼) + 내 우리 "우리에 놓기" · 4 내 놓인 알 노란 Highlight + "부화!"/"자라는 중…" · 5 펫 버튼 반짝 + 펫 창 "장착" 버튼 반짝. 목표가 화면 밖이면 가장자리 노란 화살표 ➤. 단계가 바뀌면 소리 `TutorialStep` + 패널 통통. 끝(`reward`) = 색종이 42장 + `TutorialDone` 팡파레 + "튜토리얼 끝! / $500 받았어요!" 3.6초. `done` 이면 숨김.
+- **랭킹판** (LeaderboardController): 오른쪽 위 `🏆 랭킹` 판 — 돈/속도 탭, 최대 10줄 "순위 이름 값"(1·2·3등 금·은·동), 내 줄 노란 바탕, `−`/`+` 로 접고 펴기(PC 펼침·폰 접힘으로 시작). 펼쳐서 알·발바닥 버튼에 닿으면 그 왼쪽으로 비킴, 폰은 시간 아래 좁게(170) — 튜토리얼 패널·알 놓기 안내 줄과 안 겹침 (`Layout.leaderboard`). 로블록스 기본 플레이어 목록은 끔. **허브 3D 판**: 스폰 광장 왼쪽 앞(x -26, z -150, 광장을 봄) 16×12 판 + 기둥 2 + 금 지붕 (MapBuilder, 파트 4) — 글은 클라가 Front 면 SurfaceGui 로 "🏆 랭킹 TOP 10" + 돈·속도 두 칸 10줄.
+- **정리**: 왼쪽 메뉴 = 상점·인덱스·슬로우 모드·설정 4개, `Theme.Menu` 의 quest·gift 색, 퀘스트·선물 설명 없앰.
+
 ## 5. 소리 — 사장님이 채울 ID 목록 (`src/shared/Data/Sounds.luau`)
 
 ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오디오에서 고른 뒤 숫자만 바꾸세요. (예: `id = "rbxassetid://1234567890"`)
@@ -211,7 +225,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오�
 | `Purchase` | 구매 '차링!' | 성공 알림 |
 | `Error` | '뿡' | 실패 알림 |
 | `Notify` | '띵' | 안내 알림 |
-| `Reward` | 보상 반짝 상승음 | 도감/무료 보상 |
+| `Reward` | 보상 반짝 상승음 | 도감 보상 |
 | `NightBell` | 밤 종소리 '댕~' | 밤 공지 |
 | `DayStart` | 아침 차임 | 낮 공지 |
 | `Reset` | '휘리릭' | ALL EGG RESET |
@@ -228,7 +242,8 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오�
 | `Unlock` (2차) | 철컥 + 반짝 | 사쿠라 인큐베이터 해금 |
 | `AltarOffer` / `AltarPaired` (2차) | 낮은 종 '웅~' / 천사 합창 + 쿵! | 제물 바치기 / 짝 성공 |
 | `Shrine` (2차) | 마법진 '위잉~ 쾅!' | `ShrineResult` |
-| `QuestStep` / `GateOpen` (2차) | 딩동! / 큰 문 열리는 소리 | 퀘스트 하나 완료 / 퀘스트 문 열림 |
+| `Pet` (5판) | 뾱 + 반짝 (기존 ID 재사용) | 펫 쓰다듬기 (`PetPetted`, 내 펫이거나 80 안) |
+| `TutorialStep` / `TutorialDone` (5판) | 반짝 알림 / 팡파레 (기존 ID 재사용) | 튜토리얼 다음 단계 / 끝 ($500) |
 | `Bgm_base` (음악) | 밝고 신나는 음악 | 베이스·광장·길 |
 | `Bgm_forest` … `Bgm_haunted_castle` (음악 15개) | 구역 분위기 (Sounds.luau 설명 참고) | 그 구역에 들어가면 부드럽게 바뀜 |
 
@@ -246,10 +261,11 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오�
 7. **폰 에뮬레이터**(844×390, 750×381): 메뉴가 조이스틱과 안 겹치는지, 위 한 줄 속도·돈, 오른쪽 위 시간, 핫바·드롭 버튼·러닝머신 "내리기".
 8. **슬로우 모드**: 켜면 걷기가 절반, 끄면 원래. 러닝머신에서 WASD 안 먹고 점프로 내려오는지.
 9. 출력 창에 `[Net] Remote 아직 없음` / 빨간 오류가 없는지.
+10. **5판**: `/egg dog` 로 알을 받으면 핫바에 알 칸이 바로 생기는지 → 누르면 초록 미리보기 → 우리 바닥 클릭(폰 "여기 놓기") → 3초 뒤 E 로 부화. 우리 펫이 천천히 돌아다니고 알·울타리·서로를 피하는지, 우리 앞에 가면 나를 보고 폴짝. F 로 쓰다듬으면 하트·소리. `/tutorial reset` 으로 위 가운데 1/5 패널·노란 빔·화살표, 끝나면 색종이 + "$500 받았어요!". 오른쪽 위 랭킹판(10초마다), 허브 스폰 왼쪽 앞 3D 랭킹판 글씨 방향.
 
 ## 7. 알려진 한계 / 다음 할 일
 - ~~트레일 장착/장착 해제~~ — 됨 (2판 마무리, `EquipTrail`).
-- 리더보드(이름 / Money/s / 속도)는 서버 leaderstats(수석) — 화면은 로블록스 기본 리더보드.
+- 랭킹판: 5판부터 우리 화면(LeaderboardController, `LeaderboardUpdate`). 로블록스 기본 플레이어 목록은 같은 자리라 끔 (leaderstats 는 서버에 그대로).
 - 로벅스 상품·"모두 성장시키기"·"월드" 버튼은 준비 중(꺼 둠).
 - 러닝머신 위 제자리 달리기 애니메이션(캐릭터 고정·발 움직임)은 서버 TreadmillService 담당 — 클라는 입력만 끔.
 - 구역 장식·펫 모양은 Lune 에서 만들어지는 것까지만 확인 → 스튜디오에서 모양 확인 필요(6장).
@@ -259,7 +275,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오�
 
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
-lune run tests/smoke_visuals.luau   # 서버: 2판 맵(구역 15 = MapLayout z 범위, 둥지 자리, 파트 수 ≤ 12000, 2048 한계, 판매 8·트레일 1·밤 벽 1, 베이스 7 우리 방향·러닝머신 자리·레벨 0~10 모양·표지판 숫자·주인 간판), 특수 장소 모델, 펫 134종(평균 30~80 파트), 우리 격자, 경비 15종 크기·자세, 알 6층·무게 라벨
-lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작, 창 6개(인덱스·상점·트레일·펫 판매…), 폰 버튼 46px, 2판 HUD(알 버튼·패널·▶·발바닥·시간 글자), 3판 알 창(성장 중 탭 "부화 가능!"·가방 버튼 → PickUpPlacedEgg, 가방 탭 카드·놓기 46px·창 높이), 알 놓기 모드(초록/빨강: 우리 안·앞마당·놓인 알 옆·울타리·멀리 서 있음, 여기 놓기 → PlaceEgg(uid, 월드 x, z), ESC·취소·가방에서 사라짐·우리 가득), 부화!/집기 프롬프트(남의 알 없음), 떨어진 알 "32초", 배달·선물 알 토스트 "가방에 들어갔어요", 업그레이드 표지판·판매 가게·트레일 상점 프롬프트, 달리기!!·드롭·알 칸, 러닝머신(점프→TreadmillLeave, +500), 구역 배너, +$34K, 슬로우 모드, 희귀 알 공지, 퓨전·사쿠라·제단·비밀 통로·퀘스트·무기, 반응형 HUD(750×381·844×390·1428×750)
+lune run tests/smoke_visuals.luau   # 서버: (5판: 펫 쓰다듬기 프롬프트·OwnerUserId, 60×46 우리에서 18마리 25초 돌아다니기 — 울타리·놓인 알·다른 펫 안 겹침, 통통·방향, 주인 오면 한 번 폴짝) 2판 맵(구역 15 = MapLayout z 범위, 둥지 자리, 파트 수 ≤ 12000, 2048 한계, 판매 8·트레일 1·밤 벽 1, 베이스 7 우리 방향·러닝머신 자리·레벨 0~10 모양·표지판 숫자·주인 간판), 특수 장소 모델, 펫 134종(평균 30~80 파트), 우리 격자, 경비 15종 크기·자세, 알 6층·무게 라벨
+lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작, 창 6개(인덱스·상점·트레일·펫 판매…), 폰 버튼 46px, 2판 HUD(알 버튼·패널·▶·발바닥·시간 글자), 3판 알 창(성장 중 탭 "부화 가능!"·가방 버튼 → PickUpPlacedEgg, 가방 탭 카드·놓기 46px·창 높이), 알 놓기 모드(초록/빨강: 우리 안·앞마당·놓인 알 옆·울타리·멀리 서 있음, 여기 놓기 → PlaceEgg(uid, 월드 x, z), ESC·취소·가방에서 사라짐·우리 가득), 부화!/집기 프롬프트(남의 알 없음), 떨어진 알 "32초", 배달·선물 알 토스트 "가방에 들어갔어요", 업그레이드 표지판·판매 가게·트레일 상점 프롬프트, 달리기!!·드롭·알 칸, 러닝머신(점프→TreadmillLeave, +500), 구역 배너, +$34K, 슬로우 모드, 희귀 알 공지, 퓨전·사쿠라·제단·비밀 통로·무기, 5판(핫바 알 칸 → 놓기 모드·숫자키·"…n"·새 알 바로, 튜토리얼 패널 1~5단계 가리키기·위 가운데 내리기·축하, 랭킹판 탭·접기·내 줄·허브 판, 쓰다듬기 프롬프트·PetPet·하트·주인 거르기), 반응형 HUD(750×381·844×390·1428×750, 튜토리얼 패널·랭킹판 겹침 포함)
 ```
 `@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 체크리스트로 스튜디오에서.

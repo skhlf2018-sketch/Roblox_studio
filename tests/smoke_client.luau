@@ -208,6 +208,9 @@ local Players = {
 	GetPlayers = function()
 		return { player }
 	end,
+	GetPlayerByUserId = function(_, id)
+		return if id == 77 then player else nil
+	end,
 }
 local waits = 0
 local tweenStub = {
@@ -491,9 +494,36 @@ penPet.Name = "chicken"
 local penPetRoot = worldPart("Root", roblox.Vector3.new(20, 1, 20), nil, penPet)
 penPet.PrimaryPart = penPetRoot
 penPet:SetAttribute("PetUid", "p1")
+penPet:SetAttribute("OwnerUserId", 77)
 penPet.Parent = Workspace
 penPet:SetAttribute("Height", 3)
+-- 5판: 서버 PetVisualService 가 붙이는 쓰다듬기 프롬프트 (Root > Attachment "PromptAttach" > ProximityPrompt "PetPrompt")
+local function petPrompt(rootPart)
+	local attach = Instance.new("Attachment")
+	attach.Name = "PromptAttach"
+	attach.Parent = rootPart
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "PetPrompt"
+	prompt.ActionText = "쓰다듬기"
+	prompt.Parent = attach
+	return prompt
+end
+local myPetPrompt = petPrompt(penPetRoot)
 tag(penPet, "PenPet")
+-- 남의 우리 펫 (uid 가 내 펫과 같은 "p1" — 사람마다 uid 를 따로 매겨 겹칠 수 있음)
+local otherPet = Instance.new("Model")
+otherPet.Name = "dog"
+local otherPetRoot = worldPart("Root", roblox.Vector3.new(200, 1, 20), nil, otherPet)
+otherPet.PrimaryPart = otherPetRoot
+otherPet:SetAttribute("PetUid", "p1")
+otherPet:SetAttribute("OwnerUserId", 12345)
+otherPet:SetAttribute("Height", 3)
+otherPet.Parent = Workspace
+local otherPetPrompt = petPrompt(otherPetRoot)
+tag(otherPet, "PenPet")
+-- 5판: 허브 스폰 광장 랭킹판 (MapBuilder 가 세우는 판 파트)
+local lbBoard = worldPart("LeaderboardBoard", roblox.Vector3.new(-26, 9, -150), roblox.Vector3.new(16, 12, 0.8))
+tag(lbBoard, "LeaderboardBoard")
 local growingEgg = worldPart("Incubating_i2", roblox.Vector3.new(25, 1, 20), roblox.Vector3.new(2, 2.5, 2))
 growingEgg:SetAttribute("EggUid", "i2")
 growingEgg:SetAttribute("OwnerUserId", player.UserId)
@@ -571,6 +601,10 @@ local function body()
 			"WeaponController",
 			"TreadmillController",
 			"TrailController",
+			-- 5판
+			"PetFxController",
+			"LeaderboardController",
+			"TutorialController",
 		}
 	do
 		ctrl(name).start()
@@ -1336,6 +1370,335 @@ local function body()
 	print("  sent:", table.concat(names, ","))
 
 	------------------------------------------------------------------
+	-- 5판 (선임): 핫바 알 칸 · 튜토리얼 패널 · 랭킹판 · 쓰다듬기
+	------------------------------------------------------------------
+	print("[5판: 얻은 알은 핫바에 바로]")
+	local hotbar = playerGui:FindFirstChild("Hotbar", true)
+	-- 도구는 방망이·곰덫 둘만 (앞 검사들이 무기를 여럿 넣어 둠)
+	for _, container in { backpack, character } do
+		for _, child in container:GetChildren() do
+			if child:IsA("Tool") then
+				child.Parent = nil
+				sigOf(container, "ChildRemoved"):Fire(child)
+			end
+		end
+	end
+	for _, kind in { "Bat", "BearTrap" } do
+		local t = Instance.new("Tool")
+		t.Name = kind
+		t.Parent = backpack
+		sigOf(backpack, "ChildAdded"):Fire(t)
+	end
+	fire("DataUpdate", "eggs", { eggs = savedEggs })
+	local slotE1 = hotbar:FindFirstChild("BagEgg_e1")
+	local slotE2 = hotbar:FindFirstChild("BagEgg_e2")
+	check(slotE1 ~= nil and slotE2 ~= nil, "가방 알 2개 = 핫바 알 칸 2개 (BagEgg_e1, BagEgg_e2)")
+	check(slotE1 and slotE2 and slotE2.LayoutOrder < slotE1.LayoutOrder, "가장 최근에 얻은 알(e2)이 앞 칸")
+	local toolMax = 0
+	for _, child in hotbar:GetChildren() do
+		if child:IsA("TextButton") and child.Visible and not string.find(child.Name, "BagEgg_", 1, true) then
+			if child.Name ~= "MoreEggs" then
+				toolMax = math.max(toolMax, child.LayoutOrder)
+			end
+		end
+	end
+	check(slotE2 and slotE2.LayoutOrder > toolMax, "알 칸은 도구 칸 뒤")
+	local function sameColor(a, b)
+		return a and b and math.abs(a.R - b.R) + math.abs(a.G - b.G) + math.abs(a.B - b.B) < 0.01
+	end
+	local dogRarity = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Pets")).get("dog").rarity
+	check(
+		slotE2 and sameColor(slotE2:FindFirstChildOfClass("UIStroke").Color, uiModule("Theme").rarityColor(dogRarity)),
+		"알 칸 테두리 = 희귀도 색 (개 = " .. dogRarity .. ")"
+	)
+	check(slotE2 and slotE2:FindFirstChild("Special") ~= nil, "특별 알 칸에 ★")
+	check(Workspace:FindFirstChild("EggPlacePreview") == nil and not Inc.isPlacing(), "처음엔 놓기 모드 아님")
+	check(
+		click(slotE1) and Inc.isPlacing() and Inc.placingUid() == "e1",
+		"핫바 알 칸 톡 → 바로 알 놓기 모드 (e1)"
+	)
+	check(Workspace:FindFirstChild("EggPlacePreview") ~= nil, "놓기 미리보기 생김")
+	check(slotE1:FindFirstChildOfClass("UIStroke").Thickness == 5, "놓는 중인 알 칸 = 흰 두꺼운 테두리")
+	check(click(slotE2) and Inc.placingUid() == "e2", "다른 알 칸 → 그 알로 바뀜")
+	check(click(slotE2) and not Inc.isPlacing(), "같은 칸 한 번 더 → 놓기 취소")
+	-- 숫자키 (PC): 알 칸 번호
+	local keyLabel = slotE1:FindFirstChild("Key")
+	local keyN = tonumber(keyLabel and keyLabel.Text)
+	check(keyN ~= nil, "알 칸에도 번호 " .. tostring(keyN))
+	if keyN then
+		local codes = {
+			roblox.Enum.KeyCode.One,
+			roblox.Enum.KeyCode.Two,
+			roblox.Enum.KeyCode.Three,
+			roblox.Enum.KeyCode.Four,
+			roblox.Enum.KeyCode.Five,
+			roblox.Enum.KeyCode.Six,
+			roblox.Enum.KeyCode.Seven,
+			roblox.Enum.KeyCode.Eight,
+			roblox.Enum.KeyCode.Nine,
+		}
+		fakeServices.UserInputService.InputBegan:Fire({ KeyCode = codes[keyN] }, false)
+		check(Inc.placingUid() == "e1", "숫자키 " .. keyN .. " → e1 놓기 모드")
+	end
+	-- 핫바에서 고른 알을 우리 빈자리에 놓기 → PlaceEgg
+	root.Position = roblox.Vector3.new(spawnSpot.x, 3, spawnSpot.z)
+	local hotSpot = MapLayout.toWorld(1, -24, 0)
+	Inc.previewAt(hotSpot.x, hotSpot.z)
+	local beforePlace = #sent
+	check(Inc.confirmPlace() and #sent == beforePlace + 1, "놓기 확인")
+	local hp = lastSent("PlaceEgg")
+	check(hp and hp.args[1] == "e1", "핫바 알 → PlaceEgg(e1, x, z)")
+	-- 놓기 성공: 가방에서 빠지면 핫바에서도 사라짐 (부화 중 알은 핫바에 안 보임)
+	fire("DataUpdate", "eggs", { eggs = { savedEggs[2] } })
+	check(hotbar:FindFirstChild("BagEgg_e1") == nil, "놓인 알(e1)은 핫바에서 사라짐")
+	check(hotbar:FindFirstChild("BagEgg_e2") ~= nil, "남은 가방 알(e2)은 그대로")
+	-- 알이 많으면: 최대 6칸 + "…n"
+	local many = {}
+	for i = 1, 9 do
+		table.insert(many, {
+			uid = "m" .. i,
+			petId = if i % 2 == 0 then "unicorn" else "chicken",
+			size = "normal",
+			mutations = {},
+			biomeId = "forest",
+			special = false,
+			progress = 0,
+			required = 10,
+		})
+	end
+	fire("DataUpdate", "eggs", { eggs = many })
+	local eggSlotsN = 0
+	for _, child in hotbar:GetChildren() do
+		if string.find(child.Name, "BagEgg_", 1, true) then
+			eggSlotsN += 1
+		end
+	end
+	local moreSlot = hotbar:FindFirstChild("MoreEggs")
+	check(eggSlotsN == 6, "가방 알 9개 → 핫바 알 칸 6개: " .. eggSlotsN)
+	check(moreSlot and moreSlot.Visible and moreSlot.Count.Text == "+3", "'…n' 칸 = +3")
+	check(
+		hotbar:FindFirstChild("BagEgg_m9") ~= nil and hotbar:FindFirstChild("BagEgg_m1") == nil,
+		"새 알(m9)부터 보임"
+	)
+	check(
+		click(moreSlot) and panel.Visible and playerGui:FindFirstChild("Bag", true).Visible,
+		"'…n' 칸 → 알 창 가방 탭"
+	)
+	panel.Visible = false
+	-- 새 알이 들어오면 칸이 바로 생김
+	table.insert(many, {
+		uid = "m10",
+		petId = "dog",
+		size = "normal",
+		mutations = {},
+		biomeId = "forest",
+		special = false,
+		progress = 0,
+		required = 3,
+	})
+	fire("DataUpdate", "eggs", { eggs = many })
+	local m10 = hotbar:FindFirstChild("BagEgg_m10")
+	check(m10 ~= nil and moreSlot.Count.Text == "+4", "새로 얻은 알(m10)이 바로 핫바에 (+4)")
+	fire("DataUpdate", "eggs", { eggs = savedEggs })
+
+	print("[5판: 튜토리얼 패널]")
+	local Tut = ctrl("TutorialController")
+	local tutPanel = playerGui:FindFirstChild("TutorialPanel", true)
+	local function tut(step, text, done, reward)
+		fire("TutorialUpdate", {
+			step = step,
+			total = 5,
+			text = text,
+			hint = if done then "" else "작은 설명 " .. step,
+			done = done or false,
+			reward = reward,
+		})
+	end
+	root.Position = roblox.Vector3.new(0, 3, 30) -- 숲 안
+	tut(1, "숲에서 알 훔치기")
+	check(tutPanel and tutPanel.Visible, "튜토리얼 패널 보임 (위 가운데)")
+	check(
+		tutPanel.StepBadge.Step.Text == "1/5" and tutPanel.Title.Text == "숲에서 알 훔치기",
+		"1/5 · 큰 글씨"
+	)
+	check(tutPanel.Hint.Text == "작은 설명 1", "작은 설명")
+	local guide = Workspace:FindFirstChild("TutorialGuide")
+	local targetPart = guide and guide:FindFirstChild("TutorialTarget")
+	local markerGui = targetPart and targetPart:FindFirstChild("TutorialMarker")
+	check(
+		markerGui and markerGui.Enabled and markerGui.Text.Text == "알 훔치기!",
+		"1단계: 숲 둥지 알 표시 '알 훔치기!'"
+	)
+	check(
+		targetPart and (targetPart.CFrame.Position - roblox.Vector3.new(0, 1, 60)).Magnitude < 0.01,
+		"1단계: 가장 가까운 숲 알(떨어진 알 포함)을 가리킴"
+	)
+	local tbeam = targetPart and targetPart:FindFirstChild("TutorialBeam")
+	check(tbeam and tbeam.Enabled and tbeam.Attachment0 ~= nil, "1단계: 내 캐릭터 → 목표 노란 빔")
+	root.Position = roblox.Vector3.new(0, 3, -100) -- 허브
+	Tut.update()
+	check(markerGui.Text.Text == "숲으로!", "허브에 있으면 '숲으로!' (숲 입구)")
+	-- 위 가운데 것들이 패널 아래로 내려감
+	local run = playerGui:FindFirstChild("RunBanner", true)
+	local tutBottom = tutPanel.Position.Y.Offset + tutPanel.Size.Y.Offset * tutPanel.ScreenScale.Scale
+	check(
+		run.Position.Y.Offset >= tutBottom,
+		string.format("'달리기!!' 배너가 패널 아래 (%d ≥ %.0f)", run.Position.Y.Offset, tutBottom)
+	)
+	check(playerGui:FindFirstChild("ZoneBanner", true).Position.Y.Offset >= tutBottom, "구역 배너도 패널 아래")
+	check(
+		playerGui:FindFirstChild("PlaceBar", true).Position.Y.Offset >= tutBottom,
+		"알 놓기 안내 줄도 패널 아래"
+	)
+	tut(2, "안전 구역으로 돌아오기")
+	check(tutPanel.StepBadge.Step.Text == "2/5", "2/5")
+	check(markerGui.Text.Text == "안전 구역", "2단계: '안전 구역' 표시")
+	check(targetPart.CFrame.Position.Z < 0, "2단계: 허브(z < 0) 쪽")
+	tut(3, "핫바에서 알을 골라 우리에 놓기")
+	check(markerGui.Text.Text == "우리에 놓기", "3단계: 내 우리 표시")
+	check(
+		hotbar:FindFirstChild("BagEgg_e1"):FindFirstChild("TutorialGlow") ~= nil
+			and hotbar:FindFirstChild("BagEgg_e2"):FindFirstChild("TutorialGlow") ~= nil,
+		"3단계: 핫바 알 칸 반짝 테두리"
+	)
+	tut(4, "부화!")
+	check(
+		hotbar:FindFirstChild("BagEgg_e1"):FindFirstChild("TutorialGlow") == nil,
+		"다음 단계면 알 칸 반짝 끝"
+	)
+	check(markerGui.Text.Text == "부화!", "4단계: 다 자란 내 알 위 '부화!'")
+	local hl = guide:FindFirstChild("TutorialHighlight")
+	check(hl and hl.Adornee == growingEgg, "4단계: 놓인 알 노란 Highlight")
+	tut(5, "펫 장착")
+	check(
+		playerGui:FindFirstChild("PetsButton", true):FindFirstChild("TutorialGlow") ~= nil,
+		"5단계: 펫 버튼 반짝"
+	)
+	check(not markerGui.Enabled, "5단계: 3D 표시 없음")
+	Windows.open("Pets")
+	Tut.update()
+	local equipGlow = false
+	for _, d in playerGui:GetDescendants() do
+		if d:IsA("TextButton") and d.Name == "Equip" and d:FindFirstChild("TutorialGlow") then
+			equipGlow = true
+		end
+	end
+	check(equipGlow, "5단계: 펫 창 '장착' 버튼 반짝")
+	Windows.close()
+	holdDelays = true
+	tut(6, "", true, 500)
+	local donePop = playerGui:FindFirstChild("TutorialDone", true)
+	check(not tutPanel.Visible, "끝나면 패널 숨김")
+	check(
+		donePop and donePop.Card.Reward.Text == "$500 받았어요!",
+		"끝 축하: '" .. tostring(donePop and donePop.Card.Reward.Text) .. "'"
+	)
+	local confetti = 0
+	for _, d in (donePop and donePop:GetChildren() or {}) do
+		if d.Name == "Confetti" then
+			confetti += 1
+		end
+	end
+	check(confetti >= 30, "색종이 " .. confetti .. "장")
+	holdDelays = false
+	check(
+		run.Position.Y.Offset == 14 and playerGui:FindFirstChild("PlaceBar", true).Position.Y.Offset == 64,
+		"패널이 숨으면 위 가운데 것들 제자리"
+	)
+	check(playerGui:FindFirstChild("TutorialGlow", true) == nil, "끝나면 반짝 테두리 없음")
+	-- 이미 끝낸 사람 (Snapshot.tutorial.done) → 안 보임
+	fire("DataUpdate", "tutorial", { tutorial = { step = 6, total = 5, text = "", hint = "", done = true } })
+	check(not tutPanel.Visible, "State.tutorial.done → 패널 숨김")
+	-- 다시 처음부터 (/tutorial reset)
+	tut(1, "숲에서 알 훔치기")
+	check(tutPanel.Visible and tutPanel.StepBadge.Step.Text == "1/5", "/tutorial reset → 1/5 다시 보임")
+
+	print("[5판: 랭킹판]")
+	local lb = playerGui:FindFirstChild("Leaderboard", true)
+	check(lb ~= nil, "오른쪽 위 랭킹판")
+	fire("LeaderboardUpdate", {
+		money = {
+			{ name = "부자", value = 5e9, userId = 1 },
+			{ name = "Tester", value = 12345, userId = 77 },
+			{ name = "셋째", value = 100, userId = 3 },
+		},
+		speed = {
+			{ name = "Tester", value = 2.5e6, userId = 77 },
+			{ name = "부자", value = 1000, userId = 1 },
+		},
+	})
+	local Lb = ctrl("LeaderboardController")
+	Lb.setExpanded(true)
+	local rowsFrame = lb:FindFirstChild("Rows")
+	local row2 = rowsFrame and rowsFrame:FindFirstChild("Row2")
+	check(rowsFrame and rowsFrame:FindFirstChild("Row3") ~= nil and rowsFrame:FindFirstChild("Row4") == nil, "돈 3줄")
+	check(row2 and row2.PlayerName.Text == "Tester" and row2:GetAttribute("Mine") == true, "내 줄 강조 (2등)")
+	check(
+		rowsFrame.Row1.Value.Text == "$5B" or string.sub(rowsFrame.Row1.Value.Text, 1, 1) == "$",
+		"돈 = Format.money: " .. rowsFrame.Row1.Value.Text
+	)
+	check(click(lb:FindFirstChild("LbTab_speed")), "속도 탭")
+	check(
+		rowsFrame.Row1.PlayerName.Text == "Tester" and rowsFrame:FindFirstChild("Row3") == nil,
+		"속도 2줄, 1등 = 나"
+	)
+	check(string.sub(rowsFrame.Row1.Value.Text, 1, 1) ~= "$", "속도 = Format.number: " .. rowsFrame.Row1.Value.Text)
+	check(click(lb:FindFirstChild("LbToggle")) and not Lb.isExpanded() and not rowsFrame.Visible, "접기")
+	check(click(lb:FindFirstChild("LbToggle")) and Lb.isExpanded() and rowsFrame.Visible, "펴기")
+	local boardGui = lbBoard:FindFirstChild("LeaderboardGui")
+	check(boardGui and boardGui.Face == roblox.Enum.NormalId.Front, "허브 3D 판 SurfaceGui (Front)")
+	local line1 = boardGui and boardGui:FindFirstChild("Line1", true)
+	check(
+		boardGui
+			and string.find(boardGui.Back.Column_money.Line1.Text, "부자", 1, true)
+			and string.find(boardGui.Back.Column_speed.Line1.Text, "Tester", 1, true),
+		"허브 판: 돈 1등 '" .. tostring(line1 and line1.Text) .. "' · 속도 1등"
+	)
+	check(boardGui and boardGui.Back.Column_money.Line4.Text == "", "허브 판: 없는 줄은 빈칸")
+	-- 가득 (10줄) — 아래 반응형 검사에서 가장 긴 랭킹판으로 겹침 확인
+	local ten = {}
+	for i = 1, 10 do
+		table.insert(
+			ten,
+			{ name = "플레이어" .. i, value = 1e6 * (11 - i), userId = if i == 7 then 77 else 1000 + i }
+		)
+	end
+	fire("LeaderboardUpdate", { money = ten, speed = ten })
+	check(
+		rowsFrame:FindFirstChild("Row10") ~= nil and rowsFrame.Row7:GetAttribute("Mine") == true,
+		"10줄, 7등 = 내 줄"
+	)
+	check(boardGui.Back.Column_speed.Line10.Text ~= "", "허브 판 10줄")
+
+	print("[5판: 쓰다듬기]")
+	check(myPetPrompt.Enabled, "내 펫 '쓰다듬기' 프롬프트 켜짐")
+	check(not otherPetPrompt.Enabled, "남의 펫 프롬프트는 내 화면에서 꺼짐")
+	check(
+		trigger(myPetPrompt) and lastSent("PetPet") and lastSent("PetPet").args[1] == "p1",
+		"쓰다듬기 → PetPet(p1)"
+	)
+	local beforePet = #sent
+	trigger(otherPetPrompt)
+	check(#sent == beforePet, "남의 펫은 안 보냄")
+	holdDelays = true
+	fire("PetPetted", 77, "p1")
+	local hearts = penPetRoot:FindFirstChild("PetHearts")
+	check(hearts and hearts.AlwaysOnTop and hearts:FindFirstChild("Heart1").Text == "♥", "내 펫 위 '♥' 하트")
+	check(
+		otherPetRoot:FindFirstChild("PetHearts") == nil,
+		"같은 uid 의 남의 펫에는 안 뜸 (주인으로 거름)"
+	)
+	fire("PetPetted", 12345, "p1")
+	check(otherPetRoot:FindFirstChild("PetHearts") ~= nil, "남이 자기 펫을 쓰다듬으면 그 펫 위에 하트")
+	holdDelays = false
+	local Pf = ctrl("PetFxController")
+	check(not Pf.petted(77, "nope"), "없는 펫이면 연출 없음")
+	check(Pf.findPet(77, "p1") == penPet and Pf.findPet(12345, "p1") == otherPet, "주인 + uid 로 펫 찾기")
+	-- 폴짝 (서버 자리 위로만): Heartbeat 한 번 돌려도 오류 없음
+	fakeServices.RunService.Heartbeat:Fire(1 / 60)
+	check(true, "폴짝 한 프레임")
+
+	------------------------------------------------------------------
 	-- 반응형 HUD: 왼쪽 메뉴 · 핫바 자리 (화면 영역 좌표 = 위 인셋 58px 아래부터 0)
 	------------------------------------------------------------------
 	print("[반응형 HUD (폰 750x381 · 844x390 · PC 1428x750)]")
@@ -1486,10 +1849,21 @@ local function body()
 
 		local hb = hotbarRect(area)
 		print("    핫바 " .. tag .. ": " .. fmt(hb) .. string.format(" 칸 %.1fpx", hb.slot))
+		-- 5판: 도구 칸 + 가방 알 칸(+ "…n") 이 다 들어감
+		local shownSlots, eggSlotsShown = 0, 0
+		for _, child in bar:GetChildren() do
+			if child:IsA("GuiObject") and child.Visible then
+				shownSlots += 1
+				if string.find(child.Name, "BagEgg_", 1, true) or child.Name == "MoreEggs" then
+					eggSlotsShown += 1
+				end
+			end
+		end
 		check(
-			#case.tools == 0 or (bar.Size.X.Offset == #case.tools * Layout.SLOT + (#case.tools - 1) * Layout.SLOT_GAP),
-			tag .. " 핫바 너비 = 칸 수"
+			bar.Size.X.Offset == shownSlots * Layout.SLOT + (shownSlots - 1) * Layout.SLOT_GAP,
+			tag .. " 핫바 너비 = 칸 수 " .. shownSlots .. " (알 칸 " .. eggSlotsShown .. ")"
 		)
+		check(eggSlotsShown >= 1, tag .. " 가방 알이 있으면 알 칸(또는 '…n')이 핫바에 보임")
 		check(hb.x >= 0 and hb.y >= 0 and hb.x + hb.w <= area.X and hb.y + hb.h <= area.Y, tag .. " 핫바 화면 안")
 		check(hb.slot >= 44, string.format("%s 핫바 칸 %.1fpx (44 이상)", tag, hb.slot))
 		if case.touch then
@@ -1509,6 +1883,69 @@ local function body()
 		end
 		for _, r in rects do
 			check(not Layout.overlaps(r, hb), tag .. " 메뉴 " .. r.name .. " 와 핫바 안 겹침")
+		end
+
+		-- 5판: 튜토리얼 패널(위 가운데) · 랭킹판(오른쪽 위) 이 다른 HUD 와 안 겹침 (랭킹판 접힘/펼침 둘 다)
+		local k = Ui.scale()
+		local tutS = tutPanel.ScreenScale.Scale
+		local tutRect = {
+			x = area.X / 2 - tutPanel.Size.X.Offset * tutS / 2,
+			y = tutPanel.Position.Y.Offset,
+			w = tutPanel.Size.X.Offset * tutS,
+			h = tutPanel.Size.Y.Offset * tutS,
+		}
+		local rbFrame = hudLayer:FindFirstChild("RightButtons")
+		local rbS = rbFrame.ScreenScale.Scale
+		local rbRect = {
+			x = area.X + rbFrame.Position.X.Offset - rbFrame.Size.X.Offset * rbS,
+			y = area.Y * rbFrame.Position.Y.Scale - rbFrame.Size.Y.Offset * rbS / 2,
+			w = rbFrame.Size.X.Offset * rbS,
+			h = rbFrame.Size.Y.Offset * rbS,
+		}
+		local layoutRb = Layout.rightButtons(area, k, case.touch)
+		check(
+			math.abs(layoutRb.x - rbRect.x) < 1 and math.abs(layoutRb.y - rbRect.y) < 1,
+			tag .. " Layout.rightButtons = 실제 알·발바닥 버튼 자리 " .. fmt(rbRect)
+		)
+		local timerRect = Layout.timerRect(area, k, case.touch)
+		local others = {
+			{ name = "속도·돈", rect = statsRect(area, case.touch) },
+			{ name = "시간", rect = timerRect },
+			{ name = "알·발바닥 버튼", rect = rbRect },
+			{ name = "핫바", rect = hb },
+		}
+		for _, r in rects do
+			table.insert(others, { name = "메뉴 " .. r.name, rect = r })
+		end
+		check(tutPanel.Visible, tag .. " 튜토리얼 패널 보임")
+		check(
+			tutRect.y >= 0 and tutRect.x >= 0 and tutRect.x + tutRect.w <= area.X,
+			tag .. " 튜토리얼 패널 화면 안 " .. fmt(tutRect)
+		)
+		for _, o in others do
+			check(
+				not Layout.overlaps(tutRect, o.rect),
+				tag .. " 튜토리얼 패널이 " .. o.name .. " 과 안 겹침"
+			)
+		end
+		for _, expandedNow in { false, true } do
+			Lb.setExpanded(expandedNow)
+			local lbS = lb.ScreenScale.Scale
+			local lbRect = {
+				x = lb.Position.X.Offset,
+				y = lb.Position.Y.Offset,
+				w = lb.Size.X.Offset * lbS,
+				h = lb.Size.Y.Offset * lbS,
+			}
+			local what = tag .. (if expandedNow then " 랭킹판(펼침) " else " 랭킹판(접힘) ") .. fmt(lbRect)
+			check(
+				lbRect.x >= 0 and lbRect.y >= 0 and lbRect.x + lbRect.w <= area.X and lbRect.y + lbRect.h <= area.Y,
+				what .. " 화면 안"
+			)
+			check(not Layout.overlaps(lbRect, tutRect), what .. " 이 튜토리얼 패널과 안 겹침")
+			for _, o in others do
+				check(not Layout.overlaps(lbRect, o.rect), what .. " 이 " .. o.name .. " 과 안 겹침")
+			end
 		end
 	end
 	-- 원래대로 (폰 가로)

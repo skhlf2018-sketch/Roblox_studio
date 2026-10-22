@@ -305,7 +305,8 @@ function NotifyController.start()
 		local pet = Pets.get(tostring(id))
 		return if pet then pet.name else tostring(id)
 	end
-	local SOURCES: { [string]: string } = { altar = "제단", shrine = "비밀 통로" }
+	-- 선물 알 출처 (5판: 퀘스트·무료 보상 선물은 없어짐 — 제단·비밀 통로·개발 명령 /egg 만)
+	local SOURCES: { [string]: string } = { altar = "제단", shrine = "비밀 통로", dev = "개발 명령" }
 	local extra = E :: { [string]: string }
 	onOptional(extra.EggGranted, function(p)
 		-- 2판 수정: 선물 알도 알 가방으로 (대기 줄 없음, payload.queued 는 안 봄)

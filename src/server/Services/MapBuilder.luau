@@ -4839,6 +4839,25 @@ local function buildHub(map: Instance)
 		background = Color3.fromRGB(60, 170, 235),
 	})
 
+	-- 5판 랭킹판 (스폰 광장 왼쪽 앞, 광장 가운데를 봄): 판 파트만 — 돈·속도 TOP 10 글은 클라 LeaderboardController 가 Front 면에
+	local lbPos = Vector3.new(ms0.x - 26, FLOOR_TOP + 9, ms0.z - 10)
+	local lbLook = Vector3.new(ms0.x, FLOOR_TOP + 9, ms0.z)
+	local lbCf = CFrame.lookAt(lbPos, lbLook)
+	makePart({
+		name = "LeaderboardBoard",
+		size = Vector3.new(16, 12, 0.8),
+		cframe = lbCf,
+		parent = hub,
+		color = Color3.fromRGB(40, 42, 58),
+		material = Enum.Material.Plastic,
+		tag = Visuals.Tags.LeaderboardBoard,
+		studs = true,
+	})
+	for _, s in { -1, 1 } do
+		B(hub, Vector3.new(1.2, 3.4, 1.2), lbCf * CFrame.new(s * 7, -7.7, 0.6), POST, true)
+	end
+	B(hub, Vector3.new(17.4, 1, 1.6), lbCf * CFrame.new(0, 6.5, 0), Color3.fromRGB(255, 200, 60))
+
 	-- 4판 허브 꾸미기: 돌길 양옆 가로등 · 꽃 화분 · 벤치 (빨리 달려 돌아와도 걸리지 않게 안 부딪힘) · 스폰 뒤 분수 (≈ 45 파트)
 	local deco = folder("HubDecor", hub)
 	for k = 0, 4 do

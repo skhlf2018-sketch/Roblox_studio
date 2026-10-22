@@ -307,10 +307,10 @@ tutorial: TutorialView             -- 5판: { step, total, text, hint, done } (�
 - [x] ~~`tests/crossrefs.spec.luau` 의 `PENDING_UI`(DropEgg·SellPet·TreadmillLeave)~~ — 지움 (2판 마무리, 클라가 셋 다 보냄)
 - [ ] **알 창 + 우리에 놓기 (2판 수정)**: 오른쪽 알 버튼 창에 `snap.eggs`(가방) 목록 → 알 고르면 놓기 모드 → 내 우리 바닥 클릭/터치 → `PlaceEgg(uid, hit.X, hit.Z)` (미리보기 `EggPlacement.check`). 놓인 알 다시 줍기 프롬프트/버튼 → `PickUpPlacedEgg(uid)`. 다 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `PlaceEgg`·`PickUpPlacedEgg` 지우기
 - [ ] **2판 수정 클라 정리**: `EggDelivered` 토스트는 "가방에 넣었어요" 뜻으로, `EggGranted` 토스트 "부화 슬롯에 들어갔어요/기다리는 중" → "가방에 들어갔어요", `DebugController` 의 `EggDelivered` 출력(`record.slot` %d — 이제 nil 이라 에러), `IncubatorController` 의 `record.slot` 대신 순서, MapBuilder 받침(`IncubatorSlot`, `incubatorSpots`) 지우기, 바닥 알 "32초" 카운트다운(`ExpiresAt`)
-- [ ] **5판 튜토리얼 패널**: `TutorialUpdate` / `State.get().tutorial` 로 "n/5 + 글" 패널, `done` 이면 숨김, 끝내는 순간 `reward` 축하 (6절). 튜토리얼 중엔 부화 펫이 자동 장착 안 되니 5단계에서 펫 창 장착 버튼을 눈에 띄게
-- [ ] **5판 랭킹판**: `LeaderboardUpdate` → 오른쪽 위 리더보드(이름 / 돈 / 속도) + 허브 판(선택)
-- [ ] **5판 쓰다듬기**: PenPet 모델에 프롬프트/클릭 → `PetPet(uid)`, `PetPetted(ownerUserId, uid)` → 하트·소리. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `PetPet` 지우기
-- [ ] **5판 정리**: `Theme.Menu` 의 `quest`·`gift` 색(이제 안 씀), `NotifyController` 선물 알 출처 글, `docs/UI.md` 의 퀘스트·선물 설명
+- [x] (선임 5판 완료 — TutorialController) **5판 튜토리얼 패널**: `TutorialUpdate` / `State.get().tutorial` 로 "n/5 + 글" 패널, `done` 이면 숨김, 끝내는 순간 `reward` 축하 (6절). 튜토리얼 중엔 부화 펫이 자동 장착 안 되니 5단계에서 펫 창 장착 버튼을 눈에 띄게
+- [x] (선임 5판 완료 — LeaderboardController + 허브 판 LeaderboardBoard) **5판 랭킹판**: `LeaderboardUpdate` → 오른쪽 위 리더보드(이름 / 돈 / 속도) + 허브 판(선택)
+- [x] (선임 5판 완료 — PetVisualService 프롬프트·OwnerUserId + PetFxController, AWAITING_CLIENT 에서 PetPet 지움) **5판 쓰다듬기**: PenPet 모델에 프롬프트/클릭 → `PetPet(uid)`, `PetPetted(ownerUserId, uid)` → 하트·소리. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `PetPet` 지우기
+- [x] (선임 5판 완료) **5판 정리**: `Theme.Menu` 의 `quest`·`gift` 색(이제 안 씀), `NotifyController` 선물 알 출처 글, `docs/UI.md` 의 퀘스트·선물 설명
 - [ ] **트레일 창 장착/장착 해제 버튼 → `EquipTrail(id)` / `EquipTrail("none")`** (2판 마무리). 버튼 글자는 `snap.equippedTrail == id` 이면 "장착 해제", 가졌으면 "장착", 아니면 가격. 붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 `EquipTrail` 지우기 (안 지우면 테스트가 알려 줌)
 
 **서버가 계속 부르는 MapBuilder 공개 함수 (이름·모양 유지 부탁):** `start()`, `getFolder(name)` ("Eggs"/"Guardians"/"Traps"/"Incubating"), `getNests(biomeId): {BasePart}` (없으면 빈 표 → 서버가 `nestsFor` 자리 바닥에 놓음), `groundY(position, ignore): number`, `setNightWalls(on)`, `setPlotOwner(index, player?)`, `plotCount()`, `getPlot(index)` (서버는 이제 안 씀). **더 이상 안 부름:** `isInSafeZone`, `isInPlot`, `findBiomeAt`, `getZone`, `getZonePart`, `getGuardSpawn`.

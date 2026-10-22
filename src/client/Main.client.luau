@@ -70,6 +70,10 @@ boot("WeaponController")
 boot("TreadmillController")
 boot("TrailController")
 boot("SpeedFxController") -- 4판: 빠를수록 시야를 넓혀 속도 체감
+-- 선임 5판: 펫 쓰다듬기(프롬프트·하트), 랭킹판(오른쪽 위 + 허브 판), 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
+boot("PetFxController")
+boot("LeaderboardController")
+boot("TutorialController")
 
 -- 접속 직후 서버가 보낸 Snapshot 을 놓쳤을 수 있으니 한 번 요청
 Net.send(Remotes.ToServer.RequestSnapshot)

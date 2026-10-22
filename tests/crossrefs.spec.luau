@@ -226,7 +226,7 @@ return function(T, Loader)
 	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
 	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
 	--   PetPet (5판): 내 우리 펫 쓰다듬기 — 선임이 펫 ProximityPrompt/클릭을 붙이면 지우기 (서버·REMOTES.md 는 완료)
-	local AWAITING_CLIENT: { [string]: boolean } = { PetPet = true }
+	local AWAITING_CLIENT: { [string]: boolean } = {} -- 5판: PetPet 은 PetFxController 가 보냄
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",

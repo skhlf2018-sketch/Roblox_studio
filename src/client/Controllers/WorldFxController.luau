@@ -1,7 +1,7 @@
 --!strict
 --[[
 	WorldFxController — 월드 연출 (내 화면에서만, 판정과 상관없음)
-	- 우리 펫(PenPet)은 제자리에서 통통, 부모 동물(ParentAnimal)은 살짝 숨쉬기 (TweenService)
+	- 부모 동물(ParentAnimal)은 살짝 숨쉬기 (TweenService). 5판: 우리 펫(PenPet)은 서버가 돌아다니게 하므로 여기서 안 움직임
 	- 레인보우 알 껍데기(EggShell + Rainbow) 색 순환
 	- 머리 위에 든 알 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 희귀도 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
@@ -253,9 +253,12 @@ WorldFxController.popMoney = popMoney
 
 function WorldFxController.start()
 	watchTag(VT.PenPet, function(inst)
-		bounce(inst, 0.14, 0.32)
+		-- 5판: 통통 튀기는 서버(PetVisualService 돌아다니기)가 함 — 여기서 Root 를 Tween 하면 걷는 펫이 제자리로 끌려옴
 		local uid = inst:GetAttribute("PetUid")
-		if inst:IsA("Model") and typeof(uid) == "string" then
+		local owner = inst:GetAttribute("OwnerUserId")
+		-- uid 는 사람마다 따로 매겨서 겹칠 수 있음 → 내 펫만 (OwnerUserId 가 없던 옛 서버면 그냥 받음)
+		local mine = owner == nil or owner == Players.LocalPlayer.UserId
+		if inst:IsA("Model") and typeof(uid) == "string" and mine then
 			penPets[uid] = inst
 		end
 	end)

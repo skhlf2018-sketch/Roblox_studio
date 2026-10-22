@@ -100,13 +100,14 @@ Visuals.palette = C
 
 -- 맵/연출 전용 태그 (shared/Tags.luau 는 수석 파일이라 따로 둠)
 Visuals.Tags = {
-	PenPet = "PenPet", -- 우리에 진열된 펫 모델 (클라가 통통 튀기기)
+	PenPet = "PenPet", -- 우리 펫 모델 (5판: 서버가 우리 안을 돌아다니게 함, Attr PetUid·OwnerUserId, 쓰다듬기 프롬프트 PetPrompt)
 	ParentAnimal = "ParentAnimal", -- 둥지 옆 부모 동물 모델
 	GuardVisual = "GuardVisual", -- 경비 겉모습 모델
 	RarityHighlight = "RarityHighlight", -- 희귀도 테두리 Highlight (클라가 가까운 것만 켬, 31개 한계)
 	EggShell = "EggShell", -- 알 껍데기 비주얼 파트 (레인보우 색 순환)
 	Ambient = "AmbientEmitter", -- 구역 분위기 파티클
 	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 클라가 "업그레이드" 프롬프트
+	LeaderboardBoard = "LeaderboardBoard", -- 5판: 허브 스폰 광장 랭킹판 (판 파트만, Front 면 글은 클라 LeaderboardController 가 채움)
 }
 
 ------------------------------------------------------------------

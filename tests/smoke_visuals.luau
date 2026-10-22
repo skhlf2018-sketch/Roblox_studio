@@ -641,6 +641,185 @@ local function petsBody()
 	end
 	print("  pen parts (18 pets):", penTotal)
 
+	-- 5판: 쓰다듬기 프롬프트 + 우리 안 돌아다니기
+	print("[5판: 우리 펫 쓰다듬기 프롬프트]")
+	local promptOk, ownerOk = 0, 0
+	for _, m in penPets do
+		local attach = m.PrimaryPart:FindFirstChild("PromptAttach")
+		local prompt = attach and attach:FindFirstChild("PetPrompt")
+		if
+			prompt
+			and prompt:IsA("ProximityPrompt")
+			and prompt.ActionText == "쓰다듬기"
+			and math.abs(prompt.HoldDuration - 0.3) < 1e-6
+			and prompt.KeyboardKeyCode == roblox.Enum.KeyCode.F
+			and attach.Position.Y > 0
+		then
+			promptOk += 1
+		end
+		if m:GetAttribute("OwnerUserId") == 77 and typeof(m:GetAttribute("Footprint")) == "number" then
+			ownerOk += 1
+		end
+	end
+	check(promptOk == #penPets, "펫마다 '쓰다듬기' 프롬프트 (0.3초, F, 몸 가운데): " .. promptOk)
+	check(ownerOk == #penPets, "펫마다 Attr OwnerUserId(주인)·Footprint: " .. ownerOk)
+
+	print("[5판: 우리 펫 돌아다니기]")
+	-- 진짜 크기 우리(맵 1번 베이스, 60 × 46)에 최대 18마리
+	local pen1, floor1
+	for _, inst in CollectionService:GetTagged("PenArea") do
+		if inst:GetAttribute("PlotIndex") == 1 then
+			pen1 = inst
+		end
+	end
+	for _, inst in CollectionService:GetTagged("Plot") do
+		if inst:GetAttribute("PlotIndex") == 1 then
+			floor1 = inst
+		end
+	end
+	floor1:SetAttribute("OwnerUserId", 77)
+	PVS.refreshPens()
+	local wanderPets = {}
+	for _, m in pen1.Parent:GetChildren() do
+		if m:IsA("Model") and m:GetAttribute("PetUid") then
+			table.insert(wanderPets, m)
+		end
+	end
+	check(#wanderPets == 18, "1번 베이스 우리(60×46)에 펫 18마리: " .. #wanderPets)
+	local function flatDist(a, b)
+		local dx, dz = a.X - b.X, a.Z - b.Z
+		return math.sqrt(dx * dx + dz * dz)
+	end
+	local top = pen1.CFrame.Position.Y + pen1.Size.Y / 2
+	-- 놓인 알 하나 (펫 격자 바로 앞, 우리 가운데쯤 — 펫이 지나다니는 곳)
+	local eggPart = Instance.new("Part")
+	eggPart.Name = "Incubating_x"
+	eggPart.Size = roblox.Vector3.new(2, 2.5, 2)
+	eggPart.CFrame = pen1.CFrame * roblox.CFrame.new(0, 1.3, -pen1.Size.Z / 6 - 3)
+	eggPart.Parent = pen1.Parent
+	CollectionService:AddTag(eggPart, "IncubatingEgg")
+	local eggPos = eggPart.CFrame.Position
+	local starts, radii, looks = {}, {}, {}
+	for i, m in wanderPets do
+		starts[i] = m:GetPivot().Position
+		looks[i] = m:GetPivot().LookVector
+		local w = PVS.walkerOf(m)
+		radii[i] = w and w.r or 1
+	end
+	check(PVS.walkerOf(wanderPets[1]) ~= nil, "우리 펫 18마리 모두 걷기 등록")
+	local minPair = {}
+	for i = 1, #wanderPets do
+		for j = i + 1, #wanderPets do
+			minPair[i .. ":" .. j] = math.min(flatDist(starts[i], starts[j]), radii[i] + radii[j]) - 0.05
+		end
+	end
+	local t0 = os.clock()
+	local dt = 1 / 30
+	local outside, nearEgg, overlap, bobbed, walking = 0, 0, 0, false, 0
+	local minEgg = math.huge
+	for frame = 1, 30 * 25 do
+		PVS.stepPens(dt, t0 + frame * dt)
+		for i, m in wanderPets do
+			local p = m:GetPivot().Position
+			local lp = pen1.CFrame:PointToObjectSpace(p)
+			if math.abs(lp.X) > pen1.Size.X / 2 + 0.01 or math.abs(lp.Z) > pen1.Size.Z / 2 + 0.01 then
+				outside += 1
+			end
+			local de = flatDist(p, eggPos)
+			minEgg = math.min(minEgg, de)
+			if de < 4 - 0.01 then
+				nearEgg += 1
+			end
+			if p.Y > top + 0.05 then
+				bobbed = true
+			end
+			if frame % 15 == 0 then
+				for j = i + 1, #wanderPets do
+					if flatDist(p, wanderPets[j]:GetPivot().Position) < minPair[i .. ":" .. j] then
+						overlap += 1
+					end
+				end
+			end
+		end
+		if frame == 30 * 6 then
+			for _, m in wanderPets do
+				local w = PVS.walkerOf(m)
+				if w and w.state == "walk" then
+					walking += 1
+				end
+			end
+		end
+	end
+	local moved, turned = 0, 0
+	for i, m in wanderPets do
+		if flatDist(m:GetPivot().Position, starts[i]) > 2 then
+			moved += 1
+		end
+		if m:GetPivot().LookVector:Dot(looks[i]) < 0.95 then
+			turned += 1
+		end
+	end
+	check(
+		moved >= #wanderPets - 2,
+		"25초 동안 펫이 돌아다님 (2 스터드 넘게 움직임): " .. moved .. "/" .. #wanderPets
+	)
+	check(turned >= #wanderPets / 2, "걸으면서 방향을 돌림: " .. turned)
+	check(bobbed, "걷는 동안 통통 (바닥 위로 살짝)")
+	print("  6초째 걷는 펫: " .. walking .. "마리")
+	check(
+		walking >= 1 and walking < #wanderPets,
+		"걷기·쉬기가 섞여 있음 (6초째 걷는 펫 " .. walking .. ")"
+	)
+	check(outside == 0, "울타리(우리 사각형) 밖으로 안 나감")
+	check(nearEgg == 0, string.format("놓인 알과 4 스터드 넘게 떨어짐 (가장 가까이 %.2f)", minEgg))
+	check(overlap == 0, "다른 펫과 겹치지 않음")
+	-- 주인이 우리 10 스터드 안에 오면 → 주인을 보고 한 번 폴짝
+	local ownerChar = Instance.new("Model")
+	local ownerRoot = Instance.new("Part")
+	ownerRoot.Name = "HumanoidRootPart"
+	ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 6)
+	ownerRoot.Parent = ownerChar
+	fakePlayer.Character = ownerChar
+	local t1 = t0 + 30 * 25 * dt
+	local hopped, facing = 0, 0
+	local hopSeen = {}
+	for frame = 1, 30 do
+		PVS.stepPens(dt, t1 + frame * dt)
+		for i, m in wanderPets do
+			local w = PVS.walkerOf(m)
+			if w and m:GetPivot().Position.Y > top + 0.8 then
+				hopSeen[i] = true
+			end
+		end
+	end
+	for i, m in wanderPets do
+		if hopSeen[i] then
+			hopped += 1
+		end
+		local cf = m:GetPivot()
+		local to = ownerRoot.CFrame.Position - cf.Position
+		local flatTo = roblox.Vector3.new(to.X, 0, to.Z).Unit
+		if cf.LookVector:Dot(flatTo) > 0.9 then
+			facing += 1
+		end
+	end
+	check(hopped == #wanderPets, "주인이 오면 모두 한 번 폴짝: " .. hopped)
+	check(facing >= #wanderPets - 1, "주인 쪽을 봄: " .. facing)
+	-- 주인이 계속 있어도 다시 폴짝하지 않음 (한 번만), 쉬다가 다시 걸음
+	local again = 0
+	for frame = 1, 30 * 6 do
+		PVS.stepPens(dt, t1 + 1 + frame * dt)
+		if frame > 30 then
+			for _, m in wanderPets do
+				if m:GetPivot().Position.Y > top + 0.8 then
+					again += 1
+				end
+			end
+		end
+	end
+	check(again == 0, "주인이 그대로 있으면 다시 안 폴짝")
+	fakePlayer.Character = nil
+
 	-- 경비 겉모습 (Lune 에는 Attribute 변경 신호가 없어서 State 를 바꾼 뒤 refreshGuard 를 직접 부름)
 	local function fire(inst, _name)
 		PVS.refreshGuard(inst)

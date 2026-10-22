@@ -41,6 +41,8 @@ local SoundController = require(script.Parent.SoundController)
 local HudController = {}
 HudController.eggBadge = nil :: TextLabel? -- 알 버튼 배지 (IncubatorController 가 숫자를 씀)
 HudController.showZoneBanner = nil :: ((string, string?) -> ())?
+HudController.petsButton = nil :: TextButton? -- 5판: 튜토리얼 5단계 "펫 장착" 때 TutorialController 가 반짝이게 함
+HudController.eggButton = nil :: TextButton?
 
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
@@ -204,7 +206,7 @@ function HudController.isMenuWide(): boolean
 	return menuWide
 end
 
--- 메뉴 오른쪽 끝 (화면 픽셀). 메뉴 옆에 붙는 패널(퀘스트 등)이 씀
+-- 메뉴 오른쪽 끝 (화면 픽셀). 메뉴 옆에 붙는 패널이 씀
 function HudController.menuRight(): number
 	local menu = menuFrame
 	local plan = menuPlan
@@ -481,13 +483,15 @@ function HudController.start()
 			fn()
 		end
 	end)
-	squareButton("PetsButton", C.pawOrange, "paw", 84, function()
+	local petsButton = squareButton("PetsButton", C.pawOrange, "paw", 84, function()
 		Windows.toggle("Pets")
 	end)
 	local eggBadge = Ui.badge(eggButton)
 	eggBadge.BackgroundColor3 = C.shopGreen
 	eggBadge.Position = UDim2.new(1, -4, 1, -4)
 	HudController.eggBadge = eggBadge
+	HudController.eggButton = eggButton
+	HudController.petsButton = petsButton
 
 	------------------------------------------------------------------
 	-- 위 가운데: 구역 배너 ("Jungle 😬")

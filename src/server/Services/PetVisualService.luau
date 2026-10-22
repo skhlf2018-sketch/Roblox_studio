@@ -8,8 +8,13 @@
 	- 만드는 것:
 	    1) ReplicatedStorage.PetModels   134종 + 경비 전용 모양 (크기 1, 효과 없음) → 클라 UI 의 ViewportFrame 이 복제해서 씀
 	    2) 둥지 근처 부모 동물 (ParentAnimalSpot 태그 자리, 크기 1.8 + 희귀도 빛 + 작은 이름표)
-	    3) 우리(PenArea)에 장착 펫 진열 (최대 18마리, 우리 뒤쪽 2/3 에 격자, 모두 PenArea LookVector 쪽을 봄)
+	    3) 우리(PenArea)에 장착 펫 진열 (최대 18마리, 처음엔 우리 뒤쪽 2/3 에 격자, 모두 PenArea LookVector 쪽을 봄)
 	       머리 위 BillboardGui "PetTag": TextLabel "Rarity"(희귀도 색) / "PetName"(흰) / "Income"($수입/s, 초록) / "Extra"(크기·돌연변이, 있을 때)
+	       5판: 우리 안을 천천히 돌아다님 (stepPens — Heartbeat 한 루프에서 모든 펫): 랜덤 목표로 2~5초 걷고 1~3초 쉼,
+	       걷는 동안 통통(bob), 방향을 돌려 걸음, 울타리(PenArea 가장자리)·놓인 알(IncubatingEgg)·다른 펫과 안 겹침.
+	       주인이 우리 10 스터드 안에 오면 주인 쪽을 보고 한 번 폴짝. 모델 Attr PetUid·OwnerUserId·Footprint,
+	       Root 의 Attachment "PromptAttach" 에 ProximityPrompt "PetPrompt"("쓰다듬기", 0.3초, F) — 클라 PetFxController 가
+	       내 펫이면 Triggered → PetPet(uid), 남의 펫이면 내 화면에서 끔 (서버는 Triggered 를 안 받음 = 판정은 PetService)
 	    4) 경비(Guardian 태그) 겉모습 — 키 25~40 스터드, HumanoidRootPart 에 Weld "GuardPose" (Humanoid·HumanoidRootPart 이름은 그대로)
 	       State Idle/Sleeping → 자는 자세 + BillboardGui "SleepZ"(TextLabel Z1~Z3), Chase → 일어섬 + Highlight "GuardGlow"
 	       4판: build(.., { guard = true }) 로 경비 전용 GUARD_EXTRAS 를 더함 — 얼굴 + 그 동물·괴물다운 소품.
@@ -27,6 +32,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Pets = require(Shared.Data.Pets)
@@ -39,6 +45,7 @@ local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local Types = require(Shared.Types)
+local Config = require(Shared.Data.Config)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
 
@@ -2468,7 +2475,7 @@ local function mutationText(record: Types.PetRecord): string
 	return table.concat(parts, " · ")
 end
 
-local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, parent: Instance): Model
+local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, parent: Instance, owner: number): Model
 	local mult = SIZE_SCALE[record.size] or 1
 	local fit = if cell > 0 then cell / PEN_FOOTPRINT else PEN_SCALE
 	local scale = math.max(0.6, math.min(PEN_SCALE, fit) * mult)
@@ -2512,9 +2519,374 @@ local function buildPenPet(record: Types.PetRecord, spot: CFrame, cell: number, 
 		end
 	end
 	model:SetAttribute("PetUid", record.uid)
+	model:SetAttribute("OwnerUserId", owner) -- PetPetted(ownerUserId, uid) 를 받은 클라가 이걸로 거름 (uid 는 사람마다 겹칠 수 있음)
+	model:SetAttribute("Footprint", PEN_FOOTPRINT * scale) -- 바닥에서 차지하는 폭 (돌아다닐 때 겹침 판정)
+	if root then
+		-- 5판 쓰다듬기 프롬프트 (몸 가운데 높이). 누르면 클라가 PetPet(uid) — PetFxController
+		local attach = Instance.new("Attachment")
+		attach.Name = "PromptAttach"
+		attach.Position = Vector3.new(0, math.max(1, height(model) * 0.6), 0)
+		attach.Parent = root
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "PetPrompt"
+		prompt.ActionText = "쓰다듬기"
+		prompt.ObjectText = if pet then pet.name else record.petId
+		prompt.HoldDuration = 0.3
+		prompt.KeyboardKeyCode = Enum.KeyCode.F -- 우리 안 알의 "부화!"(E) 와 안 겹치게
+		prompt.MaxActivationDistance = 10
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = attach
+	end
 	CollectionService:AddTag(model, Visuals.Tags.PenPet)
 	model.Parent = parent
 	return model
+end
+
+------------------------------------------------------------------
+-- 5판: 우리 펫 돌아다니기 (사장님 지시 "제자리에 서 있지 말고")
+--   서버가 Root 를 옮기면(PivotTo) 모두에게 복제됨. BaseService·클라 알 놓기 미리보기(penPetSpots)는 지금 자리를 읽음.
+--   상태: 쉼(rest) → 목표 고르기 → 걷기(walk, 2~5초, 다 가면 쉼) → 쉼(1~3초) … 길이 막히면 잠깐 쉬고 다른 목표.
+--   막힘 = 우리(PenArea) 가장자리 FENCE_MARGIN + 몸 반지름 밖 · 놓인 알과 max(알 간격 4, 몸+알+여유) 안 · 다른 펫과 몸끼리 닿음
+--   (이미 가까운 것에서 "멀어지는" 걸음은 허용 → 바로 옆에 알을 놓아도 갇히지 않음)
+------------------------------------------------------------------
+
+local WALK_SPEED = { 2.6, 3.8 } -- 스터드/초 (천천히)
+local WALK_TIME = { 2, 5 }
+local REST_TIME = { 1, 3 }
+local TURN_SPEED = 5 -- 라디안/초
+local TURN_FIRST = math.rad(50) -- 이보다 많이 돌아야 하면 먼저 제자리에서 돌고 걸음
+local BOB_RATE = 11 -- 통통 걸음 빠르기 (라디안/초, |sin|)
+local HOP_TIME = 0.45
+local OWNER_NEAR = 10 -- 주인이 우리에서 이 거리 안에 오면 주인을 보고 폴짝
+local FACE_TIME = 1.4
+local FENCE_MARGIN = 1.5
+local EGG_EXTRA = 0.6
+local SENSE_INTERVAL = 0.25 -- 놓인 알 자리·주인 거리는 이 초마다만
+
+type Walker = {
+	model: Model,
+	pen: BasePart,
+	penIndex: number,
+	owner: number,
+	r: number, -- 몸 반지름
+	pos: Vector3, -- 바닥 위 자리 (y = 우리 바닥)
+	yaw: number, -- CFrame.Angles(0, yaw, 0) → LookVector = (-sin, 0, -cos)
+	state: string, -- "rest" | "walk"
+	untilT: number,
+	target: Vector3?,
+	speed: number,
+	phase: number,
+	bobH: number,
+	hopH: number,
+	hopAt: number?,
+	faceAt: Vector3?,
+	faceUntil: number,
+	lastY: number,
+}
+type EggSpot = { pos: Vector3, r: number }
+
+local walkers: { [Model]: Walker } = {}
+local penEggs: { [number]: { EggSpot } } = {}
+local ownerNear: { [number]: boolean } = {}
+local senseClock = 0
+local walkRng = Random.new()
+
+local function between(range: { number }): number
+	return walkRng:NextNumber(range[1], range[2])
+end
+
+local function flat(v: Vector3): Vector3
+	return Vector3.new(v.X, 0, v.Z)
+end
+
+-- a 에서 b 로 가장 짧게 도는 각 (-π ~ π)
+local function angleDiff(a: number, b: number): number
+	local d = (b - a) % (2 * math.pi)
+	if d > math.pi then
+		d -= 2 * math.pi
+	end
+	return d
+end
+
+local function yawTo(from: Vector3, to: Vector3): number?
+	local d = flat(to - from)
+	if d.Magnitude < 0.05 then
+		return nil
+	end
+	return math.atan2(-d.X, -d.Z)
+end
+
+-- 우리 바닥 위 자리가 울타리 안쪽인가 (PenArea 로컬: X = 폭, Z = 깊이)
+local function insidePen(pen: BasePart, pos: Vector3, margin: number): boolean
+	local lp = pen.CFrame:PointToObjectSpace(pos)
+	return math.abs(lp.X) <= pen.Size.X / 2 - margin and math.abs(lp.Z) <= pen.Size.Z / 2 - margin
+end
+
+-- 우리 사각형에서 pos 까지 수평 거리 (안이면 0)
+local function penDistance(pen: BasePart, pos: Vector3): number
+	local lp = pen.CFrame:PointToObjectSpace(pos)
+	local dx = math.max(math.abs(lp.X) - pen.Size.X / 2, 0)
+	local dz = math.max(math.abs(lp.Z) - pen.Size.Z / 2, 0)
+	return math.sqrt(dx * dx + dz * dz)
+end
+
+local function eggLimit(w: Walker, egg: EggSpot): number
+	return math.max(Config.EGG_PLACE_SPACING, w.r + egg.r + EGG_EXTRA)
+end
+
+-- from → to 걸음이 막히나 (이미 가까운 것에서 멀어지는 건 됨)
+local function blocked(w: Walker, from: Vector3, to: Vector3): boolean
+	if not insidePen(w.pen, to, FENCE_MARGIN + w.r) and insidePen(w.pen, from, FENCE_MARGIN + w.r) then
+		return true
+	end
+	local eggs: { EggSpot } = penEggs[w.penIndex] or {}
+	for _, egg in eggs do
+		local limit = eggLimit(w, egg)
+		local dTo = flat(to - egg.pos).Magnitude
+		if dTo < limit and dTo < flat(from - egg.pos).Magnitude then
+			return true
+		end
+	end
+	for _, other in walkers do
+		if other ~= w and other.penIndex == w.penIndex and other.pen == w.pen then
+			local limit = w.r + other.r + 0.3
+			local dTo = flat(to - other.pos).Magnitude
+			if dTo < limit and dTo < flat(from - other.pos).Magnitude then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+-- 걸어갈 목표: 우리 안 랜덤 자리 중 알·다른 펫(지금 자리·가는 곳)과 넉넉히 떨어진 곳
+local function pickTarget(w: Walker): Vector3?
+	local pen = w.pen
+	local hx = pen.Size.X / 2 - FENCE_MARGIN - w.r
+	local hz = pen.Size.Z / 2 - FENCE_MARGIN - w.r
+	if hx <= 0 or hz <= 0 then
+		return nil
+	end
+	for _ = 1, 10 do
+		local p = pen.CFrame:PointToWorldSpace(Vector3.new(walkRng:NextNumber(-hx, hx), 0, walkRng:NextNumber(-hz, hz)))
+		local candidate = Vector3.new(p.X, w.pos.Y, p.Z)
+		local ok = flat(candidate - w.pos).Magnitude >= 3
+		if ok then
+			local eggs: { EggSpot } = penEggs[w.penIndex] or {}
+			for _, egg in eggs do
+				if flat(candidate - egg.pos).Magnitude < eggLimit(w, egg) + 1 then
+					ok = false
+					break
+				end
+			end
+		end
+		if ok then
+			for _, other in walkers do
+				if other ~= w and other.penIndex == w.penIndex then
+					local limit = w.r + other.r + 1
+					local t = other.target
+					if
+						flat(candidate - other.pos).Magnitude < limit
+						or (t ~= nil and flat(candidate - t).Magnitude < limit)
+					then
+						ok = false
+						break
+					end
+				end
+			end
+		end
+		if ok then
+			return candidate
+		end
+	end
+	return nil
+end
+
+local function rest(w: Walker, now: number, seconds: number)
+	w.state = "rest"
+	w.target = nil
+	w.untilT = now + seconds
+end
+
+-- 우리 펫 하나를 돌아다니게 등록 (refreshPens 가 만들 때마다). 처음엔 격자 자리에서 잠깐 쉼
+function PetVisualService.addWalker(model: Model, pen: BasePart, penIndex: number, owner: number)
+	local pivot = model:GetPivot()
+	local look = pivot.LookVector
+	local h = height(model)
+	local fp = model:GetAttribute("Footprint")
+	local footprint = if typeof(fp) == "number" then fp else PEN_FOOTPRINT
+	local top = pen.CFrame.Position.Y + pen.Size.Y / 2
+	walkers[model] = {
+		model = model,
+		pen = pen,
+		penIndex = penIndex,
+		owner = owner,
+		r = math.max(0.8, footprint * 0.4),
+		pos = Vector3.new(pivot.Position.X, top, pivot.Position.Z),
+		yaw = math.atan2(-look.X, -look.Z),
+		state = "rest",
+		untilT = os.clock() + walkRng:NextNumber(0.3, 3),
+		target = nil,
+		speed = between(WALK_SPEED),
+		phase = 0,
+		bobH = math.clamp(h * 0.12, 0.15, 0.6),
+		hopH = math.clamp(h * 0.5, 1, 3),
+		hopAt = nil,
+		faceAt = nil,
+		faceUntil = 0,
+		lastY = 0,
+	}
+end
+
+-- 놓인 알 자리 (우리마다) + 주인이 다가왔는지 (SENSE_INTERVAL 마다)
+local function sense(now: number)
+	table.clear(penEggs)
+	local pensSeen: { [number]: BasePart } = {}
+	for _, w in walkers do
+		pensSeen[w.penIndex] = w.pen
+	end
+	for _, inst in CollectionService:GetTagged(Tags.IncubatingEgg) do
+		if inst:IsA("BasePart") then
+			local pos = inst.CFrame.Position
+			for index, pen in pensSeen do
+				if insidePen(pen, pos, -1) then
+					local list = penEggs[index] or {}
+					penEggs[index] = list
+					table.insert(list, { pos = pos, r = math.max(inst.Size.X, inst.Size.Z) / 2 })
+					break
+				end
+			end
+		end
+	end
+	for index, pen in pensSeen do
+		local owner = 0
+		for _, w in walkers do
+			if w.penIndex == index then
+				owner = w.owner
+				break
+			end
+		end
+		local near = false
+		local where: Vector3? = nil
+		local player = if owner ~= 0 then Players:GetPlayerByUserId(owner) else nil
+		local character = if player then player.Character else nil
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if root and root:IsA("BasePart") then
+			local p = root.CFrame.Position
+			where = p
+			near = penDistance(pen, p) <= OWNER_NEAR
+		end
+		if near and not ownerNear[index] and where then
+			-- 주인이 왔다! → 모두 주인 쪽을 보고 차례로 한 번 폴짝
+			for _, w in walkers do
+				if w.penIndex == index then
+					w.faceAt = where
+					w.faceUntil = now + FACE_TIME
+					w.hopAt = now + walkRng:NextNumber(0.1, 0.45)
+					rest(w, now, FACE_TIME + walkRng:NextNumber(0.2, 1))
+				end
+			end
+		end
+		ownerNear[index] = near
+	end
+end
+
+local function stepWalker(w: Walker, dt: number, now: number)
+	local moved = false
+	if w.faceUntil > now and w.faceAt then
+		-- 주인 보기 (제자리에서 돌기)
+		local want = yawTo(w.pos, w.faceAt :: Vector3)
+		if want then
+			local d = angleDiff(w.yaw, want)
+			if math.abs(d) > 0.01 then
+				w.yaw += math.clamp(d, -TURN_SPEED * 1.6 * dt, TURN_SPEED * 1.6 * dt)
+				moved = true
+			end
+		end
+	elseif w.state == "walk" then
+		local target = w.target
+		if not target or now >= w.untilT then
+			rest(w, now, between(REST_TIME))
+		else
+			local to = flat(target - w.pos)
+			local dist = to.Magnitude
+			if dist < 0.4 then
+				rest(w, now, between(REST_TIME))
+			else
+				local want = math.atan2(-to.X, -to.Z)
+				local d = angleDiff(w.yaw, want)
+				w.yaw += math.clamp(d, -TURN_SPEED * dt, TURN_SPEED * dt)
+				moved = true
+				if math.abs(d) < TURN_FIRST then
+					local dir = Vector3.new(-math.sin(w.yaw), 0, -math.cos(w.yaw))
+					local nextPos = w.pos + dir * math.min(dist, w.speed * dt)
+					if blocked(w, w.pos, nextPos) then
+						rest(w, now, walkRng:NextNumber(0.4, 1.2)) -- 막힘 → 잠깐 쉬고 다른 곳으로
+					else
+						w.pos = nextPos
+						w.phase += dt * BOB_RATE
+					end
+				end
+			end
+		end
+	elseif now >= w.untilT then
+		local target = pickTarget(w)
+		if target then
+			w.state = "walk"
+			w.target = target
+			w.untilT = now + between(WALK_TIME)
+			w.speed = between(WALK_SPEED)
+		else
+			rest(w, now, between(REST_TIME))
+		end
+	end
+	-- 높이: 걷는 동안 통통 + 폴짝
+	local y = 0
+	if w.state == "walk" then
+		y = math.abs(math.sin(w.phase)) * w.bobH
+	else
+		w.phase = 0
+	end
+	local hopAt = w.hopAt
+	if hopAt and now >= hopAt then
+		local t = now - hopAt
+		if t < HOP_TIME then
+			y += math.sin(math.pi * t / HOP_TIME) * w.hopH
+		else
+			w.hopAt = nil
+		end
+		moved = true
+	end
+	if moved or math.abs(y - w.lastY) > 1e-3 then
+		w.model:PivotTo(CFrame.new(w.pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, w.yaw, 0))
+		w.lastY = y
+	end
+end
+
+-- 모든 우리 펫 한 프레임 (Heartbeat 하나에서). 테스트는 dt·now 를 직접 줌
+function PetVisualService.stepPens(dt: number, now: number)
+	for model in walkers do
+		if model.Parent == nil then
+			walkers[model] = nil
+		end
+	end
+	if now - senseClock >= SENSE_INTERVAL then
+		senseClock = now
+		sense(now)
+	end
+	for _, w in walkers do
+		stepWalker(w, math.min(dt, 0.1), now)
+	end
+end
+
+-- 지금 돌아다니는 펫 정보 (테스트용 복사본)
+function PetVisualService.walkerOf(model: Model): { state: string, pos: Vector3, yaw: number, r: number }?
+	for m, w in walkers do
+		if m == model then -- (Lune 테스트는 같은 인스턴스라도 표 열쇠가 달라서 == 로 찾음)
+			return { state = w.state, pos = w.pos, yaw = w.yaw, r = w.r }
+		end
+	end
+	return nil
 end
 
 local function refreshPens()
@@ -2547,7 +2919,9 @@ local function refreshPens()
 					local places, cell = penSpots(pen, #records)
 					local parent = pen.Parent or pen
 					for i, record in records do
-						table.insert(models, buildPenPet(record, places[i], cell, parent))
+						local model = buildPenPet(record, places[i], cell, parent, owner)
+						table.insert(models, model)
+						PetVisualService.addWalker(model, pen, index, owner)
 					end
 					pens[index] = { signature = signature, models = models }
 				end
@@ -2826,6 +3200,21 @@ function PetVisualService.start()
 				warn("[PetVisualService] 우리 갱신 오류: " .. tostring(err))
 			end
 		end
+	end)
+
+	-- 5판: 우리 펫 돌아다니기 (모든 펫을 Heartbeat 한 루프에서)
+	local warned = false
+	pcall(function()
+		RunService.Heartbeat:Connect(function(dt: number)
+			local ok, err = pcall(function(): ...any
+				PetVisualService.stepPens(dt, os.clock())
+				return
+			end)
+			if not ok and not warned then
+				warned = true
+				warn("[PetVisualService] 펫 걷기 오류: " .. tostring(err))
+			end
+		end)
 	end)
 end
 

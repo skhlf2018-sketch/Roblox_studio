@@ -1,6 +1,6 @@
 --!strict
 --[[
-	Windows — 큰 창(도감·선물·상점·펫·설정) 열고 닫기. 한 번에 하나만 열림.
+	Windows — 큰 창(도감·상점·트레일·펫·설정·펫 고르기) 열고 닫기. 한 번에 하나만 열림.
 	  Windows.register("Index", window, onOpen?)   -- window = Ui.window(...) 결과
 	  Windows.toggle("Index") / Windows.open("Index") / Windows.close()
 	  Windows.changed(function(openName: string?) end)

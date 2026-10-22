@@ -4,9 +4,16 @@
 	- 서버가 Backpack 에 넣어 준 Tool(이름 = Remotes.ToolKinds) 을 칸으로 보여 줌. 기본 Roblox 가방 UI 는 끔.
 	- 칸 누르기(또는 숫자키 1~9): 손에 들기 ↔ 내려놓기. 든 상태에서 한 번 더 누르면 사용(UseTool).
 	  손에 든 채 화면을 클릭/터치해도 ToolController 가 UseTool 을 보냄.
-	- 알을 들고 있으면(플레이어 Attribute CarryingEgg) 마지막 칸에 알 그림 칸 (보기용, 누를 수 없음)
+	- 알을 들고 있으면(플레이어 Attribute CarryingEgg) 도구 다음 칸에 알 그림 칸 "EggSlot" (보기용, 누를 수 없음)
+	- 5판 (사장님 지시 "얻은 알은 핫바에 바로"): 가방 알(State.get().eggs)이 도구 뒤에 칸으로 바로 보임 ("BagEgg_<uid>")
+	    · 새로 얻은 알이 맨 앞 (가장 최근 것부터), 최대 Layout.HOTBAR_EGG_MAX(6)칸 + 나머지는 "…n" 칸("MoreEggs" → 알 창 가방 탭)
+	    · 알 칸을 누르면(클릭·톡·숫자키) 바로 알 놓기 모드 (IncubatorController.beginPlace: 초록/빨강 미리보기 → 클릭/톡으로 PlaceEgg)
+	      같은 칸을 한 번 더 누르면 놓기 취소. 놓는 중인 알 칸은 흰 테두리.
+	    · 우리에 놓인(부화 중) 알은 가방에서 빠지므로 핫바에도 안 보임 (성장 중 확인은 오른쪽 알 버튼 창)
+	    · 칸 테두리 = 희귀도 색, 알 그림 = 펫 대표 색, 특별 알 ★
 	- PC 는 아래 가운데. 터치 기기에서는 점프 버튼(오른쪽 아래) 왼쪽으로 비켜서, 조이스틱(왼쪽 아래)과도 안 겹치게.
-	  칸이 많아 자리가 모자라면 배율을 줄임(칸 44px 까지). 규칙은 UI/Layout.luau.
+	  칸이 많아 자리가 모자라면 배율을 줄이고(칸 44px 까지), 그래도 모자라면 알 칸 수를 줄임. 규칙은 UI/Layout.luau.
+	공개: HotbarController.eggButtons() (튜토리얼 3단계가 반짝이게 함), HotbarController.refresh()
 ]]
 
 local Players = game:GetService("Players")
@@ -15,17 +22,23 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage.Shared
+local Pets = require(Shared.Data.Pets)
 local Remotes = require(Shared.Remotes)
+local Types = require(Shared.Types)
+local Visuals = require(Shared.Data.Visuals)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
+local State = require(Client.State)
 local Layout = require(Client.UI.Layout)
 local Theme = require(Client.UI.Theme)
 local Icons = require(Client.UI.Icons)
 local Tags = require(Shared.Tags)
 local Ui = require(Client.UI.Ui)
 local WeaponController = require(script.Parent.WeaponController)
+local IncubatorController = require(script.Parent.IncubatorController)
 
 local HotbarController = {}
+HotbarController.refresh = nil :: (() -> ())?
 
 local C = Theme.Colors
 
@@ -66,6 +79,20 @@ local KEYS = {
 	Enum.KeyCode.Eight,
 	Enum.KeyCode.Nine,
 }
+
+-- 핫바 한 칸이 하는 일 (숫자키 순서)
+type Entry = {
+	kind: string, -- "tool" | "carry" | "egg" | "more"
+	tool: Tool?,
+	uid: string?,
+}
+
+local eggButtonList: { GuiObject } = {}
+
+-- 지금 보이는 가방 알 칸 + "…n" 칸 (튜토리얼 3단계 강조용)
+function HotbarController.eggButtons(): { GuiObject }
+	return table.clone(eggButtonList)
+end
 
 local function isKind(name: string): boolean
 	for _, kind in Remotes.ToolKinds do
@@ -113,6 +140,66 @@ local function drawTool(kind: string, parent: Instance)
 	end
 end
 
+-- 알 그림 (펫 대표 색으로 칠함 — IncubatorController 알 창과 같은 모양)
+local function eggIcon(parent: GuiObject, petId: string, size: number): Frame
+	local icon = Icons.draw("egg", parent, size)
+	local ec = Visuals.petColor(petId, 1)
+	for _, d in icon:GetDescendants() do
+		if d:IsA("Frame") and d.BackgroundTransparency < 0.5 then
+			d.BackgroundColor3 = Color3.fromRGB(ec[1], ec[2], ec[3])
+			break
+		end
+	end
+	return icon
+end
+
+local function rarityOf(petId: string): string
+	local pet = Pets.get(petId)
+	return if pet then pet.rarity else "common"
+end
+
+local function petName(petId: string): string
+	local pet = Pets.get(petId)
+	return if pet then pet.name else petId
+end
+
+-- 가방 알: 가장 최근에 얻은 알부터 (새 알이 바로 맨 앞 알 칸에 보이게)
+local function bagEggs(): { Types.BagEgg }
+	local snap = State.get()
+	local eggs = if snap then snap.eggs or {} else {}
+	local list: { Types.BagEgg } = {}
+	for i = #eggs, 1, -1 do
+		table.insert(list, eggs[i])
+	end
+	return list
+end
+
+-- 마우스를 올리면 이름 (원작 핫바처럼 평소엔 그림만)
+local function addTip(button: TextButton, text: string)
+	local tip = Ui.label(text, UDim2.fromOffset(150, 24), 18, C.white, {
+		Name = "ToolName",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0, -4),
+		Visible = false,
+		Parent = button,
+	})
+	button.MouseEnter:Connect(function()
+		tip.Visible = true
+	end)
+	button.MouseLeave:Connect(function()
+		tip.Visible = false
+	end)
+end
+
+local function keyLabel(parent: Instance, visible: boolean)
+	Ui.label("", UDim2.fromOffset(18, 18), 14, C.white, {
+		Name = "Key",
+		Position = UDim2.fromOffset(3, 1),
+		Visible = visible,
+		Parent = parent,
+	})
+end
+
 function HotbarController.start()
 	local player = Players.LocalPlayer
 	pcall(function()
@@ -140,10 +227,13 @@ function HotbarController.start()
 		bar
 
 	local slots: { [Tool]: TextButton } = {}
-	local order: { Tool } = {}
+	local eggSlots: { [string]: TextButton } = {}
+	local entries: { Entry } = {}
 	local touch = Ui.isTouch()
 	local slotCount = 0
-	-- 알 칸 (보기용)
+	local knownEggs: { [string]: boolean }? = nil -- 처음 그린 뒤부터 새 알 칸을 통통
+
+	-- 든 알 칸 (보기용)
 	local eggSlot: Frame = Ui.new("Frame", {
 		Name = "EggSlot",
 		Size = UDim2.fromOffset(Layout.SLOT, Layout.SLOT),
@@ -155,11 +245,33 @@ function HotbarController.start()
 	Ui.corner(10).Parent = eggSlot
 	Ui.stroke(C.yellow, 3).Parent = eggSlot
 	Icons.draw("egg", eggSlot, 44)
-	Ui.label("", UDim2.fromOffset(18, 18), 14, C.white, {
-		Name = "Key",
-		Position = UDim2.fromOffset(3, 1),
-		Parent = eggSlot,
+	keyLabel(eggSlot, true)
+
+	-- "…n" 칸: 핫바에 다 못 보인 가방 알 → 알 창 가방 탭
+	local function openBag()
+		local setTab = IncubatorController.setTab
+		local panel = IncubatorController.panel
+		local toggle = IncubatorController.toggle
+		if panel and not panel.Visible and toggle then
+			toggle()
+		end
+		if setTab then
+			setTab("bag")
+		end
+	end
+	local more = Ui.button("", SLOT_COLOR, UDim2.fromOffset(Layout.SLOT, Layout.SLOT), openBag, { parent = bar })
+	more.Name = "MoreEggs"
+	more.BackgroundTransparency = 0.25
+	more.Visible = false
+	Icons.draw("egg", more, 30, UDim2.fromScale(0.5, 0.36))
+	Ui.label("…", UDim2.new(1, -6, 0, 26), 22, C.white, {
+		Name = "Count",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -2),
+		Parent = more,
 	})
+	keyLabel(more, not touch)
+	addTip(more, "알 더 보기 (가방)")
 
 	-- 실제 점프 버튼(PlayerGui.TouchGui, 로블록스 PlayerModule 이 만듦)이 보이면 그 자리, 아니면 규칙대로
 	local function realJump(): Layout.Rect?
@@ -182,7 +294,8 @@ function HotbarController.start()
 		}
 	end
 
-	local function layout()
+	-- 지금 화면에서 핫바가 피해야 할 곳: 터치 = 점프 버튼 / PC = 왼쪽 아래 속도·돈 묶음
+	local function bounds(): (Vector2, Layout.Rect?, number)
 		touch = Ui.isTouch()
 		local area = Ui.area()
 		local jump: Layout.Rect? = nil
@@ -194,7 +307,17 @@ function HotbarController.start()
 				jump = if found.x < rule.x then found else rule
 			end
 		end
-		local plan = Layout.hotbar(area, math.max(slotCount, #order), Ui.scale(), touch, 8, jump)
+		local leftLimit = 8
+		if not touch then
+			local stats = Layout.statsRect(area, Ui.scale(), false)
+			leftLimit = math.ceil(stats.x + stats.w + 8)
+		end
+		return area, jump, leftLimit
+	end
+
+	local function layout()
+		local area, jump, leftLimit = bounds()
+		local plan = Layout.hotbar(area, math.max(slotCount, 1), Ui.scale(), touch, leftLimit, jump)
 		barScale.Scale = plan.scale
 		if touch then
 			bar.AnchorPoint = Vector2.new(1, 1)
@@ -205,22 +328,12 @@ function HotbarController.start()
 			bar.Position = UDim2.new(0.5, 0, 1, -plan.bottom)
 		end
 		bar.Size = UDim2.fromOffset(plan.baseWidth, Layout.HOTBAR_HEIGHT)
-		for _, slot in slots do
-			local key = slot:FindFirstChild("Key")
+		for _, child in bar:GetChildren() do
+			local key = child:FindFirstChild("Key")
 			if key and key:IsA("GuiObject") then
 				key.Visible = not touch
 			end
 		end
-	end
-	Ui.onLayout(layout)
-	-- 로블록스 터치 조작 화면(TouchGui)이 늦게 생기면 그 점프 버튼 자리에 맞춰 다시
-	local playerGui = player:FindFirstChildOfClass("PlayerGui")
-	if playerGui then
-		playerGui.ChildAdded:Connect(function(gui: Instance)
-			if gui.Name == "TouchGui" then
-				task.delay(0.5, layout) -- 점프 버튼 크기·자리가 정해진 뒤
-			end
-		end)
 	end
 
 	local function humanoid(): Humanoid?
@@ -245,7 +358,50 @@ function HotbarController.start()
 		end
 	end
 
+	-- 알 칸 누르기: 놓기 모드 시작 (같은 알이면 취소)
+	local function pressEgg(uid: string)
+		if IncubatorController.placingUid() == uid then
+			IncubatorController.cancelPlace()
+			return
+		end
+		-- 손에 든 도구는 내려놓음 (클릭이 방망이 휘두르기로 가지 않게)
+		local hum = humanoid()
+		if hum then
+			hum:UnequipTools()
+		end
+		IncubatorController.beginPlace(uid)
+	end
+
+	local function makeEggSlot(egg: Types.BagEgg): TextButton
+		local uid = egg.uid
+		local rid = rarityOf(egg.petId)
+		local made = Ui.button("", SLOT_COLOR, UDim2.fromOffset(Layout.SLOT, Layout.SLOT), function()
+			pressEgg(uid)
+		end, { parent = bar })
+		made.Name = "BagEgg_" .. uid
+		made.BackgroundTransparency = 0.25
+		made:SetAttribute("EggUid", uid)
+		local stroke = made:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = Theme.rarityColor(rid)
+			stroke.Thickness = 3
+		end
+		eggIcon(made, egg.petId, 42)
+		if egg.special then
+			Ui.label("★", UDim2.fromOffset(20, 20), 18, C.yellow, {
+				Name = "Special",
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -2, 0, 1),
+				Parent = made,
+			})
+		end
+		keyLabel(made, not touch)
+		addTip(made, petName(egg.petId) .. " 알 · 눌러서 놓기")
+		return made
+	end
+
 	local function refresh()
+		-- 도구
 		local list: { Tool } = {}
 		local seen: { [Tool]: boolean } = {}
 		for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
@@ -272,8 +428,8 @@ function HotbarController.start()
 				slots[tool] = nil
 			end
 		end
-		order = list
-		for i, tool in list do
+		local newEntries: { Entry } = {}
+		for _, tool in list do
 			local slot = slots[tool]
 			if not slot then
 				local t = tool
@@ -289,35 +445,12 @@ function HotbarController.start()
 					TextXAlignment = Enum.TextXAlignment.Right,
 					Parent = made,
 				})
-				Ui.label(tostring(i), UDim2.fromOffset(18, 18), 14, C.white, {
-					Name = "Key",
-					Position = UDim2.fromOffset(3, 1),
-					Visible = not touch,
-					Parent = made,
-				})
-				-- 마우스를 올리면 도구 이름 (원작 핫바처럼 평소엔 그림만)
-				local tip = Ui.label(NAMES[t.Name] or t.Name, UDim2.fromOffset(120, 24), 18, C.white, {
-					Name = "ToolName",
-					AnchorPoint = Vector2.new(0.5, 1),
-					Position = UDim2.new(0.5, 0, 0, -4),
-					Visible = false,
-					Parent = made,
-				})
-				made.MouseEnter:Connect(function()
-					tip.Visible = true
-				end)
-				made.MouseLeave:Connect(function()
-					tip.Visible = false
-				end)
+				keyLabel(made, not touch)
+				addTip(made, NAMES[t.Name] or t.Name)
 				slots[t] = made
 				slot = made
 			end
 			local s = slot :: TextButton
-			s.LayoutOrder = i
-			local key = s:FindFirstChild("Key")
-			if key and key:IsA("TextLabel") then
-				key.Text = tostring(i)
-			end
 			local caption = s:FindFirstChild("Caption")
 			if caption and caption:IsA("TextLabel") then
 				local count = tool:GetAttribute("Count")
@@ -328,19 +461,106 @@ function HotbarController.start()
 				stroke.Color = if equipped(tool) then C.white else C.winEdge
 				stroke.Thickness = if equipped(tool) then 4 else 2
 			end
+			table.insert(newEntries, { kind = "tool", tool = tool })
 		end
-		-- 알 칸 (들고 있을 때만, 마지막 번호)
+
+		-- 든 알 칸 (들고 있을 때만)
 		local carry = player:GetAttribute(Tags.PlayerAttributes.CarryingEgg)
 		local carrying = typeof(carry) == "string" and carry ~= ""
 		eggSlot.Visible = carrying
-		eggSlot.LayoutOrder = #list + 1
-		local eggKey = eggSlot:FindFirstChild("Key")
-		if eggKey and eggKey:IsA("TextLabel") then
-			eggKey.Text = tostring(#list + 1)
-			eggKey.Visible = not touch
+		if carrying then
+			table.insert(newEntries, { kind = "carry" })
 		end
-		slotCount = #list + (if carrying then 1 else 0)
+
+		-- 가방 알 칸 (자리에 맞춰 최대 6칸 + "…n")
+		local eggs = bagEggs()
+		local area, jump, leftLimit = bounds()
+		local capacity = Layout.hotbarCapacity(area, touch, leftLimit, jump)
+		local shown, hasMore = Layout.hotbarEggs(capacity, #newEntries, #eggs)
+		local placingUid = IncubatorController.placingUid()
+		local want: { [string]: boolean } = {}
+		local firstBuild = knownEggs == nil
+		local known: { [string]: boolean } = knownEggs or {}
+		table.clear(eggButtonList)
+		for i = 1, shown do
+			local egg = eggs[i]
+			want[egg.uid] = true
+			local slot = eggSlots[egg.uid]
+			if not slot then
+				slot = makeEggSlot(egg)
+				eggSlots[egg.uid] = slot
+			end
+			local s = slot :: TextButton
+			local stroke = s:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				local active = placingUid == egg.uid
+				stroke.Color = if active then C.white else Theme.rarityColor(rarityOf(egg.petId))
+				stroke.Thickness = if active then 5 else 3
+			end
+			table.insert(newEntries, { kind = "egg", uid = egg.uid })
+			table.insert(eggButtonList, s)
+			if not firstBuild and not known[egg.uid] then
+				Ui.pop(s, 1.35) -- 방금 얻은 알
+			end
+		end
+		for uid, slot in eggSlots do
+			if not want[uid] then
+				slot:Destroy()
+				eggSlots[uid] = nil
+			end
+		end
+		local nextKnown: { [string]: boolean } = {}
+		for _, egg in eggs do
+			nextKnown[egg.uid] = true
+		end
+		if State.get() ~= nil then
+			knownEggs = nextKnown -- 첫 Snapshot 의 알들은 통통 안 함 (그 뒤 새로 들어온 알만)
+		end
+		more.Visible = hasMore
+		if hasMore then
+			local count = more:FindFirstChild("Count")
+			if count and count:IsA("TextLabel") then
+				count.Text = "+" .. tostring(#eggs - shown)
+			end
+			table.insert(newEntries, { kind = "more" })
+			table.insert(eggButtonList, more)
+		end
+
+		-- 순서·번호 (숫자키 1~9 = 이 순서)
+		entries = newEntries
+		for i, entry in newEntries do
+			local frame: GuiObject? = nil
+			if entry.kind == "tool" and entry.tool then
+				frame = slots[entry.tool]
+			elseif entry.kind == "carry" then
+				frame = eggSlot
+			elseif entry.kind == "egg" and entry.uid then
+				frame = eggSlots[entry.uid]
+			elseif entry.kind == "more" then
+				frame = more
+			end
+			if frame then
+				frame.LayoutOrder = i
+				local key = frame:FindFirstChild("Key")
+				if key and key:IsA("TextLabel") then
+					key.Text = if i <= #KEYS then tostring(i) else ""
+					key.Visible = not touch
+				end
+			end
+		end
+		slotCount = #newEntries
 		layout() -- 칸 수가 바뀌면 너비·배율 다시
+	end
+	HotbarController.refresh = refresh
+	Ui.onLayout(refresh) -- 화면 크기가 바뀌면 들어가는 알 칸 수도 다시
+	-- 로블록스 터치 조작 화면(TouchGui)이 늦게 생기면 그 점프 버튼 자리에 맞춰 다시
+	local playerGui = player:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui.ChildAdded:Connect(function(gui: Instance)
+			if gui.Name == "TouchGui" then
+				task.delay(0.5, refresh) -- 점프 버튼 크기·자리가 정해진 뒤
+			end
+		end)
 	end
 
 	local function watch(container: Instance?)
@@ -377,8 +597,15 @@ function HotbarController.start()
 			task.defer(refresh)
 		end
 	end)
-	refresh()
 	player:GetAttributeChangedSignal(Tags.PlayerAttributes.CarryingEgg):Connect(refresh)
+	-- 가방 알이 바뀌면 (배달·선물 알·놓기·다시 줍기) 알 칸 다시
+	State.onChanged(function(section: string)
+		if section == "snapshot" or section == "eggs" then
+			refresh()
+		end
+	end)
+	IncubatorController.onPlaceChanged(refresh)
+	refresh()
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if processed then
@@ -386,14 +613,24 @@ function HotbarController.start()
 		end
 		for i, key in KEYS do
 			if input.KeyCode == key then
-				local tool = order[i]
-				local hum = humanoid()
-				if tool and hum then
-					if equipped(tool) then
-						hum:UnequipTools()
-					else
-						hum:EquipTool(tool)
+				local entry = entries[i]
+				if not entry then
+					return
+				end
+				if entry.kind == "tool" and entry.tool then
+					local tool = entry.tool
+					local hum = humanoid()
+					if hum then
+						if equipped(tool) then
+							hum:UnequipTools()
+						else
+							hum:EquipTool(tool)
+						end
 					end
+				elseif entry.kind == "egg" and entry.uid then
+					pressEgg(entry.uid)
+				elseif entry.kind == "more" then
+					openBag()
 				end
 				return
 			end

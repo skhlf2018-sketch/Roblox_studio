@@ -9,13 +9,13 @@
 	  - "모두 성장시키기" (로벅스) 는 어른 확인 전이라 꺼 둠.
 	  - 알 버튼 배지 = 가방 속 알 수 + 지금 부화할 수 있는 알 수 (할 일 수)
 
-	알 놓기 모드 (가방 카드 "놓기"):
+	알 놓기 모드 (5판: 아래 핫바의 알 칸을 누르면 바로 — HotbarController. 가방 탭 카드 "놓기" 도 그대로):
 	  - 내 우리 바닥에 반투명 알 미리보기 + 바닥 동그라미. 초록 = 놓을 수 있음 / 빨강 = 안 됨 (위 안내 줄에 이유)
 	    판정 = EggPlacement.check(MapLayout.toLocal(내 베이스, 자리), 놓인 알들, 우리 펫들) + 놓인 알 수 + 서 있는 곳(서버와 같은 규칙)
 	  - PC: 마우스를 따라 미리보기, 왼쪽 클릭 → PlaceEgg(uid, x, z) (월드 x, z)
 	  - 폰: 바닥을 톡 누른 곳으로 미리보기 (처음엔 우리 안 첫 빈자리), "여기 놓기" 버튼 → PlaceEgg
 	  - ESC / "취소" 버튼으로 끝. 그 알이 가방에서 사라지면(놓기 성공 등) 저절로 끝.
-	  공개: beginPlace(uid) / previewAt(x, z) / confirmPlace() / cancelPlace() / isPlacing() (테스트도 씀)
+	  공개: beginPlace(uid) / previewAt(x, z) / confirmPlace() / cancelPlace() / isPlacing() / placingUid() / onPlaceChanged(fn) (핫바·튜토리얼·테스트도 씀)
 
 	월드: 우리 안 부화 중 알(태그 IncubatingEgg, 내 알만)에 프롬프트 2개 (E)
 	  - 다 자랐으면 "부화!" → HatchEgg(uid) / 아직이면 "집기" → PickUpPlacedEgg(uid) (Config.ALLOW_EGG_PICKUP)
@@ -421,6 +421,18 @@ function IncubatorController.previewAt(x: number, z: number): (boolean, string?)
 	return ok, reason
 end
 
+-- 놓기 모드가 시작·끝·다른 알로 바뀔 때 (핫바가 고른 알 칸을 강조)
+local placeListeners: { () -> () } = {}
+local function emitPlace()
+	for _, fn in placeListeners do
+		task.spawn(fn)
+	end
+end
+
+function IncubatorController.onPlaceChanged(fn: () -> ())
+	table.insert(placeListeners, fn)
+end
+
 function IncubatorController.cancelPlace()
 	local state = placing
 	placing = nil
@@ -428,10 +440,19 @@ function IncubatorController.cancelPlace()
 		state.ghost:Destroy()
 	end
 	refreshPlaceUi()
+	if state then
+		emitPlace()
+	end
 end
 
 function IncubatorController.isPlacing(): boolean
 	return placing ~= nil
+end
+
+-- 지금 놓으려는 가방 알 uid (놓기 모드가 아니면 nil)
+function IncubatorController.placingUid(): string?
+	local state = placing
+	return if state then state.uid else nil
 end
 
 -- 지금 미리보기 자리에 놓기 (PlaceEgg). 보냈으면 true
@@ -505,6 +526,7 @@ function IncubatorController.beginPlace(uid: string): boolean
 	if bar then
 		Ui.pop(bar, 1.15)
 	end
+	emitPlace()
 	return true
 end
 
@@ -714,7 +736,7 @@ function IncubatorController.start()
 	Ui.grid(Vector2.new(cardW, cardH), 6).Parent = bag
 
 	local emptyGrow = Ui.label(
-		"우리에 놓인 알이 없어요!\n'가방' 탭에서 알을 골라 우리에 놓아요",
+		"우리에 놓인 알이 없어요!\n아래 핫바의 알 칸을 눌러 우리에 놓아요",
 		UDim2.new(1, -20, 0, 80),
 		20,
 		C.white,

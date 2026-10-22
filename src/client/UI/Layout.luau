@@ -8,6 +8,9 @@
 	  Layout.hotbar(area, count, hudScale, touch, leftLimit, jump?) → 핫바 오른쪽·아래 여백, 배율
 	  Layout.jumpZone(area)                         → 터치 점프 버튼 자리 (PlayerModule TouchJump 규칙)
 	  Layout.joystickZone(area)                     → 터치 조이스틱 자리 (왼쪽 아래 정사각형)
+	  5판: Layout.hotbarCapacity / hotbarEggs        → 핫바에 넣을 가방 알 칸 수 (최대 6 + "…n")
+	       Layout.statsRect / timerRect / rightButtons → HudController 와 같은 자리 (다른 패널이 피할 때)
+	       Layout.tutorialPanel / leaderboard        → 튜토리얼 패널(위 가운데)·랭킹판(오른쪽 위) 자리
 
 	규칙 (docs/UI.md 4-2):
 	  - 메뉴 버튼은 화면에서 44px 이상. 위는 y ≥ 8 (배지가 안 잘리게 조금 더), 아래는 PC 8px / 터치는 조이스틱 위.
@@ -163,7 +166,8 @@ function Layout.hotbar(
 		right = math.max(right, math.ceil(area.X - j.x) + Layout.HOTBAR_MARGIN)
 		left = math.max(left, Layout.joystickSize(area) + 8)
 	end
-	local room = area.X - right - left
+	-- PC 는 아래 가운데라 양쪽을 똑같이 비움 (왼쪽 아래 속도·돈 묶음 = leftLimit)
+	local room = if touch then area.X - right - left else area.X - 2 * math.max(left, right)
 	local scale = hudScale
 	if baseWidth * scale > room then
 		scale = math.max(Layout.MIN_TOUCH / Layout.SLOT, room / baseWidth)
@@ -175,6 +179,98 @@ function Layout.hotbarRect(area: Vector2, plan: HotbarPlan): Rect
 	local w = plan.baseWidth * plan.scale
 	local h = Layout.HOTBAR_HEIGHT * plan.scale
 	return { x = area.X - plan.right - w, y = area.Y - plan.bottom - h, w = w, h = h }
+end
+
+------------------------------------------------------------------
+-- 5판: 핫바 알 칸 · 튜토리얼 패널 · 랭킹판 자리
+------------------------------------------------------------------
+
+Layout.HOTBAR_EGG_MAX = 6 -- 핫바에 보이는 가방 알 칸 최대 (나머지는 "…n" 칸 → 알 창 가방 탭)
+
+-- 핫바에 넣을 수 있는 칸 수 (칸이 가장 작은 44px 일 때). Layout.hotbar 와 같은 여백 규칙
+function Layout.hotbarCapacity(area: Vector2, touch: boolean, leftLimit: number, jump: Rect?): number
+	local right = Layout.HOTBAR_MARGIN
+	local left = leftLimit
+	if touch then
+		local j = jump or Layout.jumpZone(area)
+		right = math.max(right, math.ceil(area.X - j.x) + Layout.HOTBAR_MARGIN)
+		left = math.max(left, Layout.joystickSize(area) + 8)
+	end
+	local room = if touch then area.X - right - left else area.X - 2 * math.max(left, right)
+	local minScale = Layout.MIN_TOUCH / Layout.SLOT
+	local per = (Layout.SLOT + Layout.SLOT_GAP) * minScale
+	return math.max(1, math.floor((room + Layout.SLOT_GAP * minScale) / per))
+end
+
+-- 가방 알 칸 수 정하기: capacity = hotbarCapacity, fixed = 도구 칸 + 든 알 칸, bag = 가방 알 수
+-- → (보일 알 칸 수, "…n" 칸이 있나). 자리가 모자라도 알 칸 또는 "…n" 칸 하나는 보임
+function Layout.hotbarEggs(capacity: number, fixed: number, bag: number): (number, boolean)
+	if bag <= 0 then
+		return 0, false
+	end
+	local free = math.max(capacity - fixed, 1)
+	if bag <= math.min(free, Layout.HOTBAR_EGG_MAX) then
+		return bag, false
+	end
+	return math.clamp(math.min(free, Layout.HOTBAR_EGG_MAX + 1) - 1, 0, Layout.HOTBAR_EGG_MAX), true
+end
+
+-- HUD 자리 (HudController 와 같은 숫자 — 다른 패널이 피할 때 씀)
+function Layout.statsRect(area: Vector2, hudScale: number, touch: boolean): Rect
+	if touch then
+		return { x = 10, y = 4, w = 520 * hudScale, h = 48 * hudScale }
+	end
+	return { x = 10, y = area.Y - 6 - 150 * hudScale, w = 330 * hudScale, h = 150 * hudScale }
+end
+
+function Layout.timerRect(area: Vector2, hudScale: number, touch: boolean): Rect
+	local w, h = 250 * hudScale, 56 * hudScale
+	if touch then
+		return { x = area.X - 12 - w, y = 4, w = w, h = h }
+	end
+	return { x = area.X - 12 - w, y = area.Y - 8 - h, w = w, h = h }
+end
+
+-- 오른쪽 알·발바닥 버튼 묶음 (72 × 156, 세로 가운데 0.46 / 작은 터치 화면 0.42)
+function Layout.rightButtons(area: Vector2, hudScale: number, touch: boolean): Rect
+	local w, h = 72 * hudScale, 156 * hudScale
+	local fy = if touch and small(area) then 0.42 else 0.46
+	return { x = area.X - 12 - w, y = area.Y * fy - h / 2, w = w, h = h }
+end
+
+Layout.TUTORIAL_W = 460
+Layout.TUTORIAL_H = 56
+
+-- 튜토리얼 패널 (위 가운데). PC 는 맨 위, 터치는 위 한 줄 속도·돈 아래
+function Layout.tutorialPanel(area: Vector2, hudScale: number, touch: boolean): Rect
+	local w, h = Layout.TUTORIAL_W * hudScale, Layout.TUTORIAL_H * hudScale
+	local top = if touch then math.ceil(4 + 48 * hudScale + 6) else 6
+	return { x = (area.X - w) / 2, y = top, w = w, h = h }
+end
+
+Layout.BOARD_W = 230 -- 랭킹판 기준 너비 (PC)
+Layout.BOARD_W_TOUCH = 170 -- 터치 (폰에서 튜토리얼 패널·놓기 안내 줄과 안 겹치게 좁게)
+Layout.BOARD_HEADER = 34
+Layout.BOARD_TABS = 26
+Layout.BOARD_ROW = 20
+
+-- 랭킹판 (오른쪽 위). rows = 보일 줄 수 (접혀 있으면 0 → 제목 줄만).
+-- PC: 맨 위 오른쪽 / 터치: 오른쪽 위 시간 아래. 펼쳐서 오른쪽 알·발바닥 버튼에 닿으면 그 왼쪽으로 비킴
+function Layout.leaderboard(area: Vector2, hudScale: number, touch: boolean, rows: number): Rect
+	local baseW = if touch then Layout.BOARD_W_TOUCH else Layout.BOARD_W
+	local baseH = Layout.BOARD_HEADER + (if rows > 0 then Layout.BOARD_TABS + rows * Layout.BOARD_ROW + 6 else 0)
+	local w, h = baseW * hudScale, baseH * hudScale
+	local top = 6
+	if touch then
+		local t = Layout.timerRect(area, hudScale, true)
+		top = math.ceil(t.y + t.h + 6)
+	end
+	local rect: Rect = { x = area.X - 12 - w, y = top, w = w, h = h }
+	local rb = Layout.rightButtons(area, hudScale, touch)
+	if Layout.overlaps(rect, { x = rb.x - 6, y = rb.y - 6, w = rb.w + 12, h = rb.h + 12 }) then
+		rect.x = rb.x - 6 - w
+	end
+	return rect
 end
 
 return Layout

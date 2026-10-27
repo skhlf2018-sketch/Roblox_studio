@@ -1341,3 +1341,32 @@ S3 이면 8구역 3~5h, 13구역 20~30h, 15구역 40~60h 목표를 모두 지키
 | 화면 | ✅ 우리 안에 펫 4마리 흩어져 걷고 수입 팝업(+$9), 헛간·"펫 우리" 아치, 튜토리얼 1/5, 랭킹판 $36 |
 | 검사 | selene 0 / stylua 통과 / Lune 461 통과(건너뜀 1 = B-4 NaN 방어, 낮음) / smoke client·visuals OK / 타입 0 |
 | 남은 것 | B-4(랭킹 NaN 정렬, 지금은 생길 길 없음)·B-5·B-8~B-12 참고 사항은 그대로. 폰 화면(750×381) 5판 겹침은 Lune 반응형 검사로만 확인 |
+
+## 17. 주임 6판 검수 (주임, 2026-10-28, HEAD e6b03fd 위에서, 아직 커밋 전)
+
+**결론: 심각한 구멍 없음.** 새 Remote 11개(PickFruit·SellFruits·FeedFruit·SkipGrowth·SellPlant·PetPet·SakuraOffer·SakuraDraw·PlaceEgg·PickUpPlacedEgg·ClaimIndexReward)를 코드로 읽고, 무작위 시험으로도 던져 봤는데 코인·가방·남의 것이 뚫리는 곳이 없었어요.
+
+| 한 것 | 결과 |
+|---|---|
+| 서버 읽기 (FruitService·BaseService 건너뛰기/선물·SakuraService·PetService 팔기/물주기·FruitRules·GardenRules·Wallet·Net·Validate) | 모든 uid·fruitId·"all"/"half" 가 `Validate` 를 거치고, 내 정원 목록(`findPlant`/`findIncubator`)에서만 찾아서 남의 식물·열매는 못 건드림. 건너뛰기 값·팔기 값은 전부 서버가 계산(클라 값은 안 씀). `Wallet` 이 NaN·음수·무한 거부 + 코인 상한. 열매 가방 300은 `addToBag` 가 자리만큼만. 식물당 열매 5는 `FruitRules.produce`. 레이트 리밋은 11개 전부 있음. 밤 30배는 `BaseService.growTick` 한 곳만(열매 틱은 그대로) |
+| 무작위 시험 `tests/holes_garden.spec` (새 테스트 2개) | 두 사람(A·B)이 한 서버에서 A 가 온갖 값(남의 uid, NaN, ∞, 1e308, 표, 아주 긴 글, "ALL")을 온갖 자리(정원·가판대·숲·사쿠라 나무 앞/뒤)·낮밤·시간 경과 속에서 1,500번 보냄. 매번 확인: 코인 유한·0 이상·상한 이하 / 열매 가방 ≤ 300·개수 정수·값 유한 / 식물 열매 0~5 정수 / 정원 칸 안 넘음 / uid 겹침 없음 / 크리스탈 정수 / 서버 warn 0 / 돈은 팔기·도감으로만 늘고 건너뛰기는 **정확히 표 가격만큼만** 빠짐 / **멀리서는 따기·팔기·먹이기·물주기·바치기·뽑기가 안 됨** / B 의 코인·열매 가방·씨앗 가방·크리스탈·돌연변이는 그대로. 통과. (시험이 진짜 무는지: `addToBag` 의 300 제한을 일부러 뺐더니 16번째 줄에서 "열매 가방 345" 로 잡힘 → 되돌림) |
+| 성장 시간 실측 (새 테스트) | 일반 10초는 10초 뒤 성체. 비밀 `rune_rose` 86,400초: 낮 1시간 = 정확히 3,600 성장초, 건너뛰기 값 = 올림(분) × 10 × 100, 밤으로 바꾸면 남은 시간이 30배 빨리 줄어 약 46분 뒤 성체(전체 밤이면 48분). 성체가 되면 열매 1개 |
+| 숫자 대조 (lune) | 건너뛰기 배수 11등급 = SEED 3·11장 (1·2·4·8·15·30·60·100·180·300·500), 11등급 대표 식물 건너뛰기 "전부" 값 = 올림(분) × 10 × 배수 전부 일치. 러닝머신 20레벨 = 정확히 1,000,000/초(걸음 250,000 × 배율 4), 서버 `stepTick` 10초 = 10,000,000 (기존 `services_core`·`design_doc` 이 이미 지킴) |
+| 클라 ↔ 서버 (FruitBag·PetFx·PlantFx·Incubator·Pets·Sakura·Hotbar) | 받는 이벤트 이름·필드(plant/isNew/fruitValue/fruitInterval, plantUid/count/value, count/coins, plantUid/mutation, kind/gained/crystals, (ownerUserId, uid))가 REMOTES.md 1장과 같음. 보내는 쪽 인자 순서(`FeedFruit(식물 uid, 열매 식물 id)`, `SkipGrowth(uid, mode)`, `PlaceEgg(uid, x, z)`)도 같음. 읽는 Attribute 전부 서버가 세팅(`VisualHeight` 포함). Connect 누수 없음: 파트마다 거는 것은 `hooked`/`eggPrompts` 표로 한 번만 + `Destroying`/`Parent == nil` 에서 끊음, `Hotbar` 는 `Tracked` 로 끊음, 나머지는 시작할 때 한 번. RenderStepped 는 `IncubatorController` 심기 모드 하나(Instance 안 만듦) |
+
+### 발견 (모두 낮음·참고, 고치지 않음 / 주석 1개만 고침)
+
+| 번호 | 심각도 | 어디 | 내용 · 재현 |
+|---|---|---|---|
+| C-1 | 낮음 (설계 확인) | `Config.SAKURA_OFFER_CRYSTALS` · `SAKURA_DRAW_COST` | 일반·고급 성체 1그루 = 크리스탈 1, 10개면 코스믹 "벚꽃 요정 나무" 씨앗(97.5%, 열매 60만 코인 · 18초). 숲 강아지풀(3초)을 10그루 키워 바치면 코스믹 씨앗 1개 → 8시간(밤이면 16분) 또는 건너뛰기 288,000 코인이면 성체. 5판 숫자 그대로라 설계 확인만 (사장님이 "너무 쉽다"면 `SAKURA_DRAW_COST` 를 올리거나 낮은 등급 크리스탈 수를 줄이면 됨) |
+| C-2 | 참고 | `PetService.luau:262` · `PetFxController.luau:56,260` | 물 쿨다운(서버 `session.cooldowns["water:uid"]`, 클라 `waterUntil[uid]`)이 식물을 팔거나 바친 뒤에도 남음. 한 접속 동안 물 준 uid 수만큼(수십 개)이라 무시 가능 |
+| C-3 | 참고 | `PetService.luau:250` | 물 쿨다운이 씨앗과 성체가 같은 uid 라서, 씨앗에 물을 주고 곧 성체가 되면 성체에게 60초 못 줌 (안내 글은 나옴) |
+| C-4 | 참고 (성능) | `PlantFxController.luau:107,136` | 0.5초마다 `swayModels()` 가 새 표를 만들고 `GetTagged(ParentAnimal)` 를 부르며, 5초마다 모든 아우라 파트를 `GetDescendants` 로 다시 맞춤. 아우라 파트는 태그된 것만이라 `GetDescendants` 전체 훑기는 아님. 파트가 수백 개여도 가벼움 |
+| C-5 | 참고 (표시) | `PetsController.luau:114` · `FruitService` 가판대 배지 | 코인 2배 게임패스가 있으면 "뽑아서 팔기"·"열매 n개 · x 코인" 표시가 실제(×2)의 절반. 서버 지급은 맞음 |
+| C-6 | 참고 (주석) | `TreadmillService.luau:8` | 머리말에 "TREADMILL_MULTIPLIER(3)" → 6판 4 로 고침 (코드는 처음부터 `Config` 값 사용) |
+
+### 이번에 추가·고친 것
+- 새 파일 `tests/holes_garden.spec.luau` (테스트 2개: 무작위 1,500번 / 성장 시간 실측), `tests/run.luau` 에 등록. 시험 장치 메모: `H.setPhase("Night")` 는 서버가 허브 밖 사람을 베이스로 옮기므로, 거리 시험은 부르기 직전에 `H.spawn`.
+- `src/` 는 주석 1줄만.
+- 검사: Lune 458 통과 (건너뜀 1 = B-4) / selene 0 / stylua 통과 / smoke client·visuals OK / luau-analyze 타입 0·require 0·lint 0·syntax 0.
+- 스튜디오에서 꼭 볼 것: ① 낮에 일반 씨앗을 심어 10초 뒤 성체가 되는지 + 밤에 비밀 씨앗이 훨씬 빨리 크는지(씨앗 위 숫자가 1초에 30씩 줄어듦) ② 정원에서 멀리 서서 "열매 따기"·"물 주기"가 안 되는지(걸어가면 됨) ③ 판매 가판대에서 열매 팔기 → 코인 팝업 + 튜토리얼 5단계 완료, 건너뛰기 창의 가격이 눌렀을 때 낮아진 코인과 같은지.

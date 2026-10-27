@@ -42,6 +42,8 @@ local specs = {
 	{ "holes_world.spec", require("./holes_world.spec") },
 	-- 6판 씨앗을 훔치세요: 성장 단계·성체·열매·건너뛰기·팔기·도감·사쿠라 씨앗·스키마 v6
 	{ "garden.spec", require("./garden.spec") },
+	-- 6판 주임 검수
+	{ "holes_garden.spec", require("./holes_garden.spec") },
 }
 
 local filters: { string } = {}

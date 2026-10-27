@@ -5,7 +5,7 @@
 	- 내 베이스 러닝머신 벨트(MapLayout.treadmillRect(plotIndex), 앞마당) 위에 올라서면 서버가 태움:
 	    플레이어 Attr OnTreadmill = true, WalkSpeed 0 (WASD 무시), 캐릭터를 벨트 가운데로 옮겨 복도 쪽을 보게 함.
 	    (HumanoidRootPart Anchored·PlatformStand 안 씀 → 점프는 됨)
-	- 1초(TREADMILL_TICK_SECONDS)마다 걸음 1번: 속도 += 걸음당 속도(Upgrades 러닝머신 레벨) × TREADMILL_MULTIPLIER(3)
+	- 1초(TREADMILL_TICK_SECONDS)마다 걸음 1번: 속도 += 걸음당 속도(Upgrades 러닝머신 레벨) × TREADMILL_MULTIPLIER(6판 4)
 	    → Wallet.addSpeed + TreadmillStep { amount } (클라 "+500" 분홍 팝업)
 	- 내리기: 클라가 점프할 때 TreadmillLeave() → 벨트 앞(복도 쪽)으로 내려 줌.
 	    클라가 안 보내도 점프하면 몸통이 TREADMILL_MAX_HEIGHT(8) 위로 떠서 서버가 내려 줌 (그 자리 착지 → 걸어서 나가면 됨).

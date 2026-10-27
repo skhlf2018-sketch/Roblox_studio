@@ -1,11 +1,11 @@
 --!strict
 --[[
-	ChaseController — 알을 들었을 때 화면 (2판: 원작 그대로)
-	- 알을 들면(플레이어 Attribute CarryingEgg ≠ ""): 위 가운데 빨간 "달리기!!" 배너 + 화면 가장자리 빨간 비네트(맥박)
-	  + 아래 가운데 빨간 "드롭" 버튼(쓰레기통) → DropEgg (그 자리에 알을 내려놓고 추격 끝)
+	ChaseController — 씨앗을 들었을 때 화면 (2판: 원작 그대로)
+	- 씨앗을 들면(플레이어 Attribute CarryingEgg ≠ ""): 위 가운데 빨간 "달리기!!" 배너 + 화면 가장자리 빨간 비네트(맥박)
+	  + 아래 가운데 빨간 "드롭" 버튼(쓰레기통) → DropEgg (그 자리에 씨앗을 내려놓고 추격 끝)
 	- RunAlert: 속도가 모자라면 배너 아래 작은 경고 ("속도가 부족해요!")
-	- 허브(안전 구역)에 들어오면 배너 글자 "베이스로!" (배달 = 내 베이스 영역에 들어가면 자동)
-	- Caught: "잡혔다!" + 화면 흔들림 + 빨간 번쩍 + 알이 어떻게 됐는지
+	- 허브(안전 구역)에 들어오면 씨앗 가방으로 (배달 = 안전 구역에 들어가면 자동). 경비 = 그 구역 식물 괴물
+	- Caught: "잡혔다!" + 화면 흔들림 + 빨간 번쩍 + 씨앗이 어떻게 됐는지
 ]]
 
 local Players = game:GetService("Players")
@@ -165,9 +165,9 @@ function ChaseController.start()
 		local reason = if typeof(payload) == "table" then payload.reason else nil
 		if banner.Visible then
 			warnLabel.Text = if reason == "safe"
-				then "안전 구역! 이제 내 베이스로 가져가요!"
-				elseif reason == "night" then "밤이 됐어요! 베이스로!"
-				else "경비가 멈췄어요! 베이스로 가져가요!"
+				then "안전 구역 도착! 씨앗을 정원에 심어요!"
+				elseif reason == "night" then "밤이 됐어요! 안전 구역으로!"
+				else "식물 괴물이 멈췄어요! 안전 구역으로!"
 			warnLabel.TextColor3 = C.moneyGreen
 		end
 	end)
@@ -190,7 +190,7 @@ function ChaseController.start()
 			task.wait(0.2)
 			if banner.Visible then
 				local inSafe = player:GetAttribute(Attr.InSafeZone) == true
-				banner.Text = if inSafe then "베이스로!" else "달리기!!"
+				banner.Text = if inSafe then "안전 구역!" else "달리기!!"
 				if not guardSlow and warnLabel.TextColor3 ~= C.moneyGreen then
 					warnLabel.TextColor3 = C.yellow
 				end
@@ -263,8 +263,8 @@ function ChaseController.start()
 		local by = tostring(payload.by or "")
 		local how = if cause == "player" or cause == "trap" then by .. "의 공격!" else by .. "에게 잡혔어요!"
 		local egg = if outcome == "ReturnToNest"
-			then " 알이 둥지로 돌아갔어요"
-			elseif outcome == "DropHere" then " 알을 떨어뜨렸어요! 빨리 주워요"
+			then " 씨앗이 둥지로 돌아갔어요"
+			elseif outcome == "DropHere" then " 씨앗을 떨어뜨렸어요! 빨리 주워요"
 			else ""
 		caughtInfo.Text = how .. egg
 		caughtHolder.Visible = true

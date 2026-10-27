@@ -414,7 +414,8 @@ local function body()
 		local look0 = MapBuilder.getPlot(i).treadmill.Parent:FindFirstChild("TreadmillLook")
 		lookBefore += if look0 then count(look0) else 0
 	end
-	for level = 0, 10 do
+	local padColors = {}
+	for level = 0, 20 do
 		kidLevels.TreadmillLevel = level
 		MapBuilder.setPlotOwner(2, kid)
 		local look = MapBuilder.getPlot(2).treadmill.Parent:FindFirstChild("TreadmillLook")
@@ -422,16 +423,28 @@ local function body()
 			looksOk = false
 			print("    러닝머신 레벨 " .. level .. " 모양 문제")
 		end
+		if level >= 1 then
+			local pad = MapBuilder.getPlot(2).treadmill
+			padColors[tostring(pad.Color) .. "|" .. tostring(pad.Material) .. "|" .. (look and count(look) or 0)] = true
+		end
 		maxLook = math.max(maxLook, look and count(look) or 0)
 	end
-	check(looksOk, "러닝머신 레벨 0~10 모양 모델 (레벨마다 교체)")
+	check(looksOk, "러닝머신 레벨 0~20 모양 모델 (레벨마다 교체)")
+	local distinct = 0
+	for _ in padColors do
+		distinct += 1
+	end
+	check(
+		distinct == 20,
+		"6판: 러닝머신 1~20레벨 모양이 전부 다름 (벨트 색·재질·파트 수): " .. distinct
+	)
 	-- 7 베이스 모두 가장 파트가 많은 러닝머신 모양이어도 맵 7,000 이하
 	local worst = mapBefore - lookBefore + 7 * maxLook
 	check(
 		worst <= 7000,
 		string.format("러닝머신 7개 모두 가장 큰 모양(%d)이어도 맵 ≤ 7,000: %d", maxLook, worst)
 	)
-	-- 6판 (사장님: 러닝머신 최대 1초 1M): 20레벨까지. 11~20레벨 모양은 아직 10번 모양 그대로 (선임이 10개 더)
+	-- 6판 (사장님: 러닝머신 최대 1초 1M): 20레벨까지, 11~20레벨 모양 10개 더 (정글·바다·사탕·벚꽃·용암·수정·유령·은하·무지개·황제)
 	local Upgrades = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Upgrades"))
 	check(#Upgrades.Treadmill == 20, "러닝머신 20레벨: " .. #Upgrades.Treadmill)
 	local levelsSeen = {}
@@ -548,42 +561,153 @@ local function body()
 	})
 	check(#(tagged.SakuraIncubator or {}) == before, "Landmarks.ensure 가 임시 사쿠라 나무를 안 만듦")
 
-	print("[펫]")
+	-- 6판: 사쿠라 나무 모양 (태그 꽃밭 파트 크기 그대로 + 줄기·가지·분홍 꽃 덩어리·꽃잎)
+	do
+		local pedestal = sakura[1]
+		local treeModel = pedestal and pedestal.Parent
+		local wood, pinkBalls, petals = 0, 0, nil
+		for _, d in (treeModel and treeModel:GetDescendants() or {}) do
+			if d:IsA("BasePart") then
+				if d.Material == roblox.Enum.Material.Wood then
+					wood += 1
+				elseif d.Shape == roblox.Enum.PartType.Ball and d.Color.R > 0.9 and d.Color.G < 0.85 then
+					pinkBalls += 1
+				end
+				if d.Name == "PetalEmitter" then
+					petals = d:FindFirstChildOfClass("ParticleEmitter")
+				end
+			end
+		end
+		check(
+			pedestal ~= nil and math.abs(pedestal.Size.Y - 7) < 0.01 and math.abs(pedestal.Size.X - 1.6) < 0.01,
+			"사쿠라 나무 꽃밭(SakuraIncubator) 크기 그대로 (지름 7)"
+		)
+		check(treeModel and treeModel.Name == "SakuraIncubatorModel", "사쿠라 나무 모델 이름 그대로")
+		check(
+			wood >= 8 and pinkBalls >= 9 and petals ~= nil,
+			string.format(
+				"사쿠라 나무: 줄기·가지 %d, 분홍 꽃 덩어리 %d, 꽃잎 파티클",
+				wood,
+				pinkBalls
+			)
+		)
+		check(treeModel and treeModel:FindFirstChild("SakuraEgg", true) == nil, "6판: 5판 알 돔(SakuraEgg) 없음")
+	end
 end
 
--- 펫·우리·경비·알 검사 (맵 검사가 실패해도 따로 돎: 가짜 베이스·우리 파트를 직접 만듦)
+-- 식물·씨앗 단계·경비(식물 괴물)·씨앗 껍데기 검사 (맵 검사가 실패해도 따로 돎)
 local function petsBody()
 	local Pets = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Pets"))
 	local Visuals = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Visuals"))
+	local Rarities = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Rarities"))
 	local PVS = requireNode(Loader.get("ServerScriptService/Server/Services/PetVisualService"))
+	local PlantVS = requireNode(Loader.get("ServerScriptService/Server/Services/PlantVisualService"))
+	local function has(list, inst)
+		for _, x in list or {} do
+			if x == inst then
+				return true
+			end
+		end
+		return false
+	end
+	local function fxOf(inst)
+		local emitters, lights, on = 0, 0, 0
+		for _, d in inst:GetDescendants() do
+			if d:IsA("ParticleEmitter") then
+				emitters += 1
+				if d.Enabled then
+					on += 1
+				end
+			elseif d:IsA("PointLight") then
+				lights += 1
+				if d.Enabled then
+					on += 1
+				end
+			end
+		end
+		return emitters, lights, on
+	end
+	local function visibleFruits(model)
+		local n, total = 0, 0
+		for _, d in model:GetChildren() do
+			if d:IsA("BasePart") and string.match(d.Name, "^Fruit%d$") then
+				total += 1
+				if d.Transparency < 1 then
+					n += 1
+				end
+			end
+		end
+		return n, total
+	end
+
+	print("[6판 식물 134종]")
 	local total, maxParts, maxId, minParts, minId = 0, 0, "", math.huge, ""
-	local byBody = {}
+	local byForm = {}
+	local rootOk, swayOk, fruitOk, auraOk, heightOk = 0, 0, 0, 0, 0
+	local auraLine = {}
 	for _, pet in Pets.list do
-		local m = PVS.build(pet.id, 1, { effects = true })
+		local m = PlantVS.build(pet.id, { fx = true, fruits = 0 })
 		local n = count(m)
 		total += n
-		local body = Visuals.pet(pet.id).body
-		byBody[body] = byBody[body] or { n = 0, sum = 0, min = math.huge }
-		byBody[body].n += 1
-		byBody[body].sum += n
-		byBody[body].min = math.min(byBody[body].min, n)
 		if n > maxParts then
 			maxParts, maxId = n, pet.id
 		end
 		if n < minParts then
 			minParts, minId = n, pet.id
 		end
+		local form = m:GetAttribute("Form")
+		byForm[form] = (byForm[form] or 0) + 1
+		if m.PrimaryPart and m.PrimaryPart.Name == "Root" and m.PrimaryPart.Anchored then
+			local welded = true
+			for _, d in m:GetDescendants() do
+				if d:IsA("BasePart") and d ~= m.PrimaryPart then
+					if d.Anchored or d.CanCollide or d.CanTouch or d.CanQuery then
+						welded = false
+					end
+				end
+			end
+			if welded then
+				rootOk += 1
+			end
+		end
+		if m:GetAttribute("Sway") == true then
+			swayOk += 1
+		end
 		local h = m:GetAttribute("Height")
-		check(type(h) == "number" and h > 0.5 and h < 8, pet.id .. " Height " .. tostring(h))
-		check(m.PrimaryPart ~= nil and m.PrimaryPart.Name == "Root", pet.id .. " Root")
-	end
-	for id in Visuals.extra do
-		PVS.build(id, 2.4, { effects = false, rarity = "secret" })
+		if type(h) == "number" and h > 1.2 and h < 14 then
+			heightOk += 1
+		end
+		local shown, fruits = visibleFruits(m)
+		PlantVS.setFruits(m, 3)
+		local shown3 = visibleFruits(m)
+		if fruits == 5 and shown == 0 and shown3 == 3 then
+			fruitOk += 1
+		end
+		-- 아우라: 희귀(rare) 이상만 파티클·빛, 전부 꺼진 채 + AuraFx 태그
+		local r = Rarities.get(pet.rarity)
+		local aura = m:FindFirstChild("Aura")
+		local emitters, lights, on = fxOf(m)
+		local good
+		if r.order >= 3 then
+			good = aura ~= nil and has(tagged.AuraFx, aura) and emitters + lights >= 1 and on == 0
+		else
+			good = aura == nil and emitters == 0 and lights == 0
+		end
+		if good then
+			auraOk += 1
+		else
+			table.insert(auraLine, pet.id)
+		end
 	end
 	local avg = total / #Pets.list
+	local forms = {}
+	for name, k in byForm do
+		table.insert(forms, name .. " " .. k)
+	end
+	table.sort(forms)
 	print(
 		string.format(
-			"  pets built: %d  avg parts: %.1f  min: %d (%s)  max: %d (%s)",
+			"  plants built: %d  avg parts: %.1f  min: %d (%s)  max: %d (%s)",
 			#Pets.list,
 			avg,
 			minParts,
@@ -592,79 +716,171 @@ local function petsBody()
 			maxId
 		)
 	)
-	local bodyNames = {}
-	for name in byBody do
-		table.insert(bodyNames, name)
+	print("  모양별 식물 수: " .. table.concat(forms, ", "))
+	check(#forms == 16, "식물 모양 16종 모두 쓰임: " .. #forms)
+	check(maxParts <= 40 and minParts >= 8, string.format("식물 하나 파트 8~40 (평균 %.1f)", avg))
+	check(rootOk == #Pets.list, "Root(Anchored) + 나머지 용접·충돌/터치/쿼리 꺼짐: " .. rootOk)
+	check(swayOk == #Pets.list, "모델 Attr Sway = true: " .. swayOk)
+	check(heightOk == #Pets.list, "키(Height) 1.2~14: " .. heightOk)
+	check(fruitOk == #Pets.list, "열매 파트 5개, setFruits(3) 이면 3개만 보임: " .. fruitOk)
+	check(
+		auraOk == #Pets.list,
+		"아우라 파티클·빛은 희귀 이상만 + 꺼진 채 + AuraFx 태그: " .. table.concat(auraLine, ",")
+	)
+	-- 슈퍼 울트라디바인 하늘 빛기둥은 늘 켜짐
+	local sky = PlantVS.build("sky_pillar_flower", { fx = true })
+	local beam = sky:FindFirstChild("SkyPillar", true)
+	check(
+		beam ~= nil and beam:IsA("Beam") and beam.Enabled == true,
+		"슈퍼 울트라디바인 하늘 빛기둥(SkyPillar) 켜짐"
+	)
+	check(sky:FindFirstChild("AuraRing") ~= nil, "슈퍼 울트라디바인 고리(AuraRing)")
+	local lib = PlantVS.build("owl_oak", { fx = false, fruits = 3 })
+	local le, ll = fxOf(lib)
+	check(le == 0 and ll == 0 and lib:FindFirstChild("Aura") == nil, "UI 모델(fx = false)은 아우라 없음")
+	-- 돌연변이: 무지개 = 꽃잎·열매에 EggShell 태그 + Rainbow, 원소 = 파티클
+	local rainbowPlant = PlantVS.build("sprout_daisy", { mutations = { "rainbow" } })
+	local rainbowParts = 0
+	for _, d in rainbowPlant:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("Rainbow") == true and has(tagged.EggShell, d) then
+			rainbowParts += 1
+		end
 	end
-	table.sort(bodyNames)
-	local bodyLine = {}
-	for _, name in bodyNames do
-		local b = byBody[name]
-		table.insert(bodyLine, string.format("%s %d/%d", name, b.min, math.floor(b.sum / b.n)))
-	end
-	print("  체형별 최소/평균: " .. table.concat(bodyLine, ", "))
-	check(#Pets.list > 100, "펫 모델 전부 만듦")
-	check(avg >= 30 and avg <= 80, "펫 평균 파트 수 30~80: " .. string.format("%.1f", avg))
-	check(minParts >= 20 and maxParts <= 110, "펫 파트 수 범위 (최소 20, 최대 110)")
+	check(rainbowParts >= 3, "무지개 돌연변이 식물: 꽃잎·열매가 색 순환 대상 " .. rainbowParts)
+	local frozen = PlantVS.build("sprout_daisy", { mutations = { "frozen" } })
+	check(
+		frozen:FindFirstChild("Mutation_frozen", true) ~= nil,
+		"얼음 돌연변이 파티클 (일반 식물이어도)"
+	)
+	-- 크기 등급
+	local small = PlantVS.build("sprout_daisy", { size = "normal" }):GetAttribute("Height")
+	local giant = PlantVS.build("sprout_daisy", { size = "giant" }):GetAttribute("Height")
+	check(giant > small * 1.4, string.format("크기 등급 반영: 보통 %.1f → 초거대 %.1f", small, giant))
+	-- 등급이 높을수록 큼 (키 배율 tall 을 빼고 비교)
+	local common = PlantVS.build("sprout_daisy", {}):GetAttribute("Height") / Visuals.plantLook("sprout_daisy").tall
+	local secret = PlantVS.build("lollipop_flower", {}):GetAttribute("Height")
+		/ Visuals.plantLook("lollipop_flower").tall
+	check(secret > common, "등급이 높을수록 큰 식물")
 
-	-- 6판 "씨앗을 훔치세요": 5판 우리 펫 진열(18마리)·쓰다듬기 프롬프트·돌아다니기·126마리 부하 검사는 없앰.
-	--   정원의 성체 식물은 서버 BaseService 가 심은 자리에 GardenPlant 파트로 보여 주고, PetVisualService.penRecords 는 빈 표.
-	--   식물 모양·열매·물 주기 프롬프트는 선임이 새로 (docs/REMOTES.md 8장) → 그때 이 자리에 식물 기준 검사를 다시.
-	print("[6판: 정원 펫 진열 없음]")
-	do
-		local Sessions = requireNode(Loader.get("ServerScriptService/Server/Sessions"))
-		local fakePlayer = { UserId = 77, Name = "Tester", DisplayName = "Tester" }
-		Players.GetPlayerByUserId = function(_, id)
-			return if id == 77 then fakePlayer else nil
+	print("[6판 자라는 씨앗 4단계]")
+	local heights = {}
+	for _, stage in { "seed", "sprout", "stem", "bud" } do
+		local m = PlantVS.buildStage("owl_oak", stage, { fx = true })
+		table.insert(heights, m:GetAttribute("Height"))
+		check(m:GetAttribute("Stage") == stage and count(m) <= 14, stage .. " 모양 (" .. count(m) .. " 파트)")
+		local _, _, on = fxOf(m)
+		check(on == 0, stage .. " 아우라 꺼진 채 (희귀 owl_oak)")
+	end
+	check(
+		heights[1] < heights[2] and heights[2] < heights[3] and heights[3] < heights[4],
+		"단계가 갈수록 키가 큼: " .. table.concat(heights, " < ")
+	)
+	check(PlantVS.visualStage("sprout", 0, 100) == "seed", "처음 10% 는 씨앗(땅에 묻힘)")
+	check(PlantVS.visualStage("sprout", 20, 100) == "sprout", "그다음 새싹")
+	check(PlantVS.visualStage("bud", 80, 100) == "bud", "봉오리")
+	local commonSeed = PlantVS.buildStage("sprout_daisy", "bud", { fx = true })
+	local ce, cl = fxOf(commonSeed)
+	check(ce == 0 and cl == 0, "일반 등급 씨앗은 파티클·빛 없음")
+
+	print("[6판 정원 파트에 붙이기]")
+	local garden = Instance.new("Folder")
+	garden.Name = "FakeGarden"
+	garden.Parent = Workspace
+	local function ball(name, d, hs, attrs)
+		local p = Instance.new("Part")
+		p.Name = name
+		p.Shape = roblox.Enum.PartType.Ball
+		p.Size = roblox.Vector3.new(d, d, d)
+		p.Anchored = true
+		local mesh = Instance.new("SpecialMesh")
+		mesh.Name = "EggShape"
+		mesh.MeshType = roblox.Enum.MeshType.Sphere
+		mesh.Scale = roblox.Vector3.new(1, hs, 1)
+		mesh.Parent = p
+		p.CFrame = roblox.CFrame.new(300, d * hs / 2, 300)
+		for k, v in attrs do
+			p:SetAttribute(k, v)
 		end
-		local session = Sessions.create(fakePlayer)
-		local petsList = {}
-		for i = 1, 18 do
-			local pet = Pets.list[(i * 7) % #Pets.list + 1]
-			table.insert(petsList, {
-				uid = "p" .. i,
-				petId = pet.id,
-				size = "normal",
-				mutations = {},
-				x = -20,
-				z = i,
-				fruits = 0,
-				fruitProgress = 0,
-			})
-		end
-		session.data = { pets = petsList }
-		session.loaded = true
-		local base = Instance.new("Folder")
-		base.Name = "FakePlot"
-		base.Parent = Workspace
-		local floor = Instance.new("Part")
-		floor.Size = roblox.Vector3.new(60, 1, 60)
-		floor.CFrame = roblox.CFrame.new(500, 0, 500)
-		floor:SetAttribute("PlotIndex", 99)
-		floor:SetAttribute("OwnerUserId", 77)
-		floor.Parent = base
-		CollectionService:AddTag(floor, "Plot")
-		local pen = Instance.new("Part")
-		pen.Size = roblox.Vector3.new(36, 0.2, 24)
-		pen.CFrame = roblox.CFrame.lookAt(roblox.Vector3.new(500, 0.6, 500), roblox.Vector3.new(501, 0.6, 500))
-		pen:SetAttribute("PlotIndex", 99)
-		pen.Parent = base
-		CollectionService:AddTag(pen, "PenArea")
-		PVS.refreshPens()
-		local penPets = 0
-		for _, m in base:GetChildren() do
-			if m:IsA("Model") and m:GetAttribute("PetUid") then
-				penPets += 1
-			end
-		end
-		check(penPets == 0, "6판: 정원에 펫 모델을 안 만듦 (성체 18그루가 있어도): " .. penPets)
-		base.Parent = nil
-		Sessions.remove(fakePlayer)
-		Players.GetPlayerByUserId = function()
-			return nil
+		local label = Instance.new("BillboardGui")
+		label.Name = "Label"
+		label.Parent = p
+		p.Parent = garden
+		return p
+	end
+	local seedPart = ball("Incubating_i1", 2, 1.25, {
+		EggUid = "i1",
+		OwnerUserId = 77,
+		PetId = "owl_oak",
+		Size = "normal",
+		Mutations = "",
+		Progress = 0,
+		Required = 100,
+		Stage = "sprout",
+	})
+	PlantVS.attachSeed(seedPart)
+	local sv = seedPart:FindFirstChild("SeedVisual")
+	check(sv ~= nil and sv:GetAttribute("Stage") == "seed", "자라는 씨앗: SeedVisual 붙음 (처음엔 씨앗)")
+	check(seedPart.Transparency == 1, "원래 공 파트는 투명")
+	local vh = seedPart:GetAttribute("VisualHeight")
+	check(type(vh) == "number" and vh > 0, "VisualHeight Attr: " .. tostring(vh))
+	local root = sv and sv.PrimaryPart
+	check(root and math.abs(root.CFrame.Position.Y - 0) < 0.01, "씨앗 모델 바닥 = 공 파트 바닥 (y 0)")
+	seedPart:SetAttribute("Progress", 30)
+	PlantVS.refreshSeed(seedPart)
+	check(seedPart:FindFirstChild("SeedVisual"):GetAttribute("Stage") == "sprout", "Progress 30% → 새싹")
+	seedPart:SetAttribute("Stage", "bud")
+	PlantVS.refreshSeed(seedPart)
+	local bud = seedPart:FindFirstChild("SeedVisual")
+	check(
+		bud:GetAttribute("Stage") == "bud" and #seedPart:GetChildren() == 3,
+		"Stage bud → 봉오리 (옛 모델은 지움)"
+	)
+	local label = seedPart:FindFirstChild("Label")
+	check(
+		label.StudsOffsetWorldSpace.Y >= seedPart:GetAttribute("VisualHeight") - 1.25,
+		"이름표가 식물 위로 올라감"
+	)
+
+	local plantPart = ball("Plant_p1", 3.2, 1.6, {
+		PlantUid = "p1",
+		OwnerUserId = 77,
+		PetId = "moon_lotus",
+		Size = "normal",
+		Mutations = "",
+		Stage = "adult",
+		Fruits = 2,
+		FruitMax = 5,
+	})
+	PlantVS.attachPlant(plantPart)
+	local pv = plantPart:FindFirstChild("moon_lotus")
+	check(pv ~= nil and pv:IsA("Model"), "성체: 식물 모델 붙음")
+	check(pv and select(1, visibleFruits(pv)) == 2, "Fruits 2 → 열매 2개 보임")
+	plantPart:SetAttribute("Fruits", 5)
+	PlantVS.refreshPlant(plantPart)
+	check(
+		pv and pv.Parent == plantPart and select(1, visibleFruits(pv)) == 5,
+		"Fruits 5 → 같은 모델에서 5개 보임"
+	)
+	plantPart:SetAttribute("Fruits", 0)
+	PlantVS.refreshPlant(plantPart)
+	check(pv and select(1, visibleFruits(pv)) == 0, "Fruits 0 → 열매 없음")
+	plantPart:SetAttribute("Mutations", "golden")
+	PlantVS.refreshPlant(plantPart)
+	local golden = plantPart:FindFirstChild("moon_lotus")
+	local neonPetals = 0
+	for _, d in (golden and golden:GetChildren() or {}) do
+		if d:IsA("BasePart") and d.Name == "Petal" and d.Material == roblox.Enum.Material.Neon then
+			neonPetals += 1
 		end
 	end
+	check(
+		golden ~= pv and neonPetals > 0,
+		"Mutations golden → 다시 만들고 꽃잎이 금빛 네온: " .. neonPetals
+	)
+	check(#plantPart:GetChildren() == 3, "옛 식물 모델은 지움 (메시·이름표·모델)")
+	garden.Parent = nil
 
+	print("[경비 = 식물 괴물]")
 	-- 경비 겉모습 (Lune 에는 Attribute 변경 신호가 없어서 State 를 바꾼 뒤 refreshGuard 를 직접 부름)
 	local function fire(inst, _name)
 		PVS.refreshGuard(inst)
@@ -692,7 +908,7 @@ local function petsBody()
 	end
 	PVS.started = false
 	PVS.start()
-	local dressed, tall, grounded = 0, 0, 0
+	local dressed, tall = 0, 0
 	local minH, maxH = math.huge, 0
 	for _, g in guards do
 		local visual = g.guard:FindFirstChild(g.model)
@@ -704,13 +920,10 @@ local function petsBody()
 			if h >= 25 and h <= 40 then
 				tall += 1
 			end
-			-- 서 있을 때 발바닥(Root) 높이 = 땅(0)
 			fire(g.guard, "State") -- Idle → 잠
 		end
 	end
 	check(dressed == 15, "경비 겉모습 15구역 전부 붙음: " .. dressed)
-	-- 4판: 경비 전용 소품(GUARD_EXTRAS) — 기본 모양보다 파트가 늘고, 키(Height)는 그대로 (잡힘 거리)
-	local extraOk, heightSame, extraLine = 0, 0, {}
 	local guardIds = {}
 	for _, spec in Visuals.guards do
 		table.insert(guardIds, spec.model)
@@ -718,30 +931,47 @@ local function petsBody()
 			table.insert(guardIds, spec.darkModel)
 		end
 	end
+	local faceOk, partLine, partsOk = 0, {}, 0
 	for _, id in guardIds do
-		local plain = PVS.build(id, 1, nil)
-		local fancy = PVS.build(id, 1, { guard = true })
-		local np, nf = count(plain), count(fancy)
-		if nf > np then
-			extraOk += 1
+		check(Visuals.monsters[id] ~= nil, id .. " 식물 괴물 모양 표")
+		local m = PVS.buildMonster(id, 1, nil)
+		local brows, closed, open = 0, 0, 0
+		for _, d in m:GetDescendants() do
+			if d:IsA("BasePart") then
+				if d.Name == "Brow" and d.Transparency == 1 then
+					brows += 1
+				elseif d.Name == "EyeClosed" and d.Transparency < 1 then
+					closed += 1
+				elseif d.Name == "EyeOpen" and d.Transparency == 1 then
+					open += 1
+				end
+			end
 		end
-		if math.abs(plain:GetAttribute("Height") - fancy:GetAttribute("Height")) < 1e-6 then
-			heightSame += 1
+		if brows == 2 and closed == 2 and open >= 2 then
+			faceOk += 1
 		end
-		table.insert(extraLine, string.format("%s %d→%d", id, np, nf))
+		local n = count(m)
+		if n >= 12 and n <= 70 then
+			partsOk += 1
+		end
+		table.insert(partLine, id .. " " .. n)
 	end
-	print("  경비 파트 (기본→경비): " .. table.concat(extraLine, ", "))
-	check(extraOk == #guardIds, string.format("경비 %d종 모두 전용 소품이 붙음: %d", #guardIds, extraOk))
-	check(heightSame == #guardIds, "경비 소품을 붙여도 키(Height) 그대로: " .. heightSame)
-	local heightOk = true
+	print("  괴물 파트: " .. table.concat(partLine, ", "))
+	check(#guardIds == 16, "식물 괴물 16종 (15구역 + 악마 장미): " .. #guardIds)
+	check(
+		faceOk == #guardIds,
+		"괴물 모두 자는 얼굴로 시작 (눈썹 숨김·감은 눈 2·뜬 눈 숨김): " .. faceOk
+	)
+	check(partsOk == #guardIds, "괴물 파트 12~70")
+	local heightOk2 = true
 	for biomeId, g in guards do
 		local visual = g.guard:FindFirstChild(g.model)
 		local want = Visuals.guards[biomeId].height
 		if not visual or math.abs(visual:GetAttribute("Height") - want) > 0.01 then
-			heightOk = false
+			heightOk2 = false
 		end
 	end
-	check(heightOk, "경비 겉모습 Height = Visuals.guards[..].height (GuardianService 잡힘 거리)")
+	check(heightOk2, "경비 겉모습 Height = Visuals.guards[..].height (GuardianService 잡힘 거리)")
 	check(tall == 15, string.format("경비 키 25~40 스터드: %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH))
 	local forest = guards.forest
 	if forest then
@@ -750,7 +980,6 @@ local function petsBody()
 		check(z ~= nil and z:IsA("BillboardGui") and z.Enabled == true, "Idle 이면 머리 위 Z (SleepZ 켜짐)")
 		local glow = visual and visual:FindFirstChild("GuardGlow")
 		check(glow ~= nil and glow.Enabled == false, "Idle 이면 빨간 테두리 꺼짐")
-		-- 얼굴: 처음(자는 중)엔 눈썹 안 보이고 감은 눈, Chase 면 눈썹·뜬 눈 보임, Return 이면 다시 감음
 		local function face(name)
 			local n, shown = 0, 0
 			for _, d in visual:GetDescendants() do
@@ -805,7 +1034,27 @@ local function petsBody()
 		check(z ~= nil and z.Enabled == true, "다시 Idle 이면 Z 다시 보임")
 	end
 
-	print("[알]")
+	print("[둥지 옆 장식 식물]")
+	local spots = 0
+	for _, spot in tagged.ParentAnimalSpot or {} do
+		if spot.Parent then
+			spots += 1
+		end
+	end
+	PlantVS.started = false
+	PlantVS.start()
+	local decorations = 0
+	for _, m in tagged.ParentAnimal or {} do
+		if m.Parent and m:IsA("Model") and m:FindFirstChild("PetTag", true) then
+			decorations += 1
+		end
+	end
+	check(
+		spots == 0 or decorations == spots,
+		string.format("둥지 옆 장식 식물 %d / 자리 %d", decorations, spots)
+	)
+
+	print("[씨앗 껍데기]")
 	local eggs = Instance.new("Folder")
 	eggs.Parent = Workspace
 	local carrier = {
@@ -821,10 +1070,10 @@ local function petsBody()
 	local carriedEgg
 	for i, spec in
 		{
-			{ "chicken", "", false, "common" },
-			{ "unicorn", "golden,bloom", true, "divine" },
-			{ "kraken", "rainbow", true, "secret" },
-			{ "yeti", "silver", false, "secret" },
+			{ "sprout_daisy", "", false, "common" },
+			{ "world_tree", "golden", true, "divine" },
+			{ "lollipop_flower", "rainbow", true, "secret" },
+			{ "yeti_cabbage", "silver", false, "secret" },
 		}
 	do
 		local p = Instance.new("Part")
@@ -842,18 +1091,12 @@ local function petsBody()
 		end
 		p.Parent = eggs
 		CollectionService:AddTag(p, "Egg")
-		local inc = Instance.new("Part")
-		inc.Size = roblox.Vector3.new(2, 2, 2)
-		inc:SetAttribute("PetId", spec[1])
-		inc:SetAttribute("Mutations", spec[2])
-		inc.Parent = eggs
-		CollectionService:AddTag(inc, "IncubatingEgg")
 	end
 	local EVS = requireNode(Loader.get("ServerScriptService/Server/Services/EggVisualService"))
 	EVS.started = false
 	EVS.start()
-	-- 4판 수정: 매끈한 타원 알 = Ball 껍데기 1개(Shell) + SpecialMesh Sphere(Scale y 1.25), 층 쌓기 없음
-	local function smoothShell(v)
+	-- 6판 씨앗: Ball 껍데기 1개(Shell) + SpecialMesh Sphere(Scale (0.82, 1.25, 1)) + 끝(Tip) + 줄무늬
+	local function seedShell(v)
 		local shell = v and v:FindFirstChild("Shell")
 		if not (shell and shell:IsA("Part") and shell.Shape == roblox.Enum.PartType.Ball) then
 			return nil
@@ -862,40 +1105,37 @@ local function petsBody()
 		if not (mesh and mesh.MeshType == roblox.Enum.MeshType.Sphere and math.abs(mesh.Scale.Y - 1.25) < 1e-6) then
 			return nil
 		end
-		for _, c in v:GetChildren() do
-			if c.Name == "Layer" then
-				return nil
-			end
+		if mesh.Scale.X >= 1 or v:FindFirstChild("Tip") == nil then
+			return nil
 		end
 		return shell
 	end
-	local shells, smooth = 0, 0
+	local shells, seedOk = 0, 0
 	for _, e in eggs:GetChildren() do
 		local v = e:FindFirstChild("EggVisual")
 		if v then
 			shells += 1
-			if smoothShell(v) and count(v) <= 8 then
-				smooth += 1
+			if seedShell(v) and count(v) <= 8 then
+				seedOk += 1
 			end
 		end
 	end
-	check(shells == 8, "알 껍데기 8개 (둥지 알 4 + 부화 중 4): " .. shells)
-	check(smooth == 8, "알이 매끈한 타원 하나(Ball + Sphere 메시), 층 없음, ≤ 8 파트: " .. smooth)
+	check(shells == 4, "씨앗 껍데기 4개 (둥지·든 씨앗): " .. shells)
+	check(seedOk == 4, "씨앗 = 아몬드 껍데기 + 끝 + 줄무늬, ≤ 8 파트: " .. seedOk)
 	check(#(tagged.EggShell or {}) > 0, "EggShell 태그 붙음")
 	local weight = carriedEgg and carriedEgg:FindFirstChild("WeightTag")
-	check(weight ~= nil and weight.Enabled == true, "든 알 무게 이름표(WeightTag) 켜짐")
+	check(weight ~= nil and weight.Enabled == true, "든 씨앗 무게 이름표(WeightTag) 켜짐")
 	if weight then
 		local kg = weight:FindFirstChild("Kg")
 		check(kg ~= nil and kg.Text == "4,740Kg", "무게 글자 4,740Kg: " .. tostring(kg and kg.Text))
-		print("  weight:", weight.Gender.Text, kg and kg.Text)
 	end
 	local nestEgg = eggs:GetChildren()[3]
 	local nestWeight = nestEgg and nestEgg:FindFirstChild("WeightTag")
-	check(nestWeight == nil or nestWeight.Enabled == false, "둥지 알은 무게 이름표 숨김")
-	print("  egg visual parts:", count(eggs))
+	check(nestWeight == nil or nestWeight.Enabled == false, "둥지 씨앗은 무게 이름표 숨김")
+	local special = eggs:GetChildren()[2]
+	check(special and special:FindFirstChild("SpecialBeam") ~= nil, "특별 씨앗 빛기둥(SpecialBeam) 그대로")
 
-	-- 4판: 등급 10개 모두 알 모양 (매끈한 타원 + 띠·점, 알 하나 ≤ 8 파트, 희귀 이상 반짝이)
-	local Rarities = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Rarities"))
+	-- 등급 11개 씨앗 모양 + 아우라 (희귀 이상 꺼진 파티클·빛 + AuraFx)
 	local rarityEggs = Instance.new("Folder")
 	rarityEggs.Parent = Workspace
 	local made = {}
@@ -905,7 +1145,7 @@ local function petsBody()
 		p.Size = roblox.Vector3.new(2, 2, 2)
 		p.CFrame = roblox.CFrame.new(i * 10, 1.25, 900)
 		p.Anchored = true
-		p:SetAttribute("PetId", "chicken")
+		p:SetAttribute("PetId", "sprout_daisy")
 		p:SetAttribute("Mutations", "")
 		p:SetAttribute("Rarity", r.id)
 		p:SetAttribute("EggUid", "egg-r" .. i)
@@ -916,34 +1156,38 @@ local function petsBody()
 	end
 	EVS.started = false
 	EVS.start()
-	local looksOk, glintOk, line = 0, 0, {}
+	local looksOk, auraOk2, line = 0, 0, {}
 	for _, r in Rarities.list do
 		local p = made[r.id]
 		local v = p:FindFirstChild("EggVisual")
 		local n = v and count(v) or 0
-		local shell = smoothShell(v)
+		local shell = seedShell(v)
 		local lowest = if shell then shell.CFrame.Position.Y - shell.Size.Y / 2 * 1.25 else math.huge
-		check(Visuals.eggLooks[r.id] ~= nil, r.id .. " 알 모양 표(Visuals.eggLooks)")
+		check(Visuals.eggLooks[r.id] ~= nil, r.id .. " 씨앗 모양 표(Visuals.eggLooks)")
 		if shell and n >= 3 and n <= 8 then
 			looksOk += 1
 		end
-		local glint = v and v:FindFirstChild("RarityGlint", true)
-		if (r.order >= 3) == (glint ~= nil) then
-			glintOk += 1
+		local emitters, lights, on = fxOf(v or p)
+		local tagged2 = shell and has(tagged.AuraFx, shell)
+		if r.order >= 3 then
+			if tagged2 and emitters + lights >= 1 and on == 0 then
+				auraOk2 += 1
+			end
+		elseif not tagged2 and emitters + lights == 0 then
+			auraOk2 += 1
 		end
-		-- 껍데기 아래 = 파트 가운데 - 알 높이 절반 (바닥 위 거의 딱 붙음)
 		check(
 			math.abs(lowest - 0) < 0.01,
-			r.id .. " 알 바닥이 둥지 위에 붙음: " .. string.format("%.3f", lowest)
+			r.id .. " 씨앗 바닥이 둥지 위에 붙음: " .. string.format("%.3f", lowest)
 		)
 		table.insert(line, r.id .. " " .. n)
 	end
-	print("  등급별 알 파트: " .. table.concat(line, ", "))
+	print("  등급별 씨앗 파트: " .. table.concat(line, ", "))
+	check(looksOk == #Rarities.list, "등급 11개 씨앗: 아몬드 껍데기 + 무늬, 3~8 파트: " .. looksOk)
 	check(
-		looksOk == #Rarities.list,
-		"등급 11개 씨앗(알 모양): 매끈한 타원 + 무늬, 3~8 파트: " .. looksOk
+		auraOk2 == #Rarities.list,
+		"희귀(rare) 이상만 아우라 (꺼진 채 + AuraFx 태그, 클라가 가까운 것만 켬): " .. auraOk2
 	)
-	check(glintOk == #Rarities.list, "희귀(rare) 이상만 등급 반짝이(RarityGlint): " .. glintOk)
 end
 
 local mapOk, mapErr = xpcall(body, function(e)

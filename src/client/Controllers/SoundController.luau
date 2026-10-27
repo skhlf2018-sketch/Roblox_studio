@@ -3,10 +3,13 @@
 	SoundController — 효과음·배경음 (shared/Data/Sounds.luau 의 이름으로)
 	  SoundController.play("Pickup")
 	  SoundController.setMusic("Bgm_forest")      -- 구역 배경음 (부드럽게 바뀜)
-	  SoundController.setChase(true)              -- 알 들고 있는 동안 긴장 음악이 배경음 대신
+	  SoundController.setChase(true)              -- 씨앗 들고 있는 동안 긴장 음악이 배경음 대신
 	  SoundController.setMusicEnabled(false) / setSfxEnabled(false)  -- 설정 창
 	ID 가 "rbxassetid://0" 이면 조용히 건너뜀 (사장님이 나중에 ID 만 채우면 됨).
-	서버 이벤트 연결은 여기 start() 에서 (줍기/RUN/잡힘/부화/배달/돈/밤/희귀 알 공지 …).
+	서버 이벤트 연결은 여기 start() 에서 (줍기/RUN/잡힘/배달/코인/밤/희귀 씨앗 공지 …).
+	6판: 성체 됨(PlantGrown → Grown · 전설 이상 GrownRare) · 열매 따기(FruitPicked → FruitPick) ·
+	  열매 팔기(FruitsSold → FruitSell) · 먹이기(FeedResult → 돌연변이면 FeedMutate, 아니면 Feed).
+	  물 주기(Water)는 PetFxController 가 PetPetted 연출과 함께 냄.
 ]]
 
 local Players = game:GetService("Players")
@@ -198,18 +201,42 @@ function SoundController.start()
 	Net.on(E.EggDelivered, function()
 		SoundController.play("Deliver")
 	end)
-	-- 6판: 씨앗이 성체가 됨 (5판 부화 HatchResult 자리 — 소리는 그대로 Hatch/HatchRare). 오프라인 수입·퓨전 소리는 없어짐
+	-- 6판: 씨앗이 성체가 됨 (전설 이상은 팡파레)
 	Net.on(E.PlantGrown, function(payload: any)
 		local plant = if typeof(payload) == "table" then payload.plant else nil
 		local def = if typeof(plant) == "table" then Pets.get(tostring(plant.petId)) else nil
 		local rare = def ~= nil and Rarities.order(def.rarity) >= 5
-		SoundController.play(if rare then "HatchRare" else "Hatch")
+		SoundController.play(if rare then "GrownRare" else "Grown")
+	end)
+	-- 열매 따기: "모두 따기"면 식물마다 FruitPicked 가 와서 0.15초에 한 번만
+	local lastPick = 0
+	Net.on(E.FruitPicked, function()
+		local now = os.clock()
+		if now - lastPick > 0.15 then
+			lastPick = now
+			SoundController.play("FruitPick")
+		end
 	end)
 	Net.on(E.FruitsSold, function()
-		SoundController.play("Sell")
+		SoundController.play("FruitSell")
+	end)
+	Net.on(E.FeedResult, function(payload: any)
+		local mutation = if typeof(payload) == "table" then payload.mutation else nil
+		SoundController.play(if typeof(mutation) == "string" then "FeedMutate" else "Feed")
 	end)
 	Net.on(E.IndexRewarded, function()
 		SoundController.play("Reward")
+	end)
+	-- 사쿠라 나무: 성체 바침 → SakuraOffer, 씨앗 뽑기 → 벚꽃(Bloom) / 정령 벚꽃(비밀 이상, SpiritBloom)
+	Net.on(E.SakuraResult, function(payload: any)
+		local kind = if typeof(payload) == "table" then payload.kind else nil
+		if kind == "offered" then
+			SoundController.play("SakuraOffer")
+		elseif kind == "draw" then
+			local def = Pets.get(tostring(payload.petId))
+			local rare = def ~= nil and Rarities.order(def.rarity) >= Rarities.order("secret")
+			SoundController.play(if rare then "SpiritBloom" else "Bloom")
+		end
 	end)
 	Net.on(E.Notify, function(payload: any)
 		local kind = if typeof(payload) == "table" then payload.kind else nil
@@ -234,7 +261,7 @@ function SoundController.start()
 		end
 	end)
 
-	-- 알을 내려놓으면(배달·놓침) 추격 음악 끝
+	-- 씨앗을 내려놓으면(배달·놓침) 추격 음악 끝
 	player:GetAttributeChangedSignal(Tags.PlayerAttributes.CarryingEgg):Connect(function()
 		local carrying = player:GetAttribute(Tags.PlayerAttributes.CarryingEgg)
 		if carrying == nil or carrying == "" then
@@ -251,7 +278,7 @@ function SoundController.start()
 	end)
 	SoundController.setMusic("Bgm_base")
 
-	-- 돈 짤랑 (수입이 들어올 때, 최대 2초에 한 번)
+	-- 코인 짤랑 (코인이 들어올 때, 최대 2초에 한 번)
 	local lastMoney = player:GetAttribute(Tags.PlayerAttributes.Money)
 	local lastCoin = 0
 	player:GetAttributeChangedSignal(Tags.PlayerAttributes.Money):Connect(function()

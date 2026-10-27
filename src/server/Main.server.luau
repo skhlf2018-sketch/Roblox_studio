@@ -6,7 +6,7 @@
 	특수 장소 서비스(사쿠라 나무)는 MapBuilder 다음이어야 함 (맵에 파트가 없으면 임시 파트를 만듦).
 	5판: 퀘스트(QuestService)·무료 보상(RewardService.start) 없앰. TutorialService 는 BaseService·PetService 뒤
 	     (그 신호에 연결), LeaderboardService(10초마다 랭킹판) 추가.
-	6판 "씨앗을 훔치세요": FruitService(열매 맺기·따기·팔기·먹이기) 추가 — TutorialService 가 그 신호에 연결하므로 그보다 먼저.
+	6판 "씨앗을 훔치세요": PlantVisualService(선임: 씨앗 단계·성체 식물 모양) 추가. FruitService(열매 맺기·따기·팔기·먹이기) 추가 — TutorialService 가 그 신호에 연결하므로 그보다 먼저.
 	     없앤 것: IncomeService(자동 수입), RewardService(오프라인 수입), FusionService(퓨전 머신), AltarService(제단·비밀 통로)
 ]]
 
@@ -17,6 +17,7 @@ local Net = require(Server.Net)
 local MapBuilder = require(Services.MapBuilder)
 local PetVisualService = require(Services.PetVisualService)
 local EggVisualService = require(Services.EggVisualService)
+local PlantVisualService = require(Services.PlantVisualService)
 local DataService = require(Services.DataService)
 local AntiCheatService = require(Services.AntiCheatService)
 local SpeedService = require(Services.SpeedService)
@@ -57,6 +58,9 @@ boot("PetVisualService", function()
 end)
 boot("EggVisualService", function()
 	EggVisualService.start()
+end)
+boot("PlantVisualService", function()
+	PlantVisualService.start()
 end)
 boot("DataService", function()
 	DataService.start()

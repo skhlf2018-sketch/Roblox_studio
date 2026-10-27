@@ -1,10 +1,11 @@
 --!strict
 --[[
-	HatchController — 성체 결과 팝업 (6판 PlantGrown, 5판 부화 HatchResult 자리)
-	펫 카드: 희귀도 색 테두리 + 빙글 도는 3D 펫 + 뒤에서 도는 빛살 + "NEW!" (도감 첫 발견) + 초당 수입.
-	잠깐 흔들리는 알 → 펑! 하고 카드가 나오는 순서 (기대감 → 보상).
-	FusionResult 도 같은 카드 (1.3초 뒤, "희귀도 UP!/크기 UP!" 리본 + 수입 3마리 합 → 결과 + 보너스 돌연변이).
-	HatchController.show(payload) 로 다른 컨트롤러도 씀 (제단 알 · 비밀 합성 알: title/ribbon/footer 지정).
+	HatchController — 성체 카드 "성체가 됐어요!" (6판 PlantGrown { plant, isNew, fruitValue, fruitInterval })
+	정원에 심은 씨앗이 그 자리에서 성체가 되면: 씨앗이 흔들리다 퐁! → 카드
+	(등급 색 테두리 + 빙글 도는 3D 식물 + 뒤에서 도는 빛살 + "NEW!" (도감 첫 발견) + 열매 1개 값 · 열매 간격).
+	접속 때 오프라인으로 여러 그루가 한꺼번에 성체가 되면 카드는 MAX_QUEUE 장까지만 (새 발견·전설 이상 먼저 남김).
+	HatchController.show(payload) 로 다른 컨트롤러도 씀:
+	  payload = { pet = { petId, size, mutations }, fruitValue?, fruitInterval?, title?, titleColor?, ribbon?, footer?, isNew?, delay? }
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,7 +16,6 @@ local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
-local Visuals = require(Shared.Data.Visuals)
 local Remotes = require(Shared.Remotes)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
@@ -26,6 +26,7 @@ local PetViewport = require(Client.UI.PetViewport)
 local HatchController = {}
 
 local C = Theme.Colors
+local MAX_QUEUE = 4
 local queue: { any } = {}
 local showing = false
 
@@ -44,6 +45,11 @@ local function describe(record: any): string
 		end
 	end
 	return table.concat(parts, " · ")
+end
+
+local function rarityOrder(payload: any): number
+	local pet = Pets.get(tostring(payload.pet.petId))
+	return if pet then Rarities.order(pet.rarity) else 0
 end
 
 local showNext: () -> ()
@@ -68,23 +74,31 @@ local function buildCard(payload: any, track: (Frame) -> ())
 	Ui.scaled(holder, Vector2.new(440, 520))
 	track(holder)
 
-	-- 1) 알이 흔들림
-	local eggColor = Visuals.petColor(tostring(record.petId), 1)
-	local egg: Frame = Ui.new("Frame", {
+	-- 1) 씨앗이 흔들림 (등급 색 아몬드 + 새싹)
+	local seed: Frame = Ui.new("Frame", {
+		Name = "Seed",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.45),
-		Size = UDim2.fromOffset(150, 190),
-		BackgroundColor3 = Color3.fromRGB(eggColor[1], eggColor[2], eggColor[3]),
+		Size = UDim2.fromOffset(120, 170),
+		BackgroundColor3 = Theme.lighter(rcolor, 0.1),
 		Parent = holder,
 	})
-	Ui.corner(1).Parent = egg
-	Ui.stroke(C.white, 5).Parent = egg
+	Ui.corner(1).Parent = seed
+	Ui.stroke(C.white, 5).Parent = seed
+	local sprout: Frame = Ui.new("Frame", {
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 0, 10),
+		Size = UDim2.fromOffset(46, 30),
+		BackgroundColor3 = C.green,
+		Parent = seed,
+	})
+	Ui.corner(1).Parent = sprout
 	for i = 1, 6 do
-		Ui.tween(egg, TweenInfo.new(0.08), { Rotation = if i % 2 == 0 then -12 else 12 }).Completed:Wait()
+		Ui.tween(seed, TweenInfo.new(0.08), { Rotation = if i % 2 == 0 then -12 else 12 }).Completed:Wait()
 	end
-	Ui.tween(egg, TweenInfo.new(0.15), { Size = UDim2.fromOffset(220, 260), BackgroundTransparency = 1 }).Completed
+	Ui.tween(seed, TweenInfo.new(0.15), { Size = UDim2.fromOffset(200, 250), BackgroundTransparency = 1 }).Completed
 		:Wait()
-	egg:Destroy()
+	seed:Destroy()
 
 	-- 2) 카드
 	local rays: Frame = Ui.new("Frame", {
@@ -143,20 +157,15 @@ local function buildCard(payload: any, track: (Frame) -> ())
 		end
 	end)
 
-	local titleText = if typeof(payload.title) == "string"
-		then payload.title
-		elseif payload.fusion then "퓨전!"
-		else "부화!"
-	local titleColor = if typeof(payload.titleColor) == "Color3"
-		then payload.titleColor
-		elseif payload.fusion then C.purple
-		else C.orange
-	Ui.label(titleText, UDim2.new(1, 0, 0, 50), 42, titleColor, { Position = UDim2.fromOffset(0, 10), Parent = card })
-	-- 왼쪽 위 리본: 퓨전 "희귀도 UP!" / "크기 UP!" / 직접 준 글
-	local ribbonText: string? = if typeof(payload.ribbon) == "string"
-		then payload.ribbon
-		elseif payload.fusion then (if payload.upgraded then "희귀도 UP!" else "크기 UP!")
-		else nil
+	local titleText = if typeof(payload.title) == "string" then payload.title else "성체가 됐어요!"
+	local titleColor = if typeof(payload.titleColor) == "Color3" then payload.titleColor else C.green
+	Ui.label(titleText, UDim2.new(1, 0, 0, 50), 40, titleColor, {
+		Name = "Title",
+		Position = UDim2.fromOffset(0, 10),
+		Parent = card,
+	})
+	-- 왼쪽 위 리본 (직접 준 글)
+	local ribbonText: string? = if typeof(payload.ribbon) == "string" then payload.ribbon else nil
 	if ribbonText then
 		local ribbon: TextLabel = Ui.new("TextLabel", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -185,6 +194,7 @@ local function buildCard(payload: any, track: (Frame) -> ())
 	view.Parent = card
 	PetViewport.spin(view, 0.9)
 	Ui.label(if pet then pet.name else tostring(record.petId), UDim2.new(1, -20, 0, 46), 38, rcolor, {
+		Name = "PlantName",
 		Position = UDim2.fromOffset(10, 266),
 		TextScaled = true,
 		Parent = card,
@@ -192,7 +202,7 @@ local function buildCard(payload: any, track: (Frame) -> ())
 	local rarityTag: TextLabel = Ui.new("TextLabel", {
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 314),
-		Size = UDim2.fromOffset(150, 34),
+		Size = UDim2.fromOffset(170, 34),
 		BackgroundColor3 = rcolor,
 		TextColor3 = Theme.rarityText(rarityId),
 		TextSize = 22,
@@ -200,38 +210,37 @@ local function buildCard(payload: any, track: (Frame) -> ())
 		Parent = card,
 	})
 	Ui.corner(1).Parent = rarityTag
+	-- 열매 1개 값 · 열매 간격
 	local extra = describe(record)
-	local incomeText = Format.money(tonumber(payload.income) or 0) .. "/초"
-	if payload.fusion and tonumber(payload.inputIncome) then
-		-- 퓨전: 3마리 합 → 결과
-		incomeText = Format.money(tonumber(payload.inputIncome) or 0) .. " → " .. incomeText
+	local value = tonumber(payload.fruitValue) or 0
+	local interval = tonumber(payload.fruitInterval) or 0
+	local fruitText = "열매 1개 " .. Format.money(value)
+	if interval > 0 and interval == interval then
+		fruitText ..= string.format(" · %d초마다", math.floor(interval + 0.5))
 	end
-	local incomeLabel = Ui.label(
-		incomeText .. (if extra ~= "" then "  ·  " .. extra else ""),
+	local fruitLabel = Ui.label(
+		fruitText .. (if extra ~= "" then "  ·  " .. extra else ""),
 		UDim2.new(1, -20, 0, 32),
 		24,
 		C.money,
-		{ Position = UDim2.fromOffset(10, 354), TextScaled = true, Parent = card }
+		{ Name = "Fruit", Position = UDim2.fromOffset(10, 354), TextScaled = true, Parent = card }
 	)
 	local limit = Instance.new("UITextSizeConstraint")
 	limit.MaxTextSize = 24
-	limit.Parent = incomeLabel
+	limit.Parent = fruitLabel
 	local footer = if typeof(payload.footer) == "string"
 		then payload.footer
-		elseif payload.sold then "보관함이 가득 차서 바로 팔렸어요"
-		elseif payload.equipped then "우리에 들어갔어요!"
-		else "보관함으로 갔어요"
-	if payload.fusion and typeof(payload.bonusMutation) == "string" then
-		local m = Mutations.get(payload.bonusMutation)
-		footer = "보너스 돌연변이: " .. (if m then m.name else payload.bonusMutation) .. "!  " .. footer
-	end
+		elseif payload.isNew then "도감 새 발견! 정원에 열매가 달렸어요 — 따서 팔아요"
+		else "정원에 열매가 달렸어요 — 따서 팔아요!"
 	Ui.label(footer, UDim2.new(1, -20, 0, 24), 18, C.ink, {
+		Name = "Footer",
 		Position = UDim2.fromOffset(10, 386),
 		TextScaled = true,
 		Parent = card,
 	})
 	if payload.isNew then
 		local new: TextLabel = Ui.new("TextLabel", {
+			Name = "New",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.new(1, -30, 0, 26),
 			Size = UDim2.fromOffset(110, 44),
@@ -265,12 +274,13 @@ local function buildCard(payload: any, track: (Frame) -> ())
 		showing = false
 		showNext()
 	end
-	Ui.button("좋아요!", C.green, UDim2.fromOffset(190, 56), close, {
+	local ok = Ui.button("좋아요!", C.green, UDim2.fromOffset(190, 56), close, {
 		anchor = Vector2.new(0.5, 1),
 		position = UDim2.new(0.5, 0, 1, -14),
 		textSize = 28,
 		parent = card,
 	})
+	ok.Name = "Ok"
 	Ui.pop(card, 0.3)
 	task.delay(8, close)
 end
@@ -297,8 +307,26 @@ showNext = function()
 	end
 end
 
--- 다른 컨트롤러도 같은 카드를 띄울 수 있음 (제단 알·비밀 합성 알 등)
---   payload = { pet = { petId, size, mutations }, income, title?, titleColor?, ribbon?, footer?, isNew?, delay? }
+-- 줄이 너무 길면 (접속 때 오프라인 성장으로 여러 그루) 새 발견도 아니고 등급도 낮은 것부터 뺌
+local function trimQueue()
+	while #queue > MAX_QUEUE do
+		local drop = 1
+		local worst = math.huge
+		for i, p in queue do
+			local score = rarityOrder(p) + (if p.isNew then 100 else 0)
+			if score < worst then
+				worst, drop = score, i
+			end
+		end
+		table.remove(queue, drop)
+	end
+end
+
+function HatchController.queued(): number
+	return #queue
+end
+
+-- 다른 컨트롤러도 같은 카드를 띄울 수 있음
 function HatchController.show(payload: any)
 	if typeof(payload) ~= "table" or typeof(payload.pet) ~= "table" then
 		return
@@ -306,6 +334,7 @@ function HatchController.show(payload: any)
 	local wait = tonumber(payload.delay) or 0
 	local function push()
 		table.insert(queue, payload)
+		trimQueue()
 		task.spawn(showNext)
 	end
 	if wait > 0 then
@@ -316,21 +345,16 @@ function HatchController.show(payload: any)
 end
 
 function HatchController.start()
-	-- [6판 수석 임시] 씨앗이 정원에서 성체가 됨 (PlantGrown { plant, isNew, fruitValue, fruitInterval }) → 같은 카드.
-	-- 5판 HatchResult·FusionResult 는 없어짐. 카드 글·모양(식물·열매)은 선임이 다시 꾸밀 예정
+	-- 씨앗이 정원에서 성체가 됨 → 카드
 	Net.on(Remotes.ToClient.PlantGrown, function(payload: any)
 		if typeof(payload) ~= "table" or typeof(payload.plant) ~= "table" then
 			return
 		end
-		local interval = tonumber(payload.fruitInterval) or 0
 		HatchController.show({
 			pet = payload.plant,
-			isNew = payload.isNew,
-			income = if interval > 0 then (tonumber(payload.fruitValue) or 0) / interval else 0,
-			title = "성체가 됐어요!",
-			footer = "열매 1개 "
-				.. Format.number(tonumber(payload.fruitValue) or 0)
-				.. " 코인 — 따서 팔아요!",
+			isNew = payload.isNew == true,
+			fruitValue = tonumber(payload.fruitValue) or 0,
+			fruitInterval = tonumber(payload.fruitInterval) or 0,
 		})
 	end)
 end

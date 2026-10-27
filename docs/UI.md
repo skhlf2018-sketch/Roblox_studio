@@ -1,11 +1,11 @@
-# 화면·소리·생김새 (UI.md)
+# 화면·소리·생김새 (UI.md) — 6판 "씨앗을 훔치세요"
 
-작성: 선임, 2026-10-18 · **5차 전면 갱신 (2판, 원작 스타일)** — 맵을 한 줄 복도로, 베이스·펫·경비·알을 원작 블록 스타일로, HUD·창을 원작 화면 그대로 다시 만듦.
-**6차 (5판, 2026-10-22)**: 얻은 알은 핫바에 바로(알 칸 → 놓기 모드), 우리 펫 돌아다니기·쓰다듬기, 튜토리얼 패널·가리키기, 랭킹판(오른쪽 위 + 허브 판). 퀘스트·선물 화면은 없앰 → 4-3장.
-(1~4차 기록은 git 이력에.) 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다.
+작성: 선임 (2026-10-18 처음 · 2판 원작 스타일 · 5판 2026-10-22 · **7차 전면 갱신 = 6판 "씨앗을 훔치세요", 2026-10-27**).
+게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다. 이전 기록(알·펫·퓨전·제단·우리 펫 걷기)은 git 이력에.
 외부 에셋(메시·이미지·소리)을 올릴 계정이 없어서 **모든 모양은 기본 도형**(Block/Ball/Cylinder/Wedge + SpecialMesh)과 **UI 기본 요소(Frame)**로 코드에서 만듭니다.
-원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드(SurfaceType.Studs)** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨.
-원작 스크린샷 46장(본부장 촬영)을 보고 맞췄습니다. 배치 숫자는 전부 수석의 `src/shared/Data/MapLayout.luau`.
+원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨. 배치 숫자는 전부 수석의 `src/shared/Data/MapLayout.luau`, Remote 는 `docs/REMOTES.md`, 규칙은 `docs/SEED_GAME_DESIGN.md`.
+
+**6판 용어** (화면 글): 알 → **씨앗** · 우리 → **정원** · 부화 → **성체가 됨** · 펫 → **(성체) 식물** · 돈 `$` → **코인** (`Format.money(n)` = "1.5K 코인") · 쓰다듬기 → **물 주기** · 경비 → **식물 괴물**. Remote·모듈·태그·변수 이름은 5판 그대로인 것이 많음 (`PetPet`, `IncubatingEgg`, `PetsController`, `PetModels` …).
 
 ---
 
@@ -14,268 +14,216 @@
 ### 데이터 (shared)
 | 파일 | 내용 |
 |---|---|
-| `src/shared/Data/Visuals.luau` | 펫 134종 + 경비 전용 생김새, **구역 15개 테마(2판: 바닥 두 색·담장 색·담장 위 띠·네온 줄·배너 이모지 `label`·천사&악마 오른쪽 지옥 `rightSide`)**, 희귀도/돌연변이 효과, 경비 크기(`height` 25~40), **베이스 울타리 색(`plotColors`)**, 연출용 태그(`UpgradeSign` 추가) |
-| `src/shared/Data/Sounds.luau` | 소리 이름 → `rbxassetid://0` 자리 + 설명 (5장) |
+| `src/shared/Data/Visuals.luau` | **식물 생김새** `plantThemes`(15구역) · `PLANT_FORMS`(16 기본 모양) · `plantLook(id)`(구역 테마 + 이름 낱말 + id 해시 → 모양·색·꽃잎/잎 수·열매 모양) · `petColor(id, 1/2/3)`(꽃잎/잎/열매 색, 클라 UI 가 씀), **아우라** `auras`(11종), 경비 `guards`(식물 괴물 id·scale·height) + `monsters`, `rarityEffects` 11개, `mutationLooks`(+ 원소 frozen/burning/shocked `effect`), 씨앗 줄무늬 `eggLooks`, 구역 15개 테마, `plotColors`, 태그 `Tags`(+ `AuraFx`) |
+| `src/shared/Data/Sounds.luau` | 소리 이름 → id + 설명 (5장) |
+| `src/shared/Format.luau` | `Format.money` = "N 코인" (6판) |
 
 ### 서버 (모두가 같은 모양)
 | 파일 | 내용 |
 |---|---|
-| `src/server/Services/MapBuilder.luau` | 2판 맵 전체 (2장) + 태그 색인 + 베이스 표지판·러닝머신 모양 갱신. 서버가 부르는 함수(start·getFolder·getNests·groundY·setNightWalls·setPlotOwner·plotCount) 유지, 나머지(getZone·isInPlot 등)도 MapLayout 기준으로 남겨 둠 |
-| `src/server/Services/PetVisualService.luau` | 펫 블록 모델(체형 17종, 평균 45파트), 부모 동물(구역마다 2), 우리 진열(격자, 앞을 봄, 이름표 3줄), 거대 경비(25~40스터드, 잠자기/추격 자세 + Z), `ReplicatedStorage.PetModels` 도서관 |
-| `src/server/Services/EggVisualService.luau` | 계단형 블록 알(6층, 줄무늬·점), 희귀도 빛, 돌연변이, 특별 알 빛기둥, 들고 있을 때 무게 "♂ 4,740Kg" |
-| `src/server/Util/Gui.luau` | 월드 글자 도우미(billboard·surface·sign·tag) — 그대로 |
+| `src/server/Services/MapBuilder.luau` | 맵 전체 (2장). 6판: **사쿠라 나무**(줄기·가지 5·분홍 꽃 덩어리 9·빛 꽃·등불·꽃잎, 태그 파트 지름 7 그대로), **러닝머신 모양 20단계**(`TREAD_STYLES`, 장식 2개 `extra2`), 표지판 글 코인·"+N/초"·정원, 허브 판 "씨앗을 훔치세요". 서버가 부르는 공개 함수(start·getFolder·getNests·groundY·setNightWalls·setPlotOwner·plotCount·getPlot) 이름 그대로 |
+| `src/server/Services/PlantVisualService.luau` | **새 파일 (6판).** 자라는 씨앗(`IncubatingEgg`) 단계 모양, 정원 성체(`GardenPlant`) 식물 모델 + 열매, 등급 아우라, 둥지 옆 장식 식물(5판 부모 동물 자리), `ReplicatedStorage.PetModels` 도서관(식물 134종, UI 뷰포트용). 공개: `build(plantId, opts)` · `buildStage(plantId, stage, opts)` · `visualStage` · `setFruits(model, n)` · `addAura(host, rarityId, scale, opts)` |
+| `src/server/Services/PetVisualService.luau` | 6판: **경비 = 식물 괴물 16종**만 (`buildMonster`, `build` 는 별칭). 5판 동물 체형·우리 펫 걷기·부모 동물·도서관은 지움. GuardPose·SleepZ·GuardGlow·자는/추격 얼굴 그대로 |
+| `src/server/Services/EggVisualService.luau` | 둥지·들고 있는·떨어진 **씨앗**(`Egg` 태그): 아몬드 모양 껍데기 + 뾰족한 끝 + 세로 줄무늬 + 별·보석 점(≤ 8 파트), 등급 아우라(`addAura`), 특별 씨앗 빛기둥 + 이름표, 들고 있을 때 "♂ 4,740Kg" |
+| `src/server/Util/Gui.luau` | 월드 글자 도우미 — 그대로 |
 
 ### 클라 (내 화면)
 | 파일 | 내용 |
 |---|---|
-| `src/client/Main.client.luau` | 진입점. 컨트롤러를 하나씩 따로 시작 (2판: `TreadmillController`, `TrailController` 추가) |
-| `src/client/Net.luau` | + `Net.onLater(name, fn)` (기다리는 동안 부른 쪽을 안 멈춤) · `Net.trySend(name, ...)` (없으면 조용히 버림) |
-| `UI/Theme.luau` | 색 — 2판 원작 색 추가: `win`/`winDark`/`winEdge`(진한 창), `shopGreen`·`indexCyan`·`trailPurple`·`eggRed`·`pawOrange`·`speedRed`·`moneyGreen`·`runRed` |
-| `UI/Ui.luau` | 창 = **진한 회남색 + 두꺼운 검은 테두리 + 줄무늬 제목 띠(`Ui.stripes`) + 빨간 네모 X**. 버튼 모서리 10 |
-| `UI/Icons.luau` | **새 파일.** HUD 그림을 Frame 으로: cart·book·egg·paw·shoe·money·moon·sun·trash·star·lock·gear·gift·scroll·sell·trail |
-| `UI/Layout.luau` | 반응형 자리 계산. `Layout.menu(..., topLimit, bottomOverride)` 추가, 핫바 칸 64(원작처럼 작게) |
-| `UI/Windows.luau`, `UI/PetViewport.luau`, `UI/PetPicker.luau`, `UI/WorldPrompt.luau`, `UI/Fx.luau` | 그대로 (PetPicker 글자색만 진한 창에 맞춤. 3판: `PetPicker.myEggs` 에 가방 알도 — 사쿠라 블룸은 가방 알도 됨) |
-| `Controllers/HudController.luau` | **다시 씀.** 3장 HUD 전부 + 슬로우 모드 |
-| `Controllers/ChaseController.luau` | **다시 씀.** "달리기!!" 배너·빨간 비네트·드롭 버튼, 잡힘 연출 |
-| `Controllers/IncubatorController.luau` | **다시 씀 (3판).** 알 창("성장하는 달걀" 패널: 성장 중 탭 + 가방 탭) + **알 놓기 모드**(`PlaceEgg`) + 우리 안 알 "부화!"/"집기" 프롬프트 |
-| `Controllers/TreadmillController.luau` | **새 파일.** 러닝머신 위에선 이동 입력 끄기, 점프 → `TreadmillLeave`, "+500" 분홍 팝업 |
-| `Controllers/TrailController.luau` | **새 파일.** 트레일 상점 창 + 허브 가게 프롬프트 |
-| `Controllers/IndexController.luau` | **다시 씀.** 원작 "펫 인덱스" 창 |
-| `Controllers/ShopController.luau` | **다시 씀.** 원작 초록 상점 창 + 오른쪽 세로 탭 + 베이스 업그레이드 표지판 프롬프트 |
-| `Controllers/PetsController.luau` | 진한 카드 + **판매 버튼**(판매 가게 근처) + 판매 가게 프롬프트 |
-| `Controllers/HotbarController.luau` | 아래 가운데 작은 어두운 칸 + 든 알 칸 + **5판: 가방 알 칸(최대 6 + "…n") → 누르면 바로 알 놓기 모드** |
-| `Controllers/PetFxController.luau` | **새 파일 (5판).** 우리 펫 "쓰다듬기" 프롬프트(내 펫만) → `PetPet`, `PetPetted` → 하트 ♥·반짝·소리·폴짝 |
-| `Controllers/TutorialController.luau` | **새 파일 (5판).** 위 가운데 "n/5" 패널 + 단계별 가리키기(3D 빔·▼ 표시·가장자리 화살표·반짝 테두리·Highlight) + 끝 축하(색종이·$500) |
-| `Controllers/LeaderboardController.luau` | **새 파일 (5판).** 오른쪽 위 랭킹판(돈/속도 탭, 접기, 내 줄 강조) + 허브 3D 판 글 |
-| `Controllers/NotifyController.luau` | 원작 글씨 토스트("에그를 훔쳤어요!")·공지(색 조각 RichText) |
-| `Controllers/WorldFxController.luau` | + 펫 돈 팝업 "+$34K"(IncomeTick), 자는 경비 Z 둥실둥실, 배달 반짝은 내 베이스 스폰 자리 |
-| `Controllers/ZoneController.luau` | 구역 = `CurrentZone` Attribute 또는 `MapLayout.zoneAt(z)` ("hub" → "base") |
-| 나머지 (Settings·Hatch·Fusion·Sakura·Altar·Weapon·Sound·Lighting·SpeedFx·Debug 등, 5판: Gift·Quest 없앰) | 그대로 (새 창 스타일만 자동 적용) |
+| `Controllers/IncubatorController.luau` | 씨앗 창(오른쪽 빨간 씨앗 버튼): "자라는 중" 탭(단계 이름 `GardenRules.stageName`·막대·남은 시간·가방 버튼·⏩ 건너뛰기) + "가방" 탭(심기) · **씨앗 심기 모드** · **건너뛰기 창**(`SkipDialog`) · 자라는 씨앗 프롬프트 "집기"(E)·"건너뛰기"(R) |
+| `Controllers/PetsController.luau` | **정원 식물 창**(오른쪽 주황 버튼): "정원 n/칸 · 성체 n", 열매 모두 따기, 카드마다 열매·값·다음 열매·따기·먹이기·팔기(확인 창) · 판매 가판대 "식물 팔기"(F) |
+| `Controllers/FruitBagController.luau` | **새 파일.** 열매 가방 창 · 먹이기(열매 ↔ 성체 고르기 + 확률 미리보기) · 판매 가판대 "열매 팔기"(E) · "+N 코인" 연출 |
+| `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E)·"물 주기"(F) · 물방울 연출(`PetPetted`) · 먹이기 결과 반짝/냠냠(`FeedResult`) |
+| `Controllers/PlantFxController.luau` | **새 파일.** 아우라 100 스터드 안만 켜기 · 가까운(60) 식물 살랑살랑 |
+| `Controllers/HatchController.luau` | **성체 카드** "성체가 됐어요!" (`PlantGrown`) |
+| `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 10" |
+| `Controllers/HudController.luau` | HUD (3장) + 오른쪽 **초록 열매 버튼·배지 "12/300"** |
+| `Controllers/IndexController.luau` | "식물 도감" (등급 11개, 열매 1개 값, 신성 이상 무지개 띠) |
+| `Controllers/ShopController.luau` | 상점: 정원 업그레이드("정원 칸 7 → 8") · 러닝머신(20단계 이름, "1초에 속도 +N") · 트레일 |
+| `Controllers/TutorialController.luau` | 6판 5단계 가리키기 (4-3장) |
+| `Controllers/SoundController.luau` | 소리 (5장) — 결과 이벤트에서 스스로 냄 |
+| `Controllers/WorldFxController.luau` | "+열매 N" 팝업(`FruitPicked`), 떨어진 씨앗 "32초", 자는 경비 Z, 무지개 순환 |
+| `Controllers/LeaderboardController.luau`, `NotifyController.luau`, `ChaseController.luau`, `HotbarController.luau`, `AnnounceController.luau` 등 | 글자만 6판으로 (코인·씨앗·식물 괴물·안전 구역) |
+| `UI/Ui.luau` | + **`Ui.dialog` / `Ui.confirm`** (확인 창, 화면 층 "Dialogs") |
+| `UI/PetPicker.luau` | 식물·씨앗·열매 고르기 창 (장착 개념 없앰, 카드 둘째 줄 `info` 옵션) |
+| `UI/Theme.luau`, `UI/Icons.luau` | 등급 색 11개(Rarities 표에서 읽음) + `RainbowRarities`·`rarityName`, 코인 금색, 그림 `seed`·`plant`·`fruit`·`coin` (옛 이름 egg·paw·money 도 같은 그림) |
+| `UI/Layout.luau` | 오른쪽 버튼 묶음 3개(씨앗·식물·열매)로 높이 맞춤 |
 
 ---
 
-## 2. 맵 배치 (MapBuilder, 2판)
+## 2. 맵 배치 (MapBuilder — 6판은 2판 배치 그대로)
 
 ```
             +Z (멀리)
   z=3600 ── 끝 벽 ─────────────────────────────
            15 유령 성 … 2 호수 (구역마다 240, 벽·문 없음, 경계에 베이지 모래띠)
-  z=0    ── "안전 구역" 검은 글씨 + 빨간 점선 + 밤 벽(NightWall 1장) ──
+  z=0    ── "안전 구역" 글씨 + 빨간 점선 + 밤 벽(NightWall 1장) ──
            [1]  허브(안전 구역, 잔디 스터드)  [2]      베이스: 왼쪽 x=-75 (1·3·5·7), 오른쪽 x=+75 (2·4·6)
            [3]       기본 스폰(0,-140)      [4]      z = -40 / -110 / -180 / -250
            [5]                              [6]
-           [7]               판매 가게 · 트레일 상점 · 이벤트 포털 (오른쪽 z≈-250)
-  z=-290 ── 허브 뒤 흰 벽 (구름 + 달 그림) ──
-             x = -110 ……… 0 ……… +110   (양옆 담장 높이 60, 체크무늬 스터드)
+           [7]        판매 가판대 · 트레일 상점 · 이벤트 포털 (오른쪽 z≈-250)
+  z=-290 ── 허브 뒤 흰 벽 ──
 ```
-- **바닥**: 구역마다 20×20 칸 체크무늬(`floor`/`floor2`, Plastic + 스터드). 천사&악마는 왼쪽 흰금(천국) / 오른쪽 검붉(지옥).
-- **담장**: 30×30 칸 체크무늬, 구역 색(숲~눈 황토, 사막 노랑, 화산 검정+주황 네온 줄, 심연 남색, 코스믹 검정+흰 네온 별 …). 숲·호수 등은 담장 위 초록 띠(`wallCap`). 구역 시작 쪽 담장 위에 이름판 "숲 🙂 / 추천 속도 10".
-- **구역 장식**: 담장 쪽 띠(|x| ≥ 89)에만, 둥지·부모 동물·특수 장소를 피해서. 가운데는 비움(경비가 직선으로 쫓아옴).
-  2판 새 블록 장식: `blockytree`, `bushblock`, `chick`, `duck`, `swan`, `cactusblock`, `blockypalm`, `icecrystal`(눈: 하늘색 블록 결정), `bigbone`, `coralblock` + 특수 처리 `lakewater`(호수 큰 물), `sandedge`(심연 모래 테두리), `lavawall`(화산 담장 용암 줄), `wallstars`(코스믹 담장 별).
-- **둥지**: `MapLayout.nestsFor` 자리 8개. 건초 링(막대 10개) / 선사시대 통나무·뼈 큰 둥지 / 코스믹 작은 둥근 그릇 / 눈 덮인 둥지 / 심연 조개 둥지. `Nest` 태그 파트(원기둥)는 1판과 같은 크기라 서버가 알을 그 위에 놓음.
-- **경비 집**: 구역 가운데(`guardHome`) 살짝 어두운 둥근 자국 + `GuardSpawn` 파트(표시용).
-- **부모 동물 자리**: 1번·8번 둥지 옆 담장 쪽 2곳 (`ParentAnimalSpot`).
-- **특수 장소**: `MapLayout.specials` 자리 — 사쿠라 인큐베이터(벚꽃 왼쪽), 천국/지옥 제단(천사&악마 x=∓55), 비밀 통로+폭포(왼쪽 담장) (5판: 마법의 숲 퀘스트 문·비밀 정원은 없앰).
-- **허브**: 잔디 체크무늬, 양옆 황토 담장, 뒤 흰 벽 + 구름·달 그림 2개, z=0 "안전 구역" 글씨·빨간 점선·파란 반원, 판매 가게(빨강·흰 천막 + "판매" + 청록 링, `SellStall`), 트레일 상점(천막 + "트레일 상점", `TrailShop`), 이벤트 포털(검붉은 바위 아치 + 주황 소용돌이, "HALLOWEEN DIMENSION / 오픈"), 기본 스폰, 인덱스 보드.
-- **베이스(7개)** — `MapLayout.plot(i)`:
-  - 우리(뒤 46, `PenArea` 파트가 우리 전체를 덮고 LookVector = 복도 쪽) + 앞마당(24).
-  - **나무 X자 울타리**: 검은 기둥(10 간격) + 위·아래 가로대 + X 보강재, 가로대 색 = `Visuals.plotColors[i]`(갈색·흰·노랑·하늘·분홍·연두·보라). 우리 앞 가운데 12 출입구.
-  - 우리 바닥은 비어 있음 (3판: 부화 알 받침 없앰 — 알은 플레이어가 `PlaceEgg` 로 우리 안 아무 데나 놓음), 펫은 뒤쪽(`petRect`).
-  - 앞마당: 스폰(흰 원), **러닝머신**(벨트 = `Treadmill` 태그, `treadmillRect` 12×8, 윗면 = 바닥+1, Attr `Level`), **퓨즈 머신**(파란 기계 + "?" 화면(`Core`) + 별 패널 + 빨간 표시등 `Tube1~3` + 청록 링 + "퓨즈 머신 / 0/3" 빌보드 `FuseLabel`), **판매 가게**(작은 천막, `SellStall` + `PlotIndex`), 업그레이드 표지판 2개(남색 판 "펫 우리 업그레이드 / 레벨 5 > 레벨 6 / [$50B]", "러닝머신 업그레이드 …", `UpgradeSign` 태그 + Attr `Kind`/`PlotIndex`), 주인 이름 간판(`PlotSign`), 러닝머신 위 "+100/스텝" 분홍 빌보드.
-  - 표지판 숫자·러닝머신 모양은 주인 Attribute `PenLevel`/`TreadmillLevel` 이 바뀔 때마다 갱신 (`Economy.nextPenCost`/`nextTreadmillCost`/`treadmillPerStep`).
-- **러닝머신 모양 10단계**(`TREAD_STYLES`): 1 기본(회색 벨트) · 2 사이파이(흰 틀 + 청록 네온) · 3 불꽃(검붉은 틀 + 화로 불) · 4 셀럽(레드카펫 + 금 기둥·벨벳 줄) · 5 황금(반짝) · 6 얼음(파란 틀 + 하늘색 얼음 결정, 원작 사진) · 7 럭키블록("?" 노란 블록) · 8 해커(검정 + 초록 네온 모니터) · 9 악마(뿔 + 붉은 불) · 10 천사(날개 + 금 링). 레벨 0(잠김) = 기본 모양 반투명 + "잠김 ($1K)".
-- **파트 수**: 맵 약 7,650개 (구역 6,200 · 베이스 1,110 · 허브 310), 한 변 2048 넘는 파트 없음. 구역·베이스마다 `task.wait()`.
+- **바닥·담장·구역 장식·둥지·경비 집**: 5판 그대로 (구역 테마 `Visuals.biomes`). 둥지 `Nest` 태그 파트 크기 그대로 → 서버가 씨앗을 그 위에 놓음.
+- **둥지 옆 장식 식물** (`ParentAnimalSpot` 자리, 5판 부모 동물): 그 구역 식물을 작게 + 이름표 (`ParentAnimal` 태그, Attr `Sway`).
+- **특수 장소**: 6판은 **사쿠라 나무**(`SakuraIncubator`, 벚꽃 구역) 하나뿐. 제단·비밀 통로·퓨전 머신 자리는 비어 있음.
+- **베이스(7개)**: 정원(뒤 46, `PenArea`) + 앞마당. 앞마당에 스폰·**러닝머신**(`Treadmill`, 12×8)·**판매 가판대**(`SellStall` + `PlotIndex`, 간판 "열매 판매")·업그레이드 표지판 2개("정원 업그레이드 / 레벨 n > n+1 / [N 코인]", "러닝머신 업그레이드 … +N/초", `UpgradeSign` Attr `Kind`/`PlotIndex`)·주인 간판.
+- **러닝머신 모양 20단계** (`TREAD_STYLES`): 1 기본 · 2 사이파이 · 3 불꽃 · 4 셀럽 · 5 황금 · 6 얼음 · 7 럭키블록 · 8 해커 · 9 악마 · 10 천사 · **11 정글 · 12 바다 · 13 사탕 · 14 벚꽃 · 15 용암 · 16 수정 · 17 유령 · 18 은하 · 19 무지개 · 20 황제** (상점 `TREADMILL_NAMES` 와 같은 순서). 레벨 0(잠김) = 기본 모양 반투명.
+- **파트 수**: 맵 약 6,300 (상한 7,000, `smoke_visuals` 가 검사).
 
 ### 2-1. 클라 이름 규칙 (연출이 찾는 이름 — 모델을 바꿀 때 유지)
 | 이름 | 쓰는 곳 |
 |---|---|
-| 퓨즈 머신 모델 `Core`, `Tube1~3` | FusionController 번쩍임 |
-| `Treadmill` 태그 Attr `Level`, 형제 모델 `TreadmillLook` | (표시) |
-| `UpgradeSign` 태그 (Visuals.Tags) Attr `Kind`·`PlotIndex` | ShopController "업그레이드" 프롬프트 |
-| `SellStall` 태그 (허브 1 + 베이스 7) | PetsController "펫 팔기" 프롬프트·판매 버튼 거리 |
-| `TrailShop` 태그 (허브) | TrailController "열기" 프롬프트 |
-| `PlotSpawn` 태그 | WorldFx 배달 반짝 |
-| 경비 겉모습 `SleepZ` 빌보드(`Z1~Z3`), `GuardPose` 용접, `GuardGlow` | WorldFx Z 둥실둥실 |
-| 우리 펫 `PetUid`·`OwnerUserId`·`Footprint` Attr + `PenPet` 태그, 빌보드 `PetTag`(`Rarity`/`PetName`/`Income`/`Extra`), 5판 `Root > PromptAttach > PetPrompt`("쓰다듬기") | WorldFx 돈 팝업 · PetFxController 쓰다듬기 (통통은 5판부터 서버가 걸을 때) |
-| 5판 허브 랭킹판 `LeaderboardBoard` 태그(Visuals.Tags) 파트, Front 면 `LeaderboardGui`(`Column_money`/`Column_speed` > `Line1~10`) | LeaderboardController |
-| 5판 화면 이름: 핫바 `BagEgg_<uid>`·`MoreEggs`, `TutorialPanel`(`StepBadge.Step`/`Title`/`Hint`)·`TutorialArrow`·`TutorialGlow`·`TutorialDone`, Workspace `TutorialGuide`(`TutorialTarget` > `TutorialMarker`·`TutorialBeam`, `TutorialHighlight`), `Leaderboard`(`LbTab_money`/`LbTab_speed`/`LbToggle`/`Rows`), 펫 위 `PetHearts` | Hotbar · Tutorial · Leaderboard · PetFx |
-| 알 `EggVisual` 폴더(`Layer`·`Spot1~2`), 빌보드 `WeightTag`(`Gender`/`Kg`) | WorldFx 레인보우 순환 |
-| 부화 중 알 프롬프트 `HatchPrompt`("부화!")·`PickUpPrompt`("집기") (클라가 내 알에만 붙임, 이름표는 서버 `Label`) · 놓기 미리보기 `EggPlacePreview`(+`EggPlaceRing`, 내 화면만) · 떨어진 알 `DropTimer`(`Time`) | IncubatorController · WorldFxController |
+| `IncubatingEgg` 파트(투명) > 모델 **`SeedVisual`** (Attr `Stage` "seed"/"sprout"/"stem"/"bud", `Sway`), 파트 Attr **`VisualHeight`** | PlantFx 흔들기 · 프롬프트·팝업 높이 |
+| `GardenPlant` 파트(투명) > 모델 이름 = **식물 id** (PrimaryPart `Root` Anchored, 나머지 WeldConstraint, Attr `Sway`·`Height`·`Form`·`Fruits`·`PetId`), 열매 파트 **`Fruit1`~`Fruit5`**(서버가 Attr `Fruits` 개수만 보이게), 파트 Attr `VisualHeight` | PlantFx · PetFx · WorldFx "+열매" |
+| 태그 **`AuraFx`** (`Visuals.Tags.AuraFx`): 그 파트 아래 ParticleEmitter·PointLight 는 서버가 `Enabled = false` → 클라가 100 안만 켬. 정원 모델은 투명 파트 `Aura`, 씨앗은 껍데기 `Shell` 에 붙음. 빛기둥 Beam `SkyPillar`·`SpecialBeam` 은 늘 켜짐 | PlantFxController |
+| 무지개 돌연변이: 꽃잎·열매 파트에 `EggShell` 태그 + Attr `Rainbow` | WorldFx 색 순환 |
+| 클라 프롬프트 (내 것에만, Attachment `GardenPromptAttach`): 성체 `PickFruitPrompt`(E) · `WaterPrompt`(F) / 씨앗 `WaterPrompt`(F) · "집기"(E) · "건너뛰기"(R) / 가판대 `SellFruitsPrompt`(E) · `SellPrompt`(F, 식물 팔기) / 사쿠라 `SakuraPrompt`(E) | PetFx · Incubator · FruitBag · Pets · Sakura |
+| 정원 식물 창 버튼 `PickFruit`(카드)·`PickAllFruit`·`FruitBagOpen`·`Feed`·`Sell` · 열매 가방 `FeedButton` · 건너뛰기 창 `SkipDialog`(`SkipAll`/`SkipHalf`) · 사쿠라 `OfferButton`/`DrawButton` | Tutorial 반짝 · smoke_client |
+| `UpgradeSign` 태그 Attr `Kind`·`PlotIndex` / `TrailShop` / `PlotSpawn` / `LeaderboardBoard` | Shop · Trail · WorldFx · Leaderboard |
+| 경비 겉모습 `SleepZ`(`Z1~Z3`), `GuardPose`, `GuardGlow`, 눈 `EyeOpen`/`EyeClosed`/`Brow` | WorldFx Z 둥실 · 얼굴 |
+| 핫바 `BagEgg_<uid>`·`MoreEggs`, `TutorialPanel`·`TutorialArrow`·`TutorialGlow`·`TutorialDone`, Workspace `TutorialGuide`, 씨앗 미리보기 `EggPlacePreview`/`EggPlaceRing`, 떨어진 씨앗 `DropTimer` | Hotbar · Tutorial · Incubator · WorldFx |
 
 ---
 
-## 3. 동물·알 생김새
+## 3. 생김새 (서버)
 
-### 펫 (PetVisualService)
-- 모든 큰 타원체·공·굵은 원기둥 → **모서리 깎인 블록(직육면체 3개 겹침)**, 넓은 면 스터드, 기본 Plastic. 눈 = 검은 네모 + 흰 하이라이트.
-- 체형 17종(quad·bird·fish·snake·bug·spider·dragon·ghost·humanoid·frog·turtle·whale·jelly·lizard·blob·dino·penguin)을 블록 디테일로 보강 → **134종 평균 44.6 파트(최소 31, 최대 73)**.
-- 희귀도 외곽 빛(Highlight, 전설 금 · 신화 빨강 · 코스믹 보라 …) + 전설 이상 반짝이.
-- **우리 진열**: `PenArea` 사각형 뒤쪽 2/3 에 격자(앞줄부터), 모두 앞(복도)을 봄. 머리 위 3줄 **[희귀도 색 글씨] / 이름 / $수입/s** (+크기·돌연변이 한 줄).
-- **5판 돌아다니기** (`PetVisualService.stepPens`, 서버 Heartbeat 한 루프): 격자에서 시작해 우리 안 랜덤 목표로 2~5초 걷고(초당 2.6~3.8) 1~3초 쉼. 많이 돌아야 하면 제자리에서 먼저 돌고 걸음, 걷는 동안 통통(bob). 울타리 1.5+몸 반지름 안쪽, 놓인 알과 max(4, 몸+알+0.6), 다른 펫과 몸끼리 안 닿음 (이미 가까우면 멀어지는 걸음만). 막히면 0.4~1.2초 쉬고 다른 곳으로. 주인이 우리 10 스터드 안에 들어오면 모두 주인을 보고(1.4초) 한 번 폴짝. 쉬는 펫은 CFrame 을 안 바꿔서 복제가 가벼움.
-- **경비**: 높이 25~40 스터드(캐릭터 5~8배). `State = "Sleeping"`(또는 Idle) 이면 엎드린 자세 + 머리 위 파란 "Z" 세 개, `"Chase"` 면 일어서고 빨간 테두리.
+### 자라는 씨앗 (PlantVisualService — `IncubatingEgg`)
+- 서버 공 파트는 투명(판정·이름표 그대로), 자식 `SeedVisual` 을 Attr `Stage` 가 바뀔 때만 다시 만듦 (일생에 4번).
+- **4 모양**: 씨앗(흙 둔덕 + 반쯤 묻힌 씨앗, 0% 막 심음) → **새싹**(떡잎 2장) → **줄기**(줄기 + 잎) → **봉오리**(등급 색 봉오리). 이름표 "Label" 은 모델 위로.
 
-### 알 (EggVisualService)
-- 계단형 블록 달걀 6층(아래 넓게, 위 좁게) + 둘째 색 줄무늬 2층 + 점 2개, 윗면 스터드.
-- 돌연변이(실버/골든/레인보우/블룸), 특별 알(비밀/영원/신성) 하늘 빛기둥 + "비밀 알!" 이름표, 전설 이상 빛.
-- 들고 있을 때(`EggState = "Carried"`) 알 위 **"♂ 4,740Kg"** (알 `WeightKg`, 없으면 들고 있는 사람 `CarryWeightKg`).
+### 성체 식물 (PlantVisualService — `GardenPlant`)
+- **절차적**: 134종을 손으로 만들지 않고 `Visuals.plantLook(id)` = 구역 테마(숲 꽃·나무, 호수 수초·연꽃, 사막 선인장·야자, 정글 덩굴·대나무, 눈 소나무, 화산 불꽃꽃, 바다 해초·산호, 선사 고사리, 코스믹 버섯, 벚꽃 나무 …) + 이름 낱말(버섯·장미·선인장 …) + **id 해시**(잎 수·꽃잎 수·색조·열매 모양) → 16 기본 모양(`PLANT_FORMS`) 중 하나로. 134종 모두 서로 다름 (평균 약 20 파트, 14~29).
+- **등급**: 크기·색 진하기, **크기 등급**(보통·큼·거대·초거대)도 키에 반영. **돌연변이 색** `Visuals.mutationLooks` (실버 Foil · 황금 네온 · 무지개 순환 · 얼음/불/번개 파티클).
+- **열매**: `Fruit1~5` 를 미리 만들고 Attr `Fruits` 개수만큼만 보임 (바뀌면 Transparency 만 — 다시 안 만듦).
+- **흔들기**: 모델 Attr `Sway` → 클라 PlantFxController 가 60 스터드 안만 Root 를 ±3° Tween (Reverse·무한, 멀어지면 Cancel + 원래 자리). 5판 펫 걷기 코드는 지움.
+
+### 아우라 (`Rarities.aura` 11종, `Visuals.auras`)
+| 등급 | 아우라 | 모양 |
+|---|---|---|
+| 일반 | none | 없음 |
+| 고급 | lime_glow | 파티클 없이 연두 네온 테두리/색 |
+| 희귀 | blue_sparkle | 파란 반짝 파티클 |
+| 에픽 | purple_flame | 보라 불꽃 |
+| 전설 | gold_ring | 금빛 링(정적 파트) + 반짝 |
+| 신화 | red_lightning | 빨간 번개 |
+| 코스믹 | stardust_swirl | 별가루 소용돌이 |
+| 비밀 | black_mist | 검은 안개 + 보라 눈 |
+| 영원 | white_clock | 흰 시계 링 |
+| 신성 | rainbow_beam | 무지개 광선 |
+| 슈퍼 울트라디바인 | sky_pillar | 무지개 + 번개 + **하늘 빛기둥 Beam (늘 켜짐, 맵 어디서나)** |
+- **가볍게**: 파티클·빛은 **희귀(rare) 이상만**, 서버는 꺼진 채로 만들고(`AuraFx` 태그) 클라가 내 캐릭터 **100 스터드 안**만 켬 (0.5초마다 검사, 켜짐이 바뀔 때만 자식을 훑음). Rate 작게.
+
+### 씨앗 (EggVisualService — `Egg` 태그: 둥지·들고 있는·떨어진)
+- 아몬드 모양 껍데기 `Shell` + 뾰족한 끝 `Tip` + 세로 줄무늬(등급 색, `eggLooks`) + 별·보석 점, ≤ 8 파트. 판정 파트 높이에 맞춰 바닥에 붙음. 아우라 위 규칙.
+- 특별 씨앗(비밀 이상 `Special`): 빛기둥 `SpecialBeam` + "비밀 씨앗!" 이름표. 들고 있을 때 "♂ 4,740Kg".
+
+### 경비 = 식물 괴물 (PetVisualService)
+- `Biomes.guardName` 15구역 + 천사&악마 밤 쪽 = 16종: 덥석 파리지옥 · 연꽃 개구리풀 · 가시 선인장 대장 · 덩굴 호랑이꽃 · 서리 가시나무 · 용암 머리꽃 · 심해 해초 괴물 · 공룡 고사리 · 우주 버섯 거인 · 벚꽃 여우나무 · 돌 거인 나무 · 천사 백합 / 악마 장미 · 정령 버섯 · 사탕수수 거인 · 호박 머리 덩굴 (15~31 파트).
+- **키(`Height`)·scale 은 `Visuals.guards` 그대로** (GuardianService 잡힘 거리). 잘 때(Sleeping/Idle/Return) 감은 눈 + Z, 쫓을 때(Chase)만 눈 뜸 + 화난 눈썹.
+
+### 사쿠라 나무 (MapBuilder)
+- 태그 파트 지름 7·자리 그대로, 겉모습만 벚꽃 나무 (줄기·가지 5·분홍 꽃 덩어리 9·빛 꽃·등불·꽃잎 파티클).
 
 ---
 
-## 4. 화면 (원작 Steal An Egg HUD 그대로)
+## 4. 화면
 
 ```
  ┌─────────────────────────────────────────────────────────────────┐
- │             [1/5 숲에서 알 훔치기 · 작은 설명]   ← 5판 튜토리얼 [🏆 랭킹 −]│
- │                  [ 달리기!! ]   ← 알 들었을 때      [돈][속도]   │
- │                  Jungle 😬      ← 구역 배너          1 부자 $5B  │
- │                  Jungle에 비밀 킹 스네이크 에그 등장!  2 나 $12K  │
- │ [🛒 상점    ]                                             [🥚]① │
- │ [📘 인덱스  ]                                             [🐾]  │
- │ [■ 슬로우 모드]                                                 │
- │ [⚙ 설정     ]                                                   │
- │ 👟 5.7M         (빨강)               에그를 훔쳤어요!            │
- │ 💵 $18.7B       (초록)               [ 🗑 드롭 ]                │
- │ 친구 부스트: +10%   [1 방망이][2 곰덫 x3][3 🥚][4 🥚][5 +3]   🌙 3분 58초 │
+ │        [1/5 숲에서 씨앗 훔치기 · 작은 설명]   ← 튜토리얼     [🏆 랭킹 −]│
+ │                  [ 달리기!! ]   ← 씨앗 들었을 때       [코인][속도] │
+ │                  Jungle 😬      ← 구역 배너                         │
+ │ [🛒 상점    ]                                          [🌰 씨앗]① │
+ │ [📘 도감    ]                                          [🌿 식물]  │
+ │ [■ 슬로우 모드]                                        [🍎 12/300]│
+ │ [⚙ 설정     ]                                                     │
+ │ 👟 5.7M   (빨강)                    씨앗을 훔쳤어요!               │
+ │ 🪙 18.7B 코인 (금색)                [ 🗑 드롭 ]                    │
+ │       [1 방망이][2 곰덫 x3][3 🌰][4 🌰][5 +3]            🌙 3분 58초 │
  └─────────────────────────────────────────────────────────────────┘
 ```
 | 화면 | 파일 | 데이터 |
 |---|---|---|
-| 왼쪽 메뉴 (넓은 버튼: 아이콘 + 글자) | HudController | 상점 → Shop 창, 인덱스 → Index 창(배지 = 받을 보상 수), 슬로우 모드, 설정 — 5판: 이 4개뿐 (퀘스트·선물 버튼 없앰) |
-| 슬로우 모드 | HudController | 켜면 `Humanoid.WalkSpeed` = 플레이어 Attr `WalkSpeed` ÷ 2 (서버가 속도를 바꿔도 다시 절반으로). 느려지기만 하므로 치트 검사와 충돌 없음 |
-| 왼쪽 아래 속도·돈·친구 부스트 | HudController | Attr `Speed`(빨강), `Money`(초록, 숫자 올라가는 애니메이션). "친구 부스트" 는 장식 |
-| 오른쪽 알 버튼 / 발바닥 버튼 | HudController + IncubatorController | 알 → 알 창("성장하는 달걀" 패널) 열고 닫기, 초록 배지 = 가방 속 알 수 + 지금 부화 가능 수(할 일 수). 새 알이 들어오면 버튼 통통 + 다음에 열 때 "가방" 탭. 발바닥 → Pets 창 |
-| 오른쪽 아래 시간 | HudController | GameState `Phase`/`PhaseEndsAt`. 낮엔 달 그림(밤까지), 밤엔 해 그림(낮까지). "3분 58초" / 1분 아래는 "52초 안에" |
-| 구역 배너 | HudController | `ZoneEntered{nameEn}` + 테마 `label` 이모지 ("Jungle 😬"), 2.6초 |
-| 공지 | NotifyController | `Announce` — 희귀 알은 `rareEggText`: 구역(초록) + 희귀도(색) + 알 이름(금) "에그 등장!" |
-| 토스트 | NotifyController | `Notify`, `EggDelivered` → "에그를 훔쳤어요! 가방에 들어갔어요", `EggGranted` → "제단 선물 알: 펫이름! 가방에 들어갔어요" (바탕 없는 굵은 외곽선 글씨) |
-| 달리기!! | ChaseController | Attr `CarryingEgg` ≠ "" 동안 배너 + 비네트(맥박) + 드롭 버튼(`DropEgg`). `RunAlert` 속도 부족 경고, `ChaseEnded.reason` 안내, 허브에선 "베이스로!" |
-| 잡힘 | ChaseController | `Caught` → "잡혔다!" + 화면 흔들림 + 빨간 번쩍 |
-| 알 창 "성장 중" 탭 | IncubatorController | 우리에 놓인 알(`snap.incubators`) 줄: 알 그림 + 펫 이름(희귀도 색) + 초록 막대 + "5m 25s"(다 자라면 노란 막대 "부화 가능!") + 주황 "가방"(`PickUpPlacedEgg`, 자라는 중일 때만) + ▶(다 자랐으면 `HatchEgg`, 아니면 안내). 탭 글자 "성장 중 2/8"(`placedEggMax`). "모두 성장시키기"(로벅스)는 꺼 둠 |
-| 알 창 "가방" 탭 | IncubatorController | 가방 속 알(`snap.eggs`, `DataUpdate("eggs")`) 카드 3열: 희귀도 색 테두리·바탕, 펫 색 알 그림(특별 알 ★), 펫 이름, "전설 · 큼 · 골든"(희귀도·크기·돌연변이), 초록 **놓기** → 알 놓기 모드. 탭 글자 "가방 3/50"(`eggInventoryMax`). 창 높이는 폰 화면 안으로 줄고 넘치면 스크롤 |
-| 알 놓기 모드 | IncubatorController | 우리 바닥(y = 0 평면)에 반투명 네온 알 + 바닥 동그라미(같은 크기 알 간격). **초록 = 놓을 수 있음 / 빨강 = 안 됨** — `EggPlacement.check(MapLayout.toLocal(PlotIndex, 점))` + 놓인 알 + 우리 펫(PenPet) 간격 + 놓인 알 수 + 서 있는 곳(베이스 안 또는 14 안), 서버 `PlaceEgg` 와 같은 순서. 위 안내 줄 `PlaceBar`(이유 글 = `EggPlacement.message`). PC: 마우스 따라감, 왼쪽 클릭 → `PlaceEgg(uid, x, z)`(월드). 폰: 처음엔 우리 안 첫 빈 격자 자리, 바닥을 톡(`TouchTapInWorld`) → 미리보기 이동, **여기 놓기** → `PlaceEgg`. ESC·**취소** → 끝, 보낸 뒤·그 알이 가방에서 사라지면 끝. 모드 중엔 알 창 닫힘 |
-| 우리 안 알 이름표·부화·집기 | IncubatorController | 이름표 "에그 1m 52s" 는 **서버(BaseService) 것**을 그대로 씀(클라 이름표 없음). 내 `IncubatingEgg` 에만 프롬프트 2개(E): 다 자라면 **부화!** → `HatchEgg(uid)`, 자라는 중이면 **집기**(0.4초 누르기) → `PickUpPlacedEgg(uid)` (`Config.ALLOW_EGG_PICKUP`) |
-| 떨어진 알 카운트다운 | WorldFxController | `Egg` 파트 Attribute `ExpiresAt`(서버 시각)이 있으면 머리 위 빨간 "32초" (`ceil(ExpiresAt - workspace:GetServerTimeNow())`, 0.25초마다), 10초부터 노랑/빨강 깜빡. Attribute 가 없어지면(다시 주움) 지움 |
-| 러닝머신 | TreadmillController | Attr `OnTreadmill` 동안 이동 입력 끔 + "점프하면 내려와요"(터치 "내리기" 버튼). 점프 → `TreadmillLeave`. `TreadmillStep{amount}` → 분홍 "+500" |
-| 돈 팝업 | WorldFxController | `IncomeTick{petUid, amount}` → 그 펫 위 큰 초록 "+$34K" 떠오름 |
-| 핫바 | HotbarController | PC 아래 가운데, 작은 어두운 칸(번호·그림·"x3"), 알 들면 도구 다음 칸에 알. **5판: 가방 알 칸 `BagEgg_<uid>`** (4-3장) |
+| 왼쪽 메뉴 | HudController | 상점 · 도감(배지 = 받을 보상 수) · 슬로우 모드 · 설정 |
+| 왼쪽 아래 속도·코인 | HudController | Attr `Speed`, `Money` (`Format.money` = "N 코인") |
+| 오른쪽 씨앗 / 식물 / **열매** 버튼 | HudController | 씨앗 → 씨앗 창(배지 = 가방 씨앗 수) · 식물 → 정원 식물 창 · 열매 → 열매 가방 창 (배지 "`FruitCount`/`fruitBagMax`") |
+| 오른쪽 아래 시간 | HudController | GameState `Phase`/`PhaseEndsAt` |
+| 달리기!! / 잡힘 | ChaseController | 씨앗 들면 배너 + 비네트 + 드롭, 식물 괴물 이름, 안전 구역 들어오면 "안전 구역!" |
+| 씨앗 창 "자라는 중" | IncubatorController | `snap.incubators` (또는 파트 Attr `Progress`/`Required`): 씨앗 그림 + 이름 · **단계(새싹/줄기/봉오리)** + 막대 + 남은 시간(다 자라면 "곧 성체!") + 가방(`PickUpPlacedEgg`) + **⏩**(건너뛰기 창). 탭 "자라는 중 · 정원 n/칸"(`#incubators + #pets` / `penSlots`) |
+| 씨앗 창 "가방" | IncubatorController | `snap.eggs` 카드 → "심기" → 심기 모드 |
+| 씨앗 심기 모드 | IncubatorController | 정원 바닥 미리보기 초록/빨강 = `EggPlacement.check(toLocal, 자라는 씨앗 + 성체 자리)` + 정원 칸 + 서 있는 곳. PC 클릭 / 폰 "여기 심기" → `PlaceEgg(uid, 월드 x, z)` |
+| **건너뛰기 창** | IncubatorController + `Ui.dialog` | "전부 · N 코인" / "절반 · N 코인" / 취소 — `GardenRules.skipCost(petId, progress, required, mode)`, **1초마다 다시 계산**, 코인 모자라면 회색 → `SkipGrowth(uid, "all"\|"half")` |
+| **성체 카드** | HatchController | `PlantGrown` → 씨앗 퐁! → "성체가 됐어요!" + 3D 식물 + "열매 1개 N 코인 · N초마다" + NEW!(도감 첫 발견). 한꺼번에 여러 그루면 4장까지 |
+| **정원 식물 창** | PetsController | `snap.pets`: "정원 n/칸 · 성체 n", **열매 모두 따기**(`PickFruit("all")`), 열매 가방 버튼, 카드: 열매 n/5 · 1개 값(`FruitRules.fruitValue`) · 다음 열매 n초(1초마다) · 따기(`PickFruit(uid)`) · 먹이기 · **팔기 N 코인**(`GardenRules.sellPrice`, 확인 창 → `SellPlant`) |
+| **열매 가방 창** | FruitBagController | `snap.fruits`: "열매 12/300 · 다 팔면 N 코인", 칸마다 열매 색 · 이름 · ×개수 · 값 · **먹이기** → 성체 고르기(카드에 `feedOptions`·`feedChance`, 더 붙을 게 없으면 회색) → `FeedFruit(plantUid, fruitId)` |
+| 판매 가판대 | FruitBagController / PetsController | E "열매 팔기 · 열매 12개 · 3.4K 코인"(Attr `FruitCount`·`FruitBagValue`, 0개면 안내만) → `SellFruits()` → `FruitsSold` "+3.4K 코인" / F "식물 팔기" → 정원 식물 창 |
+| 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐) · "물 주기"(F) / 내 씨앗: "물 주기"(F) · "집기"(E) · "건너뛰기"(R). 높이 = `VisualHeight`. 물 준 뒤 60초는 "물 주기 (45초)" |
+| 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
+| "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
+| 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`) / "씨앗 뽑기 · 크리스탈 10"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
+| 도감 | IndexController | "식물 도감", 구역 탭 15, 등급 11개 색(신성·슈퍼 울트라디바인 무지개 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
+| 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") · 트레일 |
+| 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` "+1M" 분홍 팝업 |
+| 랭킹판 | LeaderboardController | 코인 / 속도 탭 + 허브 3D 판 |
 
-### 창 (진한 창 + 줄무늬 제목 + 빨간 X)
-- **펫 인덱스**(하늘): 왼쪽 구역 그림 탭 15개(받을 보상 "!") · 가운데 희귀도 색 카드(미발견 검은 실루엣 "???") + 진행바 "1/8" · 오른쪽 큰 펫 + 이름/희귀도/수입 + 빨간 ">" + 보상(돈·속도) + **획득!** · 아래 **모두 획득 (n)!** 또는 "잠금 해제: n/134" · 창 밖 **월드** 버튼(준비 중 안내).
-- **상점**(초록): 카드 2장(펫 우리 / 러닝머신 업그레이드, 다음 러닝머신 모양 이름·스텝당 속도) + 창 밖 오른쪽 세로 탭(업그레이드·트레일·추천·속도·돈). 로벅스 탭은 "준비 중"(살 수 없음).
-- **트레일 상점**(보라): 가로로 넘기는 카드 11장 — 이름·등급·캐릭터 그림·"x4 스피드" 배지·버튼: 안 가짐 = 가격(초록, `PurchaseUpgrade("Trail", id)`, 산 뒤 서버가 자동 장착) / 가졌음 = "장착"(파랑, `EquipTrail(id)`) / 장착 중(`snap.equippedTrail`, 없으면 Attr `EquippedTrail`) = "장착 해제"(노랑, `EquipTrail("none")`). `DataUpdate("upgrades")`·Attr 바뀌면 카드 다시 그림. 캐릭터 꾸밈: 모든 플레이어 HumanoidRootPart 에 `EquippedTrailFx` Trail(Attr `EquippedTrail` 색, "none" 이면 지움).
-- **펫**(주황): 진한 카드, 장착/해제, 최고 펫 장착, **판매 가게 근처면 "판매 $가격"**(`SellPet`, 가격 = 수입 × 60초).
-- 설정·펫 고르기·부화 카드는 그대로(새 창 스타일만). 5판: 선물 창 없앰.
-
-### 4-1. 펫 고르기 창 (`UI/PetPicker.luau`)
-```lua
-PetPicker.open({
-	title = "퓨전 머신", color = Theme.Colors.purple, hint = "같은 펫 3마리를 골라요",
-	count = 3,                                   -- 정확히 이만큼 고르면 확인 버튼 켜짐
-	items = function() return PetPicker.myPets() end,  -- 생략 = 내 보관함 펫 전부 (myEggs() = 부화 중 알)
-	filters = { PetPicker.sameSpecies(3) },      -- 아래 필터 버튼 ("같은 펫만" / PetPicker.sameSide(side) "같은 쪽만" / 직접)
-	check = function(item, selected) return ok, "이유" end,   -- 못 고르는 카드 = 회색 + 빨간 이유
-	ready = function(selected) return ok, "이유" end,          -- 확인 버튼 조건 (이유는 안내 줄에 빨갛게)
-	status = function(selected) return "안내" end,             -- 고른 것에 따라 안내 줄
-	onConfirm = function(selected) Net.send(...) end,
-	closeWhen = function() return 멀어짐 end,    -- 0.5초마다 확인, true 면 닫힘
-})
-```
-- 카드 132×178: 희귀도 색 테두리, 3D 펫(알은 알 모양), 이름(희귀도 색)·희귀도·수입·크기/돌연변이 또는 이유, "장착" 표시. 카드 전체가 버튼. 고르면 노란 두꺼운 테두리 + 순서 번호.
-- 정렬: 고를 수 있는 것 → 희귀도 높은 순 → 같은 펫끼리 → 수입. 한 쪽 24장.
-- 아래 막대: 필터 버튼 · "고름 2/3" · 취소 · 확인. 위 줄: 안내 · `<` 쪽 `>`. 버튼은 전부 `Ui.touch` 로 **폰에서도 46px 이상**.
-- 창은 Windows 에 "PetPicker" 로 등록(한 번에 하나, ESC 로 닫힘). 확인을 누르면 닫고 요청만 보냄 — 결과는 서버 이벤트로 옴.
-- State 가 바뀌면 다시 그림 (팔리거나 퓨전된 펫은 선택에서 빠짐).
-
-조명: 낮 14시 밝고 따뜻하게 → 밤 22시 어둡고 파랗게 → 새벽 5시半 → 낮 (시계는 앞으로만 2.5초 Tween). 구역마다 안개 색(유령 성 보랏빛 짙게, 화산 주황, 바다 파랑, 눈 하양 …), 밤엔 더 어둡게.
-
+### 4-1. 확인 창 (`Ui.dialog` / `Ui.confirm`)
+- 화면 층 "Dialogs" (창 위). 버튼은 `Ui.touch` 로 폰에서도 46px 이상. 건너뛰기 · 식물 팔기 · 먹이기 확인에 씀.
 
 ### 4-2. 반응형 HUD (`UI/Layout.luau`)
-- **PC**: 왼쪽 메뉴 = 넓은 1열 버튼(150 × 52 기준), 속도·돈 묶음(왼쪽 아래) 위쪽 공간 가운데쯤. 핫바 아래 가운데. 시간 오른쪽 아래.
-- **터치(폰)**: 속도·돈을 **화면 위 왼쪽 한 줄**로 올리고(친구 부스트 숨김), 시간은 **오른쪽 위**로 (점프 버튼 자리 비움). 메뉴는 `Layout.menu(area, n, scale, touch, nil, topLimit = 속도·돈 아래, …)` 로 조이스틱 위까지, 버튼 44px 이상, 모자라면 2~3열 **정사각 아이콘 버튼**(작은 글자). 핫바는 점프 버튼 왼쪽.
-- 창 버튼(닫기 X·획득!·사기·장착·판매·탭)은 `Ui.touch` 로 폰에서도 46px 이상.
-- 측정 (스모크): 750×381 폰 = 메뉴 2열 45px, 844×390 = 2열 48px, 1428×750 PC = 1열 53px 높이, 핫바 칸 44.8~66.7px.
+- PC: 왼쪽 메뉴 넓은 1열, 속도·코인 왼쪽 아래, 오른쪽 버튼 3개(씨앗·식물·열매, 묶음 높이 240). 터치: 속도·코인 위 왼쪽 한 줄, 시간 오른쪽 위, 메뉴는 조이스틱 위 정사각 아이콘 2~3열, 오른쪽 버튼은 점프 버튼과 안 겹치게.
 
-### 4-3. 5판 화면 (사장님 지시, 2026-10-22)
-- **얻은 알은 핫바에 바로** (HotbarController): 가방 알(`snap.eggs`)이 도구 칸 뒤에 `BagEgg_<uid>` 칸으로 — **가장 최근 알이 맨 앞**, 칸 테두리 = 희귀도 색, 알 그림 = 펫 색, 특별 알 ★. 최대 6칸 + `MoreEggs` "+n"(누르면 알 창 가방 탭). 자리가 모자라면(무기가 많은 폰) 알 칸 수를 줄이고 마지막엔 "+n" 칸 하나만 (`Layout.hotbarCapacity`/`hotbarEggs`, 칸 44px 이상 유지).
-  알 칸을 **누르면(PC 클릭·숫자키 / 폰 톡) 바로 알 놓기 모드** (`IncubatorController.beginPlace` — 초록/빨강 미리보기, PC 클릭 / 폰 "여기 놓기" → `PlaceEgg`). 놓는 중인 칸은 흰 두꺼운 테두리, 같은 칸 한 번 더 = 취소, 손에 든 도구는 내려놓음. 놓인(부화 중) 알은 가방에서 빠져 핫바에 안 보임 — 성장 중 확인은 오른쪽 알 버튼 창(그대로).
-- **쓰다듬기** (PetFxController + 서버 PetVisualService): 우리 펫마다 "쓰다듬기" 프롬프트(F, 0.3초 누르기, 10 스터드). 내 펫만 켜지고 → `PetPet(uid)`. `PetPetted(owner, uid)` → 그 주인 우리 그 펫(모델 Attr `OwnerUserId`, 없으면 주인 `PlotIndex` == `MapLayout.plotAt`) 위에 ♥ 5개 떠오름 + 분홍 반짝 + 소리 `Pet` + 폴짝(서버가 보낸 마지막 자리 위로만 — 걷는 펫이 끌려오지 않음). 서버는 프롬프트 Triggered 를 안 받음(판정은 PetService).
-- **튜토리얼** (TutorialController): `TutorialUpdate` / `State.get().tutorial` → 위 가운데 패널 `[n/5] 큰 글씨 / 작은 설명` (PC 맨 위, 터치는 위 한 줄 속도·돈 아래 — `Layout.tutorialPanel`). 패널이 보이면 위 가운데 것들(달리기!! 배너·구역 배너·공지 배너·알 놓기 안내 줄)을 패널 아래로 같이 내림(원래 y 는 Attr `TutorialBaseY`). 가리키기: 1 노란 빔 + "▼ 숲으로!"(허브) / "알 훔치기!"(숲: 가장 가까운 둥지·떨어진 알) · 2 "안전 구역"(z < 0) · 3 핫바 알 칸 노란 테두리 반짝(알이 없으면 알 버튼) + 내 우리 "우리에 놓기" · 4 내 놓인 알 노란 Highlight + "부화!"/"자라는 중…" · 5 펫 버튼 반짝 + 펫 창 "장착" 버튼 반짝. 목표가 화면 밖이면 가장자리 노란 화살표 ➤. 단계가 바뀌면 소리 `TutorialStep` + 패널 통통. 끝(`reward`) = 색종이 42장 + `TutorialDone` 팡파레 + "튜토리얼 끝! / $500 받았어요!" 3.6초. `done` 이면 숨김.
-- **랭킹판** (LeaderboardController): 오른쪽 위 `🏆 랭킹` 판 — 돈/속도 탭, 최대 10줄 "순위 이름 값"(1·2·3등 금·은·동), 내 줄 노란 바탕, `−`/`+` 로 접고 펴기(PC 펼침·폰 접힘으로 시작). 펼쳐서 알·발바닥 버튼에 닿으면 그 왼쪽으로 비킴, 폰은 시간 아래 좁게(170) — 튜토리얼 패널·알 놓기 안내 줄과 안 겹침 (`Layout.leaderboard`). 로블록스 기본 플레이어 목록은 끔. **허브 3D 판**: 스폰 광장 왼쪽 앞(x -26, z -150, 광장을 봄) 16×12 판 + 기둥 2 + 금 지붕 (MapBuilder, 파트 4) — 글은 클라가 Front 면 SurfaceGui 로 "🏆 랭킹 TOP 10" + 돈·속도 두 칸 10줄.
-- **정리**: 왼쪽 메뉴 = 상점·인덱스·슬로우 모드·설정 4개, `Theme.Menu` 의 quest·gift 색, 퀘스트·선물 설명 없앰.
-
-## 5. 소리 — 사장님이 채울 ID 목록 (`src/shared/Data/Sounds.luau`)
-
-ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. Creator Store → 오디오에서 고른 뒤 숫자만 바꾸세요. (예: `id = "rbxassetid://1234567890"`)
-
-| 이름 | 소리 | 언제 |
-|---|---|---|
-| `Click` | 버튼 클릭 '톡' | 모든 버튼 |
-| `Open` / `Close` | 창 열림 '뿅' / 닫힘 '슉' | 창 |
-| `Pickup` | 알 줍기 '퐁!' | `RunAlert` |
-| `RunAlert` | 사이렌 한 번 | `RunAlert` |
-| `Chase` (음악) | 추격 긴장 음악 | 알 들고 있는 동안 (배경음 대신) |
-| `Caught` | '퍽! + 휘익' | 잡힘/맞음 |
-| `Trap` | 곰덫 '철컥!' | 곰덫 밟음 |
-| `Bat` | 방망이 '붕' | (예비) |
-| `Deliver` | 배달 성공 '띠링~' | `EggDelivered` |
-| `HatchReady` | 다 자람 반짝 | (예비) |
-| `Hatch` / `HatchRare` | 부화 '빠직+반짝' / 희귀(전설 이상) 팡파레 | `HatchResult` |
-| `Fusion` | 퓨전 '윙윙~ 펑!' | `FusionResult` |
-| `Coin` | 돈 '짤랑' (아주 작게, 2초에 한 번까지) | 돈이 늘 때 |
-| `Purchase` | 구매 '차링!' | 성공 알림 |
-| `Error` | '뿡' | 실패 알림 |
-| `Notify` | '띵' | 안내 알림 |
-| `Reward` | 보상 반짝 상승음 | 도감 보상 |
-| `NightBell` | 밤 종소리 '댕~' | 밤 공지 |
-| `DayStart` | 아침 차임 | 낮 공지 |
-| `Reset` | '휘리릭' | ALL EGG RESET |
-| `RareEgg` | 희귀 알 팡파레 | 희귀 알 공지 |
-| `Offline` | 돈 쏟아지는 소리 | 오프라인 수입 팝업 |
-| `Equip` | '뾱' | 장착 버튼 |
-| `Drop` (2판) | 알 내려놓기 '툭' | 드롭 버튼 |
-| `ZoneEnter` (2판) | 새 구역 '휙+짠' | 구역 배너 ("Jungle 😬") |
-| `TreadmillStep` (2판) | 러닝머신 걸음 '탁' (작게) | `TreadmillStep` "+500" 팝업 |
-| `Sell` (2판) | 펫 판매 '짤랑짤랑' | 펫 창 판매 버튼 |
-| `Swing` (2차) | 무기 휘두르기 '휙!' | 손 모양 휘두를 때 (쿨다운마다 한 번) |
-| `FusionCharge` (2차) | 퓨전 빛 모으기 '우우웅~' | `FusionResult` 직후 (`Fusion` '펑!' 은 1.2초 뒤) |
-| `Bloom` / `SpiritBloom` (2차) | 꽃잎 반짝 / 신비로운 합창 | `SakuraResult` 블룸 / 스피릿 블룸 |
-| `Unlock` (2차) | 철컥 + 반짝 | 사쿠라 인큐베이터 해금 |
-| `AltarOffer` / `AltarPaired` (2차) | 낮은 종 '웅~' / 천사 합창 + 쿵! | 제물 바치기 / 짝 성공 |
-| `Shrine` (2차) | 마법진 '위잉~ 쾅!' | `ShrineResult` |
-| `Pet` (5판) | 뾱 + 반짝 (기존 ID 재사용) | 펫 쓰다듬기 (`PetPetted`, 내 펫이거나 80 안) |
-| `TutorialStep` / `TutorialDone` (5판) | 반짝 알림 / 팡파레 (기존 ID 재사용) | 튜토리얼 다음 단계 / 끝 ($500) |
-| `Bgm_base` (음악) | 밝고 신나는 음악 | 베이스·광장·길 |
-| `Bgm_forest` … `Bgm_haunted_castle` (음악 15개) | 구역 분위기 (Sounds.luau 설명 참고) | 그 구역에 들어가면 부드럽게 바뀜 |
+### 4-3. 튜토리얼 가리키기 (TutorialController, 6판 단계)
+1 숲에서 씨앗 훔치기 → 노란 빔 "숲으로!"(허브) / "씨앗 훔치기!"(가장 가까운 둥지) · 2 안전 구역으로 → 경계 "안전 구역" · 3 핫바에서 씨앗을 골라 정원에 심기 → 핫바 씨앗 칸 반짝 + 내 정원 "정원에 심기" · 4 성체까지 기다리기 → 남은 시간이 가장 적은 내 씨앗 "자라는 중… n초"/"곧 성체가 돼요!" · 5 열매 따서 팔기 → 열매 가방이 비면 열매 달린 내 성체 "열매 따기!"(+ 정원 식물 창 `PickFruit`/`PickAllFruit` 반짝), 가방에 열매가 있으면 가장 가까운 판매 가판대 "열매 팔기!". 끝 = 색종이 + "500 코인 받았어요!".
 
 ---
 
+## 5. 소리 (`src/shared/Data/Sounds.luau`)
 
-## 6. 스튜디오에서 꼭 볼 것 (체크리스트, 2판)
+ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 기존 무료 ID 를 다시 씀 — 더 좋은 소리를 찾으면 숫자만 바꾸세요.
 
-1. **복도 전체**: 허브에서 +Z 쪽을 보면 담장·체크무늬 바닥이 원작처럼 이어지는지, 구역 경계 모래띠, 담장 위 초록 띠. 스터드가 보이는지(Plastic + Studs). 너무 어둡거나 안개가 짙지 않은지(구역 Atmosphere 를 0.2~0.3 으로 낮춤).
-2. **"안전 구역" 글씨 방향**: z=0 바닥 글씨가 허브에서 복도를 볼 때 똑바로 읽히는지 (SurfaceGui Top 면 + Y 180도 회전 — 거꾸로면 `SafeZoneText` 회전만 0 으로).
-3. **베이스**: 울타리 X자 보강재 각도, 출입구, 업그레이드 표지판 글씨 방향(복도 쪽에서 읽힘), 판매 가게·주인 간판·러닝머신·퓨즈 머신이 서로 안 겹치는지. 러닝머신 레벨 1~10 모양(`/` 명령이나 DevCommands 로 레벨 올려 보기).
-4. **구역 장식**: 둥지·경비 길을 막지 않는지, 담장 쪽에만 있는지. 호수 물·심연 모래 테두리·화산 용암 줄·코스믹 별.
-5. **펫·경비·알**: 펫 블록 모양이 또렷한지, 우리 격자 진열·이름표 3줄, 거대 경비(25~40) 발이 땅에 닿는지·자는 자세·Z, 계단형 알과 "♂ 4,740Kg".
-6. **HUD**: 원작 사진과 나란히 — 왼쪽 버튼, 왼쪽 아래 숫자 크기·색, 오른쪽 알/발바닥 버튼, 오른쪽 아래 시간, 알 들 때 "달리기!!" + 비네트 + 드롭, 구역 배너, "+$34K", "+500".
-7. **폰 에뮬레이터**(844×390, 750×381): 메뉴가 조이스틱과 안 겹치는지, 위 한 줄 속도·돈, 오른쪽 위 시간, 핫바·드롭 버튼·러닝머신 "내리기".
-8. **슬로우 모드**: 켜면 걷기가 절반, 끄면 원래. 러닝머신에서 WASD 안 먹고 점프로 내려오는지.
-9. 출력 창에 `[Net] Remote 아직 없음` / 빨간 오류가 없는지.
-10. **5판**: `/egg dog` 로 알을 받으면 핫바에 알 칸이 바로 생기는지 → 누르면 초록 미리보기 → 우리 바닥 클릭(폰 "여기 놓기") → 3초 뒤 E 로 부화. 우리 펫이 천천히 돌아다니고 알·울타리·서로를 피하는지, 우리 앞에 가면 나를 보고 폴짝. F 로 쓰다듬으면 하트·소리. `/tutorial reset` 으로 위 가운데 1/5 패널·노란 빔·화살표, 끝나면 색종이 + "$500 받았어요!". 오른쪽 위 랭킹판(10초마다), 허브 스폰 왼쪽 앞 3D 랭킹판 글씨 방향.
+| 이름 | 소리 | 언제 |
+|---|---|---|
+| `Click` / `Open` / `Close` | 톡 / 뿅 / 슉 | 버튼·창 |
+| `Pickup` · `RunAlert` · `Chase`(음악) | 퐁! · 사이렌 · 추격 음악 | 씨앗 줍기 (`RunAlert`) |
+| `Caught` / `Trap` / `Bat` / `Swing` | 퍽 / 철컥 / 붕 / 휙 | 잡힘·곰덫·무기 |
+| `Deliver` · `Drop` | 띠링~ · 툭 | 씨앗 가방에 (`EggDelivered`) · 드롭 |
+| **`Grown` / `GrownRare`** (6판) | 짠 / 팡파레 (전설 이상) | `PlantGrown` |
+| **`FruitPick`** (6판) | 뽁! (0.15초에 한 번) | `FruitPicked` |
+| **`FruitSell`** (6판) | 짤랑짤랑 | `FruitsSold` |
+| **`Feed` / `FeedMutate`** (6판) | 냠냠 / 반짝 | `FeedResult` (mutation 없음 / 있음) |
+| **`Water`** (6판) | 졸졸 + 물방울 | `PetPetted` (물 주기) |
+| `SakuraOffer` · `Bloom` / `SpiritBloom` | 철컥+반짝 · 꽃잎 반짝 / 합창 | `SakuraResult` offered · draw (정령 벚꽃 = 비밀 이상) |
+| `Coin` · `Purchase` · `Error` · `Notify` · `Reward` | 짤랑(작게) · 차링 · 뿡 · 띵 · 반짝 상승 | 코인 늘 때 · 성공 · 실패 · 안내 · 도감 보상 |
+| `NightBell` / `DayStart` / `Reset` / `RareEgg` | 종 / 차임 / 휘리릭 / 팡파레 | 밤 · 낮 · ALL SEED RESET · 특별 씨앗 공지 |
+| `ZoneEnter` · `TreadmillStep` | 휙+짠 · 탁 | 구역 배너 · 러닝머신 |
+| `TutorialStep` / `TutorialDone` | 반짝 / 팡파레 | 튜토리얼 단계 / 끝 (500 코인) |
+| `Bgm_base`, `Bgm_forest` … `Bgm_haunted_castle` (음악) | 베이스 / 구역 분위기 | 있는 곳이 바뀌면 |
+
+6판에서 지운 소리: `Hatch`·`HatchRare`·`HatchReady`(→ `Grown`), `Offline`(오프라인 수입), `Equip`(장착), `Sell`(펫 판매), `Pet`(쓰다듬기 → `Water`), `Unlock`(→ `SakuraOffer`). 퓨전·제단·비밀 통로 소리도 없음.
+
+---
+
+## 6. 스튜디오에서 꼭 볼 것
+
+사장님용 번호 체크리스트는 `docs/STUDIO_CHECKLIST.md` (씨앗 줍기 → 심기 → 단계 → 성체 → 열매 따기 → 팔기 → 먹이기 → 건너뛰기 → 물 주기 → 사쿠라 → 도감 → 러닝머신 20레벨). 선임이 특히 걱정하는 것:
+1. **씨앗 4단계·성체 모양**: 단계마다 모양이 바뀌는지, 식물이 바닥에 붙어 있는지(떠 있거나 묻히지 않음), 이름표·프롬프트·"+열매" 팝업 높이(`VisualHeight`)가 모양에 맞는지, 열매 개수가 따기에 맞게 보이고 사라지는지.
+2. **흔들기·아우라**: 가까운 식물만 살랑살랑(원래 자리에서 밀리지 않음), 희귀 이상 아우라가 100 스터드 안에서만 켜지고 정원에 식물이 많아도 안 끊기는지.
+3. **식물 괴물 16종**: 키·발 위치(땅에 닿음), 자는 얼굴 ↔ 추격 얼굴, 잡힘 거리가 5판과 같은지.
+4. **판매 가판대 E/F 두 프롬프트**가 겹치지 않고 따로 눌리는지, 건너뛰기 확인 창 가격이 1초마다 줄어드는지.
+5. **사쿠라 나무**·**러닝머신 11~20레벨 모양**·폰 에뮬레이터(오른쪽 버튼 3개와 점프 버튼).
 
 ## 7. 알려진 한계 / 다음 할 일
-- ~~트레일 장착/장착 해제~~ — 됨 (2판 마무리, `EquipTrail`).
-- 랭킹판: 5판부터 우리 화면(LeaderboardController, `LeaderboardUpdate`). 로블록스 기본 플레이어 목록은 같은 자리라 끔 (leaderstats 는 서버에 그대로).
-- 로벅스 상품·"모두 성장시키기"·"월드" 버튼은 준비 중(꺼 둠).
-- 러닝머신 위 제자리 달리기 애니메이션(캐릭터 고정·발 움직임)은 서버 TreadmillService 담당 — 클라는 입력만 끔.
-- 구역 장식·펫 모양은 Lune 에서 만들어지는 것까지만 확인 → 스튜디오에서 모양 확인 필요(6장).
-- 경비 이름표(GuardianService, 수석)가 머리 3스터드 위라 거대 경비 몸 안에 묻힐 수 있음 → 겉모습 `Height` 위로 올려야 함.
+- 둥지 파트는 아직 5판 둥지 모양 ("씨앗 주머니/꽃받침" 은 다음에).
+- 로벅스 건너뛰기·"모두 성장시키기"·"월드" 버튼은 준비 중(꺼 둠, 어른 확인 필요).
+- 식물·괴물 모양은 Lune 에서 만들어지는 것(파트 수·이름·Attr)까지만 확인 → 생김새는 스튜디오에서.
+- 6판 소리는 기존 무료 ID 재사용 — 더 어울리는 소리로 바꾸면 좋음.
 
 ## 8. 스모크 테스트 (Lune, 스튜디오 없이)
 
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
-lune run tests/smoke_visuals.luau   # 서버: (5판: 펫 쓰다듬기 프롬프트·OwnerUserId, 60×46 우리에서 18마리 25초 돌아다니기 — 울타리·놓인 알·다른 펫 안 겹침, 통통·방향, 주인 오면 한 번 폴짝) 2판 맵(구역 15 = MapLayout z 범위, 둥지 자리, 파트 수 ≤ 12000, 2048 한계, 판매 8·트레일 1·밤 벽 1, 베이스 7 우리 방향·러닝머신 자리·레벨 0~10 모양·표지판 숫자·주인 간판), 특수 장소 모델, 펫 134종(평균 30~80 파트), 우리 격자, 경비 15종 크기·자세, 알 6층·무게 라벨
-lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작, 창 6개(인덱스·상점·트레일·펫 판매…), 폰 버튼 46px, 2판 HUD(알 버튼·패널·▶·발바닥·시간 글자), 3판 알 창(성장 중 탭 "부화 가능!"·가방 버튼 → PickUpPlacedEgg, 가방 탭 카드·놓기 46px·창 높이), 알 놓기 모드(초록/빨강: 우리 안·앞마당·놓인 알 옆·울타리·멀리 서 있음, 여기 놓기 → PlaceEgg(uid, 월드 x, z), ESC·취소·가방에서 사라짐·우리 가득), 부화!/집기 프롬프트(남의 알 없음), 떨어진 알 "32초", 배달·선물 알 토스트 "가방에 들어갔어요", 업그레이드 표지판·판매 가게·트레일 상점 프롬프트, 달리기!!·드롭·알 칸, 러닝머신(점프→TreadmillLeave, +500), 구역 배너, +$34K, 슬로우 모드, 희귀 알 공지, 퓨전·사쿠라·제단·비밀 통로·무기, 5판(핫바 알 칸 → 놓기 모드·숫자키·"…n"·새 알 바로, 튜토리얼 패널 1~5단계 가리키기·위 가운데 내리기·축하, 랭킹판 탭·접기·내 줄·허브 판, 쓰다듬기 프롬프트·PetPet·하트·주인 거르기), 반응형 HUD(750×381·844×390·1428×750, 튜토리얼 패널·랭킹판 겹침 포함)
+lune run tests/smoke_visuals.luau   # 서버: 맵(15구역·파트 상한 7,000·사쿠라 나무·러닝머신 20 모양), 식물 134종 모델(파트 수·모양 다 다름), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴)
+lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·FeedFruit·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·FeedResult·PetPetted·SakuraResult), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침
 ```
-`@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 체크리스트로 스튜디오에서.
+`@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 / STUDIO_CHECKLIST 로 스튜디오에서.

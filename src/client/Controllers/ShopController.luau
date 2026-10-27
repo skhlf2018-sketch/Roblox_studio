@@ -2,10 +2,11 @@
 --[[
 	ShopController — 상점 창 (2판: 원작 초록 창 + 오른쪽 세로 탭)
 
-	  탭 "업그레이드"(기본): 카드 2장 — 펫 우리(장착 칸) / 러닝머신(걸음당 속도, 레벨 모양 이름)
-	      사기 버튼 → PurchaseUpgrade("Pen" | "Treadmill"). 돈이 모자라면 회색 (서버가 다시 검사)
+	  탭 "업그레이드"(기본): 카드 2장 — 정원(칸 수 Economy.penSlots) / 러닝머신(1초 속도
+	      Economy.treadmillGainPerSecond, 20레벨 = 1,000,000, 레벨 모양 이름 20개)
+	      사기 버튼 → PurchaseUpgrade("Pen" | "Treadmill"). 코인이 모자라면 회색 (서버가 다시 검사)
 	  탭 "트레일": 트레일 상점 창(TrailController)을 엶
-	  탭 "추천"·"속도"·"돈": 로벅스 상품 — 어른 확인 전이라 "준비 중" 카드만 보여 줌 (사지 못함)
+	  탭 "추천"·"속도"·"코인": 로벅스 상품 — 어른 확인 전이라 "준비 중" 카드만 보여 줌 (사지 못함)
 	베이스 업그레이드 표지판(Visuals.Tags.UpgradeSign, 내 베이스 것만)에 "업그레이드" 프롬프트 → 같은 구매 요청.
 ]]
 
@@ -33,9 +34,29 @@ local C = Theme.Colors
 local NAME = "Shop"
 local SIZE = Vector2.new(820, 520)
 
--- 러닝머신 레벨 모양 이름 (MapBuilder TREAD_STYLES 와 같은 순서)
-local TREADMILL_NAMES =
-	{ "기본", "사이파이", "불꽃", "셀럽", "황금", "얼음", "럭키블록", "해커", "악마", "천사" }
+-- 러닝머신 레벨 모양 이름 20개 (MapBuilder TREAD_STYLES 와 같은 순서, 6판 20레벨)
+local TREADMILL_NAMES = {
+	"기본",
+	"사이파이",
+	"불꽃",
+	"셀럽",
+	"황금",
+	"얼음",
+	"럭키블록",
+	"해커",
+	"악마",
+	"천사",
+	"정글",
+	"바다",
+	"사탕",
+	"벚꽃",
+	"용암",
+	"수정",
+	"유령",
+	"은하",
+	"무지개",
+	"황제",
+}
 ShopController.TREADMILL_NAMES = TREADMILL_NAMES
 
 local ROBUX_ITEMS: { [string]: { { title: string, sub: string, color: Color3, icon: string } } } = {
@@ -50,9 +71,9 @@ local ROBUX_ITEMS: { [string]: { { title: string, sub: string, color: Color3, ic
 		{ title = "+10만 속도", sub = "한 번", color = Color3.fromRGB(40, 150, 255), icon = "shoe" },
 	},
 	money = {
-		{ title = "x2 돈", sub = "영원히", color = Color3.fromRGB(60, 190, 60), icon = "money" },
-		{ title = "$1M", sub = "한 번", color = Color3.fromRGB(60, 190, 60), icon = "money" },
-		{ title = "$1B", sub = "한 번", color = Color3.fromRGB(60, 190, 60), icon = "money" },
+		{ title = "x2 코인", sub = "영원히", color = Color3.fromRGB(230, 170, 30), icon = "coin" },
+		{ title = "1M 코인", sub = "한 번", color = Color3.fromRGB(230, 170, 30), icon = "coin" },
+		{ title = "1B 코인", sub = "한 번", color = Color3.fromRGB(230, 170, 30), icon = "coin" },
 	},
 }
 
@@ -92,7 +113,7 @@ function ShopController.start()
 			{ "trail", "트레일", "trail" },
 			{ "featured", "추천", "star" },
 			{ "speed", "속도", "shoe" },
-			{ "money", "돈", "money" },
+			{ "money", "코인", "coin" },
 		}
 	do
 		local id = spec[1]
@@ -185,14 +206,16 @@ function ShopController.start()
 			end
 			local penLevel = snap.penLevel or 1
 			local penCost = Economy.nextPenCost(penLevel)
-			local pen = card(row, 1, Color3.fromRGB(70, 170, 60), "paw", "펫 우리 업그레이드", {
+			local pen = card(row, 1, Color3.fromRGB(70, 170, 60), "plant", "정원 업그레이드", {
 				string.format("레벨 %d > 레벨 %d", penLevel, if penCost then penLevel + 1 else penLevel),
-				string.format(
-					"장착 칸 %d → %d",
-					Economy.penSlots(penLevel),
-					Economy.penSlots(if penCost then penLevel + 1 else penLevel)
-				),
-				"펫이 많을수록 돈을 더 벌어요",
+				if penCost
+					then string.format(
+						"정원 칸 %d → %d",
+						Economy.penSlots(penLevel),
+						Economy.penSlots(penLevel + 1)
+					)
+					else string.format("정원 칸 %d (최대!)", Economy.penSlots(penLevel)),
+				"씨앗과 식물을 더 많이 심어요",
 			})
 			pen.Name = "PenCard"
 			buyButton(pen, penCost, function()
@@ -207,12 +230,15 @@ function ShopController.start()
 					else string.format("레벨 %d > 레벨 %d", tLevel, if tCost then tLevel + 1 else tLevel),
 				if tCost
 					then string.format(
-						"%s 러닝머신: +%s/스텝",
+						"%s 러닝머신: 1초에 속도 +%s",
 						nextName,
-						Format.number(Economy.treadmillPerStep(tLevel + 1))
+						Format.number(Economy.treadmillGainPerSecond(tLevel + 1))
 					)
-					else "최고 러닝머신이에요!",
-				"올라서면 걸음마다 속도가 올라요",
+					else string.format(
+						"최고 러닝머신! 1초에 속도 +%s",
+						Format.number(Economy.treadmillGainPerSecond(tLevel))
+					),
+				"올라서면 1초마다 속도가 올라요",
 			})
 			tread.Name = "TreadmillCard"
 			buyButton(tread, tCost, function()
@@ -274,7 +300,7 @@ function ShopController.start()
 		name = "UpgradePrompt",
 		action = "업그레이드",
 		object = function(part: BasePart): string
-			return if part:GetAttribute("Kind") == "Pen" then "펫 우리" else "러닝머신"
+			return if part:GetAttribute("Kind") == "Pen" then "정원" else "러닝머신"
 		end,
 		distance = 10,
 		enabled = function(part: BasePart): boolean

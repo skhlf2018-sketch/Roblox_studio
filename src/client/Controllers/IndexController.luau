@@ -1,20 +1,22 @@
 --!strict
 --[[
-	IndexController — 펫 인덱스 창 (2판: 원작 화면 그대로)
+	IndexController — 식물 도감 창 (2판 원작 화면 → 6판 "씨앗을 훔치세요" 성체 도감)
 
-	  ┌ 펫 인덱스 ─────────────────────────────── [X] ┐   [월드]
-	  │ [구역  ]  [카드][카드][카드][카드]   [ 선택 펫 3D ] │
+	  ┌ 식물 도감 ────────────────────────────── [X] ┐   [월드]
+	  │ [구역  ]  [카드][카드][카드][카드]   [ 선택 식물 3D ] │
 	  │ [그림  ]  [카드][카드][카드][카드]   ???  일반  [>] │
-	  │ [목록 ↕]  [■■■□□□□□ 1/8      ]     보상: $100 +420 │
+	  │ [목록 ↕]  [■■■□□□□□ 1/8      ]     보상: 100 코인 +420 │
 	  │                                    [  획득!  ]     │
 	  │ [📘 모두 획득 (n)!  /  잠금 해제: 18/134         ] │
 	  └───────────────────────────────────────────────────┘
 	- 왼쪽: 구역 15개 그림 탭 (세로 스크롤). 받을 보상이 있는 구역은 "!" 표시
-	- 가운데: 구역 펫 카드 (희귀도 색 바탕, 발견 전 검은 실루엣 "???") + 진행바 "발견/전체"
-	- 오른쪽: 고른 펫 크게 + 이름·희귀도·초당 수입 + 빨간 ">" (다음 펫) + 보상(돈·속도) + "획득!" → ClaimIndexReward(petId)
+	- 가운데: 구역 식물 카드 (등급 색 바탕 — 등급 11개, 신성·슈퍼 울트라디바인은 무지개 띠, 발견 전 검은 실루엣 "???")
+	  + 진행바 "발견/전체". 발견 = 한 번이라도 성체가 됨
+	- 오른쪽: 고른 식물 크게 + 이름·등급 + "열매 1개 N 코인 · N초마다" + 빨간 ">" (다음 식물)
+	  + 보상(코인·속도) + "획득!" → ClaimIndexReward(plantId)
 	- 아래: "모두 획득 (n)!" → ClaimIndexReward("all"), 받을 게 없으면 "잠금 해제: 발견/134"
 	- 창 오른쪽 위 밖의 "월드" 버튼: 다른 월드는 준비 중 안내
-	데이터: State.indexDiscovered / indexClaimed, 보상 미리보기 Index.reward (shared)
+	데이터: State.indexDiscovered / indexClaimed, 보상 미리보기 Index.reward (shared, 코인 = 열매 1개 값 × 10)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -109,8 +111,19 @@ local function zonePicture(parent: Instance, biomeId: string)
 	end
 end
 
+-- 신성·슈퍼 울트라디바인: 무지개 띠 (카드 바탕·등급 글씨)
+local function rainbow(target: GuiObject, rarityId: string)
+	if Theme.RainbowRarities[rarityId] then
+		local g = Instance.new("UIGradient")
+		g.Name = "Rainbow"
+		g.Color = Theme.RAINBOW
+		g.Rotation = 20
+		g.Parent = target
+	end
+end
+
 function IndexController.start()
-	local window = Ui.window(NAME, "펫 인덱스", C.indexCyan, SIZE, function()
+	local window = Ui.window(NAME, "식물 도감", C.indexCyan, SIZE, function()
 		Windows.close(NAME)
 	end)
 	local content = window.content
@@ -237,7 +250,7 @@ function IndexController.start()
 			Parent = tile,
 		})
 	end
-	local rewardMoney = rewardTile(40, "money")
+	local rewardMoney = rewardTile(40, "coin")
 	local rewardSpeed = rewardTile(130, "shoe")
 	local claimH = Ui.touch(56, SIZE)
 	local claim = Ui.button("획득!", Color3.fromRGB(150, 150, 160), UDim2.new(1, -24, 0, claimH), nil, {
@@ -320,9 +333,21 @@ function IndexController.start()
 		detailName.Text = if found then pet.name else "???"
 		detailRarity.Text = if rarity then rarity.name else pet.rarity
 		detailRarity.TextColor3 = Theme.rarityColor(pet.rarity)
-		-- [6판 수석 임시] 열매 1개 값 (5판: 초당 수입). 표시 모양은 선임
+		local oldRainbow = detailRarity:FindFirstChild("Rainbow")
+		if oldRainbow then
+			oldRainbow:Destroy()
+		end
+		if Theme.RainbowRarities[pet.rarity] then
+			detailRarity.TextColor3 = C.white
+			rainbow(detailRarity, pet.rarity)
+		end
+		-- 열매 1개 값(보통 크기·돌연변이 없음) + 열매 맺는 간격
 		detailIncome.Text = if found
-			then "열매 " .. Format.number(Economy.fruitValue(pet.id, "normal", {}))
+			then string.format(
+				"열매 1개 %s · %d초마다",
+				Format.money(Economy.fruitValue(pet.id, "normal", {})),
+				math.floor(Economy.fruitInterval(pet.id) + 0.5)
+			)
 			else "???"
 		local biome = Biomes.get(selected)
 		local reward = Index.reward(pet.rarity, pet.fruitValue, if biome then biome.recommendedSpeed else 0)
@@ -358,7 +383,11 @@ function IndexController.start()
 				Parent = grid,
 			})
 			Ui.corner(6).Parent = card
-			Ui.gradient(Theme.lighter(rcolor, 0.3), Theme.darker(rcolor, 0.15)).Parent = card
+			if Theme.RainbowRarities[pet.rarity] then
+				rainbow(card, pet.rarity)
+			else
+				Ui.gradient(Theme.lighter(rcolor, 0.3), Theme.darker(rcolor, 0.15)).Parent = card
+			end
 			local stroke =
 				Ui.stroke(if pet.id == selectedPet then C.white else C.winEdge, if pet.id == selectedPet then 4 else 2)
 			stroke.Parent = card

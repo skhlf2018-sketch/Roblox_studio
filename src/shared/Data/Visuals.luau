@@ -4,33 +4,22 @@
 
 	선임 담당. 서버 PetVisualService / EggVisualService / MapBuilder 와 클라 연출이 읽습니다.
 
-	[6판 수석 임시 변경 — 선임이 식물 모양으로 바꿀 때까지] 식물 id(Data/Plants) 가 5판 펫 id 를 대신해서,
-	  pets 표 열쇠를 같은 구역·같은 순서의 새 식물 id 로 기계적으로 바꿈 (모양은 아직 5판 동물).
-	  경비 겉모습(Visuals.guards)은 옛 펫 id 그대로 extra 표로 옮김 (PetVisualService GUARD_EXTRAS 가 그 id 로 찾음).
-	  rarityEffects/eggLooks/specialEggs: eternal → eternity, + super_ultradivine. mutationLooks + frozen/burning/shocked.
+	6판 "씨앗을 훔치세요" (선임):
+	  - 식물 134종 생김새 = 구역 테마(plantThemes) + 이름 낱말(FORM_WORDS) + id 해시 → Visuals.plantLook(id)
+	    (PlantVisualService 가 모양 16종 PLANT_FORMS 로 만듦). 대표 색 Visuals.petColor(id, 1~3) = 꽃잎·잎·열매.
+	  - 경비 15종(+ 어두운 쪽 1) = 식물 괴물 (Visuals.monsters + Visuals.guards, PetVisualService.buildMonster).
+	  - 등급 아우라 11종 (Visuals.auras, 이름 = Rarities.aura), 돌연변이 겉모습 (mutationLooks, 원소 3종 effect).
+	  - 씨앗 껍데기 (eggLooks, EggVisualService: 아몬드 모양 + 등급 줄무늬).
 	색은 RGB 0~255 배열. Material 은 Enum.Material 이름(문자열).
-
-	펫 체형(body) 템플릿 17종:
-	  bird(새) quad(네발짐승) fish(물고기) snake(뱀) bug(곤충) spider(거미) dragon(드래곤) ghost(유령)
-	  humanoid(사람형) frog(개구리) turtle(거북) whale(고래) jelly(해파리/문어) lizard(도마뱀)
-	  blob(동글이) dino(공룡) penguin(펭귄)
-	장식(features): 쉼표로 여러 개. PetVisualService 의 FEATURES 표에 있는 이름만 사용.
 
 	4판 비주얼: 구역 테마에 바닥 무늬(pattern)·가운데 길(path)·가운데 작은 장식(scatter)·담장 면 장식(wallDecor)·
 	입구 아치(arch)·담장 기둥 색(pilaster), 알 등급별 모양(eggLooks). 장식 개수는 MapBuilder 파트 상한
 	(구역 ≤ 400, 맵 ≤ 7,000) 안에서 정함 — 늘리면 lune run tests/smoke_visuals.luau 로 상한 확인.
 ]]
 
-export type Color = { number }
+local Plants = require(script.Parent.Plants)
 
-export type PetVisual = {
-	body: string,
-	colors: { Color }, -- [1] 몸 [2] 배/무늬 [3] 포인트
-	features: { string },
-	material: string?, -- 몸 재질 (기본 SmoothPlastic)
-	ghostly: boolean?, -- 반투명
-	glow: boolean?, -- 포인트 색을 네온으로
-}
+export type Color = { number }
 
 export type DecorSpec = { kind: string, count: number }
 
@@ -105,336 +94,563 @@ Visuals.palette = C
 
 -- 맵/연출 전용 태그 (shared/Tags.luau 는 수석 파일이라 따로 둠)
 Visuals.Tags = {
-	PenPet = "PenPet", -- 우리 펫 모델 (5판: 서버가 우리 안을 돌아다니게 함, Attr PetUid·OwnerUserId, 쓰다듬기 프롬프트 PetPrompt)
-	ParentAnimal = "ParentAnimal", -- 둥지 옆 부모 동물 모델
+	PenPet = "PenPet", -- [5판 우리 펫 — 6판 서버는 안 만듦] 이름만 남김 (옛 클라 코드 호환)
+	ParentAnimal = "ParentAnimal", -- 둥지 옆 장식 식물 모델 (6판: 그 구역 식물, 5판 부모 동물 자리)
+	AuraFx = "AuraFx", -- 6판: 등급 아우라·돌연변이 파티클/빛을 담은 파트 (서버는 Enabled = false, 클라가 100 스터드 안만 켬)
 	GuardVisual = "GuardVisual", -- 경비 겉모습 모델
 	RarityHighlight = "RarityHighlight", -- 희귀도 테두리 Highlight (클라가 가까운 것만 켬, 31개 한계)
-	EggShell = "EggShell", -- 알 껍데기 비주얼 파트 (레인보우 색 순환)
+	EggShell = "EggShell", -- 씨앗 껍데기·무지개 돌연변이 식물 파트 (Attr Rainbow = true 면 클라가 색 순환)
 	Ambient = "AmbientEmitter", -- 구역 분위기 파티클
 	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 클라가 "업그레이드" 프롬프트
 	LeaderboardBoard = "LeaderboardBoard", -- 5판: 허브 스폰 광장 랭킹판 (판 파트만, Front 면 글은 클라 LeaderboardController 가 채움)
 }
 
 ------------------------------------------------------------------
--- 펫 생김새 (134종 전부)
+-- 6판: 식물 생김새 (134종) — 손으로 하나씩 만들지 않고 "구역 테마 + 이름 낱말 + id 해시" 로 정함
+--   PlantVisualService 가 이 표로 모델을 만듦 (모양 form · 색 · 잎/꽃잎 수 · 열매 모양).
+--   form: 이름 낱말이 먼저 (버섯 → mushroom, 선인장 → cactus …), 없으면 구역 테마 forms 중 해시로 고름.
+--   색: 구역 팔레트에서 해시로 고르고 살짝 흔듦(서로 조금씩 다르게). 등급 색은 PlantVisualService 가 받침 고리·크기로.
 ------------------------------------------------------------------
 
-local pets: { [string]: PetVisual } = {}
+export type PlantTheme = {
+	forms: { string },
+	leaf: Color,
+	stem: Color,
+	petals: { Color },
+	fruits: { Color },
+	glow: boolean?, -- 꽃 가운데·열매를 네온으로 (밤 구역·바다·코스믹)
+	petalMaterial: string?,
+}
 
-type PetOpts = { material: string?, ghostly: boolean?, glow: boolean? }
+-- PlantVisualService 가 아는 모양 (crossrefs.spec 이 서버 코드와 대조)
+Visuals.PLANT_FORMS = {
+	"flower",
+	"cup",
+	"rose",
+	"tree",
+	"pine",
+	"palm",
+	"cactus",
+	"mushroom",
+	"lotus",
+	"reed",
+	"vine",
+	"fern",
+	"gourd",
+	"coral",
+	"crystal",
+	"candy",
+}
 
-local function split(text: string): { string }
-	local result: { string } = {}
-	for word in string.gmatch(text, "[^,%s]+") do
-		table.insert(result, word)
+Visuals.plantThemes = {
+	forest = {
+		forms = { "flower", "tree" },
+		leaf = { 80, 175, 70 },
+		stem = { 70, 130, 55 },
+		petals = { { 255, 255, 255 }, { 255, 220, 90 }, { 255, 150, 190 } },
+		fruits = { { 230, 60, 60 }, { 255, 170, 60 }, { 150, 90, 200 } },
+	},
+	lake = {
+		forms = { "lotus", "reed" },
+		leaf = { 70, 180, 120 },
+		stem = { 60, 140, 100 },
+		petals = { { 170, 200, 255 }, { 255, 190, 220 }, { 255, 255, 255 } },
+		fruits = { { 90, 150, 255 }, { 120, 220, 255 }, { 200, 140, 255 } },
+	},
+	desert = {
+		forms = { "cactus", "palm" },
+		leaf = { 120, 170, 80 },
+		stem = { 150, 120, 70 },
+		petals = { { 255, 120, 140 }, { 255, 200, 80 }, { 255, 150, 60 } },
+		fruits = { { 255, 90, 120 }, { 255, 200, 60 }, { 230, 120, 50 } },
+	},
+	jungle = {
+		forms = { "vine", "fern" },
+		leaf = { 40, 160, 60 },
+		stem = { 90, 110, 40 },
+		petals = { { 255, 90, 60 }, { 255, 200, 40 }, { 200, 60, 200 } },
+		fruits = { { 255, 220, 50 }, { 255, 130, 40 }, { 120, 220, 80 } },
+	},
+	snow = {
+		forms = { "pine", "cup" },
+		leaf = { 120, 190, 170 },
+		stem = { 90, 120, 140 },
+		petals = { { 220, 240, 255 }, { 170, 220, 255 }, { 255, 255, 255 } },
+		fruits = { { 150, 220, 255 }, { 230, 245, 255 }, { 120, 170, 255 } },
+		petalMaterial = "Ice",
+	},
+	volcano = {
+		forms = { "flower", "cactus" },
+		leaf = { 90, 70, 60 },
+		stem = { 50, 40, 40 },
+		petals = { { 255, 110, 30 }, { 255, 60, 40 }, { 255, 200, 60 } },
+		fruits = { { 255, 90, 30 }, { 255, 180, 40 }, { 200, 30, 30 } },
+		glow = true,
+	},
+	abyss_ocean = {
+		forms = { "coral", "reed" },
+		leaf = { 40, 120, 130 },
+		stem = { 30, 90, 110 },
+		petals = { { 90, 230, 255 }, { 255, 120, 200 }, { 160, 120, 255 } },
+		fruits = { { 120, 255, 240 }, { 255, 150, 220 }, { 120, 160, 255 } },
+		glow = true,
+	},
+	prehistoric = {
+		forms = { "fern", "tree" },
+		leaf = { 90, 140, 50 },
+		stem = { 110, 85, 50 },
+		petals = { { 220, 170, 70 }, { 180, 110, 60 }, { 240, 220, 120 } },
+		fruits = { { 230, 150, 40 }, { 200, 90, 50 }, { 160, 200, 70 } },
+	},
+	cosmic = {
+		forms = { "mushroom", "crystal" },
+		leaf = { 90, 70, 170 },
+		stem = { 60, 50, 110 },
+		petals = { { 150, 90, 255 }, { 90, 200, 255 }, { 255, 120, 230 } },
+		fruits = { { 255, 240, 140 }, { 160, 120, 255 }, { 120, 230, 255 } },
+		glow = true,
+	},
+	cherry_blossom = {
+		forms = { "tree", "flower" },
+		leaf = { 110, 160, 90 },
+		stem = { 110, 70, 60 },
+		petals = { { 255, 180, 210 }, { 255, 220, 235 }, { 240, 130, 170 } },
+		fruits = { { 255, 110, 150 }, { 200, 60, 90 }, { 255, 200, 220 } },
+	},
+	titan_temple = {
+		forms = { "crystal", "tree" },
+		leaf = { 100, 140, 80 },
+		stem = { 140, 135, 125 },
+		petals = { { 255, 210, 90 }, { 230, 230, 220 }, { 200, 170, 110 } },
+		fruits = { { 255, 200, 50 }, { 240, 240, 230 }, { 180, 140, 80 } },
+	},
+	angels_demons = {
+		forms = { "cup", "rose" },
+		leaf = { 150, 200, 140 },
+		stem = { 170, 160, 130 },
+		petals = { { 255, 255, 255 }, { 255, 230, 140 }, { 200, 40, 50 } },
+		fruits = { { 255, 240, 170 }, { 230, 60, 60 }, { 255, 255, 255 } },
+	},
+	enchanted_forest = {
+		forms = { "mushroom", "flower" },
+		leaf = { 60, 170, 120 },
+		stem = { 80, 110, 80 },
+		petals = { { 170, 255, 220 }, { 200, 150, 255 }, { 255, 190, 240 } },
+		fruits = { { 150, 255, 200 }, { 210, 160, 255 }, { 255, 230, 120 } },
+		glow = true,
+	},
+	candy_kingdom = {
+		forms = { "candy", "flower" },
+		leaf = { 120, 220, 150 },
+		stem = { 255, 235, 240 },
+		petals = { { 255, 130, 190 }, { 150, 220, 255 }, { 255, 240, 120 } },
+		fruits = { { 255, 90, 150 }, { 120, 200, 255 }, { 255, 220, 80 } },
+	},
+	haunted_castle = {
+		forms = { "gourd", "mushroom" },
+		leaf = { 70, 90, 60 },
+		stem = { 50, 45, 55 },
+		petals = { { 170, 120, 220 }, { 240, 240, 255 }, { 255, 140, 40 } },
+		fruits = { { 255, 140, 30 }, { 150, 255, 140 }, { 180, 110, 230 } },
+		glow = true,
+	},
+} :: { [string]: PlantTheme }
+
+local DEFAULT_THEME: PlantTheme = Visuals.plantThemes.forest
+
+-- 이름 낱말 → 모양 (위에서부터 먼저 맞는 것)
+local FORM_WORDS: { { string } } = {
+	{ "mushroom", "mushroom", "toadstool", "candle" },
+	{ "cactus", "cactus", "aloe", "thistle", "thorn" },
+	{ "palm", "palm" },
+	{ "pine", "pine", "bonsai" },
+	{ "tree", "tree", "oak", "willow", "ginkgo", "cycad", "plum", "acorn" },
+	{ "lotus", "lotus", "pad", "clover" },
+	{ "reed", "reed", "grass", "horsetail", "bamboo", "kelp" },
+	{ "vine", "vine", "ivy", "wisteria" },
+	{ "fern", "fern", "leaf", "feather", "moss" },
+	{ "gourd", "gourd", "pumpkin", "cabbage", "eggplant", "pepper", "nightshade", "cotton", "cress", "fruit" },
+	{ "coral", "coral", "anemone" },
+	{ "candy", "lollipop", "candy" },
+	{ "crystal", "crystal", "relic", "gong", "pillar" },
+	{
+		"cup",
+		"tulip",
+		"bell",
+		"snowdrop",
+		"trumpet",
+		"harp",
+		"lantern",
+		"lily",
+		"iris",
+		"orchid",
+		"pitcher",
+		"shell",
+	},
+	{ "rose", "rose", "peony", "camellia", "bloom", "blossom" },
+	{ "flower", "daisy", "sunflower", "dandelion", "flower", "sprout", "crown" },
+}
+
+local FRUIT_SHAPES = { "round", "oval", "long", "berry" }
+
+-- 문자열 해시 (같은 id = 늘 같은 값)
+function Visuals.hash(text: string): number
+	local h = 7
+	for i = 1, #text do
+		h = (h * 31 + string.byte(text, i)) % 2147483647
+	end
+	return h
+end
+
+local function jitter(c: Color, h: number, amount: number): Color
+	local result: Color = {}
+	for i = 1, 3 do
+		local d = ((math.floor(h / (7 ^ i)) % 9) - 4) / 4 * amount
+		result[i] = math.clamp(math.floor(c[i] + d + 0.5), 0, 255)
 	end
 	return result
 end
 
-local function pet(id: string, body: string, c1: string, c2: string, c3: string, features: string, opts: PetOpts?)
-	pets[id] = {
+export type PlantLook = {
+	form: string,
+	leaf: Color,
+	stem: Color,
+	petal: Color,
+	center: Color,
+	fruit: Color,
+	fruitShape: string,
+	petals: number, -- 꽃잎·가지 수 (5~8)
+	leaves: number, -- 잎 수 (2~4)
+	tall: number, -- 키 배율 (0.85~1.15)
+	twist: number, -- 돌린 각도(도), 정원마다 같은 방향을 안 보게
+	glow: boolean,
+	petalMaterial: string?,
+}
+
+local lookCache: { [string]: PlantLook } = {}
+
+function Visuals.plantLook(id: string): PlantLook
+	local cached = lookCache[id]
+	if cached then
+		return cached
+	end
+	local plant = Plants.get(id)
+	local theme = (if plant then Visuals.plantThemes[plant.biome] else nil) or DEFAULT_THEME
+	local h = Visuals.hash(id)
+	local form: string? = nil
+	for _, row in FORM_WORDS do
+		for i = 2, #row do
+			if string.find(id, row[i], 1, true) then
+				form = row[1]
+				break
+			end
+		end
+		if form then
+			break
+		end
+	end
+	local chosen = form or theme.forms[h % #theme.forms + 1]
+	local petal = theme.petals[math.floor(h / 3) % #theme.petals + 1]
+	local fruit = theme.fruits[math.floor(h / 11) % #theme.fruits + 1]
+	local look: PlantLook = {
+		form = chosen,
+		leaf = jitter(theme.leaf, h, 22),
+		stem = jitter(theme.stem, math.floor(h / 5), 14),
+		petal = jitter(petal, math.floor(h / 13), 26),
+		center = jitter(theme.fruits[math.floor(h / 17) % #theme.fruits + 1], h, 20),
+		fruit = jitter(fruit, math.floor(h / 19), 24),
+		fruitShape = FRUIT_SHAPES[math.floor(h / 23) % #FRUIT_SHAPES + 1],
+		petals = 5 + math.floor(h / 29) % 4,
+		leaves = 2 + math.floor(h / 31) % 3,
+		tall = 0.85 + (math.floor(h / 37) % 7) * 0.05,
+		twist = (math.floor(h / 41) % 12) * 30,
+		glow = theme.glow == true,
+		petalMaterial = theme.petalMaterial,
+	}
+	lookCache[id] = look
+	return look
+end
+
+-- 식물 대표 색 (씨앗 껍데기·UI 동그라미): 1 = 꽃잎, 2 = 잎, 3 = 열매
+function Visuals.petColor(id: string, index: number?): Color
+	local look = Visuals.plantLook(id)
+	local i = index or 1
+	return if i == 2 then look.leaf elseif i == 3 then look.fruit else look.petal
+end
+
+------------------------------------------------------------------
+-- 경비 = 식물 괴물 (6판, 이름 Biomes.guardName). PetVisualService.buildMonster 가 만듦.
+--   body: "stalk"(줄기) | "trunk"(나무 몸통) | "blob"(동글 몸) | "column"(기둥 몸) | "kelp"(해초 다발)
+--   head: "jaws"(파리지옥 턱) | "flower"(꽃 머리) | "cap"(버섯 갓) | "canopy"(나뭇잎 머리) | "pumpkin" | "lotus" |
+--         "rose" | "lily" | "none"(몸에 얼굴)
+--   colors: [1] 몸 [2] 머리/꽃 [3] 포인트. extras: 쉼표로 (PetVisualService MONSTER_EXTRAS)
+------------------------------------------------------------------
+
+export type MonsterLook = {
+	body: string,
+	head: string,
+	colors: { Color },
+	extras: { string },
+	glowEyes: boolean?,
+	ghostly: boolean?,
+}
+
+local function monster(
+	body: string,
+	head: string,
+	colors: { Color },
+	extras: string,
+	opts: { [string]: boolean }?
+): MonsterLook
+	local list: { string } = {}
+	for word in string.gmatch(extras, "[^,%s]+") do
+		table.insert(list, word)
+	end
+	return {
 		body = body,
-		colors = { C[c1] or C.white, C[c2] or C.white, C[c3] or C.white },
-		features = split(features),
-		material = if opts then opts.material else nil,
+		head = head,
+		colors = colors,
+		extras = list,
+		glowEyes = if opts then opts.glowEyes else nil,
 		ghostly = if opts then opts.ghostly else nil,
-		glow = if opts then opts.glow else nil,
 	}
 end
 
-local GLOW: PetOpts = { glow = true }
-local GHOST: PetOpts = { ghostly = true, glow = true }
-
--- 1. 숲
-pet("sprout_daisy", "bird", "white", "cream", "yellow", "comb")
-pet("puppy_grass", "quad", "tan", "cream", "dbrown", "ears_floppy")
-pet("acorn_sprout", "bird", "blue", "sky", "yellow", "crest")
-pet("mossy_fern", "bird", "brown", "tan", "yellow", "owl_eyes")
-pet("bell_mushroom", "quad", "gray", "white", "black", "ears_pointy,mask,stripes")
-pet("honey_tulip", "quad", "brown", "tan", "dbrown", "ears_round")
-pet("owl_oak", "quad", "orange", "white", "dark", "ears_pointy,tail_fluffy")
-pet("firefly_lily", "humanoid", "brown", "tan", "dgreen", "leaves")
-
--- 2. 호수
-pet("water_clover", "frog", "green", "lime", "yellow", "")
-pet("ripple_reed", "bird", "yellow", "cream", "orange", "")
-pet("bubble_cress", "fish", "gray", "tan", "dark", "whiskers")
-pet("lotus_pad", "turtle", "green", "brown", "lime", "")
-pet("dewdrop_iris", "fish", "sky", "white", "gray", "cat_ears,legs_short")
-pet("frog_lily", "bird", "white", "cream", "orange", "long_neck")
-pet("moon_lotus", "lizard", "pink", "white", "hotpink", "gills")
-pet("rain_willow", "snake", "navy", "teal", "cyan", "fins,spikes", GLOW)
-
--- 3. 사막
-pet("sand_sprout", "quad", "tan", "cream", "pink", "ears_long")
-pet("pebble_cactus", "quad", "cream", "white", "orange", "ears_big,tail_fluffy")
-pet("dune_grass", "quad", "tan", "cream", "brown", "hump,long_neck")
-pet("sun_aloe", "blob", "tan", "cream", "red", "hat")
-pet("camel_thorn", "snake", "green", "yellow", "dgreen", "")
-pet("mirage_rose", "bug", "brown", "tan", "red", "claws,stinger")
-pet("pharaoh_palm", "spider", "tan", "brown", "red", "")
-pet("scorpion_cactus", "quad", "gold", "navy", "cyan", "pharaoh", GLOW)
-
--- 4. 정글
-pet("banana_leaf", "bird", "black", "white", "orange", "beak_big")
-pet("vine_twist", "humanoid", "dbrown", "tan", "black", "ears_round")
-pet("parrot_flower", "lizard", "dgreen", "lime", "yellow", "spikes,teeth")
-pet("drum_gourd", "humanoid", "dark", "gray", "black", "brow")
-pet("monkey_fruit", "humanoid", "orange", "yellow", "green", "pineapple")
-pet("jungle_pitcher", "spider", "black", "red", "purple", "")
-pet("tiger_orchid", "quad", "orange", "white", "black", "ears_round,stripes")
-pet("thunder_bamboo", "snake", "red", "black", "gold", "crown,stripes")
-
--- 5. 눈
-pet("snow_bell", "penguin", "black", "white", "orange", "")
-pet("frost_pine", "blob", "brown", "tan", "white", "tusks,whiskers")
-pet("ice_cactus", "quad", "white", "cream", "black", "ears_round")
-pet("penguin_tulip", "quad", "tan", "cream", "white", "fangs,ears_round")
-pet("aurora_fern", "quad", "brown", "dbrown", "cream", "tusks,trunk,ears_big")
-pet("icicle_rose", "quad", "ice", "sky", "gold", "tusks,trunk,crown", GLOW)
-pet("yeti_cabbage", "humanoid", "white", "sky", "dark", "horns")
-pet("crystal_snowdrop", "dragon", "ice", "white", "cyan", "crystals,horns", GLOW)
-
--- 6. 화산
-pet("ember_sprout", "lizard", "red", "orange", "lava", "lava_spots")
-pet("lava_moss", "frog", "dark", "lava", "lava", "lava_spots")
-pet("ash_pepper", "quad", "dred", "red", "gold", "horns,flame")
-pet("flame_sunflower", "lizard", "orange", "red", "black", "spikes")
-pet("magma_cactus", "blob", "red", "red", "green", "stem,sunglasses")
-pet("smoke_tulip", "quad", "dark", "red", "lava", "three_heads,eyes_glow")
-pet("phoenix_lily", "bird", "lava", "gold", "red", "flame,crest", GLOW)
-pet("volcano_rose", "dragon", "dark", "lava", "gold", "flame,horns", GLOW)
-
--- 7. 심연의 바다
-pet("coral_bloom", "fish", "teal", "pink", "yellow", "")
-pet("kelp_tower", "fish", "navy", "sky", "white", "sword_nose")
-pet("glow_anemone", "fish", "gray", "white", "dark", "fin_big,teeth")
-pet("pearl_shell_flower", "whale", "black", "white", "gray", "fin_big")
-pet("jelly_tulip", "whale", "navy", "white", "sky", "spots")
-pet("deep_lantern", "whale", "white", "ice", "gray", "")
-pet("whale_kelp", "jelly", "purple", "red", "pink", "eyes_glow,tentacles_thick")
-pet("abyss_orchid", "fish", "gold", "teal", "white", "crown,fin_big", GLOW)
-
--- 8. 선사시대
-pet("fossil_fern", "bird", "gray", "white", "yellow", "beak_big")
-pet("amber_moss", "bird", "tan", "brown", "orange", "crest,bat_wings")
-pet("giant_horsetail", "quad", "olive", "tan", "brown", "spikes,club")
-pet("dino_eggplant", "quad", "green", "tan", "cream", "frill")
-pet("tar_flower", "quad", "lime", "green", "tan", "long_neck")
-pet("cycad_king", "fish", "sky", "white", "blue", "legs_short,sneakers,teeth")
-pet("claw_vine", "dino", "dgreen", "lime", "white", "teeth")
-pet("mammoth_tree", "fish", "navy", "teal", "white", "teeth,fin_big", GLOW)
-
--- 9. 코스믹
-pet("star_mushroom", "snake", "purple", "violet", "cyan", "legs_many,eyes_glow")
-pet("comet_tulip", "lizard", "navy", "violet", "cyan", "stars", GLOW)
-pet("moon_cabbage", "humanoid", "navy", "purple", "cyan", "stars,brow", GLOW)
-pet("nebula_rose", "quad", "white", "black", "violet", "planet_ring,spots,horns")
-pet("planet_pumpkin", "dragon", "navy", "violet", "cyan", "stars,horns", GLOW)
-pet("meteor_cactus", "humanoid", "bone", "purple", "cyan", "skull,crown", GLOW)
-pet("galaxy_tree", "dragon", "silver", "sky", "gold", "moon,horns", GLOW)
-pet("blackhole_lily", "quad", "white", "pink", "gold", "horn,mane", GLOW)
-
--- 10. 벚꽃
-pet("petal_sprout", "bird", "white", "black", "red", "long_neck,comb")
-pet("lantern_peony", "lizard", "orange", "black", "yellow", "spots")
-pet("tea_camellia", "quad", "orange", "white", "dbrown", "ears_pointy,tail_fluffy")
-pet("koi_lotus", "bird", "white", "gray", "yellow", "owl_eyes")
-pet("bonsai_pine", "fish", "white", "orange", "red", "spots,whiskers")
-pet("fan_ginkgo", "quad", "brown", "cream", "tan", "antlers")
-pet("moon_plum", "quad", "red", "black", "gold", "horns,stripes,eyes_glow", GLOW)
-pet("dragon_wisteria", "quad", "white", "red", "pink", "ears_pointy,nine_tails", GLOW)
-
--- 11. 타이탄 사원
-pet("stone_lotus", "bug", "red", "orange", "cream", "claws")
-pet("pillar_cactus", "spider", "gray", "gold", "red", "armor")
-pet("titan_moss", "quad", "gray", "silver", "red", "blades")
-pet("golden_vine", "bug", "lime", "dgreen", "gold", "scythe_arms,wings")
-pet("relic_rose", "humanoid", "gray", "tan", "gold", "horn,armor")
-pet("gong_flower", "fish", "lime", "purple", "gray", "fin_big,eyes_glow,teeth")
-pet("colossus_tree", "humanoid", "dark", "gold", "red", "crown,brow", GLOW)
-pet("temple_bloom", "dragon", "black", "violet", "purple", "flame,horns", GLOW)
-
--- 12. 천사 & 악마 — 천국
-pet("halo_daisy", "bird", "white", "cream", "gold", "halo")
-pet("feather_fern", "quad", "white", "cream", "gold", "wool,wings")
-pet("cloud_cotton", "bug", "cream", "gold", "white", "wings")
-pet("harp_lily", "bird", "teal", "gold", "white", "peacock_tail,crest")
-pet("dawn_rose", "jelly", "white", "sky", "gold", "halo", GLOW)
-pet("angel_trumpet", "quad", "tan", "white", "gold", "torso")
-pet("heaven_tree", "quad", "white", "sky", "gold", "wings,mane", GLOW)
-pet("seraph_lotus", "humanoid", "white", "gold", "sky", "wings,halo", GLOW)
--- 12. 천사 & 악마 — 지옥
-pet("horn_thistle", "ghost", "lava", "orange", "yellow", "flame", GLOW)
-pet("bat_flower", "quad", "dark", "red", "gold", "horns")
-pet("shadow_ivy", "humanoid", "red", "dark", "yellow", "horns,tail_devil")
-pet("trident_cactus", "quad", "dark", "red", "lava", "horns,eyes_glow")
-pet("devil_pepper", "humanoid", "gray", "dark", "red", "bat_wings,horns")
-pet("lava_nightshade", "quad", "dark", "silver", "red", "fangs,blades")
-pet("inferno_tree", "quad", "bone", "dark", "cyan", "skull,mane", GLOW)
-pet("demon_rose", "dragon", "dark", "lava", "red", "flame,horns,eyes_glow", GLOW)
--- 12. 천사 & 악마 — 중립/합성
-pet("twilight_bloom", "humanoid", "silver", "gold", "sky", "ring,helmet")
-pet("balance_tree", "humanoid", "gold", "purple", "white", "ring,crown", GLOW)
-pet("blossom_fairy", "quad", "white", "dark", "gold", "wings,horn,mane", GLOW)
-pet("spirit_blossom", "dragon", "white", "gold", "violet", "halo,horns", GLOW)
-
--- 13. 마법의 숲
-pet("fairy_bell", "lizard", "cyan", "pink", "violet", "crystals", GLOW)
-pet("wish_dandelion", "bug", "pink", "green", "white", "flower")
-pet("glow_toadstool", "bird", "blue", "white", "cyan", "crest", GLOW)
-pet("unicorn_ivy", "quad", "violet", "white", "cyan", "ears_long,antlers", GLOW)
-pet("rune_rose", "quad", "white", "black", "mint", "ears_round,eyes_glow", GLOW)
-pet("spell_lily", "quad", "navy", "violet", "yellow", "ears_pointy,tail_fluffy,stars", GLOW)
-pet("elder_tree", "quad", "gold", "orange", "white", "mane,halo", GLOW)
-pet("crystal_willow", "whale", "sky", "white", "gold", "crown,wings", GLOW)
-pet("dancing_mushroom", "bug", "lime", "yellow", "cyan", "wings,eyes_glow", GLOW)
-pet("world_tree", "humanoid", "mint", "white", "cyan", "antlers,halo", GHOST)
-
--- 14. 사탕 왕국
-pet("lollipop_flower", "humanoid", "red", "pink", "white", "ears_round", { material = "Glass", glow = false })
-pet("gummy_cactus", "quad", "pink", "white", "hotpink", "ears_long,lollipop")
-pet("cotton_candy_tree", "quad", "pink", "sky", "white", "wool")
-pet("chocolate_tulip", "turtle", "tan", "pink", "yellow", "icing,sprinkles")
-pet("candy_cane_reed", "quad", "pink", "sky", "white", "horn,mane,sprinkles", GLOW)
-pet("donut_sunflower", "humanoid", "white", "pink", "cream", "buttons")
-pet("cake_rose", "dragon", "choco", "cream", "pink", "sprinkles,horns", GLOW)
-pet("sugar_crown", "humanoid", "pink", "gold", "sky", "crown,lollipop", GLOW)
-
--- 15. 유령 성
-pet("ghost_lily", "quad", "white", "violet", "cyan", "ears_pointy,eyes_glow", GHOST)
-pet("pumpkin_vine", "spider", "orange", "dgreen", "black", "pumpkin")
-pet("bat_orchid", "bird", "dark", "purple", "red", "bat_wings,fangs,ears_pointy")
-pet("candle_mushroom", "quad", "bone", "dark", "cyan", "skull,ears_pointy", GLOW)
-pet("skull_rose", "quad", "cream", "tan", "orange", "bandages,ears_round,eyes_glow")
-pet("moon_ghost_tree", "quad", "zombie", "dgreen", "red", "stitches,ears_round")
-pet("rainbow_thunder_tree", "humanoid", "silver", "violet", "cyan", "helmet,sword", GHOST)
-pet("sky_pillar_flower", "ghost", "white", "violet", "gold", "crown", GHOST)
-
--- 펫이 아닌 경비 전용 모양
-local extra: { [string]: PetVisual } = {}
-do
-	local saved = pets
-	pets = extra
-	-- 6판: 경비 겉모습은 아직 5판 동물 모양 (선임이 식물 괴물로 바꿀 때까지) — 옛 펫 id 그대로 여기에
-	pet("chicken", "bird", "white", "cream", "yellow", "comb")
-	pet("swan", "bird", "white", "cream", "orange", "long_neck")
-	pet("scorpion", "bug", "brown", "tan", "red", "claws,stinger")
-	pet("tiger", "quad", "orange", "white", "black", "ears_round,stripes")
-	pet("yeti", "humanoid", "white", "sky", "dark", "horns")
-	pet("cerberus", "quad", "dark", "red", "lava", "three_heads,eyes_glow")
-	pet("beluga_whale", "whale", "white", "ice", "gray", "")
-	pet("t_rex", "dino", "dgreen", "lime", "white", "teeth")
-	pet("cosmic_skeleton_boss", "humanoid", "bone", "purple", "cyan", "skull,crown", GLOW)
-	pet("oni_tiger", "quad", "red", "black", "gold", "horns,stripes,eyes_glow", GLOW)
-	pet("gorilla_king", "humanoid", "dark", "gold", "red", "crown,brow", GLOW)
-	pet("spirit", "ghost", "mint", "cyan", "white", "antlers", GHOST)
-	pet("gingerbread_giant", "humanoid", "ginger", "white", "red", "buttons,icing")
-	pet("grim_reaper", "ghost", "black", "dark", "violet", "hood,scythe,eyes_glow", { glow = true })
-	pet("angel", "humanoid", "white", "gold", "sky", "wings,halo", GLOW)
-	pet("demon", "humanoid", "dred", "dark", "lava", "bat_wings,horns,tail_devil", GLOW)
-	pets = saved
-end
-
-Visuals.pets = pets
-Visuals.extra = extra
-
-local FALLBACK: PetVisual = {
-	body = "blob",
-	colors = { C.white, C.cream, C.pink },
-	features = {},
-}
-
-function Visuals.pet(id: string): PetVisual
-	return pets[id] or extra[id] or FALLBACK
-end
-
--- 펫 대표 색 (알 껍데기 등)
-function Visuals.petColor(id: string, index: number?): Color
-	local v = Visuals.pet(id)
-	return v.colors[index or 1] or C.white
-end
+Visuals.monsters = {
+	flytrap_monster = monster("stalk", "jaws", { { 70, 150, 60 }, { 130, 200, 80 }, { 220, 60, 70 } }, "teeth,leaves"),
+	lotus_frog = monster("blob", "lotus", { { 90, 180, 110 }, { 255, 170, 205 }, { 255, 240, 150 } }, "leaves,bubbles"),
+	cactus_captain = monster(
+		"column",
+		"none",
+		{ { 90, 160, 80 }, { 255, 120, 150 }, { 240, 230, 180 } },
+		"spines,arms,flower_top"
+	),
+	tiger_flower = monster("stalk", "flower", { { 60, 140, 50 }, { 255, 140, 30 }, { 30, 30, 30 } }, "stripes,leaves"),
+	frost_thorn_tree = monster(
+		"trunk",
+		"canopy",
+		{ { 150, 180, 200 }, { 210, 240, 255 }, { 120, 200, 255 } },
+		"thorns,arms,snow"
+	),
+	lava_head_flower = monster(
+		"stalk",
+		"flower",
+		{ { 55, 45, 45 }, { 255, 100, 30 }, { 255, 220, 80 } },
+		"embers,leaves",
+		{ glowEyes = true }
+	),
+	seaweed_monster = monster(
+		"kelp",
+		"none",
+		{ { 40, 130, 110 }, { 70, 200, 170 }, { 120, 255, 240 } },
+		"bubbles,glowbulbs",
+		{ glowEyes = true }
+	),
+	dino_fern = monster("stalk", "jaws", { { 90, 140, 50 }, { 140, 190, 70 }, { 240, 230, 200 } }, "fronds,teeth"),
+	space_mushroom_giant = monster(
+		"column",
+		"cap",
+		{ { 230, 220, 255 }, { 120, 70, 220 }, { 255, 240, 140 } },
+		"glowspots,arms,stars"
+	),
+	sakura_fox_tree = monster(
+		"trunk",
+		"canopy",
+		{ { 110, 70, 60 }, { 255, 180, 210 }, { 255, 140, 60 } },
+		"ears,arms,petals"
+	),
+	stone_giant_tree = monster(
+		"trunk",
+		"canopy",
+		{ { 140, 135, 125 }, { 100, 150, 80 }, { 255, 200, 60 } },
+		"arms,crown"
+	),
+	angel_lily = monster(
+		"stalk",
+		"lily",
+		{ { 150, 210, 140 }, { 255, 255, 255 }, { 255, 215, 80 } },
+		"halo,wings,leaves"
+	),
+	devil_rose = monster(
+		"stalk",
+		"rose",
+		{ { 60, 40, 40 }, { 200, 30, 40 }, { 255, 90, 30 } },
+		"horns,thorns,embers",
+		{ glowEyes = true }
+	),
+	spirit_mushroom = monster(
+		"column",
+		"cap",
+		{ { 200, 255, 235 }, { 120, 255, 200 }, { 255, 255, 255 } },
+		"glowspots,arms,orbs",
+		{ ghostly = true }
+	),
+	candy_cane_giant = monster(
+		"column",
+		"none",
+		{ { 255, 255, 255 }, { 230, 40, 60 }, { 120, 220, 150 } },
+		"stripes,arms,candy_top"
+	),
+	pumpkin_vine_monster = monster(
+		"stalk",
+		"pumpkin",
+		{ { 60, 90, 50 }, { 255, 140, 30 }, { 255, 230, 90 } },
+		"leaves,mist",
+		{ glowEyes = true }
+	),
+} :: { [string]: MonsterLook }
 
 ------------------------------------------------------------------
--- 경비 모양 (구역 id → 펫/extra id, 키)
+-- 경비 모양 (구역 id → Visuals.monsters id, 키)
 --   원작처럼 거대함 (캐릭터 5~10배). height = 겉모습 키(스터드, 25~40) — PetVisualService 가 모델 키에 맞춰
---   크기 배율을 자동 계산. scale = 대략의 배율 (height 를 쓰므로 참고용)
+--   크기 배율을 자동 계산 (GuardianService 잡힘 거리도 이 키). scale = 대략의 배율 (height 를 쓰므로 참고용)
 ------------------------------------------------------------------
 
 Visuals.guards = {
-	forest = { model = "chicken", scale = 10, height = 28 },
-	lake = { model = "swan", scale = 8.3, height = 30 },
-	desert = { model = "scorpion", scale = 18.5, height = 25 },
-	jungle = { model = "tiger", scale = 11.2, height = 30 },
-	snow = { model = "yeti", scale = 10.9, height = 36 },
-	volcano = { model = "cerberus", scale = 12, height = 32 },
-	abyss_ocean = { model = "beluga_whale", scale = 11.3, height = 26 },
-	prehistoric = { model = "t_rex", scale = 11.8, height = 40 },
-	cosmic = { model = "cosmic_skeleton_boss", scale = 11.5, height = 38 },
-	cherry_blossom = { model = "oni_tiger", scale = 12, height = 32 },
-	titan_temple = { model = "gorilla_king", scale = 11.5, height = 38 },
-	angels_demons = { model = "angel", darkModel = "demon", scale = 10.9, height = 36 },
-	enchanted_forest = { model = "spirit", scale = 11.2, height = 32 },
-	candy_kingdom = { model = "gingerbread_giant", scale = 10.9, height = 36 },
-	haunted_castle = { model = "grim_reaper", scale = 13.3, height = 38 },
+	forest = { model = "flytrap_monster", scale = 10, height = 28 },
+	lake = { model = "lotus_frog", scale = 8.3, height = 30 },
+	desert = { model = "cactus_captain", scale = 18.5, height = 25 },
+	jungle = { model = "tiger_flower", scale = 11.2, height = 30 },
+	snow = { model = "frost_thorn_tree", scale = 10.9, height = 36 },
+	volcano = { model = "lava_head_flower", scale = 12, height = 32 },
+	abyss_ocean = { model = "seaweed_monster", scale = 11.3, height = 26 },
+	prehistoric = { model = "dino_fern", scale = 11.8, height = 40 },
+	cosmic = { model = "space_mushroom_giant", scale = 11.5, height = 38 },
+	cherry_blossom = { model = "sakura_fox_tree", scale = 12, height = 32 },
+	titan_temple = { model = "stone_giant_tree", scale = 11.5, height = 38 },
+	angels_demons = { model = "angel_lily", darkModel = "devil_rose", scale = 10.9, height = 36 },
+	enchanted_forest = { model = "spirit_mushroom", scale = 11.2, height = 32 },
+	candy_kingdom = { model = "candy_cane_giant", scale = 10.9, height = 36 },
+	haunted_castle = { model = "pumpkin_vine_monster", scale = 13.3, height = 38 },
 } :: { [string]: { model: string, darkModel: string?, scale: number, height: number? } }
 
 ------------------------------------------------------------------
--- 희귀도 효과 / 돌연변이 효과
+-- 희귀도 효과 / 아우라 / 돌연변이 효과
 ------------------------------------------------------------------
 
+-- 전설 이상: 빛 색(씨앗 껍데기 PointLight) — 6판은 아래 auras 가 본 효과, 이 표는 빛 색만 씀
 Visuals.rarityEffects = {
-	-- 전설 이상: 외곽 빛(Highlight) + 반짝이 파티클. 알 껍데기도 이 표를 보고 빛남(light 없으면 highlight 색)
 	legendary = { highlight = C.gold, particle = "sparkle", particleColor = C.gold },
 	mythic = { highlight = C.red, particle = "sparkle", particleColor = C.red },
 	cosmic = { highlight = C.violet, particle = "sparkle", particleColor = C.violet, light = C.violet },
 	secret = { highlight = C.black, particle = "smoke", particleColor = C.black },
-	eternity = { highlight = C.cyan, particle = "sparkle", particleColor = C.cyan, light = C.cyan },
+	eternity = { highlight = C.white, particle = "sparkle", particleColor = C.white, light = C.white },
 	divine = { highlight = C.white, particle = "rainbow", light = C.pink },
-	-- 6판 (수석 임시값, 선임이 빛기둥·번개로 바꿀 예정): 슈퍼 울트라디바인
 	super_ultradivine = { highlight = C.gold, particle = "rainbow", light = C.yellow },
 } :: { [string]: { highlight: Color?, particle: string?, particleColor: Color?, light: Color? } }
 
-Visuals.mutationLooks =
-	{
-		silver = { color = { 205, 210, 222 }, material = "Foil", reflectance = 0.35 },
-		golden = { color = { 255, 200, 45 }, material = "Neon" },
-		rainbow = { color = { 255, 90, 200 }, material = "Neon", cycle = true },
-		bloom = { color = { 255, 170, 205 }, petals = { 255, 150, 200 } },
-		spirit_bloom = { color = { 190, 130, 255 }, petals = { 180, 120, 255 } },
-		fractured = { color = { 120, 60, 200 }, material = "Glass" },
-		parasite = { color = { 110, 160, 40 } },
-		chaos = { color = { 230, 60, 60 }, material = "Neon" },
-		-- 6판 열매 먹이기 돌연변이 (수석 임시값 — 선임이 얼음·불꽃·번개 효과로)
-		frozen = { color = { 170, 230, 255 }, material = "Ice" },
-		burning = { color = { 255, 110, 40 }, material = "Neon" },
-		shocked = { color = { 255, 240, 90 }, material = "Neon" },
-	} :: { [string]: { color: Color, material: string?, reflectance: number?, cycle: boolean?, petals: Color? } }
-
--- 4판: 알 껍데기 등급별 모양 (EggVisualService, 매끈한 타원 알 + 띠·점). 껍데기 색 = shell (없으면 등급 색을 파스텔로),
---   띠 색 = stripe (없으면 등급 색), 무늬 = pattern, 무늬 조각 색 = spot (없으면 펫 대표 색 → 어떤 펫인지 힌트)
---   pattern: "spots2"(점 2) | "spots4"(점 4) | "stripes"(띠 2+점) | "diamonds"(둘레 점 4) | "crown"(금띠+보석) |
---            "flames"(불꽃 무늬) | "stars"(별) | "rainbow"(무지개 띠 3)
---   희귀(rare) 이상은 반짝이 파티클, 전설 이상은 빛(PointLight, rarityEffects)
-export type EggLook = { pattern: string, shell: Color?, stripe: Color?, spot: Color?, spotNeon: boolean? }
-Visuals.eggLooks = {
-	common = { pattern = "spots2", shell = { 250, 244, 228 } },
-	uncommon = { pattern = "spots4" },
-	rare = { pattern = "stripes" },
-	epic = { pattern = "diamonds" },
-	legendary = { pattern = "crown", stripe = { 255, 255, 255 } },
-	mythic = { pattern = "flames", stripe = { 150, 20, 30 } },
-	cosmic = { pattern = "stars", shell = { 70, 45, 160 }, stripe = { 120, 80, 240 } },
-	secret = {
-		pattern = "spots4",
-		shell = { 30, 30, 36 },
-		stripe = { 70, 70, 80 },
-		spot = { 170, 100, 255 },
-		spotNeon = true,
+--[[
+	등급 아우라 (Rarities.aura 이름 11개, 설계 3장). PlantVisualService.addAura 가 씨앗·자라는 씨앗·성체에 붙임.
+	  particle: "sparkle" | "flame" | "spark" | "stars" | "smoke" | "rainbow" (없으면 파티클 없음)
+	  ring: 고정 고리 파트 (네온) — "ground"(바닥) | "halo"(가운데 높이 가로) | "clock"(뒤에 세운 고리)
+	  beam: 하늘로 솟는 빛기둥 (항상 켜짐, 맵 어디서나)
+	파티클·빛은 희귀(rare) 이상만, 서버는 꺼진 채(Enabled = false) 만들고 AuraFx 태그 → 클라가 100 스터드 안만 켬.
+]]
+export type AuraLook = {
+	particle: string?,
+	color: Color?,
+	rate: number?,
+	light: Color?,
+	ring: string?,
+	ringColor: Color?,
+	beam: boolean?,
+}
+Visuals.auras = {
+	none = {},
+	lime_glow = { ring = "ground", ringColor = { 170, 255, 90 } },
+	blue_sparkle = { particle = "sparkle", color = { 90, 170, 255 }, rate = 3 },
+	purple_flame = { particle = "flame", color = { 180, 90, 255 }, rate = 4 },
+	gold_ring = {
+		particle = "sparkle",
+		color = { 255, 210, 60 },
+		rate = 3,
+		ring = "halo",
+		ringColor = { 255, 205, 50 },
 	},
-	eternity = { pattern = "diamonds", spot = { 255, 255, 255 }, spotNeon = true },
-	divine = { pattern = "rainbow", shell = { 255, 255, 255 } },
-	super_ultradivine = { pattern = "rainbow", shell = { 255, 245, 160 }, stripe = { 255, 200, 40 } }, -- 6판 (수석 임시값)
+	red_lightning = { particle = "spark", color = { 255, 60, 60 }, rate = 5, light = { 255, 70, 70 } },
+	stardust_swirl = { particle = "stars", color = { 190, 140, 255 }, rate = 5, light = { 170, 110, 255 } },
+	black_mist = { particle = "smoke", color = { 30, 25, 40 }, rate = 4, light = { 150, 80, 255 } },
+	white_clock = {
+		particle = "sparkle",
+		color = { 255, 255, 255 },
+		rate = 3,
+		light = { 240, 245, 255 },
+		ring = "clock",
+		ringColor = { 255, 255, 255 },
+	},
+	rainbow_beam = {
+		particle = "rainbow",
+		rate = 6,
+		light = { 255, 170, 220 },
+		ring = "halo",
+		ringColor = { 255, 255, 255 },
+	},
+	sky_pillar = {
+		particle = "rainbow",
+		rate = 8,
+		light = { 255, 230, 120 },
+		ring = "halo",
+		ringColor = { 255, 215, 60 },
+		beam = true,
+	},
+} :: { [string]: AuraLook }
+
+-- 돌연변이 겉모습: color·material 이 꽃잎/열매/씨앗 껍데기 색을 덮어씀. cycle = 클라가 무지개로 색 순환.
+--   effect = 원소 돌연변이 파티클 (AuraFx 와 같이 가까울 때만): "snow" | "fire" | "spark"
+Visuals.mutationLooks = {
+	silver = { color = { 205, 210, 222 }, material = "Foil", reflectance = 0.35 },
+	golden = { color = { 255, 200, 45 }, material = "Neon" },
+	rainbow = { color = { 255, 90, 200 }, material = "Neon", cycle = true },
+	bloom = { color = { 255, 170, 205 }, petals = { 255, 150, 200 } },
+	spirit_bloom = { color = { 190, 130, 255 }, petals = { 180, 120, 255 } },
+	fractured = { color = { 120, 60, 200 }, material = "Glass" },
+	parasite = { color = { 110, 160, 40 } },
+	chaos = { color = { 230, 60, 60 }, material = "Neon" },
+	frozen = { color = { 170, 230, 255 }, material = "Ice", effect = "snow" },
+	burning = { color = { 255, 110, 40 }, material = "Neon", effect = "fire" },
+	shocked = { color = { 255, 240, 90 }, material = "Neon", effect = "spark" },
+} :: {
+	[string]: {
+		color: Color,
+		material: string?,
+		reflectance: number?,
+		cycle: boolean?,
+		petals: Color?,
+		effect: string?,
+	},
+}
+
+-- 6판: 씨앗 껍데기 등급별 모양 (EggVisualService). 아몬드(물방울) 모양 껍데기 + 뾰족한 끝 + 세로 줄무늬.
+--   shell = 껍데기 색 (없으면 등급 색을 파스텔로), stripe = 줄무늬 색 (없으면 등급 색), stripes = 줄무늬 수(0~4),
+--   tip = 끝 색 (없으면 껍데기를 조금 어둡게), neon = 줄무늬 네온, dots = "stars"(별 점 2) | "gems"(보석 2) | nil,
+--   rainbow = 줄무늬를 무지개 색으로. 씨앗 하나 ≤ 8 파트. 파티클·빛은 등급 아우라(Visuals.auras)
+export type EggLook = {
+	stripes: number,
+	shell: Color?,
+	stripe: Color?,
+	tip: Color?,
+	neon: boolean?,
+	dots: string?,
+	rainbow: boolean?,
+}
+Visuals.eggLooks = {
+	common = { stripes = 2, shell = { 236, 222, 188 }, stripe = { 120, 95, 70 } },
+	uncommon = { stripes = 2 },
+	rare = { stripes = 3 },
+	epic = { stripes = 3, dots = "gems" },
+	legendary = { stripes = 4, tip = { 255, 205, 50 } },
+	mythic = { stripes = 4, stripe = { 150, 20, 30 }, dots = "gems" },
+	cosmic = { stripes = 3, shell = { 70, 45, 160 }, stripe = { 140, 100, 255 }, neon = true, dots = "stars" },
+	secret = { stripes = 3, shell = { 30, 30, 36 }, stripe = { 170, 100, 255 }, neon = true },
+	eternity = { stripes = 4, shell = { 235, 250, 255 }, stripe = { 255, 255, 255 }, neon = true },
+	divine = { stripes = 3, shell = { 255, 255, 255 }, rainbow = true, dots = "stars" },
+	super_ultradivine = {
+		stripes = 4,
+		shell = { 255, 245, 160 },
+		tip = { 255, 200, 40 },
+		rainbow = true,
+		dots = "stars",
+	},
 } :: { [string]: EggLook }
 
 -- 특별 씨앗(비밀/영원/신성/슈퍼 울트라디바인) 빔 색과 글자
@@ -442,7 +658,7 @@ Visuals.specialEggs = {
 	secret = { text = "비밀 씨앗!", color = { 40, 40, 40 }, textColor = C.white },
 	eternity = { text = "영원 씨앗!", color = C.cyan, textColor = { 0, 50, 50 } },
 	divine = { text = "신성 씨앗!", color = C.pink, textColor = C.white },
-	super_ultradivine = { text = "슈퍼 울트라디바인 씨앗!", color = C.gold, textColor = { 60, 20, 90 } }, -- 6판 (수석 임시값)
+	super_ultradivine = { text = "슈퍼 울트라디바인 씨앗!", color = C.gold, textColor = { 60, 20, 90 } },
 } :: { [string]: { text: string, color: Color, textColor: Color } }
 
 ------------------------------------------------------------------

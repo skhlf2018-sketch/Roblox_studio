@@ -42,6 +42,7 @@ local LAYER_ORDER: { [string]: number } = {
 	Windows = 30,
 	Alerts = 40,
 	Popups = 50,
+	Dialogs = 55, -- 6판: 확인 창 (Ui.dialog / Ui.confirm)
 	Toasts = 60,
 }
 
@@ -604,6 +605,157 @@ function Ui.badge(parent: GuiObject): TextLabel
 	Ui.corner(1).Parent = b
 	Ui.stroke(C.white, 2).Parent = b
 	return b
+end
+
+------------------------------------------------------------------
+-- 6판: 확인 창 (건너뛰기·뽑아서 팔기 등). 한 번에 하나만 (새로 열면 옛 창은 닫힘)
+--   Ui.dialog("SkipDialog", "건너뛰기", "남은 시간을 코인으로 건너뛸까요?", {
+--       { name = "SkipAll", text = "전부 · 120 코인", color = C.shopGreen, onClick = fn },
+--       { name = "DialogCancel", text = "취소", color = C.gray },
+--   })
+--   버튼을 누르면 창을 닫고 onClick (keepOpen = true 면 안 닫음). 반환 handle.setBody / close / alive
+------------------------------------------------------------------
+
+export type DialogButton = {
+	name: string,
+	text: string,
+	color: Color3,
+	onClick: (() -> ())?,
+	keepOpen: boolean?,
+	sound: string?,
+}
+
+export type Dialog = {
+	frame: TextButton,
+	body: TextLabel,
+	buttons: { [string]: TextButton },
+	setBody: (string) -> (),
+	close: () -> (),
+	alive: () -> boolean,
+}
+
+local DIALOG_BASE = Vector2.new(560, 320)
+local activeDialog: Dialog? = nil
+
+function Ui.dialog(name: string, title: string, body: string, buttons: { DialogButton }, color: Color3?): Dialog
+	local old = activeDialog
+	if old then
+		old.close()
+	end
+	local tint = color or C.orange
+	local dim: TextButton = Ui.new("TextButton", {
+		Name = name,
+		Text = "",
+		AutoButtonColor = false,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.new(0, 0, 0),
+		BackgroundTransparency = 0.55,
+		Parent = Ui.layer("Dialogs"),
+	})
+	local holder: Frame = Ui.new("Frame", {
+		Name = "Holder",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(DIALOG_BASE.X, DIALOG_BASE.Y),
+		BackgroundColor3 = C.win,
+		Parent = dim,
+	})
+	Ui.scaled(holder, DIALOG_BASE)
+	Ui.corner(16).Parent = holder
+	Ui.stroke(C.winEdge, 6).Parent = holder
+	local band: Frame = Ui.new("Frame", {
+		Name = "Header",
+		Position = UDim2.fromOffset(6, 6),
+		Size = UDim2.new(1, -12, 0, 56),
+		BackgroundColor3 = tint,
+		Parent = holder,
+	})
+	Ui.corner(10).Parent = band
+	Ui.stripes(tint).Parent = band
+	Ui.label(title, UDim2.new(1, -20, 1, 0), 30, C.white, {
+		Name = "Title",
+		Position = UDim2.fromOffset(10, 0),
+		Parent = band,
+	})
+	local btnH = Ui.touch(60, DIALOG_BASE)
+	local bodyLabel = Ui.label(body, UDim2.new(1, -32, 1, -(56 + 12 + btnH + 28)), 24, C.white, {
+		Name = "Body",
+		Position = UDim2.fromOffset(16, 70),
+		TextScaled = true,
+		Parent = holder,
+	})
+	local limit = Instance.new("UITextSizeConstraint")
+	limit.MaxTextSize = 26
+	limit.Parent = bodyLabel
+	local row: Frame = Ui.new("Frame", {
+		Name = "Buttons",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -12),
+		Size = UDim2.new(1, -24, 0, btnH),
+		BackgroundTransparency = 1,
+		Parent = holder,
+	})
+	Ui.list(Enum.FillDirection.Horizontal, 10, Enum.HorizontalAlignment.Center, Enum.VerticalAlignment.Center).Parent =
+		row
+	local alive = true
+	local made: { [string]: TextButton } = {}
+	local handle: Dialog
+	local function close()
+		if not alive then
+			return
+		end
+		alive = false
+		if activeDialog == handle then
+			activeDialog = nil
+		end
+		dim:Destroy()
+	end
+	local n = math.max(1, #buttons)
+	local w = math.floor((DIALOG_BASE.X - 24 - (n - 1) * 10) / n)
+	for i, spec in buttons do
+		local b = Ui.button(spec.text, spec.color, UDim2.fromOffset(w, btnH), function()
+			if not alive then
+				return
+			end
+			if not spec.keepOpen then
+				close()
+			end
+			local fn = spec.onClick
+			if fn then
+				fn()
+			end
+		end, { layoutOrder = i, textSize = 22, parent = row, sound = spec.sound })
+		b.Name = spec.name
+		made[spec.name] = b
+	end
+	handle = {
+		frame = dim,
+		body = bodyLabel,
+		buttons = made,
+		setBody = function(text: string)
+			bodyLabel.Text = text
+		end,
+		close = close,
+		alive = function(): boolean
+			return alive
+		end,
+	}
+	activeDialog = handle
+	Ui.pop(holder, 0.85)
+	return handle
+end
+
+-- 예/아니오 확인 창 (버튼 이름 ConfirmYes / ConfirmNo)
+function Ui.confirm(title: string, body: string, yesText: string, onYes: () -> (), color: Color3?): Dialog
+	return Ui.dialog("ConfirmDialog", title, body, {
+		{ name = "ConfirmNo", text = "취소", color = C.gray, sound = "Close" },
+		{ name = "ConfirmYes", text = yesText, color = C.shopGreen, onClick = onYes },
+	}, color)
+end
+
+-- 지금 열린 확인 창 (없으면 nil)
+function Ui.activeDialog(): Dialog?
+	return activeDialog
 end
 
 return Ui

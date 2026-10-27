@@ -1,22 +1,24 @@
 --!strict
 --[[
-	PetPicker — "펫 N마리 고르기" 공용 창 (퓨전 머신 · 사쿠라 인큐베이터 · 제단 · 비밀 통로)
+	PetPicker — "식물(또는 열매) 고르기" 공용 창 (6판: 사쿠라 나무 성체 바치기 · 열매 먹이기)
 
 	  PetPicker.open({
-	      title = "퓨전 머신", color = Theme.Colors.purple,
-	      hint = "같은 펫 3마리를 골라요",
-	      count = 3,                                  -- 정확히 이만큼 고르면 확인 버튼이 켜짐
-	      filters = { PetPicker.sameSpecies(3) },     -- 위쪽 필터 버튼 (켜면 안 맞는 카드는 숨김)
+	      title = "사쿠라 나무", color = Theme.Colors.pink,
+	      hint = "바칠 성체 1그루를 골라요",
+	      count = 1,                                  -- 정확히 이만큼 고르면 확인 버튼이 켜짐
+	      items = PetPicker.myPets,                   -- 안 주면 정원의 성체 전부 (myFruits = 열매 가방)
 	      check = function(item, selected) return true end,   -- false, "이유" = 회색 카드(못 고름)
+	      info = function(item) return "크리스탈 5개" end,     -- 카드 둘째 줄 (기본: 등급 · 열매 1개 값)
 	      ready = function(selected) return true end,         -- 확인 버튼 조건 (기본: count 만큼 골랐나)
-	      status = function(selected) return "나올 수 있는 펫: ..." end, -- 안내 줄을 고른 것에 따라 바꿈
+	      status = function(selected) return "붙을 확률 12%" end, -- 안내 줄을 고른 것에 따라 바꿈
 	      onConfirm = function(selected) Net.send(...) end,
 	      closeWhen = function() return 멀어졌나 end,       -- true 가 되면 저절로 닫힘
 	  })
 
-	- 카드: 희귀도 색 테두리 + 3D 펫(알이면 알 모양) + 이름·희귀도·수입·크기/돌연변이. 카드 전체가 버튼(폰에서도 큼).
+	- 카드: 등급 색 테두리 + 3D 식물(씨앗이면 씨앗 모양, 열매면 열매 동그라미 + 개수) + 이름·등급·열매 값·크기/돌연변이.
+	  카드 전체가 버튼(폰에서도 큼).
 	- 고른 카드는 노란 두꺼운 테두리 + 순서 번호. 한 쪽 24장, < > 로 넘김.
-	- 항목(items)을 안 주면 내 보관함 펫 전부. State 가 바뀌면 다시 그림 (없어진 펫은 선택에서 빠짐).
+	- 항목(items)을 안 주면 정원의 성체 식물 전부. State 가 바뀌면 다시 그림 (없어진 것은 선택에서 빠짐).
 	- 아래 버튼(필터·취소·확인)은 화면에서 46px 이상 (Ui.touch).
 	- 확인을 누르면 창을 닫고 onConfirm 만 부름. 결과는 서버 이벤트로 옴.
 ]]
@@ -52,9 +54,10 @@ export type Item = {
 	petId: string,
 	size: string,
 	mutations: { string },
-	kind: string?, -- "pet"(기본) | "egg"
-	note: string?, -- 카드 아래 작은 글 ("부화 중 알" 등)
-	equipped: boolean?,
+	kind: string?, -- "pet"(성체 식물, 기본) | "egg"(씨앗) | "fruit"(열매 가방 칸: uid = petId = 열매를 맺은 식물 id)
+	note: string?, -- 카드 아래 작은 글 ("자라는 씨앗" 등)
+	count: number?, -- 열매 칸: 개수
+	value: number?, -- 열매 칸: 1개 값 (코인)
 }
 
 export type Filter = {
@@ -73,6 +76,7 @@ export type Options = {
 	items: (() -> { Item })?,
 	filters: { Filter }?,
 	check: ((item: Item, selected: { Item }) -> (boolean, string?))?,
+	info: ((item: Item) -> string?)?, -- 카드 둘째 줄 (없거나 nil 이면 등급 · 열매 값)
 	ready: ((selected: { Item }) -> (boolean, string?))?,
 	status: ((selected: { Item }) -> string?)?,
 	confirmText: string?,
@@ -83,17 +87,16 @@ export type Options = {
 }
 
 ------------------------------------------------------------------
--- 기본 항목 / 필터
+-- 기본 항목
 ------------------------------------------------------------------
 
--- 내 보관함 펫 → Item
+-- 내 정원의 성체 식물 → Item
 function PetPicker.myPets(): { Item }
 	local snap = State.get()
 	local list: { Item } = {}
 	if not snap then
 		return list
 	end
-	-- 6판: 정원의 성체 식물 (장착 개념 없음 → equipped 는 항상 false)
 	for _, record in (snap.pets or {}) :: { Types.PetRecord } do
 		table.insert(list, {
 			uid = record.uid,
@@ -101,13 +104,12 @@ function PetPicker.myPets(): { Item }
 			size = record.size,
 			mutations = record.mutations or {},
 			kind = "pet",
-			equipped = false,
 		})
 	end
 	return list
 end
 
--- 내 부화 중 알 → Item
+-- 내 씨앗 (정원에서 자라는 씨앗 + 씨앗 가방) → Item
 function PetPicker.myEggs(): { Item }
 	local snap = State.get()
 	local list: { Item } = {}
@@ -121,10 +123,9 @@ function PetPicker.myEggs(): { Item }
 			size = record.size,
 			mutations = record.mutations or {},
 			kind = "egg",
-			note = "부화 중 알",
+			note = "자라는 씨앗",
 		})
 	end
-	-- 2판 수정: 가방 속 알도 (SakuraApply 는 가방 알도 받음)
 	for _, record in (snap.eggs or {}) :: { Types.BagEgg } do
 		table.insert(list, {
 			uid = record.uid,
@@ -132,54 +133,36 @@ function PetPicker.myEggs(): { Item }
 			size = record.size,
 			mutations = record.mutations or {},
 			kind = "egg",
-			note = "가방 알",
+			note = "가방 씨앗",
 		})
 	end
 	return list
 end
 
-local function speciesCounts(items: { Item }): { [string]: number }
-	local counts: { [string]: number } = {}
-	for _, item in items do
-		counts[item.petId] = (counts[item.petId] or 0) + 1
+-- 6판: 열매 가방 칸 → Item (uid = petId = 열매를 맺은 식물 id)
+function PetPicker.myFruits(): { Item }
+	local snap = State.get()
+	local list: { Item } = {}
+	local bag = if snap then snap.fruits else nil
+	if typeof(bag) ~= "table" then
+		return list
 	end
-	return counts
-end
-
--- "같은 펫만": 아직 안 골랐으면 minCount 마리 이상 가진 펫만, 골랐으면 그 펫만
-function PetPicker.sameSpecies(minCount: number): Filter
-	local counts: { [string]: number } = {}
-	local stamp: { Item }? = nil
-	return {
-		id = "same",
-		label = "같은 펫만",
-		default = true,
-		test = function(item: Item, selected: { Item }): boolean
-			if #selected > 0 then
-				return item.petId == selected[1].petId
-			end
-			-- 목록이 바뀔 때만 다시 셈
-			local all = PetPicker.currentItems()
-			if stamp ~= all then
-				stamp = all
-				counts = speciesCounts(all)
-			end
-			return (counts[item.petId] or 0) >= minCount
-		end,
-	}
-end
-
--- "같은 쪽만": 천국(light)/지옥(dark) 쪽 펫만
-function PetPicker.sameSide(side: string): Filter
-	return {
-		id = "side",
-		label = "같은 쪽만",
-		default = true,
-		test = function(item: Item): boolean
-			local pet = Pets.get(item.petId)
-			return pet ~= nil and pet.side == side
-		end,
-	}
+	for plantId, slot in bag :: Types.FruitBag do
+		local count = if typeof(slot) == "table" then tonumber(slot.count) or 0 else 0
+		if count > 0 then
+			local total = tonumber(slot.value) or 0
+			table.insert(list, {
+				uid = plantId,
+				petId = plantId,
+				size = "normal",
+				mutations = {},
+				kind = "fruit",
+				count = count,
+				value = total / count,
+			})
+		end
+	end
+	return list
 end
 
 ------------------------------------------------------------------
@@ -238,9 +221,12 @@ local function rarityOrder(item: Item): number
 	return if pet then Rarities.order(pet.rarity) else 0
 end
 
--- 6판: 열매로 환산한 초당 코인 (5판 펫 초당 수입 자리)
-local function incomeOf(item: Item): number
-	return Economy.recordIncome(item)
+-- 6판: 열매 1개 값 (정렬용 — 열매 칸은 그 칸의 1개 값)
+local function valueOf(item: Item): number
+	if item.kind == "fruit" then
+		return item.value or 0
+	end
+	return Economy.recordFruitValue(item)
 end
 
 local function destroy(s: Session, immediate: boolean?)
@@ -328,16 +314,52 @@ local function makeCard(s: Session, item: Item, order: number, parent: Instance)
 	stroke.Parent = card
 
 	if item.kind == "egg" then
-		local ec = Visuals.petColor(item.petId, 1)
-		local egg: Frame = Ui.new("Frame", {
+		-- 씨앗 모양 (등급 색 아몬드 + 줄무늬)
+		local seed: Frame = Ui.new("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.new(0.5, 0, 0, 8),
-			Size = UDim2.fromOffset(58, 74),
-			BackgroundColor3 = Color3.fromRGB(ec[1], ec[2], ec[3]),
+			Position = UDim2.new(0.5, 0, 0, 10),
+			Size = UDim2.fromOffset(48, 70),
+			BackgroundColor3 = Theme.lighter(rcolor, 0.15),
 			Parent = card,
 		})
-		Ui.corner(1).Parent = egg
-		Ui.stroke(C.white, 3).Parent = egg
+		Ui.corner(1).Parent = seed
+		Ui.stroke(C.white, 3).Parent = seed
+		Ui.new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(0, 6, 0.8, 0),
+			BackgroundColor3 = Theme.darker(rcolor, 0.35),
+			Parent = seed,
+		})
+	elseif item.kind == "fruit" then
+		-- 열매 동그라미 (식물 열매 색) + 개수
+		local fc = Visuals.petColor(item.petId, 3)
+		local fruit: Frame = Ui.new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0),
+			Position = UDim2.new(0.5, 0, 0, 12),
+			Size = UDim2.fromOffset(66, 66),
+			BackgroundColor3 = Color3.fromRGB(fc[1], fc[2], fc[3]),
+			Parent = card,
+		})
+		Ui.corner(1).Parent = fruit
+		Ui.stroke(C.white, 3).Parent = fruit
+		local leaf: Frame = Ui.new("Frame", {
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.6, 0, 0, 6),
+			Size = UDim2.fromOffset(22, 12),
+			Rotation = -25,
+			BackgroundColor3 = C.green,
+			Parent = fruit,
+		})
+		Ui.corner(1).Parent = leaf
+		Ui.label("×" .. tostring(item.count or 0), UDim2.fromOffset(60, 28), 22, C.white, {
+			Name = "Count",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -4, 0, 4),
+			TextXAlignment = Enum.TextXAlignment.Right,
+			ZIndex = 3,
+			Parent = card,
+		})
 	else
 		local view = PetViewport.new(item.petId, { size = UDim2.new(1, -10, 0, 84), position = UDim2.fromOffset(5, 4) })
 		view.Parent = card
@@ -345,18 +367,24 @@ local function makeCard(s: Session, item: Item, order: number, parent: Instance)
 			view.ImageTransparency = 0.5
 		end
 	end
-	Ui.label(if pet then pet.name else item.petId, UDim2.new(1, -8, 0, 22), 18, rcolor, {
+	local name = if pet then pet.name else item.petId
+	if item.kind == "fruit" then
+		name ..= " 열매"
+	end
+	Ui.label(name, UDim2.new(1, -8, 0, 22), 18, rcolor, {
 		Position = UDim2.fromOffset(4, 88),
 		TextScaled = true,
 		Parent = card,
 	})
 	local rarity = Rarities.get(rarityId)
+	local infoFn = s.opts.info
+	local infoText = if infoFn then infoFn(item) else nil
 	Ui.label(
-		(if rarity then rarity.name .. " · " else "") .. Format.money(incomeOf(item)) .. "/초",
+		infoText or ((if rarity then rarity.name .. " · " else "") .. "열매 " .. Format.money(valueOf(item))),
 		UDim2.new(1, -8, 0, 18),
 		15,
 		C.money,
-		{ Position = UDim2.fromOffset(4, 111), TextScaled = true, Parent = card }
+		{ Name = "Info", Position = UDim2.fromOffset(4, 111), TextScaled = true, Parent = card }
 	)
 	local extra = detail(item)
 	local note = if reason then reason elseif item.note then item.note else extra
@@ -365,19 +393,6 @@ local function makeCard(s: Session, item: Item, order: number, parent: Instance)
 		TextScaled = true,
 		Parent = card,
 	})
-	if item.equipped then
-		local tag: TextLabel = Ui.new("TextLabel", {
-			Position = UDim2.fromOffset(4, 4),
-			Size = UDim2.fromOffset(44, 20),
-			BackgroundColor3 = C.yellow,
-			TextColor3 = C.ink,
-			TextSize = 13,
-			Text = "장착",
-			ZIndex = 3,
-			Parent = card,
-		})
-		Ui.corner(1).Parent = tag
-	end
 	if isSelected then
 		local badge: TextLabel = Ui.new("TextLabel", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -450,7 +465,7 @@ function PetPicker.open(opts: Options)
 	Ui.grid(CARD, 10).Parent = grid
 	Ui.padding(6).Parent = grid
 	local emptyLabel =
-		Ui.label(opts.empty or "고를 수 있는 펫이 없어요!", UDim2.new(1, -40, 0, 70), 26, C.white, {
+		Ui.label(opts.empty or "고를 수 있는 식물이 없어요!", UDim2.new(1, -40, 0, 70), 26, C.white, {
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.45),
 			Visible = false,
@@ -579,7 +594,7 @@ function PetPicker.open(opts: Options)
 				table.insert(visible, item)
 			end
 		end
-		-- 고를 수 있는 것 먼저 → 희귀도 높은 순 → 같은 펫끼리 → 수입 높은 순
+		-- 고를 수 있는 것 먼저 → 등급 높은 순 → 같은 식물끼리 → 열매 값 높은 순
 		local okCache: { [string]: boolean } = {}
 		local check = opts.check
 		for _, item in visible do
@@ -597,7 +612,7 @@ function PetPicker.open(opts: Options)
 			if a.petId ~= b.petId then
 				return a.petId < b.petId
 			end
-			local ia, ib = incomeOf(a), incomeOf(b)
+			local ia, ib = valueOf(a), valueOf(b)
 			if ia ~= ib then
 				return ia > ib
 			end
@@ -661,7 +676,16 @@ function PetPicker.open(opts: Options)
 	Windows.register(NAME, window, render)
 
 	s.unsubscribe = State.onChanged(function(section: string)
-		if s.alive and (section == "pets" or section == "incubators" or section == "eggs" or section == "snapshot") then
+		if
+			s.alive
+			and (
+				section == "pets"
+				or section == "incubators"
+				or section == "eggs"
+				or section == "fruits"
+				or section == "snapshot"
+			)
+		then
 			refreshItems()
 			render()
 		end

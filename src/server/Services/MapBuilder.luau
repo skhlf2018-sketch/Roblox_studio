@@ -35,7 +35,7 @@
 	  러닝머신·퓨즈 머신 받침 타일, 가판대 지붕 간판·등불.
 	- 이름이 "Map" 인 Instance 가 Workspace 에 이미 있으면 새로 만들지 않고 태그만 읽습니다.
 	- 큰 파트는 전부 한 변 2048 스터드 이하(로블록스 한계). 구역마다 task.wait() 로 나눠 만듦.
-	- 동물(부모 동물·우리 펫·경비)과 알 겉모습은 PetVisualService / EggVisualService 가 붙입니다.
+	- 경비 겉모습(식물 괴물)은 PetVisualService, 씨앗은 EggVisualService, 정원 식물·둥지 옆 장식 식물은 PlantVisualService 가 붙입니다.
 
 	태그·Attribute 이름은 shared/Tags.luau 그대로 (서버 로직이 읽음). 배달 패드는 2판에서 없음
 	(자기 베이스 영역에 들어가면 자동 배달).
@@ -1233,50 +1233,25 @@ local function model(name: string, parent: Instance): Model
 end
 
 -- 사쿠라 나무 (6판 씨앗 버전 — 모델 이름·태그는 5판 사쿠라 인큐베이터 그대로)
+--   태그 파트 SakuraIncubator = 나무 밑 둥근 꽃밭 (지름 7, 서버 거리 판정 기준 — 자리·크기 그대로).
+--   그 가운데서 굵은 줄기가 솟고, 가지 5개 + 분홍 꽃 덩어리 9개 + 하얀 빛 꽃 + 등불 4개 + 꽃잎이 떨어짐.
 local function buildSakura(center: Vector3, toward: number, parent: Instance): { Hole }
 	local m = model("SakuraIncubatorModel", parent)
 	local back = -toward
-	-- 경비 길(중심~부모 동물 원) 밖, 길 반대쪽 모서리 (도리이 옆)
+	-- 경비 길(중심~장식 식물 원) 밖, 길 반대쪽 모서리 (도리이 옆)
 	local lx, lz = 64, 46
 	local pos = Vector3.new(center.X + back * lx, FLOOR_TOP, center.Z + lz)
 	local wood = Color3.fromRGB(95, 58, 45)
 	local pink = Color3.fromRGB(255, 175, 205)
-	-- 나무 (받침 뒤)
-	local trunkPos = pos + Vector3.new(back * 5.5, 0, 0)
-	P(m, "VCyl", Vector3.new(3.2, 10, 0), CFrame.new(trunkPos + Vector3.new(0, 5, 0)), wood, M.Wood, true)
-	P(
-		m,
-		"Ell",
-		Vector3.new(11, 2.2, 11),
-		CFrame.new(pos + Vector3.new(back * 2, 0.4, 0)),
-		wood:Lerp(Color3.new(0, 0, 0), 0.15),
-		M.Wood
-	)
-	for i = 1, 6 do
-		local a = i / 6 * math.pi * 2
-		local tipPos = trunkPos + Vector3.new(math.cos(a) * 6, 0.2, math.sin(a) * 6)
-		between(m, trunkPos + Vector3.new(0, 1.6, 0), tipPos, 1.1, wood, M.Wood)
-	end
-	for i = 1, 7 do
-		local a = i / 7 * math.pi * 2
-		P(
-			m,
-			"Ball",
-			Vector3.new(6 + (i % 3), 0, 0),
-			CFrame.new(trunkPos + Vector3.new(math.cos(a) * 3.6, 11 + (i % 2) * 1.5, math.sin(a) * 3.6)),
-			pink:Lerp(Color3.new(1, 1, 1), (i % 3) * 0.12),
-			M.SmoothPlastic
-		)
-	end
-	-- 받침 (태그 SakuraIncubator)
+	-- 꽃밭 (태그 SakuraIncubator)
 	local pedestal = anchorCylinder(
 		"SakuraIncubator",
 		7,
 		1.6,
-		pos + Vector3.new(0, 1.4, 0),
+		pos + Vector3.new(0, 0.8, 0),
 		m,
-		Color3.fromRGB(200, 90, 130),
-		Enum.Material.WoodPlanks,
+		Color3.fromRGB(120, 85, 60),
+		Enum.Material.Ground,
 		Tags.SakuraIncubator
 	)
 	m.PrimaryPart = pedestal
@@ -1284,32 +1259,79 @@ local function buildSakura(center: Vector3, toward: number, parent: Instance): {
 		m,
 		"VCyl",
 		Vector3.new(7.6, 0.3, 0),
-		CFrame.new(pos + Vector3.new(0, 2.25, 0)),
+		CFrame.new(pos + Vector3.new(0, 1.65, 0)),
 		Color3.fromRGB(255, 210, 90),
 		M.Foil
 	)
-	P(m, "Ell", Vector3.new(6.2, 2.2, 6.2), CFrame.new(pos + Vector3.new(0, 2.8, 0)), pink, M.Glass, false, 0.35)
-	local egg = P(
+	P(
 		m,
-		"Ell",
-		Vector3.new(2.8, 3.6, 2.8),
-		CFrame.new(pos + Vector3.new(0, 4.4, 0)),
-		Color3.fromRGB(255, 150, 200),
-		M.SmoothPlastic
+		"VCyl",
+		Vector3.new(6.6, 0.25, 0),
+		CFrame.new(pos + Vector3.new(0, 1.7, 0)),
+		Color3.fromRGB(110, 175, 80),
+		M.Grass
 	)
-	egg.Name = "SakuraEgg"
+	-- 줄기 + 뿌리
+	local trunkTop = pos + Vector3.new(0, 13, 0)
+	between(m, pos + Vector3.new(0, 1.6, 0), pos + Vector3.new(back * 0.8, 9, 0.4), 2.6, wood, M.Wood)
+	between(m, pos + Vector3.new(back * 0.8, 9, 0.4), trunkTop, 2, wood, M.Wood)
 	for i = 1, 4 do
-		local a = i * 1.57 + 0.5
+		local a = i / 4 * math.pi * 2 + 0.4
+		between(
+			m,
+			pos + Vector3.new(0, 2.6, 0),
+			pos + Vector3.new(math.cos(a) * 3.2, 1.8, math.sin(a) * 3.2),
+			0.9,
+			wood,
+			M.Wood
+		)
+	end
+	-- 가지 5개 → 끝마다 꽃 덩어리
+	local tips: { Vector3 } = {}
+	for i = 1, 5 do
+		local a = i / 5 * math.pi * 2
+		local tip = trunkTop + Vector3.new(math.cos(a) * 6, 1.5 + (i % 2) * 1.5, math.sin(a) * 6)
+		between(m, trunkTop - Vector3.new(0, 1.5, 0), tip, 1, wood, M.Wood)
+		table.insert(tips, tip)
+	end
+	for i, tip in tips do
 		P(
 			m,
 			"Ball",
-			Vector3.new(0.6, 0, 0),
-			CFrame.new(pos + Vector3.new(math.cos(a) * 1.15, 4.4 + (i % 2) * 0.8 - 0.4, math.sin(a) * 1.15)),
-			Color3.new(1, 1, 1),
-			M.Neon
+			Vector3.new(6 + (i % 3), 0, 0),
+			CFrame.new(tip + Vector3.new(0, 1, 0)),
+			pink:Lerp(Color3.new(1, 1, 1), (i % 3) * 0.12),
+			M.SmoothPlastic
 		)
 	end
-	light(egg, Color3.fromRGB(255, 140, 200), 18, 1.6)
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + 0.6
+		P(
+			m,
+			"Ball",
+			Vector3.new(7, 0, 0),
+			CFrame.new(trunkTop + Vector3.new(math.cos(a) * 2.5, 3.5 + (i % 2), math.sin(a) * 2.5)),
+			pink:Lerp(Color3.fromRGB(240, 120, 170), (i % 2) * 0.3),
+			M.SmoothPlastic
+		)
+	end
+	-- 하얀 빛 꽃 (나무 아래를 밝게)
+	local glowBall = nil :: Part?
+	for i = 1, 5 do
+		local a = i / 5 * math.pi * 2 + 0.3
+		local b = P(
+			m,
+			"Ball",
+			Vector3.new(0.9, 0, 0),
+			CFrame.new(trunkTop + Vector3.new(math.cos(a) * 4.5, -0.8, math.sin(a) * 4.5)),
+			Color3.fromRGB(255, 240, 250),
+			M.Neon
+		)
+		glowBall = glowBall or b
+	end
+	if glowBall then
+		light(glowBall, Color3.fromRGB(255, 150, 200), 22, 1.4)
+	end
 	-- 등불 4개
 	for i = 1, 4 do
 		local a = i / 4 * math.pi * 2 + math.pi / 4
@@ -1328,8 +1350,8 @@ local function buildSakura(center: Vector3, toward: number, parent: Instance): {
 	local petalBox = P(
 		m,
 		"Block",
-		Vector3.new(12, 0.5, 12),
-		CFrame.new(trunkPos + Vector3.new(0, 12, 0)),
+		Vector3.new(14, 0.5, 14),
+		CFrame.new(trunkTop + Vector3.new(0, 2, 0)),
 		pink,
 		M.SmoothPlastic,
 		false,
@@ -1349,7 +1371,7 @@ local function buildSakura(center: Vector3, toward: number, parent: Instance): {
 	e.Size = NumberSequence.new(0.5)
 	e.LightInfluence = 0.5
 	e.Parent = petalBox
-	Gui.billboard(pedestal, "사쿠라 나무", 12, 120).TextColor3 = Color3.fromRGB(255, 220, 235)
+	Gui.billboard(pedestal, "사쿠라 나무", 22, 150).TextColor3 = Color3.fromRGB(255, 220, 235)
 	return { { x = back * lx, z = lz, r = 11 }, { x = back * (lx + 5.5), z = lz, r = 9 } }
 end
 
@@ -3324,7 +3346,7 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 		guardBed(zoneFolder, theme, home.x, home.z)
 	end
 
-	-- 둥지 8개 + 부모 동물 자리 2개 (1번·8번 둥지 옆, 담장 쪽)
+	-- 둥지 8개 + 장식 식물 자리 2개 (1번·8번 둥지 옆, 담장 쪽)
 	local holes: { Hole } = {}
 	local nestSpots = MapLayout.nestsFor(biome.id)
 	for i, spot in nestSpots do
@@ -3491,7 +3513,7 @@ local function upgradeSign(
 	price.Font = Enum.Font.FredokaOne
 	price.TextScaled = true
 	price.TextColor3 = WHITE
-	price.Text = "$1K"
+	price.Text = "1K 코인"
 	price.Parent = button
 	local ps = Instance.new("UIStroke")
 	ps.Color = Color3.fromRGB(60, 0, 0)
@@ -3559,7 +3581,7 @@ local function floorRing(parent: Instance, pos: Vector3, d: number, color: Color
 end
 
 ------------------------------------------------------------------
--- 러닝머신 (레벨 1~10 모양) — 벨트 파트(태그 Treadmill)는 그대로, 둘레 모양 모델만 바꿈
+-- 러닝머신 (레벨 1~20 모양) — 벨트 파트(태그 Treadmill)는 그대로, 둘레 모양 모델만 바꿈
 ------------------------------------------------------------------
 
 type TreadStyle = {
@@ -3570,6 +3592,7 @@ type TreadStyle = {
 	trim: Color3,
 	arrow: Color3,
 	extra: string?,
+	extra2: string?, -- 둘째 장식 (6판 11~20레벨)
 }
 
 local TREAD_STYLES: { TreadStyle } = {
@@ -3662,6 +3685,99 @@ local TREAD_STYLES: { TreadStyle } = {
 		arrow = Color3.fromRGB(255, 215, 90),
 		extra = "angel",
 	},
+	-- 6판 (사장님: 러닝머신 최대 1초 1M) 11~20레벨
+	{
+		name = "정글",
+		belt = Color3.fromRGB(60, 45, 30),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(70, 140, 60),
+		trim = Color3.fromRGB(170, 240, 90),
+		arrow = Color3.fromRGB(190, 255, 110),
+		extra = "jungle",
+	},
+	{
+		name = "바다",
+		belt = Color3.fromRGB(20, 50, 80),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(40, 150, 190),
+		trim = Color3.fromRGB(90, 240, 255),
+		arrow = Color3.fromRGB(150, 250, 255),
+		extra = "ocean",
+	},
+	{
+		name = "사탕",
+		belt = Color3.fromRGB(255, 200, 220),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(255, 255, 255),
+		trim = Color3.fromRGB(255, 80, 140),
+		arrow = Color3.fromRGB(255, 120, 180),
+		extra = "candy",
+	},
+	{
+		name = "벚꽃",
+		belt = Color3.fromRGB(90, 50, 60),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(255, 190, 215),
+		trim = Color3.fromRGB(255, 120, 170),
+		arrow = Color3.fromRGB(255, 225, 240),
+		extra = "sakura",
+	},
+	{
+		name = "용암",
+		belt = Color3.fromRGB(30, 20, 20),
+		beltMat = M.Basalt,
+		frame = Color3.fromRGB(45, 35, 35),
+		trim = Color3.fromRGB(255, 90, 20),
+		arrow = Color3.fromRGB(255, 170, 40),
+		extra = "fire",
+		extra2 = "lava",
+	},
+	{
+		name = "수정",
+		belt = Color3.fromRGB(50, 30, 80),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(150, 110, 230),
+		trim = Color3.fromRGB(220, 160, 255),
+		arrow = Color3.fromRGB(240, 210, 255),
+		extra = "crystal",
+	},
+	{
+		name = "유령",
+		belt = Color3.fromRGB(25, 20, 35),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(60, 50, 80),
+		trim = Color3.fromRGB(120, 255, 150),
+		arrow = Color3.fromRGB(160, 255, 180),
+		extra = "ghost",
+	},
+	{
+		name = "은하",
+		belt = Color3.fromRGB(15, 15, 40),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(35, 35, 90),
+		trim = Color3.fromRGB(150, 120, 255),
+		arrow = Color3.fromRGB(255, 240, 150),
+		extra = "galaxy",
+	},
+	{
+		name = "무지개",
+		belt = Color3.fromRGB(245, 245, 250),
+		beltMat = M.Plastic,
+		frame = Color3.fromRGB(255, 255, 255),
+		trim = Color3.fromRGB(255, 90, 200),
+		arrow = Color3.fromRGB(255, 220, 80),
+		extra = "rainbow",
+	},
+	{
+		name = "황제",
+		belt = Color3.fromRGB(120, 30, 160),
+		beltMat = M.Fabric,
+		frame = Color3.fromRGB(255, 205, 50),
+		trim = Color3.fromRGB(255, 245, 170),
+		arrow = Color3.fromRGB(255, 255, 210),
+		extra = "celeb",
+		extra2 = "gold",
+	},
 }
 
 -- level 0(잠김)은 기본 모양을 반투명으로
@@ -3705,148 +3821,314 @@ local function buildTreadmillLook(parent: Instance, pad: BasePart, level: number
 			)
 		end
 	end
-	local extra = style.extra
-	if extra == "scifi" then
-		for _, s in { -1, 1 } do
-			P(m, "Block", Vector3.new(0.4, 4, 0.4), at3(s * (wid / 2 + 1.4), top + 2, len / 2 - 1), style.trim, M.Neon)
-			B(m, Vector3.new(1.4, 1, 3), at3(s * (wid / 2 + 1.4), top + 4.4, len / 2 - 1), style.frame)
-		end
-	elseif extra == "fire" then
-		for _, s in { -1, 1 } do
-			local brazier = B(m, Vector3.new(1.6, 2, 1.6), at3(s * (wid / 2 + 1.6), 1, len / 2 - 1), style.frame)
-			local fire = Instance.new("Fire")
-			fire.Size = 4
-			fire.Heat = 8
-			fire.Color = Color3.fromRGB(255, 120, 30)
-			fire.SecondaryColor = Color3.fromRGB(255, 220, 80)
-			fire.Parent = brazier
-		end
-	elseif extra == "celeb" then
-		for _, s in { -1, 1 } do
-			for k = 0, 2 do
+	for _, extra in { style.extra or "", style.extra2 or "" } do
+		if extra == "scifi" then
+			for _, s in { -1, 1 } do
+				P(
+					m,
+					"Block",
+					Vector3.new(0.4, 4, 0.4),
+					at3(s * (wid / 2 + 1.4), top + 2, len / 2 - 1),
+					style.trim,
+					M.Neon
+				)
+				B(m, Vector3.new(1.4, 1, 3), at3(s * (wid / 2 + 1.4), top + 4.4, len / 2 - 1), style.frame)
+			end
+		elseif extra == "fire" then
+			for _, s in { -1, 1 } do
+				local brazier = B(m, Vector3.new(1.6, 2, 1.6), at3(s * (wid / 2 + 1.6), 1, len / 2 - 1), style.frame)
+				local fire = Instance.new("Fire")
+				fire.Size = 4
+				fire.Heat = 8
+				fire.Color = Color3.fromRGB(255, 120, 30)
+				fire.SecondaryColor = Color3.fromRGB(255, 220, 80)
+				fire.Parent = brazier
+			end
+		elseif extra == "celeb" then
+			for _, s in { -1, 1 } do
+				for k = 0, 2 do
+					P(
+						m,
+						"VCyl",
+						Vector3.new(0.5, 3.2, 0),
+						at3(s * (wid / 2 + 2.4), 1.6, -len / 2 + 2 + k * 4),
+						style.frame,
+						M.Foil
+					)
+					P(
+						m,
+						"Ball",
+						Vector3.new(0.8, 0, 0),
+						at3(s * (wid / 2 + 2.4), 3.3, -len / 2 + 2 + k * 4),
+						style.frame,
+						M.Foil
+					)
+				end
+				P(
+					m,
+					"Block",
+					Vector3.new(0.35, 0.35, 8),
+					at3(s * (wid / 2 + 2.4), 2.6, 0),
+					Color3.fromRGB(180, 20, 40),
+					M.Fabric
+				)
+			end
+		elseif extra == "gold" then
+			local sparkle = Instance.new("Sparkles")
+			sparkle.SparkleColor = Color3.fromRGB(255, 230, 120)
+			sparkle.Parent = screen
+		elseif extra == "ice" then
+			for _, s in { -1, 1 } do
+				for k = 0, 2 do
+					local h = 2.2 + (k % 2) * 1.6
+					B(
+						m,
+						Vector3.new(1.4, h, 1.4),
+						at3(s * (wid / 2 + 1.5), 1.2 + h / 2, -len / 2 + 2 + k * 4)
+							* CFrame.Angles(0, 0, s * math.rad(-18)),
+						Color3.fromRGB(110, 190, 255),
+						false,
+						M.Plastic,
+						0.05
+					)
+					B(
+						m,
+						Vector3.new(0.9, 1.2, 0.9),
+						at3(s * (wid / 2 + 2.1), 1.6 + h, -len / 2 + 2 + k * 4) * CFrame.Angles(0, 0, s * math.rad(-28)),
+						Color3.fromRGB(200, 240, 255)
+					)
+				end
+			end
+		elseif extra == "lucky" then
+			for _, s in { -1, 1 } do
+				for _, zz in { -len / 2 + 1, len / 2 - 1 } do
+					local block =
+						B(m, Vector3.new(2, 2, 2), at3(s * (wid / 2 + 1.8), 1, zz), Color3.fromRGB(255, 205, 40), true)
+					local g = Instance.new("SurfaceGui")
+					g.Face = Enum.NormalId.Front
+					g.LightInfluence = 0
+					local t = Instance.new("TextLabel")
+					t.BackgroundTransparency = 1
+					t.Size = UDim2.fromScale(1, 1)
+					t.Font = Enum.Font.FredokaOne
+					t.TextScaled = true
+					t.Text = "?"
+					t.TextColor3 = WHITE
+					t.Parent = g
+					g.Parent = block
+				end
+			end
+		elseif extra == "hacker" then
+			for _, s in { -1, 1 } do
+				local mon = B(m, Vector3.new(0.4, 2.4, 3), at3(s * (wid / 2 + 1.6), 3.4, -len / 2 + 2.5), style.frame)
+				P(
+					m,
+					"Block",
+					Vector3.new(0.1, 2, 2.6),
+					at3(s * (wid / 2 + 1.35), 3.4, -len / 2 + 2.5),
+					style.trim,
+					M.Neon,
+					false,
+					0.3
+				)
+				B(m, Vector3.new(0.5, 2.2, 0.5), at3(s * (wid / 2 + 1.6), 1.1, -len / 2 + 2.5), style.frame)
+				mon.Name = "Monitor"
+			end
+		elseif extra == "demon" then
+			for _, s in { -1, 1 } do
+				local horn = P(
+					m,
+					"Wedge",
+					Vector3.new(0.8, 3, 1.4),
+					at3(s * (wid / 2 + 0.8), top + 6.2, -len / 2 - 0.4) * CFrame.Angles(0, 0, s * math.rad(-15)),
+					Color3.fromRGB(25, 10, 12),
+					M.Plastic
+				)
+				horn.Name = "Horn"
+				local fire = Instance.new("Fire")
+				fire.Size = 3
+				fire.Color = Color3.fromRGB(230, 30, 20)
+				fire.SecondaryColor = Color3.fromRGB(120, 0, 0)
+				fire.Parent = horn
+			end
+		elseif extra == "angel" then
+			for _, s in { -1, 1 } do
+				for k = 0, 2 do
+					B(
+						m,
+						Vector3.new(0.4, 2.4 - k * 0.5, 3.2 - k * 0.6),
+						at3(s * (wid / 2 + 1.2 + k * 1.4), top + 4 + k * 0.6, -len / 2 + 0.6)
+							* CFrame.Angles(0, 0, s * math.rad(-25)),
+						WHITE
+					)
+				end
+			end
+			P(
+				m,
+				"Cyl",
+				Vector3.new(0.3, 3.4, 3.4),
+				at3(0, top + 7.2, -len / 2 - 0.4) * CFrame.Angles(0, 0, math.pi / 2),
+				style.trim,
+				M.Neon
+			)
+		elseif extra == "jungle" then
+			for _, s in { -1, 1 } do
+				for k = 0, 1 do
+					local z = -len / 2 + 2 + k * 6
+					P(
+						m,
+						"VCyl",
+						Vector3.new(0.5, 4, 0),
+						at3(s * (wid / 2 + 2), 2, z),
+						Color3.fromRGB(110, 80, 45),
+						M.Wood
+					)
+					P(m, "Ball", Vector3.new(2.4, 0, 0), at3(s * (wid / 2 + 2), 4.4, z), style.frame, M.Plastic)
+				end
+			end
+		elseif extra == "ocean" then
+			for _, s in { -1, 1 } do
+				for k = 0, 2 do
+					P(
+						m,
+						"Ball",
+						Vector3.new(0.9 - k * 0.15, 0, 0),
+						at3(s * (wid / 2 + 1.8), 1.2 + k * 1.3, -len / 2 + 2 + k * 3),
+						style.trim,
+						M.Glass,
+						false,
+						0.35
+					)
+				end
+			end
+			local e = Instance.new("ParticleEmitter")
+			e.Texture = SPARKLE_TEX
+			e.Rate = 4
+			e.Lifetime = NumberRange.new(1.5, 2.5)
+			e.Speed = NumberRange.new(1, 2)
+			e.Acceleration = Vector3.new(0, 1.5, 0)
+			e.Color = ColorSequence.new(style.trim)
+			e.Size = NumberSequence.new(0.35)
+			e.Parent = screen
+		elseif extra == "candy" then
+			for _, s in { -1, 1 } do
+				for _, zz in { -len / 2 + 1.5, len / 2 - 1.5 } do
+					P(m, "VCyl", Vector3.new(0.5, 3.6, 0), at3(s * (wid / 2 + 1.8), 1.8, zz), WHITE, M.Plastic)
+					for k = 0, 2 do
+						P(
+							m,
+							"VCyl",
+							Vector3.new(0.56, 0.4, 0),
+							at3(s * (wid / 2 + 1.8), 0.7 + k * 1.1, zz),
+							style.trim,
+							M.Plastic
+						)
+					end
+					P(m, "Ball", Vector3.new(1.4, 0, 0), at3(s * (wid / 2 + 1.8), 4, zz), style.trim, M.Plastic)
+				end
+			end
+		elseif extra == "sakura" then
+			for _, s in { -1, 1 } do
 				P(
 					m,
 					"VCyl",
-					Vector3.new(0.5, 3.2, 0),
-					at3(s * (wid / 2 + 2.4), 1.6, -len / 2 + 2 + k * 4),
-					style.frame,
-					M.Foil
+					Vector3.new(0.6, 4.4, 0),
+					at3(s * (wid / 2 + 2.2), 2.2, len / 2 - 1.5),
+					Color3.fromRGB(95, 58, 45),
+					M.Wood
 				)
+				P(m, "Ball", Vector3.new(3.2, 0, 0), at3(s * (wid / 2 + 2.2), 5, len / 2 - 1.5), style.frame, M.Plastic)
+			end
+			local e = Instance.new("ParticleEmitter")
+			e.Texture = SPARKLE_TEX
+			e.Rate = 5
+			e.Lifetime = NumberRange.new(3, 4)
+			e.Speed = NumberRange.new(0.5, 1)
+			e.Acceleration = Vector3.new(0.4, -1, 0)
+			e.RotSpeed = NumberRange.new(-90, 90)
+			e.Color = ColorSequence.new(Color3.fromRGB(255, 180, 210))
+			e.Size = NumberSequence.new(0.45)
+			e.Parent = screen
+		elseif extra == "lava" then
+			for _, s in { -1, 1 } do
+				P(m, "Block", Vector3.new(0.5, 0.2, len + 1), at3(s * (wid / 2 + 0.6), -0.4, 0), style.trim, M.Neon)
+			end
+		elseif extra == "crystal" then
+			for _, s in { -1, 1 } do
+				for k = 0, 2 do
+					local h = 2.4 + (k % 2) * 1.4
+					P(
+						m,
+						"Block",
+						Vector3.new(0.9, h, 0.9),
+						at3(s * (wid / 2 + 1.7), 0.9 + h / 2, -len / 2 + 2 + k * 4)
+							* CFrame.Angles(0, math.rad(45), s * math.rad(-15)),
+						style.trim,
+						M.Glass,
+						false,
+						0.15
+					)
+				end
+			end
+		elseif extra == "ghost" then
+			for _, s in { -1, 1 } do
+				local lamp =
+					P(m, "Ball", Vector3.new(1.2, 0, 0), at3(s * (wid / 2 + 1.6), 4.2, len / 2 - 1), style.trim, M.Neon)
 				P(
 					m,
-					"Ball",
-					Vector3.new(0.8, 0, 0),
-					at3(s * (wid / 2 + 2.4), 3.3, -len / 2 + 2 + k * 4),
+					"VCyl",
+					Vector3.new(0.3, 3.6, 0),
+					at3(s * (wid / 2 + 1.6), 1.8, len / 2 - 1),
 					style.frame,
-					M.Foil
+					M.Plastic
 				)
+				lamp.Name = "GhostLamp"
 			end
-			P(
-				m,
-				"Block",
-				Vector3.new(0.35, 0.35, 8),
-				at3(s * (wid / 2 + 2.4), 2.6, 0),
-				Color3.fromRGB(180, 20, 40),
-				M.Fabric
-			)
-		end
-	elseif extra == "gold" then
-		local sparkle = Instance.new("Sparkles")
-		sparkle.SparkleColor = Color3.fromRGB(255, 230, 120)
-		sparkle.Parent = screen
-	elseif extra == "ice" then
-		for _, s in { -1, 1 } do
-			for k = 0, 2 do
-				local h = 2.2 + (k % 2) * 1.6
-				B(
+			local e = Instance.new("ParticleEmitter")
+			e.Texture = "rbxasset://textures/particles/smoke_main.dds"
+			e.Rate = 3
+			e.Lifetime = NumberRange.new(2, 3)
+			e.Speed = NumberRange.new(0.3, 0.8)
+			e.Color = ColorSequence.new(Color3.fromRGB(160, 120, 210))
+			e.Transparency = NumberSequence.new(0.6)
+			e.Size = NumberSequence.new(2)
+			e.Parent = screen
+		elseif extra == "galaxy" then
+			for _, s in { -1, 1 } do
+				for k = 0, 3 do
+					P(
+						m,
+						"Ball",
+						Vector3.new(0.5 + (k % 2) * 0.3, 0, 0),
+						at3(s * (wid / 2 + 1.5 + (k % 2)), 2 + k * 0.9, -len / 2 + 1.5 + k * 2.6),
+						if k % 2 == 0 then style.arrow else style.trim,
+						M.Neon
+					)
+				end
+			end
+			local sparkle = Instance.new("Sparkles")
+			sparkle.SparkleColor = style.trim
+			sparkle.Parent = screen
+		elseif extra == "rainbow" then
+			local colors = {
+				Color3.fromRGB(255, 80, 80),
+				Color3.fromRGB(255, 170, 60),
+				Color3.fromRGB(255, 240, 80),
+				Color3.fromRGB(90, 230, 110),
+				Color3.fromRGB(80, 170, 255),
+				Color3.fromRGB(190, 110, 255),
+			}
+			for i, c in colors do
+				P(
 					m,
-					Vector3.new(1.4, h, 1.4),
-					at3(s * (wid / 2 + 1.5), 1.2 + h / 2, -len / 2 + 2 + k * 4) * CFrame.Angles(0, 0, s * math.rad(-18)),
-					Color3.fromRGB(110, 190, 255),
-					false,
-					M.Plastic,
-					0.05
-				)
-				B(
-					m,
-					Vector3.new(0.9, 1.2, 0.9),
-					at3(s * (wid / 2 + 2.1), 1.6 + h, -len / 2 + 2 + k * 4) * CFrame.Angles(0, 0, s * math.rad(-28)),
-					Color3.fromRGB(200, 240, 255)
+					"Block",
+					Vector3.new(wid + 2.4, 0.35, 0.35),
+					at3(0, top + 5.6 + i * 0.36, -len / 2 - 0.4),
+					c,
+					M.Neon
 				)
 			end
 		end
-	elseif extra == "lucky" then
-		for _, s in { -1, 1 } do
-			for _, zz in { -len / 2 + 1, len / 2 - 1 } do
-				local block =
-					B(m, Vector3.new(2, 2, 2), at3(s * (wid / 2 + 1.8), 1, zz), Color3.fromRGB(255, 205, 40), true)
-				local g = Instance.new("SurfaceGui")
-				g.Face = Enum.NormalId.Front
-				g.LightInfluence = 0
-				local t = Instance.new("TextLabel")
-				t.BackgroundTransparency = 1
-				t.Size = UDim2.fromScale(1, 1)
-				t.Font = Enum.Font.FredokaOne
-				t.TextScaled = true
-				t.Text = "?"
-				t.TextColor3 = WHITE
-				t.Parent = g
-				g.Parent = block
-			end
-		end
-	elseif extra == "hacker" then
-		for _, s in { -1, 1 } do
-			local mon = B(m, Vector3.new(0.4, 2.4, 3), at3(s * (wid / 2 + 1.6), 3.4, -len / 2 + 2.5), style.frame)
-			P(
-				m,
-				"Block",
-				Vector3.new(0.1, 2, 2.6),
-				at3(s * (wid / 2 + 1.35), 3.4, -len / 2 + 2.5),
-				style.trim,
-				M.Neon,
-				false,
-				0.3
-			)
-			B(m, Vector3.new(0.5, 2.2, 0.5), at3(s * (wid / 2 + 1.6), 1.1, -len / 2 + 2.5), style.frame)
-			mon.Name = "Monitor"
-		end
-	elseif extra == "demon" then
-		for _, s in { -1, 1 } do
-			local horn = P(
-				m,
-				"Wedge",
-				Vector3.new(0.8, 3, 1.4),
-				at3(s * (wid / 2 + 0.8), top + 6.2, -len / 2 - 0.4) * CFrame.Angles(0, 0, s * math.rad(-15)),
-				Color3.fromRGB(25, 10, 12),
-				M.Plastic
-			)
-			horn.Name = "Horn"
-			local fire = Instance.new("Fire")
-			fire.Size = 3
-			fire.Color = Color3.fromRGB(230, 30, 20)
-			fire.SecondaryColor = Color3.fromRGB(120, 0, 0)
-			fire.Parent = horn
-		end
-	elseif extra == "angel" then
-		for _, s in { -1, 1 } do
-			for k = 0, 2 do
-				B(
-					m,
-					Vector3.new(0.4, 2.4 - k * 0.5, 3.2 - k * 0.6),
-					at3(s * (wid / 2 + 1.2 + k * 1.4), top + 4 + k * 0.6, -len / 2 + 0.6)
-						* CFrame.Angles(0, 0, s * math.rad(-25)),
-					WHITE
-				)
-			end
-		end
-		P(
-			m,
-			"Cyl",
-			Vector3.new(0.3, 3.4, 3.4),
-			at3(0, top + 7.2, -len / 2 - 0.4) * CFrame.Angles(0, 0, math.pi / 2),
-			style.trim,
-			M.Neon
-		)
 	end
 	if locked then
 		for _, d in m:GetDescendants() do
@@ -4042,7 +4324,7 @@ local function buildPlotDressing(p: MapLayout.Plot, plotFolder: Instance, fenceC
 		canCollide = false,
 	})
 	gateSign.CanQuery = false
-	Gui.surface(gateSign, Enum.NormalId.Front, "펫 우리", WHITE)
+	Gui.surface(gateSign, Enum.NormalId.Front, "정원", WHITE)
 	for i, s in { -1, 1 } do
 		local lamp = P(
 			plotFolder,
@@ -4197,7 +4479,7 @@ local function buildPlot(index: number, parent: Instance)
 		attributes = { PlotIndex = index, Level = 0 },
 	})
 	dyn.pad = pad
-	local stepGui = twoLine(pad, 9, "+0/스텝", Color3.fromRGB(255, 120, 200), nil, "StepLabel")
+	local stepGui = twoLine(pad, 9, "+0/초", Color3.fromRGB(255, 120, 200), nil, "StepLabel")
 	local stepTop = stepGui:FindFirstChild("Top")
 	dyn.stepLabel = if stepTop and stepTop:IsA("TextLabel") then stepTop else nil
 
@@ -4209,7 +4491,7 @@ local function buildPlot(index: number, parent: Instance)
 		plotFolder,
 		Vector3.new(s.penUpgrade.x, FLOOR_TOP, s.penUpgrade.z),
 		toFront,
-		"펫 우리 업그레이드",
+		"정원 업그레이드",
 		"Pen",
 		index
 	)
@@ -4228,7 +4510,7 @@ local function buildPlot(index: number, parent: Instance)
 		Vector3.new(p.sellStall.x, FLOOR_TOP, p.sellStall.z),
 		toFront,
 		Tags.SellStall,
-		"판매",
+		"열매 판매",
 		Color3.fromRGB(240, 40, 50),
 		7
 	)
@@ -4440,7 +4722,7 @@ local function buildHub(map: Instance)
 		Vector3.new(sellPos.x, FLOOR_TOP, sellPos.z),
 		Vector3.new(-1, 0, 0),
 		Tags.SellStall,
-		"판매",
+		"열매 판매",
 		Color3.fromRGB(240, 40, 50)
 	)
 	floorRing(hub, Vector3.new(sellPos.x - 9, FLOOR_TOP, sellPos.z), 14, Color3.fromRGB(60, 235, 220))
@@ -4491,8 +4773,8 @@ local function buildHub(map: Instance)
 		studs = true,
 	})
 	Gui.sign(board, Enum.NormalId.Front, {
-		title = "계란 훔치기",
-		subtitle = "알을 훔쳐 베이스로 달려가요!",
+		title = "씨앗을 훔치세요",
+		subtitle = "씨앗을 훔쳐 정원에 심고 키워요!",
 		background = Color3.fromRGB(60, 170, 235),
 	})
 
@@ -4861,7 +5143,7 @@ local function refreshPlot(index: number)
 		penSign.level.Text = if cost
 			then string.format("레벨 %d > 레벨 %d", penLevel, penLevel + 1)
 			else "최대 레벨!"
-		penSign.price.Text = if cost then Format.money(cost) else "MAX"
+		penSign.price.Text = if cost then Format.number(cost) .. " 코인" else "MAX"
 	end
 
 	local treadLevel = playerNumber(owner, Tags.PlayerAttributes.TreadmillLevel, 0)
@@ -4872,13 +5154,13 @@ local function refreshPlot(index: number)
 			then "잠금 해제"
 			elseif cost then string.format("레벨 %d > 레벨 %d", treadLevel, treadLevel + 1)
 			else "최대 레벨!"
-		treadSign.price.Text = if cost then Format.money(cost) else "MAX"
+		treadSign.price.Text = if cost then Format.number(cost) .. " 코인" else "MAX"
 	end
 	local step = dyn.stepLabel
 	if step then
 		step.Text = if treadLevel >= 1
-			then "+" .. Format.number(Economy.treadmillPerStep(treadLevel)) .. "/스텝"
-			else "잠김 (" .. Format.money(Economy.nextTreadmillCost(0) or 0) .. ")"
+			then "+" .. Format.number(Economy.treadmillGainPerSecond(treadLevel)) .. "/초"
+			else "잠김 (" .. Format.number(Economy.nextTreadmillCost(0) or 0) .. " 코인)"
 	end
 	local pad = dyn.pad
 	if pad and dyn.lookLevel ~= treadLevel then
@@ -4942,7 +5224,7 @@ function MapBuilder.start()
 			refreshPlot(index)
 		end)
 	end
-	-- 겉모습 서비스(PetVisualService·EggVisualService)는 Main.server.luau 에서 MapBuilder 다음에 시작합니다.
+	-- 겉모습 서비스(PetVisualService·EggVisualService·PlantVisualService)는 Main.server.luau 에서 MapBuilder 다음에 시작합니다.
 end
 
 function MapBuilder.getFolder(name: string): Folder

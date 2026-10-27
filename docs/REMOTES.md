@@ -273,37 +273,38 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 - **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id`.
 
 ## 8. 선임 할 일 (6판 체크리스트)
+> **선임 완료 (2026-10-27)**: 아래 전부 됨 — 클라에서 `placedEggMax`·`record.slot` 은 더 안 씀 (수석이 서버·Types 에서 지워도 됨). 모양 계약(`SeedVisual`·식물 id 모델·`Fruit1~5`·`AuraFx`·`VisualHeight`)은 `docs/UI.md` 2-1장. 둥지 파트 "씨앗 주머니" 모양만 다음에.
 
 서버·공유 규칙은 끝남. 아래는 화면·모양·소리 (지금은 수석이 클라를 **안 깨질 만큼만** 고쳐 둠 — `[6판 수석 임시]` 주석이 붙은 곳).
 
 **새 Remote 붙이기** (붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 그 이름을 지우세요 — 안 지우면 테스트가 알려 줌)
-- [ ] **`SellFruits()`**: 판매 가판대(`SellStall` 태그, 허브 + 베이스마다)에 ProximityPrompt "열매 팔기" — 글에 `FruitCount`·`FruitBagValue` (예 "열매 12개 · 3.4K 코인"). `FruitsSold { count, coins }` → "+3.4K 코인" 연출·소리 (`SoundController` 에 임시 소리 있음)
-- [ ] **`SkipGrowth(uid, "all" | "half")`**: 자라는 씨앗 패널(`IncubatorController`)·씨앗 위에 "건너뛰기" 버튼 2개 + 가격 `GardenRules.skipCost(petId, progress, required, mode)` (코인이 모자라면 회색) + 확인 창. 남은 시간은 1초마다 줄어드니 가격도 1초마다 다시 계산
-- [ ] **`FeedFruit(plantUid, fruitId)`**: 열매 가방 창(새로) → 열매 고르기 → 성체 고르기(정원 식물 창 또는 `GardenPlant` 프롬프트). 붙을 수 있는 것 `FruitRules.feedOptions`, 확률 `FruitRules.feedChance` 미리보기, `FeedResult` 연출 (붙으면 반짝 + 돌연변이 색 `Visuals.mutationLooks`, 안 붙으면 "냠냠")
+- [x] **`SellFruits()`**: 판매 가판대(`SellStall` 태그, 허브 + 베이스마다)에 ProximityPrompt "열매 팔기" — 글에 `FruitCount`·`FruitBagValue` (예 "열매 12개 · 3.4K 코인"). `FruitsSold { count, coins }` → "+3.4K 코인" 연출·소리 (`SoundController` 에 임시 소리 있음)
+- [x] **`SkipGrowth(uid, "all" | "half")`**: 자라는 씨앗 패널(`IncubatorController`)·씨앗 위에 "건너뛰기" 버튼 2개 + 가격 `GardenRules.skipCost(petId, progress, required, mode)` (코인이 모자라면 회색) + 확인 창. 남은 시간은 1초마다 줄어드니 가격도 1초마다 다시 계산
+- [x] **`FeedFruit(plantUid, fruitId)`**: 열매 가방 창(새로) → 열매 고르기 → 성체 고르기(정원 식물 창 또는 `GardenPlant` 프롬프트). 붙을 수 있는 것 `FruitRules.feedOptions`, 확률 `FruitRules.feedChance` 미리보기, `FeedResult` 연출 (붙으면 반짝 + 돌연변이 색 `Visuals.mutationLooks`, 안 붙으면 "냠냠")
 
 **정원·식물 모양**
-- [ ] **자라는 씨앗 모양**: `IncubatingEgg` 파트 Attr `Stage` 로 씨앗(땅에 묻힘) → 새싹 → 줄기 → 봉오리 (지금은 서버가 만든 공 + 이름표). 등급 아우라 `Rarities.aura` (11개: none · lime_glow · blue_sparkle · purple_flame · gold_ring · red_lightning · stardust_swirl · black_mist · white_clock · rainbow_beam · sky_pillar)
-- [ ] **성체 식물 모양**: `GardenPlant` 파트 자리에 식물 134종 모델 + 열매(`Fruits` 개수만큼 달림) + 다음 열매 타이머 + 돌연변이 색 (원소 3종 frozen/burning/shocked 모양 `Visuals.mutationLooks` 에 추가됨). 지금 `Visuals.pets` 는 5판 동물 모양을 같은 자리 식물 id 에 임시로 붙여 둔 것 → 식물 모양으로 바꾸기
-- [ ] **`PetVisualService` 정원 펫**: 6판에서 `penRecords` 가 빈 표 (정원 펫 모델 안 만듦). 식물 모델을 여기서 만들려면 `data.pets` 의 `x, z`(베이스 기준 → `MapLayout.toWorld`) 자리에 — `GardenPlant` 파트와 같은 자리
-- [ ] **`GardenPlant` 프롬프트**: "열매 따기"(E) → `PickFruit(PlantUid)` (지금은 정원 식물 창 버튼만), "물 주기" → `PetPet(PlantUid)`. `IncubatingEgg` 에도 "물 주기" → `PetPet(EggUid)`. **5판 PenPet 모델이 없어져서 지금 물 주기 프롬프트가 화면에 없음** (`PetFxController` 는 PenPet 을 찾음 → `GardenPlant`/`IncubatingEgg` 로 바꾸기)
-- [ ] **`PetPetted(ownerUserId, uid)`**: 하트 → **물방울** 연출, 파트 Attr `OwnerUserId` 로 거르기
-- [ ] **`FruitPicked { plantUid, count, value }`**: 그 식물 위 "+열매 3" 팝업 (`WorldFxController` 265줄 메모 — 5판 `IncomeTick` 돈 팝업 자리)
-- [ ] **경비 = 식물 괴물 모양** (`Visuals.guards`, 이름 `Biomes.guardName`: 덥석 파리지옥 · 연꽃 개구리풀 · 가시 선인장 대장 · 덩굴 호랑이꽃 · 서리 가시나무 · 용암 머리꽃 · 심해 해초 괴물 · 공룡 고사리 · 우주 버섯 거인 · 벚꽃 여우나무 · 돌 거인 나무 · 천사 백합/악마 장미 · 정령 버섯 · 사탕수수 거인 · 호박 머리 덩굴). 둥지 씨앗 모양도 알 → 씨앗
-- [ ] **사쿠라 나무** 모양 (`SakuraIncubator`, MapBuilder 이름표 "사쿠라 나무"), 제단·비밀 통로·퓨전 머신 자리는 비어 있음 (MapBuilder 에서 지움)
+- [x] **자라는 씨앗 모양**: `IncubatingEgg` 파트 Attr `Stage` 로 씨앗(땅에 묻힘) → 새싹 → 줄기 → 봉오리 (지금은 서버가 만든 공 + 이름표). 등급 아우라 `Rarities.aura` (11개: none · lime_glow · blue_sparkle · purple_flame · gold_ring · red_lightning · stardust_swirl · black_mist · white_clock · rainbow_beam · sky_pillar)
+- [x] **성체 식물 모양**: `GardenPlant` 파트 자리에 식물 134종 모델 + 열매(`Fruits` 개수만큼 달림) + 다음 열매 타이머 + 돌연변이 색 (원소 3종 frozen/burning/shocked 모양 `Visuals.mutationLooks` 에 추가됨). 지금 `Visuals.pets` 는 5판 동물 모양을 같은 자리 식물 id 에 임시로 붙여 둔 것 → 식물 모양으로 바꾸기
+- [x] **`PetVisualService` 정원 펫**: 6판에서 `penRecords` 가 빈 표 (정원 펫 모델 안 만듦). 식물 모델을 여기서 만들려면 `data.pets` 의 `x, z`(베이스 기준 → `MapLayout.toWorld`) 자리에 — `GardenPlant` 파트와 같은 자리
+- [x] **`GardenPlant` 프롬프트**: "열매 따기"(E) → `PickFruit(PlantUid)` (지금은 정원 식물 창 버튼만), "물 주기" → `PetPet(PlantUid)`. `IncubatingEgg` 에도 "물 주기" → `PetPet(EggUid)`. **5판 PenPet 모델이 없어져서 지금 물 주기 프롬프트가 화면에 없음** (`PetFxController` 는 PenPet 을 찾음 → `GardenPlant`/`IncubatingEgg` 로 바꾸기)
+- [x] **`PetPetted(ownerUserId, uid)`**: 하트 → **물방울** 연출, 파트 Attr `OwnerUserId` 로 거르기
+- [x] **`FruitPicked { plantUid, count, value }`**: 그 식물 위 "+열매 3" 팝업 (`WorldFxController` 265줄 메모 — 5판 `IncomeTick` 돈 팝업 자리)
+- [x] **경비 = 식물 괴물 모양** (`Visuals.guards`, 이름 `Biomes.guardName`: 덥석 파리지옥 · 연꽃 개구리풀 · 가시 선인장 대장 · 덩굴 호랑이꽃 · 서리 가시나무 · 용암 머리꽃 · 심해 해초 괴물 · 공룡 고사리 · 우주 버섯 거인 · 벚꽃 여우나무 · 돌 거인 나무 · 천사 백합/악마 장미 · 정령 버섯 · 사탕수수 거인 · 호박 머리 덩굴). 둥지 씨앗 모양도 알 → 씨앗
+- [x] **사쿠라 나무** 모양 (`SakuraIncubator`, MapBuilder 이름표 "사쿠라 나무"), 제단·비밀 통로·퓨전 머신 자리는 비어 있음 (MapBuilder 에서 지움)
 
 **창·글**
-- [ ] **정원 식물 창** (`PetsController` 다시 꾸미기, 지금은 임시: 장착 버튼 자리에 "열매 따기", 판매 버튼 → `SellPlant`): 칸 `#incubators + #pets / penSlots`, 식물마다 열매·열매 값·다음 열매·팔기 가격·먹이기. `PetPicker` 의 `equipped`/장착 정렬 정리
-- [ ] **자라는 씨앗 패널** (`IncubatorController`): 5판 "Hatch" 버튼 자리 정리(지금은 토스트), 단계 이름 `GardenRules.stageName`, `snap.placedEggMax` 대신 `penSlots`, `record.slot` 안 쓰기 → 다 되면 수석이 `placedEggMax`·`IncubatorRecord.slot` 을 지움
-- [ ] **성체 카드** (`HatchController` — 지금 `PlantGrown` 을 5판 부화 카드로 임시 표시): "성체가 됐어요!" + 열매 1개 값 · 열매 간격
-- [ ] **열매 가방 HUD 배지** (`FruitCount / fruitBagMax`) + 열매 가방 창
-- [ ] **사쿠라 창** (`SakuraController` 임시: 크리스탈 ≥ 10 이면 "씨앗 뽑기", 아니면 "성체 바치기") → 두 버튼 + 바칠 성체 고르기 + 등급별 크리스탈 미리보기 `SakuraRules.crystalsFor`
-- [ ] **도감** (`IndexController`): 식물 134종·등급 11개(영원 = `eternity`, 슈퍼 울트라디바인 색·아우라), 열매 1개 값 표시(임시) 모양
-- [ ] **상점 러닝머신 11~20레벨**: `ShopController.TREADMILL_NAMES` 와 `MapBuilder.TREAD_STYLES` 는 10개라 11레벨 위는 10번 모양으로 보임 (깨지지는 않음) → 이름·모양 10개 더. 카드 글 "+N/스텝" 대신 1초 속도 `Economy.treadmillGainPerSecond` (20레벨 1M). 정원 카드 "펫이 많을수록 돈을…" → 정원 칸 글
-- [ ] **글자 바꾸기**: 게임 이름 "씨앗을 훔치세요", 화면의 돈 `$`(`Format.money`) → 코인, 알 → 씨앗, 우리 → 정원, 부화 → 성체, 펫 → 식물 (`NotifyController`·`TutorialController`·`LeaderboardController`·`Theme.Menu` 등). 서버 글은 이미 바뀜
-- [ ] **등급 색** (`Theme`/`Visuals.rarityEffects`): 11개 (eternity 이름 바뀜, super_ultradivine 추가)
-- [ ] **소리**: 열매 따기·팔기·먹이기·성체 됨·물 주기 (Fusion·FusionCharge·AltarOffer·AltarPaired·Shrine 소리는 지움)
-- [ ] **튜토리얼 화살표** 6판 단계에 맞게 (6장 표)
-- [ ] 문서: `docs/UI.md`, `docs/STUDIO_CHECKLIST.md` 의 알·펫·퓨전·제단 설명
+- [x] **정원 식물 창** (`PetsController` 다시 꾸미기, 지금은 임시: 장착 버튼 자리에 "열매 따기", 판매 버튼 → `SellPlant`): 칸 `#incubators + #pets / penSlots`, 식물마다 열매·열매 값·다음 열매·팔기 가격·먹이기. `PetPicker` 의 `equipped`/장착 정렬 정리
+- [x] **자라는 씨앗 패널** (`IncubatorController`): 5판 "Hatch" 버튼 자리 정리(지금은 토스트), 단계 이름 `GardenRules.stageName`, `snap.placedEggMax` 대신 `penSlots`, `record.slot` 안 쓰기 → 다 되면 수석이 `placedEggMax`·`IncubatorRecord.slot` 을 지움
+- [x] **성체 카드** (`HatchController` — 지금 `PlantGrown` 을 5판 부화 카드로 임시 표시): "성체가 됐어요!" + 열매 1개 값 · 열매 간격
+- [x] **열매 가방 HUD 배지** (`FruitCount / fruitBagMax`) + 열매 가방 창
+- [x] **사쿠라 창** (`SakuraController` 임시: 크리스탈 ≥ 10 이면 "씨앗 뽑기", 아니면 "성체 바치기") → 두 버튼 + 바칠 성체 고르기 + 등급별 크리스탈 미리보기 `SakuraRules.crystalsFor`
+- [x] **도감** (`IndexController`): 식물 134종·등급 11개(영원 = `eternity`, 슈퍼 울트라디바인 색·아우라), 열매 1개 값 표시(임시) 모양
+- [x] **상점 러닝머신 11~20레벨**: `ShopController.TREADMILL_NAMES` 와 `MapBuilder.TREAD_STYLES` 는 10개라 11레벨 위는 10번 모양으로 보임 (깨지지는 않음) → 이름·모양 10개 더. 카드 글 "+N/스텝" 대신 1초 속도 `Economy.treadmillGainPerSecond` (20레벨 1M). 정원 카드 "펫이 많을수록 돈을…" → 정원 칸 글
+- [x] **글자 바꾸기**: 게임 이름 "씨앗을 훔치세요", 화면의 돈 `$`(`Format.money`) → 코인, 알 → 씨앗, 우리 → 정원, 부화 → 성체, 펫 → 식물 (`NotifyController`·`TutorialController`·`LeaderboardController`·`Theme.Menu` 등). 서버 글은 이미 바뀜
+- [x] **등급 색** (`Theme`/`Visuals.rarityEffects`): 11개 (eternity 이름 바뀜, super_ultradivine 추가)
+- [x] **소리**: 열매 따기·팔기·먹이기·성체 됨·물 주기 (Fusion·FusionCharge·AltarOffer·AltarPaired·Shrine 소리는 지움)
+- [x] **튜토리얼 화살표** 6판 단계에 맞게 (6장 표)
+- [x] 문서: `docs/UI.md`, `docs/STUDIO_CHECKLIST.md` 의 알·펫·퓨전·제단 설명
 
 **서버가 계속 부르는 MapBuilder 공개 함수 (이름·모양 유지 부탁):** `start()`, `getFolder(name)` ("Eggs"/"Guardians"/"Traps"/"Incubating"), `getNests(biomeId): {BasePart}`, `groundY(position, ignore): number`, `setNightWalls(on)`, `setPlotOwner(index, player?)`, `plotCount()`, `getPlot(index)`. 6판: `buildAltar`·`buildShrine`·`buildFusionMachine` 없앰.
 

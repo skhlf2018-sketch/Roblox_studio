@@ -1,13 +1,13 @@
 --!strict
 --[[
-	NotifyController — 알림
-	- Notify      → 화면 아래 가운데 굵은 외곽선 글씨 토스트 (원작 "에그를 훔쳤어요!")
-	- Announce    → 상단 가운데 굵은 외곽선 글씨 한 줄 ("ALL EGG RESET!", "OO 구역에 OO 알 등장!", 밤/낮)
-	- EggDelivered → "에그를 훔쳤어요! 가방에 들어갔어요" 토스트 (2판 수정: 알 가방), IndexRewarded → 보상 토스트
-	- 희귀 알 공지는 원작처럼 색 조각 글씨: "Jungle에 비밀 킹 스네이크 에그 등장!" (NotifyController.rareEggText)
-	- OfflineIncome → 접속 때 "자리 비운 동안 $X 벌었어요!" 팝업
-	- EggGranted ("○○ 선물 알: 펫! 가방에 들어갔어요") / PetsSold 토스트 (사쿠라·제단·비밀 통로 결과 연출은 SakuraController / AltarController)
-	  NotifyController.toast(text, kind) 는 다른 컨트롤러도 씀.
+	NotifyController — 알림 (6판 "씨앗을 훔치세요")
+	- Notify      → 화면 아래 가운데 굵은 외곽선 글씨 토스트 (서버 글은 이미 씨앗·정원·성체·열매·코인 말)
+	- Announce    → 상단 가운데 굵은 외곽선 글씨 한 줄 ("ALL SEED RESET!", "OO 구역에 OO 씨앗 등장!", 밤/낮)
+	- EggDelivered → "씨앗을 훔쳤어요! 씨앗 가방에 들어갔어요" 토스트, IndexRewarded → 도감 보상 토스트 (코인)
+	- 희귀 씨앗 공지는 색 조각 글씨: "Jungle에 비밀 룬 장미 씨앗 등장!" (NotifyController.rareEggText)
+	- EggGranted ("사쿠라 나무 선물: ○○ 씨앗! 가방에 들어갔어요")
+	  (6판: 오프라인 수입 팝업·보관함 자동 판매 토스트 없앰. 사쿠라 결과 연출은 SakuraController)
+	  NotifyController.toast(text, kind) 는 다른 컨트롤러도 씀. kind "money" = 코인 금색.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,10 +35,10 @@ local KIND_COLORS: { [string]: Color3 } = {
 	success = Color3.new(1, 1, 1),
 	error = Color3.fromRGB(255, 90, 90),
 	info = Color3.fromRGB(220, 235, 255),
-	money = Color3.fromRGB(110, 255, 90),
+	money = Color3.fromRGB(255, 215, 70), -- 코인 (금색)
 }
 
--- 원작 토스트: 바탕 없이 굵은 외곽선 흰 글씨 ("에그를 훔쳤어요!")
+-- 원작 토스트: 바탕 없이 굵은 외곽선 흰 글씨 ("씨앗을 훔쳤어요!")
 function NotifyController.toast(text: string, kind: string?)
 	local stack = toastStack
 	if not stack then
@@ -90,7 +90,7 @@ function NotifyController.toast(text: string, kind: string?)
 	end)
 end
 
--- 원작 공지: 화면 위 가운데 굵은 외곽선 글씨 한 줄 (RichText 색 조각: 구역 초록, 알 이름 금색)
+-- 원작 공지: 화면 위 가운데 굵은 외곽선 글씨 한 줄 (RichText 색 조각: 구역 초록, 식물 이름 금색)
 local function showNextBanner()
 	local holder = bannerHolder
 	if bannerBusy or not holder or #bannerQueue == 0 then
@@ -160,61 +160,6 @@ function NotifyController.rareEggText(payload: any): string?
 	)
 end
 
-local function offlinePopup(amount: number, perDay: number)
-	local layer = Ui.layer("Popups")
-	local holder: Frame = Ui.new("Frame", {
-		Name = "OfflinePopup",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(520, 330),
-		BackgroundTransparency = 1,
-		Parent = layer,
-	})
-	Ui.scaled(holder, Vector2.new(520, 330))
-	local card: Frame = Ui.new("Frame", {
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = C.panel,
-		Parent = holder,
-	})
-	Ui.corner(28).Parent = card
-	Ui.stroke(C.money, 6).Parent = card
-	Ui.label(
-		"돌아왔네요!",
-		UDim2.new(1, 0, 0, 60),
-		40,
-		C.orange,
-		{ Position = UDim2.fromOffset(0, 18), Parent = card }
-	)
-	Ui.label(
-		"자리 비운 동안",
-		UDim2.new(1, 0, 0, 36),
-		26,
-		C.ink,
-		{ Position = UDim2.fromOffset(0, 84), Parent = card }
-	)
-	local money = Ui.label(Format.money(amount), UDim2.new(1, 0, 0, 70), 60, C.money, {
-		Position = UDim2.fromOffset(0, 120),
-		Parent = card,
-	})
-	Ui.label("벌었어요!  (하루에 " .. Format.money(perDay) .. ")", UDim2.new(1, 0, 0, 32), 22, C.ink, {
-		Position = UDim2.fromOffset(0, 192),
-		Parent = card,
-	})
-	Ui.button("받기!", C.green, UDim2.fromOffset(200, 64), function()
-		holder:Destroy()
-	end, {
-		anchor = Vector2.new(0.5, 1),
-		position = UDim2.new(0.5, 0, 1, -20),
-		textSize = 32,
-		parent = card,
-		sound = "Reward",
-	})
-	Ui.pop(card, 0.4)
-	task.delay(0.4, function()
-		Ui.pop(money, 1.4)
-	end)
-end
-
 function NotifyController.start()
 	local hud = Ui.layer("Toasts")
 	local stack: Frame = Ui.new("Frame", {
@@ -274,11 +219,9 @@ function NotifyController.start()
 		)
 		NotifyController.toast(text, "money")
 		if payload.completeBonus then
-			NotifyController.banner("인덱스 전체 완성!! 엄청난 보너스!", C.purple)
+			NotifyController.banner("도감 전체 완성!! 엄청난 보너스!", C.purple)
 		end
 	end)
-	-- (6판: 오프라인 수입 OfflineIncome 없앰 — 자동 수입이 없음. offlinePopup 은 선임이 정리)
-	local _ = offlinePopup
 
 	-- 2단계 알림 (수석 Remote, docs/REMOTES.md). Remote 가 아직 없으면 조용히 건너뜀.
 	local function onOptional(name: string?, fn: (any) -> ())
@@ -306,7 +249,7 @@ function NotifyController.start()
 	local SOURCES: { [string]: string } = { sakura = "사쿠라 나무", dev = "개발 명령" }
 	local extra = E :: { [string]: string }
 	onOptional(extra.EggGranted, function(p)
-		-- 2판 수정: 선물 알도 알 가방으로 (대기 줄 없음, payload.queued 는 안 봄)
+		-- 선물 씨앗도 씨앗 가방으로 (대기 줄 없음, payload.queued 는 안 봄)
 		local egg = p.egg or p.record or {}
 		local from = SOURCES[tostring(p.source)] or "선물"
 		NotifyController.toast(
@@ -315,7 +258,7 @@ function NotifyController.start()
 		)
 	end)
 	-- (6판: 보관함 자동 판매 PetsSold 없앰)
-	-- SakuraResult / AltarUpdate / ShrineResult 연출은 SakuraController / AltarController 가 함 (2차)
+	-- SakuraResult 연출은 SakuraController 가 함
 end
 
 return NotifyController

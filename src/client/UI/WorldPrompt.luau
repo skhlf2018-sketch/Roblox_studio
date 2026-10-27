@@ -1,9 +1,10 @@
 --!strict
 --[[
-	WorldPrompt — 태그 붙은 월드 물건에 클라 전용 ProximityPrompt 붙이기 (퓨전 머신·사쿠라·제단·비밀 통로)
+	WorldPrompt — 태그 붙은 월드 물건에 클라 전용 ProximityPrompt 붙이기 (사쿠라 나무·판매 가판대·트레일 상점 등)
 
 	  local handle = WorldPrompt.attach({
-	      tag = Tags.FusionMachine, name = "FusionPrompt", action = "퓨전", object = "퓨전 머신",
+	      tag = Tags.SellStall, name = "SellFruitsPrompt", action = "열매 팔기", object = "열매 12개",
+	      key = Enum.KeyCode.F, hold = 0.2,   -- (없으면 E, 0초)
 	      enabled = function(part) return 내 베이스인가 end,
 	      onTrigger = function(part) 창 열기 end,
 	  })
@@ -26,6 +27,8 @@ export type Spec = {
 	object: string | (BasePart) -> string,
 	distance: number?,
 	enabled: ((BasePart) -> boolean)?,
+	key: Enum.KeyCode?, -- 기본 E (한 물건에 프롬프트가 둘이면 키를 다르게)
+	hold: number?, -- 누르고 있는 시간 (기본 0)
 	onTrigger: (BasePart) -> (),
 }
 
@@ -67,8 +70,8 @@ function WorldPrompt.attach(spec: Spec): Handle
 		end
 		local prompt = Instance.new("ProximityPrompt")
 		prompt.Name = spec.name
-		prompt.KeyboardKeyCode = Enum.KeyCode.E
-		prompt.HoldDuration = 0
+		prompt.KeyboardKeyCode = spec.key or Enum.KeyCode.E
+		prompt.HoldDuration = spec.hold or 0
 		prompt.MaxActivationDistance = spec.distance or 10
 		prompt.RequiresLineOfSight = false
 		prompt.Style = Enum.ProximityPromptStyle.Default

@@ -1,26 +1,20 @@
 --!strict
 --[[
-	EggVisualService — 알 겉모습 (서버, 모두가 같은 모양을 봄). 선임 담당.
+	EggVisualService — 씨앗 겉모습 (서버, 모두가 같은 모양을 봄). 선임 담당. (이름은 5판 "알" 그대로)
 
-	알 파트 생성·줍기·용접은 EggService / BaseService(수석) 가 합니다.
-	여기서는 그 파트(Egg / IncubatingEgg 태그)의 Attribute 를 읽어 겉모습만 "자식"으로 붙입니다.
+	씨앗 파트 생성·줍기·용접은 EggService(수석) 가 합니다. 여기서는 그 파트(Egg 태그 — 둥지·들고 있는·떨어진 씨앗)의
+	Attribute 를 읽어 겉모습만 "자식"으로 붙입니다. (정원에서 자라는 씨앗 IncubatingEgg 는 PlantVisualService)
 
 	- 원래 파트는 투명하게 만들고(판정·ProximityPrompt·이름표는 그대로), 폴더 "EggVisual" 안에
-	  원작처럼 "매끈한 타원 알" 껍데기("Shell": Ball + SpecialMesh Sphere, Scale y 1.25)를 WeldConstraint 로 붙임.
-	  (4판 수정: 사장님 "케이크처럼 보임" → 블록 층 쌓기 없앰)
-	- 4판: 등급(Rarities)별 색·무늬 (Visuals.eggLooks). 껍데기 = 등급 색 파스텔(일반은 크림색 진짜 달걀),
-	  띠("Band", 얇은 Cylinder, 그 높이 껍데기 지름 × 1.02) = 등급 색, 점("Spot", 표면에 60% 묻힌 작은 Ball)은 펫 대표 색.
-	  일반 점 2 / 고급 점 4 / 희귀 띠 2 + 점 / 에픽 둘레 점 4 / 전설 금띠 + 보석 4 / 신화 띠 + 불꽃 점 / 코스믹 별 점 5 /
-	  비밀 검정 + 보라 빛 점 / 영원 흰 빛 점 / 신성 무지개 띠 3 + 빛 점. 자산 업로드 필요 없음. 알 하나 ≤ 8 파트.
-	  껍데기는 파트 가운데에 맞춤 (EggService·BaseService 가 바닥 + 알 높이 절반에 놓으므로 바닥에 딱 붙음).
-	  크기는 파트 크기(크기 등급) 그대로 따라감.
-	- 희귀도: 희귀(rare) 이상은 등급 색 반짝이(RarityGlint), 전설 이상(Visuals.rarityEffects 에 있는 것)은 PointLight + 반짝이.
-	- 돌연변이: 실버(은색 Foil) / 골든(금색 네온 + 반짝) / 레인보우(네온 + 클라가 색 순환: Shell 에 EggShell 태그 + Rainbow)
-	  / 블룸·스피릿 블룸(꽃잎 파티클)
-	- 특별 알(Special = true: 비밀/영원/신성): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "비밀 알!" 이름표
-	- 들고 있는 알(EggState == "Carried"): 알 위 BillboardGui "WeightTag" (자식 TextLabel "Gender" = ♂/♀, "Kg" = "4,740Kg").
-	  무게 = 알 Attribute WeightKg (없으면 든 플레이어의 CarryWeightKg). 값이 없으면 숨김.
-	- 부화 중 알: Ready 가 되면 반짝임. ("에그 1m 52s" 라벨·부화 프롬프트는 클라가 만듦)
+	  6판 씨앗 껍데기("Shell": Ball + SpecialMesh Sphere, Scale (0.82, 1.25, 1) = 아몬드 모양) + 뾰족한 끝("Tip")
+	  + 세로 줄무늬("Stripe1~4") + 별·보석 점("Spot") 을 WeldConstraint 로 붙임. 씨앗 하나 ≤ 8 파트.
+	  색·줄무늬 수 = Visuals.eggLooks (등급별), 줄무늬에 식물 대표 색을 살짝 섞음.
+	  껍데기는 파트 가운데에 맞춤 (EggService 가 바닥 + 높이 절반에 놓으므로 바닥에 딱 붙음). 크기는 파트 크기 그대로.
+	- 등급 아우라: PlantVisualService.addAura (희귀 이상 파티클·빛, 꺼진 채 + Shell 에 AuraFx 태그 → 클라가 100 스터드 안만 켬).
+	- 돌연변이: 실버(은색 Foil) / 골든(금색 네온) / 레인보우(네온 + 클라가 색 순환: Shell 에 EggShell 태그 + Rainbow)
+	- 특별 씨앗(Special = true: 비밀/영원/신성/슈퍼 울트라디바인): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "비밀 씨앗!" 이름표
+	- 들고 있는 씨앗(EggState == "Carried"): 위 BillboardGui "WeightTag" (자식 TextLabel "Gender" = ♂/♀, "Kg" = "4,740Kg").
+	  무게 = 파트 Attribute WeightKg (없으면 든 플레이어의 CarryWeightKg). 값이 없으면 숨김.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -32,6 +26,7 @@ local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Visuals = require(Shared.Data.Visuals)
 local Tags = require(Shared.Tags)
+local PlantVisualService = require(script.Parent.PlantVisualService)
 
 local EggVisualService = {}
 EggVisualService.started = false
@@ -138,37 +133,25 @@ local function rarityColor(rarity: string): Color3
 	return if r then rgb(r.color) else Color3.fromRGB(200, 200, 200)
 end
 
-local function rarityOrder(rarity: string): number
-	local r = Rarities.get(rarity :: any)
-	return if r then r.order else 1
-end
-
-local RAINBOW_BANDS = {
+local RAINBOW_STRIPES = {
 	Color3.fromRGB(255, 90, 90),
 	Color3.fromRGB(255, 225, 80),
+	Color3.fromRGB(90, 220, 120),
 	Color3.fromRGB(90, 170, 255),
 }
 
--- 껍데기 위 점 (비율 좌표): az = 둘레 각도(라디안, 0 = 앞 -Z), el = -1(아래) ~ 1(위) 높이 비율
-type Dot = { az: number, el: number }
-local DOTS2: { Dot } = { { az = 0.5, el = 0.15 }, { az = 2.4, el = -0.2 } }
-local DOTS4: { Dot } =
-	{ { az = 0.3, el = 0.25 }, { az = 1.9, el = -0.15 }, { az = 3.5, el = 0.3 }, { az = 5.0, el = -0.25 } }
-local EQUATOR4: { Dot } = { { az = 0, el = 0 }, { az = 1.571, el = 0 }, { az = 3.142, el = 0 }, { az = 4.712, el = 0 } }
-local STARS5: { Dot } = {
-	{ az = 0.2, el = 0.45 },
-	{ az = 1.5, el = -0.1 },
-	{ az = 2.7, el = 0.3 },
-	{ az = 3.9, el = -0.35 },
-	{ az = 5.2, el = 0.1 },
-}
+-- 씨앗 껍데기 비율: 지름 d 에 대해 폭 X = d × SEED_WIDTH, 깊이 Z = d, 높이 = d × EGG_HEIGHT (판정 파트에 맞춤)
+local SEED_WIDTH = 0.82
 
--- 매끈한 타원 알 껍데기 + 등급 무늬 (4판 수정: 층 쌓기 대신 Ball + SpecialMesh 타원 하나).
---   껍데기 = Ball(지름 d) + SpecialMesh(Sphere, Scale y EGG_HEIGHT) → 높이 d × 1.25, 가운데 = 파트 가운데
---   (EggService·BaseService 가 바닥 + 알 높이 절반에 놓으므로 바닥에 딱 붙음).
---   무늬 = 껍데기 표면에 60% 묻힌 작은 Ball, 띠 = 얇은 Cylinder(그 높이 껍데기 지름의 1.02배). 알 하나 ≤ 8 파트.
---   껍데기 = 등급 색 파스텔(Visuals.eggLooks), 무늬 조각 = 펫 대표 색, 돌연변이는 껍데기 색·재질을 덮어씀.
---   반환: { 껍데기 } (반짝이·빛은 껍데기에 붙음)
+--[[
+	6판 씨앗 껍데기 (5판 매끈한 타원 알 → 아몬드·물방울 모양 씨앗).
+	  껍데기 = Ball(지름 d) + SpecialMesh(Sphere, Scale (0.82, 1.25, 1)) → 높이 d × 1.25, 가운데 = 파트 가운데
+	  (EggService·BaseService 가 바닥 + 높이 절반에 놓으므로 바닥에 딱 붙음). 위에 뾰족한 끝("Tip"),
+	  세로 줄무늬("Stripe", 껍데기 표면에 붙은 가는 타원), 별·보석 점("Spot"). 씨앗 하나 ≤ 8 파트.
+	  색 = Visuals.eggLooks (껍데기 = 등급 색 파스텔), 돌연변이(실버·황금·무지개)는 껍데기 색·재질을 덮어씀.
+	  등급 아우라(희귀 이상 파티클·빛)는 PlantVisualService.addAura (꺼진 채 + AuraFx 태그 → 클라가 가까운 것만 켬).
+	반환: { 껍데기 }
+]]
 local function dress(egg: BasePart, petId: string, mutations: { string }, rarity: string): { Part }
 	local old = egg:FindFirstChild("EggVisual")
 	if old then
@@ -179,35 +162,28 @@ local function dress(egg: BasePart, petId: string, mutations: { string }, rarity
 	folder.Parent = egg
 
 	local d = math.min(egg.Size.X, egg.Size.Z)
-	local look: Visuals.EggLook = Visuals.eggLooks[rarity] or { pattern = "spots2" }
+	local look: Visuals.EggLook = Visuals.eggLooks[rarity] or { stripes = 2 }
 	local tint = rarityColor(rarity)
 	local base = if look.shell then rgb(look.shell) else tint:Lerp(WHITE, 0.45)
 	local stripe = if look.stripe then rgb(look.stripe) else tint
-	-- 무늬 조각 색: 펫 대표 색 (껍데기와 같으면 둘째 색)
-	local spot = if look.spot then rgb(look.spot) else rgb(Visuals.petColor(petId, 1))
-	if not look.spot and spot == base then
-		spot = rgb(Visuals.petColor(petId, 2))
-	end
-	local spotMat = if look.spotNeon then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	local tip = if look.tip then rgb(look.tip) else base:Lerp(BLACK, 0.2)
+	local stripeMat = if look.neon then Enum.Material.Neon else Enum.Material.SmoothPlastic
 	local mat = Enum.Material.SmoothPlastic
 	local reflectance = 0
 	local cycle = false
-	local petals: Color3? = nil
 	for _, id in mutations do
 		local mlook = Visuals.mutationLooks[id]
-		if mlook then
-			if mlook.material or mlook.cycle or id == "silver" or id == "golden" then
-				base = rgb(mlook.color)
-				stripe = base:Lerp(WHITE, 0.45)
-				spot = base:Lerp(BLACK, 0.25)
-				mat = materialOf(mlook.material) or mat
-				reflectance = mlook.reflectance or reflectance
-				cycle = cycle or mlook.cycle == true
-			end
-			if mlook.petals then
-				petals = rgb(mlook.petals)
-			end
+		if mlook and (id == "silver" or id == "golden" or id == "rainbow") then
+			base = rgb(mlook.color)
+			tip = base:Lerp(WHITE, 0.3)
+			mat = materialOf(mlook.material) or mat
+			reflectance = mlook.reflectance or reflectance
+			cycle = cycle or mlook.cycle == true
 		end
+	end
+	-- 식물 대표 색(꽃잎)을 줄무늬에 살짝 섞어 어떤 식물인지 힌트
+	if not look.stripe and not look.rainbow then
+		stripe = stripe:Lerp(rgb(Visuals.petColor(petId, 1)), 0.3)
 	end
 
 	-- 원래 파트는 투명하게 (판정/프롬프트/이름표는 그대로 남음)
@@ -219,121 +195,60 @@ local function dress(egg: BasePart, petId: string, mutations: { string }, rarity
 	shell.Reflectance = reflectance
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Scale = Vector3.new(1, EGG_HEIGHT, 1)
+	mesh.Scale = Vector3.new(SEED_WIDTH, EGG_HEIGHT, 1)
 	mesh.Parent = shell
 	CollectionService:AddTag(shell, Visuals.Tags.EggShell)
 	if cycle then
 		shell:SetAttribute("Rainbow", true)
 	end
+	-- 뾰족한 끝 (위)
+	local tipPart =
+		piece(egg, folder, "Tip", Enum.PartType.Ball, Vector3.one * d * 0.34, CFrame.new(0, ry * 0.86, 0), tip, mat)
+	local tipMesh = Instance.new("SpecialMesh")
+	tipMesh.MeshType = Enum.MeshType.Sphere
+	tipMesh.Scale = Vector3.new(0.75, 1.5, 0.75)
+	tipMesh.Parent = tipPart
 
-	-- 껍데기 표면 점 (지름 s, 60% 묻힘 → 가운데가 표면에서 0.1 s 안쪽)
-	local count = 1
-	local function dot(at: Dot, s: number, color: Color3, m: Enum.Material)
-		local el = math.clamp(at.el, -0.9, 0.9)
-		local y = el * ry
-		local ring = r * math.sqrt(1 - el * el) -- 그 높이 껍데기 반지름
-		local inward = s * 0.1
-		local rr = math.max(0, ring - inward)
-		local offset = Vector3.new(math.sin(at.az) * rr, y - el * inward, -math.cos(at.az) * rr)
-		count += 1
-		piece(egg, folder, "Spot" .. count, Enum.PartType.Ball, Vector3.one * s, CFrame.new(offset), color, m)
-	end
-	-- 띠 (세운 얇은 원기둥, 그 높이 껍데기 지름 × 1.02)
-	local function band(el: number, thick: number, color: Color3, m: Enum.Material)
-		local ring = r * math.sqrt(1 - el * el)
-		local dia = ring * 2 * 1.02
-		count += 1
-		piece(
+	-- 세로 줄무늬 (껍데기 표면, 앞뒤·옆으로 고르게)
+	local n = math.clamp(look.stripes, 0, 4)
+	for i = 1, n do
+		local az = (i - 1) / math.max(1, n) * math.pi * 2 + 0.35
+		local rx = r * SEED_WIDTH * 0.93
+		local rz = r * 0.93
+		local offset = Vector3.new(math.sin(az) * rx, 0, -math.cos(az) * rz)
+		local color = if look.rainbow then RAINBOW_STRIPES[(i - 1) % #RAINBOW_STRIPES + 1] else stripe
+		local p = piece(
 			egg,
 			folder,
-			"Band" .. count,
-			Enum.PartType.Cylinder,
-			Vector3.new(thick, dia, dia),
-			CFrame.new(0, el * ry, 0) * CFrame.Angles(0, 0, math.pi / 2),
+			"Stripe" .. i,
+			Enum.PartType.Block,
+			Vector3.new(d * 0.13, ry * 1.6, d * 0.13),
+			CFrame.new(offset) * CFrame.Angles(0, -az, 0),
 			color,
-			m
+			if look.rainbow then Enum.Material.Neon else stripeMat
 		)
+		local m = Instance.new("SpecialMesh")
+		m.MeshType = Enum.MeshType.Sphere
+		m.Parent = p
 	end
-	local pattern = look.pattern
-	local s = d * 0.2
-	if pattern == "spots4" then
-		for _, p in DOTS4 do
-			dot(p, s, spot, spotMat)
-		end
-	elseif pattern == "stripes" then
-		band(0.38, d * 0.09, stripe, mat)
-		band(-0.3, d * 0.09, stripe, mat)
-		dot(DOTS2[1], s * 0.9, spot, spotMat)
-		dot(DOTS2[2], s * 0.9, spot, spotMat)
-	elseif pattern == "diamonds" then
-		for _, p in EQUATOR4 do
-			dot(p, s * 0.95, spot, spotMat)
-		end
-	elseif pattern == "crown" then
-		-- 금띠 + 둘레 보석 4개
-		band(0.42, d * 0.12, Color3.fromRGB(255, 205, 50), Enum.Material.Foil)
-		local gems = { Color3.fromRGB(255, 60, 90), Color3.fromRGB(60, 160, 255), Color3.fromRGB(80, 230, 120), spot }
-		for i, p in EQUATOR4 do
-			dot(p, s * 0.8, gems[i], Enum.Material.Neon)
-		end
-	elseif pattern == "flames" then
-		band(-0.55, d * 0.1, stripe, mat)
-		for i, p in EQUATOR4 do
-			dot(
-				{ az = p.az + 0.4, el = -0.3 + (i % 2) * 0.15 },
-				s * 0.85,
-				Color3.fromRGB(255, 150, 40),
+	-- 별·보석 점 (껍데기 앞쪽 표면)
+	if look.dots == "stars" or look.dots == "gems" then
+		local stars = look.dots == "stars"
+		for i, at in { { 0.9, 0.25 }, { -0.8, -0.3 } } do
+			local az = at[1]
+			local el = at[2]
+			local ring = r * math.sqrt(1 - el * el) * 0.95
+			local offset = Vector3.new(math.sin(az) * ring * SEED_WIDTH, el * ry, -math.cos(az) * ring)
+			piece(
+				egg,
+				folder,
+				"Spot" .. i,
+				Enum.PartType.Ball,
+				Vector3.one * d * (if stars then 0.14 else 0.17),
+				CFrame.new(offset),
+				if stars then Color3.fromRGB(255, 245, 170) else Color3.fromRGB(255, 70, 110),
 				Enum.Material.Neon
 			)
-		end
-	elseif pattern == "stars" then
-		for i, p in STARS5 do
-			dot(p, s * (if i % 2 == 0 then 0.7 else 0.55), Color3.fromRGB(255, 245, 170), Enum.Material.Neon)
-		end
-	elseif pattern == "rainbow" then
-		-- 신성: 무지개 띠 3 + 흰 빛 점 3
-		for i, el in { 0.45, 0, -0.45 } do
-			band(el, d * 0.1, RAINBOW_BANDS[i], Enum.Material.Neon)
-		end
-		for i = 1, 3 do
-			dot({ az = i * 2.1, el = if i == 2 then 0.25 else -0.22 }, s * 0.6, WHITE, Enum.Material.Neon)
-		end
-	else
-		-- spots2 (일반): 작은 점 2개
-		for _, p in DOTS2 do
-			dot(p, s, spot, spotMat)
-		end
-	end
-
-	if mat == Enum.Material.Neon or reflectance > 0 then
-		sparkle(shell, base:Lerp(WHITE, 0.4), 4, d * 0.25)
-	end
-	if petals then
-		local e = sparkle(shell, petals, 6, d * 0.3)
-		e.Name = "Petals"
-		e.Acceleration = Vector3.new(0, -2, 0)
-		e.RotSpeed = NumberRange.new(-90, 90)
-		e.LightEmission = 0.3
-	end
-	-- 희귀(rare) 이상: 등급 색 반짝이 (높을수록 많이)
-	local order = rarityOrder(rarity)
-	if order >= 3 then
-		local glint = sparkle(shell, tint:Lerp(WHITE, 0.5), math.min(6, order - 1), d * 0.18)
-		glint.Name = "RarityGlint"
-	end
-	-- 희귀도 빛 (전설 이상)
-	local fx = Visuals.rarityEffects[rarity]
-	if fx then
-		local c = fx.light or fx.highlight
-		if c and (c[1] + c[2] + c[3]) > 120 then
-			local light = Instance.new("PointLight")
-			light.Name = "RarityLight"
-			light.Color = rgb(c)
-			light.Range = math.max(6, d * 4)
-			light.Brightness = 1.2
-			light.Parent = shell
-			local glow = sparkle(shell, rgb(fx.particleColor or c), 3, d * 0.22)
-			glow.Name = "RarityGlow"
 		end
 	end
 	return { shell }
@@ -541,7 +456,24 @@ local function decorateEgg(egg: BasePart)
 		sub.Parent = gui
 		gui.Parent = egg
 
-		sparkle(layers[#layers], color:Lerp(WHITE, 0.3), 10, egg.Size.X * 0.3)
+		sparkle(layers[#layers], color:Lerp(WHITE, 0.3), 6, egg.Size.X * 0.3)
+	end
+
+	-- 등급 아우라 (희귀 이상). 껍데기의 파티클·빛은 전부 꺼진 채로 두고 AuraFx 태그 → 클라가 가까운 것만 켬
+	local shell = layers[1]
+	PlantVisualService.addAura(shell, rarity, math.max(0.6, egg.Size.X * 0.5), {
+		mutations = mutations,
+		noBeam = egg:GetAttribute("Special") == true, -- 특별 씨앗은 위 SpecialBeam 이 이미 있음
+	})
+	local hasFx = false
+	for _, d in shell:GetChildren() do
+		if d:IsA("ParticleEmitter") or d:IsA("PointLight") then
+			(d :: any).Enabled = false
+			hasFx = true
+		end
+	end
+	if hasFx then
+		CollectionService:AddTag(shell, Visuals.Tags.AuraFx)
 	end
 
 	-- 들고 있을 때 무게 이름표
@@ -559,21 +491,6 @@ local function decorateEgg(egg: BasePart)
 	egg:GetAttributeChangedSignal("WeightKg"):Connect(function()
 		updateWeight(egg)
 	end)
-end
-
-local function decorateIncubating(egg: BasePart)
-	local petId = stringAttr(egg, "PetId")
-	if petId == "" then
-		return
-	end
-	local layers = dress(egg, petId, split(stringAttr(egg, "Mutations")), rarityOf(egg, petId))
-	local glow = sparkle(layers[#layers], Color3.fromRGB(255, 255, 180), 12, egg.Size.X * 0.35)
-	glow.Name = "ReadyGlow"
-	local function refresh()
-		glow.Enabled = egg:GetAttribute("Ready") == true
-	end
-	refresh()
-	egg:GetAttributeChangedSignal("Ready"):Connect(refresh)
 end
 
 local function safe(fn: (BasePart) -> (), inst: Instance)
@@ -609,12 +526,6 @@ function EggVisualService.start()
 		if inst:IsA("BasePart") then
 			weightTags[inst] = nil
 		end
-	end)
-	for _, inst in CollectionService:GetTagged(Tags.IncubatingEgg) do
-		safe(decorateIncubating, inst)
-	end
-	CollectionService:GetInstanceAddedSignal(Tags.IncubatingEgg):Connect(function(inst: Instance)
-		safe(decorateIncubating, inst)
 	end)
 
 	-- 든 알 무게 이름표: 플레이어 Attribute(CarryWeightKg) 가 늦게 바뀌어도 맞춰지게 0.5초마다 (든 알만)

@@ -1,13 +1,14 @@
 --!strict
 --[[
 	WorldFxController — 월드 연출 (내 화면에서만, 판정과 상관없음)
-	- 부모 동물(ParentAnimal)은 살짝 숨쉬기 (TweenService). 5판: 우리 펫(PenPet)은 서버가 돌아다니게 하므로 여기서 안 움직임
-	- 레인보우 알 껍데기(EggShell + Rainbow) 색 순환
-	- 머리 위에 든 알 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
-	- 희귀도 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
+	- 레인보우 껍데기·꽃잎(EggShell + Rainbow — 씨앗·무지개 돌연변이 식물) 색 순환
+	- 머리 위에 든 씨앗 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
+	- 등급 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
-	- 바닥에 떨어진 알(Egg, Attribute ExpiresAt) 머리 위 빨간 "32초" 카운트다운 (2판 수정, 10초부터 깜빡)
-	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 펫 돈 팝업 "+$34K"(IncomeTick) / 자는 경비 Z 둥실둥실 / 부화: 반짝 / 잡힘: 머리 위 "퍽!" + 별
+	- 바닥에 떨어진 씨앗(Egg, Attribute ExpiresAt) 머리 위 빨간 "32초" 카운트다운 (2판 수정, 10초부터 깜빡)
+	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 자는 경비 Z 둥실둥실 / 성체가 됨: 반짝 / 잡힘: 머리 위 "퍽!" + 별
+	- 6판 열매 따기: FruitPicked { plantUid, count, value } → 그 성체(GardenPlant 파트, Attr PlantUid + OwnerUserId == 나) 위
+	  "+열매 3" 주황 글씨 + 작은 코인 값 (popFruit). 식물 살랑살랑·아우라 켜기는 PlantFxController.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -27,45 +28,13 @@ local Net = require(Client.Net)
 local ZoneController = require(script.Parent.ZoneController)
 
 local WorldFxController = {}
-WorldFxController.popMoney = nil :: ((Model, number) -> ())?
+WorldFxController.popFruit = nil :: ((BasePart, number, number) -> ())?
 
 local VT = Visuals.Tags
 local SPARKLE_TEX = "rbxasset://textures/particles/sparkles_main.dds"
 local MAX_HIGHLIGHTS = 26
 
 local rng = Random.new()
-
-------------------------------------------------------------------
--- 통통 튀기
-------------------------------------------------------------------
-
-local function bounce(inst: Instance, amplitudeFactor: number, period: number)
-	if not inst:IsA("Model") then
-		return
-	end
-	local model = inst
-	task.defer(function()
-		local root = model.PrimaryPart
-		if not root or model.Parent == nil then
-			return
-		end
-		local h = model:GetAttribute("Height")
-		local height = if typeof(h) == "number" then h else 3
-		local base = root.CFrame
-		local info =
-			TweenInfo.new(period, Enum.EasingStyle.Sine, Enum.EasingDirection.Out, -1, true, rng:NextNumber(0, period))
-		local tween = TweenService:Create(root, info, { CFrame = base * CFrame.new(0, height * amplitudeFactor, 0) })
-		tween:Play()
-		model.Destroying:Connect(function()
-			tween:Cancel()
-		end)
-		model.AncestryChanged:Connect(function()
-			if not model.Parent then
-				tween:Cancel()
-			end
-		end)
-	end)
-end
 
 local function watchTag(tag: string, fn: (Instance) -> ())
 	for _, inst in CollectionService:GetTagged(tag) do
@@ -142,7 +111,7 @@ local function popText(adornee: BasePart, text: string, color: Color3)
 end
 
 ------------------------------------------------------------------
--- 떨어진 알 카운트다운 "32초" (2판 수정: 알 파트 Attribute ExpiresAt, workspace:GetServerTimeNow 기준)
+-- 떨어진 씨앗 카운트다운 "32초" (2판 수정: 씨앗 파트 Attribute ExpiresAt, workspace:GetServerTimeNow 기준)
 ------------------------------------------------------------------
 
 local dropTimers: { [BasePart]: TextLabel } = {}
@@ -202,69 +171,74 @@ local function myPad(): BasePart?
 	return nil
 end
 
--- 펫 머리 위 돈 팝업 "+$34K" (원작: 큰 초록 글씨가 떠오름)
-local penPets: { [string]: Model } = {}
-local function popMoney(model: Model, amount: number)
-	local root = model.PrimaryPart
-	if not root then
-		return
-	end
-	local h = model:GetAttribute("Height")
-	local height = if typeof(h) == "number" then h else 3
+-- 6판: 열매를 딴 성체 위 "+열매 3" 팝업 (주황 큰 글씨 + 작은 코인 값, 떠오르며 사라짐)
+local function popFruit(part: BasePart, count: number, value: number)
+	local h = part:GetAttribute("VisualHeight")
+	local height = if typeof(h) == "number" and h > 0 then h else part.Size.Y
 	local gui = Instance.new("BillboardGui")
-	gui.Name = "MoneyPop"
-	gui.Size = UDim2.fromScale(9, 2.6)
+	gui.Name = "FruitPop"
+	gui.Size = UDim2.fromScale(8, 3.2)
 	gui.LightInfluence = 0
 	gui.MaxDistance = 90
-	local start = Vector3.new(rng:NextNumber(-1, 1), height + 2.5, 0)
+	gui.AlwaysOnTop = true
+	local start = Vector3.new(rng:NextNumber(-0.8, 0.8), -part.Size.Y / 2 + height + 2, 0)
 	gui.StudsOffsetWorldSpace = start
-	gui.Adornee = root
+	gui.Adornee = part
 	local label = Instance.new("TextLabel")
+	label.Name = "Fruits"
 	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
+	label.Size = UDim2.fromScale(1, 0.62)
 	label.Font = Enum.Font.FredokaOne
 	label.TextScaled = true
-	label.Text = "+" .. Format.money(amount)
-	label.TextColor3 = Color3.fromRGB(80, 245, 60)
+	label.Text = "+열매 " .. tostring(count)
+	label.TextColor3 = Color3.fromRGB(255, 170, 60)
 	label.Parent = gui
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(14, 15, 22)
 	stroke.Thickness = 3
 	stroke.Parent = label
-	gui.Parent = root
+	local coins = Instance.new("TextLabel")
+	coins.Name = "Value"
+	coins.BackgroundTransparency = 1
+	coins.Position = UDim2.fromScale(0, 0.62)
+	coins.Size = UDim2.fromScale(1, 0.38)
+	coins.Font = Enum.Font.FredokaOne
+	coins.TextScaled = true
+	coins.Text = Format.money(value)
+	coins.TextColor3 = Color3.fromRGB(80, 245, 60)
+	coins.TextStrokeTransparency = 0
+	coins.Parent = gui
+	gui.Parent = part
+	local fade = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	TweenService:Create(gui, TweenInfo.new(1.4, Enum.EasingStyle.Quad), {
-		StudsOffsetWorldSpace = start + Vector3.new(0, 5, 0),
+		StudsOffsetWorldSpace = start + Vector3.new(0, 4, 0),
 	}):Play()
-	TweenService
-		:Create(label, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
-		:Play()
-	TweenService
-		:Create(stroke, TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 })
-		:Play()
+	TweenService:Create(label, fade, { TextTransparency = 1 }):Play()
+	TweenService:Create(stroke, fade, { Transparency = 1 }):Play()
+	TweenService:Create(coins, fade, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 	task.delay(1.5, function()
 		gui:Destroy()
 	end)
 end
-WorldFxController.popMoney = popMoney
+WorldFxController.popFruit = popFruit
+
+-- 내 정원의 그 성체 파트 (uid 는 사람마다 겹칠 수 있으니 OwnerUserId 로 거름)
+local function myPlantPart(uid: string): BasePart?
+	local me = Players.LocalPlayer.UserId
+	for _, inst in CollectionService:GetTagged(Tags.GardenPlant) do
+		if inst:IsA("BasePart") and inst:GetAttribute("PlantUid") == uid and inst:GetAttribute("OwnerUserId") == me then
+			return inst
+		end
+	end
+	return nil
+end
+WorldFxController.myPlantPart = myPlantPart
 
 ------------------------------------------------------------------
 -- 시작
 ------------------------------------------------------------------
 
 function WorldFxController.start()
-	watchTag(VT.PenPet, function(inst)
-		-- 5판: 통통 튀기는 서버(PetVisualService 돌아다니기)가 함 — 여기서 Root 를 Tween 하면 걷는 펫이 제자리로 끌려옴
-		local uid = inst:GetAttribute("PetUid")
-		local owner = inst:GetAttribute("OwnerUserId")
-		-- uid 는 사람마다 따로 매겨서 겹칠 수 있음 → 내 펫만 (OwnerUserId 가 없던 옛 서버면 그냥 받음)
-		local mine = owner == nil or owner == Players.LocalPlayer.UserId
-		if inst:IsA("Model") and typeof(uid) == "string" and mine then
-			penPets[uid] = inst
-		end
-	end)
-	-- [6판 수석 임시] 자동 수입 팝업(IncomeTick)은 없어짐. 선임: 열매를 딴 식물(GardenPlant 파트, Attr PlantUid) 위에
-	--   FruitPicked { plantUid, value } 로 "+코인" 팝업 (popMoney 는 Model 용 — 파트용으로 바꿔 쓰기)
-	--   성체 파트는 BaseService 의 GardenPlant 태그 파트 (Attr PlantUid) — 선임이 식물 모델·열매 연출로 바꿀 예정
 	-- 자는 경비 머리 위 Z 둥실둥실 (서버 PetVisualService 의 SleepZ 빌보드)
 	local zLabels: { { label: TextLabel, base: UDim2, phase: number } } = {}
 	local function watchZ(guard: Instance)
@@ -293,11 +267,8 @@ function WorldFxController.start()
 			end
 		end
 	end)
-	watchTag(VT.ParentAnimal, function(inst)
-		bounce(inst, 0.035, 1.3)
-	end)
 
-	-- 레인보우 껍데기 + 든 알 흔들기 (한 프레임 루프)
+	-- 레인보우 껍데기 + 든 씨앗 흔들기 (한 프레임 루프)
 	local shells: { [BasePart]: boolean } = {}
 	watchTag(VT.EggShell, function(inst)
 		if inst:IsA("BasePart") and inst:GetAttribute("Rainbow") == true then
@@ -323,7 +294,7 @@ function WorldFxController.start()
 			dropTimers[inst] = nil
 		end
 	end)
-	-- 바닥에 떨어진 알 머리 위 "32초" 카운트다운 (Attribute ExpiresAt = 서버 시각)
+	-- 바닥에 떨어진 씨앗 머리 위 "32초" 카운트다운 (Attribute ExpiresAt = 서버 시각)
 	watchTag(Tags.Egg, function(inst)
 		if inst:IsA("BasePart") then
 			refreshDropTimer(inst)
@@ -377,7 +348,7 @@ function WorldFxController.start()
 		end
 	end)
 
-	-- 희귀도 Highlight 제한
+	-- 등급 Highlight 제한
 	task.spawn(function()
 		while true do
 			task.wait(0.5)
@@ -434,11 +405,31 @@ function WorldFxController.start()
 			burst(pad.Position + Vector3.new(0, 1, 0), Color3.fromRGB(255, 240, 120), 30, 0.9, 12)
 		end
 	end)
-	Net.on(E.PlantGrown, function()
-		local head = myHead()
-		if head then
-			burst(head.Position, Color3.fromRGB(255, 235, 140), 50, 1, 14)
-			burst(head.Position, Color3.fromRGB(255, 160, 220), 30, 0.8, 10)
+	Net.on(E.PlantGrown, function(payload: any)
+		-- 성체가 된 자리에서 반짝 (파트가 조금 늦게 올 수 있어 잠깐 뒤). 못 찾으면 내 머리 위
+		local plant = if typeof(payload) == "table" then payload.plant else nil
+		local uid = if typeof(plant) == "table" and typeof(plant.uid) == "string" then plant.uid else nil
+		task.delay(0.3, function()
+			local part = if uid then myPlantPart(uid) else nil
+			local head = myHead()
+			local pos = if part then part.Position + Vector3.new(0, 2, 0) elseif head then head.Position else nil
+			if pos then
+				burst(pos, Color3.fromRGB(255, 235, 140), 50, 1, 14)
+				burst(pos, Color3.fromRGB(140, 255, 150), 30, 0.8, 10)
+			end
+		end)
+	end)
+	-- 6판: 열매 따기 → 그 식물 위 "+열매 3" (식물마다 한 번씩 옴)
+	Net.on(E.FruitPicked, function(payload: any)
+		if typeof(payload) ~= "table" or typeof(payload.plantUid) ~= "string" then
+			return
+		end
+		local count = tonumber(payload.count) or 0
+		local value = tonumber(payload.value) or 0
+		local part = myPlantPart(payload.plantUid)
+		if part and count > 0 and count == count then
+			popFruit(part, math.floor(count), if value == value then value else 0)
+			burst(part.Position + Vector3.new(0, 1, 0), Color3.fromRGB(255, 180, 70), 12, 0.6, 6)
 		end
 	end)
 	Net.on(E.Caught, function(payload: any)

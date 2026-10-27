@@ -1,7 +1,7 @@
 --!strict
 --[[
 	Format — 큰 숫자/시간 표시 (순수 로직)
-	  Format.number(16000000) → "16M", Format.money(1500) → "$1.5K", Format.duration(5400) → "1h 30m"
+	  Format.number(16000000) → "16M", Format.money(1500) → "1.5K 코인" (6판: 돈 = 코인), Format.duration(5400) → "1h 30m"
 	돈 단위: K=천, M=백만, B=십억, T=조, Qa=천조 (설계문서 3장)
 ]]
 
@@ -42,7 +42,7 @@ function Format.number(n: number): string
 end
 
 function Format.money(n: number): string
-	return "$" .. Format.number(n)
+	return Format.number(n) .. " 코인"
 end
 
 function Format.duration(seconds: number): string

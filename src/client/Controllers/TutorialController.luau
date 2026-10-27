@@ -7,16 +7,20 @@
 
 	화면:
 	  - 위 가운데 패널 "TutorialPanel": [n/5] + 큰 글씨(text) + 작은 설명(hint). done 이면 숨김.
-	    PC 는 맨 위, 터치는 위 한 줄 속도·돈 아래 (UI/Layout.tutorialPanel — 폰 750×381 에서도 안 겹침).
-	    패널이 보이는 동안 위 가운데에 뜨는 것들(달리기!! 배너·구역 배너·공지 배너·알 놓기 안내 줄)을 패널 아래로 내림.
-	  - 단계마다 가리키기 (내 화면에만):
-	      1 숲에서 알 훔치기    → 3D 노란 빔 + "▼ 숲으로!" 표시 (허브면 숲 입구, 숲이면 가장 가까운 둥지 알) + 화면 밖이면 가장자리 화살표
-	      2 안전 구역으로       → 허브(안전 구역 z < 0) 쪽 빔·표시 "안전 구역"
-	      3 핫바에서 알 놓기    → 핫바의 알 칸(HotbarController.eggButtons) 노란 테두리 반짝 + 내 우리 표시 "우리에 놓기"
-	      4 부화!               → 내 우리에 놓인 알 노란 Highlight + 머리 위 "부화!" (아직 자라는 중이면 "자라는 중…")
-	      5 펫 장착             → 오른쪽 발바닥(펫) 버튼 반짝, 펫 창이 열려 있으면 "장착" 버튼들 반짝
-	        (6판 수석 임시: 5단계 "열매 따서 팔기" — 정원 식물 창의 "열매 따기"(PickFruit) 버튼들 반짝. 판매 가판대 가리키기는 선임)
-	  - 끝(reward): 색종이 + 팡파레(TutorialDone) + "튜토리얼 끝! / $500 받았어요!" (3.6초)
+	    PC 는 맨 위, 터치는 위 한 줄 속도·코인 아래 (UI/Layout.tutorialPanel — 폰 750×381 에서도 안 겹침).
+	    패널이 보이는 동안 위 가운데에 뜨는 것들(달리기!! 배너·구역 배너·공지 배너·씨앗 심기 안내 줄)을 패널 아래로 내림.
+	  - 단계마다 가리키기 (내 화면에만, 6판 "씨앗을 훔치세요"):
+	      1 숲에서 씨앗 훔치기      → 3D 노란 빔 + "▼ 씨앗 훔치기!" 표시 (허브면 숲 입구 "숲으로!", 숲이면 가장 가까운 둥지 씨앗)
+	                                + 화면 밖이면 가장자리 화살표
+	      2 안전 구역으로 돌아오기  → 허브(안전 구역 z < 0) 쪽 빔·표시 "안전 구역"
+	      3 핫바에서 씨앗을 골라 정원에 심기 → 핫바의 씨앗 칸(HotbarController.eggButtons) 노란 테두리 반짝 + 내 정원 표시 "정원에 심기"
+	      4 성체가 될 때까지 기다리기 → 내 정원의 자라는 씨앗(IncubatingEgg) 노란 Highlight + "자라는 중… n초"
+	                                (이미 성체가 됐으면 그 식물 "성체가 됐어요!")
+	      5 열매 따서 팔기          → 열매 가방에 열매가 있으면 가장 가까운 판매 가판대(SellStall) "열매 팔기!",
+	                                없으면 열매가 달린 내 성체 식물(GardenPlant) "열매 따기!" (아직 없으면 "열매가 맺히는 중…")
+	                                + 오른쪽 정원(식물) 버튼 반짝, 정원 식물 창이 열려 있으면 "열매 따기"(PickFruit)·
+	                                "모두 따기"(PickAllFruit) 버튼 반짝
+	  - 끝(reward): 색종이 + 팡파레(TutorialDone) + "튜토리얼 끝! / 500 코인 받았어요!" (3.6초)
 	  - 매 프레임 연출(RenderStepped)·0.25초 갱신 루프는 튜토리얼 중일 때만 돎. 끝나면 둘 다 끊고, /tutorial reset 으로 다시 시작되면 다시 연결
 	공개: TutorialController.view() / update() / celebrate(reward) / panelRect() / running() (테스트도 씀)
 ]]
@@ -288,7 +292,7 @@ local function pointAt(pos: Vector3, text: string, part: BasePart?)
 		local far = root ~= nil and (root.Position - pos).Magnitude > BEAM_MIN
 		b.Enabled = start ~= nil and far
 	end
-	-- 놓인 알 같은 물건은 노란 테두리
+	-- 심은 씨앗·성체 식물 같은 물건은 노란 테두리
 	if part then
 		local h = highlight
 		if not h or h.Adornee ~= part then
@@ -314,7 +318,7 @@ local function pointAt(pos: Vector3, text: string, part: BasePart?)
 	end
 end
 
--- 1단계: 허브면 숲 입구, 숲에 있으면 가장 가까운 둥지(또는 떨어진) 알
+-- 1단계: 허브면 숲 입구, 숲에 있으면 가장 가까운 둥지(또는 떨어진) 씨앗
 local function forestTarget(root: BasePart): (Vector3, string)
 	local pos = root.Position
 	if pos.Z < MapLayout.SAFE_ZONE_Z then
@@ -343,28 +347,81 @@ local function forestTarget(root: BasePart): (Vector3, string)
 			end
 		end
 	end
-	return best or FOREST_ENTRANCE, "알 훔치기!"
+	return best or FOREST_ENTRANCE, "씨앗 훔치기!"
 end
 
--- 4단계: 내 우리에 놓인 알 (다 자란 알 먼저)
-local function myPlacedEgg(): (BasePart?, boolean)
+-- 4단계: 내 정원에 심은 자라는 씨앗 (가장 많이 자란 것) + 남은 성장 초 (Required - Progress, 밤 배율 전 숫자)
+local function myGrowingSeed(): (BasePart?, number)
 	local me = Players.LocalPlayer.UserId
 	local found: BasePart? = nil
+	local bestLeft = math.huge
 	for _, inst in CollectionService:GetTagged(Tags.IncubatingEgg) do
 		if inst:IsA("BasePart") and inst:GetAttribute("OwnerUserId") == me then
 			local p, r = inst:GetAttribute("Progress"), inst:GetAttribute("Required")
-			local ready = inst:GetAttribute("Ready") == true
-				or (typeof(p) == "number" and typeof(r) == "number" and p >= r)
-			if ready then
-				return inst, true
+			local left = if typeof(p) == "number" and typeof(r) == "number" then math.max(0, r - p) else math.huge
+			if found == nil or left < bestLeft then
+				found, bestLeft = inst, left
 			end
-			found = found or inst
 		end
 	end
-	return found, false
+	return found, bestLeft
 end
 
-local function equipButtons(): { GuiObject }
+-- 내 정원의 성체 식물 (열매가 달린 것 먼저). 반환: 파트, 달린 열매 수
+local function myPlant(): (BasePart?, number)
+	local me = Players.LocalPlayer.UserId
+	local found: BasePart? = nil
+	local most = -1
+	for _, inst in CollectionService:GetTagged(Tags.GardenPlant) do
+		if inst:IsA("BasePart") and inst:GetAttribute("OwnerUserId") == me then
+			local fruits = inst:GetAttribute("Fruits")
+			local n = if typeof(fruits) == "number" then fruits else 0
+			if n > most then
+				found, most = inst, n
+			end
+		end
+	end
+	return found, math.max(most, 0)
+end
+
+-- 열매 가방 속 열매 수 (Attr FruitCount, 없으면 State 의 열매 가방)
+local function fruitCount(): number
+	local attr = Players.LocalPlayer:GetAttribute(Tags.PlayerAttributes.FruitCount)
+	if typeof(attr) == "number" then
+		return attr
+	end
+	local snap = State.get()
+	local bag = if snap then snap.fruits else nil
+	local n = 0
+	if typeof(bag) == "table" then
+		for _, slot in bag do
+			if typeof(slot) == "table" and typeof(slot.count) == "number" then
+				n += slot.count
+			end
+		end
+	end
+	return n
+end
+
+-- 가장 가까운 판매 가판대 (SellStall 태그 파트, 없으면 허브 가판대 자리)
+local function nearestStall(root: BasePart?): Vector3
+	local hub = MapLayout.hubSpots.sellStall
+	local best = Vector3.new(hub.x, 0, hub.z)
+	local from = if root then root.Position else best
+	local bestD = math.huge
+	for _, inst in CollectionService:GetTagged(Tags.SellStall) do
+		if inst:IsA("BasePart") then
+			local d = (inst.Position - from).Magnitude
+			if d < bestD then
+				best, bestD = inst.Position, d
+			end
+		end
+	end
+	return best
+end
+
+-- 정원 식물 창의 "열매 따기"(PickFruit)·"모두 따기"(PickAllFruit) 버튼 (창이 열려 있을 때만)
+local function pickButtons(): { GuiObject }
 	local list: { GuiObject } = {}
 	if not Windows.isOpen("Pets") then
 		return list
@@ -372,7 +429,7 @@ local function equipButtons(): { GuiObject }
 	local win = Ui.layer("Windows"):FindFirstChild("Pets")
 	if win then
 		for _, d in win:GetDescendants() do
-			if d:IsA("TextButton") and d.Name == "PickFruit" and d.Visible then -- 6판: 정원 식물 창 "열매 따기" (5판 "장착")
+			if d:IsA("TextButton") and (d.Name == "PickFruit" or d.Name == "PickAllFruit") and d.Visible then
 				table.insert(list, d)
 			end
 		end
@@ -480,25 +537,42 @@ function TutorialController.update()
 		local rect = MapLayout.penRect(myPlot())
 		if rect then
 			local c = MapLayout.rectCenter(rect)
-			pointAt(Vector3.new(c.x, 0, c.z), "우리에 놓기", nil)
+			pointAt(Vector3.new(c.x, 0, c.z), "정원에 심기", nil)
 		else
 			clearWorld()
 		end
 	elseif step == 4 then
-		local part, ready = myPlacedEgg()
-		if part then
-			pointAt(part.Position, if ready then "부화!" else "자라는 중…", part)
+		local seed, left = myGrowingSeed()
+		if seed then
+			local text = if left < math.huge and left > 0
+				then string.format("자라는 중… %d초", math.ceil(left))
+				else "곧 성체가 돼요!"
+			pointAt(seed.Position, text, seed)
 		else
-			clearWorld()
+			local plant = myPlant()
+			if plant then
+				pointAt(plant.Position, "성체가 됐어요!", plant)
+			else
+				clearWorld()
+			end
 		end
 	else
-		clearWorld()
 		local pets = HudController.petsButton
 		if pets then
 			table.insert(glowList, pets)
 		end
-		for _, b in equipButtons() do
+		for _, b in pickButtons() do
 			table.insert(glowList, b)
+		end
+		local plant, fruits = myPlant()
+		if fruitCount() > 0 then
+			pointAt(nearestStall(root), "열매 팔기!", nil)
+		elseif plant and fruits > 0 then
+			pointAt(plant.Position, "열매 따기!", plant)
+		elseif plant then
+			pointAt(plant.Position, "열매가 맺히는 중…", plant)
+		else
+			clearWorld()
 		end
 	end
 	setGlows(glowList)
@@ -582,7 +656,7 @@ local function syncLoops()
 			loopOn = true
 			loopGen += 1
 			local gen = loopGen
-			-- 가리킬 곳은 0.25초마다 (내가 움직이거나 알이 생기고 없어짐)
+			-- 가리킬 곳은 0.25초마다 (내가 움직이거나 씨앗이 생기고 없어짐)
 			task.spawn(function()
 				while loopGen == gen do
 					local ok, err = pcall(function(): ...any
@@ -643,7 +717,7 @@ local function setView(v: any, fromRemote: boolean)
 end
 
 ------------------------------------------------------------------
--- 끝! 축하 (색종이 + 팡파레 + "$500 받았어요!")
+-- 끝! 축하 (색종이 + 팡파레 + "500 코인 받았어요!")
 ------------------------------------------------------------------
 
 local CONFETTI = {

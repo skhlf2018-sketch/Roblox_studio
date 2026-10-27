@@ -17,7 +17,7 @@ return function(T, Loader)
 		T.eq(Format.number(5e15), "5Qa")
 		T.eq(Format.number(123456), "123K")
 		T.eq(Format.number(-1500), "-1.5K")
-		T.eq(Format.money(180000), "$180K")
+		T.eq(Format.money(180000), "180K 코인")
 	end)
 
 	T.test("시간", function()

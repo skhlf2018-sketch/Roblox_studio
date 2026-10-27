@@ -56,24 +56,26 @@ boot("ChaseController")
 boot("IncubatorController")
 boot("HatchController")
 boot("IndexController")
+boot("FruitBagController") -- 6판: 열매 가방 창 · 판매 가판대 "열매 팔기" · 열매 먹이기
 boot("PetsController")
 boot("ShopController")
 boot("SettingsController")
 boot("HotbarController")
 boot("WorldFxController")
--- 선임 2차: 2단계 특수 장소 화면 (펫 고르기 창 공용 UI/PetPicker) + 무기 손 모양
+-- 선임 2차: 특수 장소 화면 (6판 사쿠라 나무, 고르기 창 공용 UI/PetPicker) + 무기 손 모양
 boot("SakuraController")
 boot("WeaponController")
 -- 선임 5차 (2판): 러닝머신 입력·걸음 팝업, 트레일 상점 창
 boot("TreadmillController")
 boot("TrailController")
 boot("SpeedFxController") -- 4판: 빠를수록 시야를 넓혀 속도 체감
--- 선임 5판: 펫 쓰다듬기(프롬프트·하트), 랭킹판(오른쪽 위 + 허브 판), 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
+-- 선임 5판·6판: 정원 프롬프트(열매 따기·물 주기)·물방울, 식물 아우라·살랑살랑, 랭킹판, 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
 boot("PetFxController")
+boot("PlantFxController")
 boot("LeaderboardController")
 boot("TutorialController")
 
 -- 접속 직후 서버가 보낸 Snapshot 을 놓쳤을 수 있으니 한 번 요청
 Net.send(Remotes.ToServer.RequestSnapshot)
 
-print("[StealAnEgg] 클라이언트 시작 완료")
+print("[씨앗을 훔치세요] 클라이언트 시작 완료")

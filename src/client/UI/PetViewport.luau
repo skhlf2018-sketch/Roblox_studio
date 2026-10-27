@@ -1,9 +1,9 @@
 --!strict
 --[[
-	PetViewport — 펫 3D 모습을 UI 안에 (ViewportFrame)
-	서버 PetVisualService 가 만든 ReplicatedStorage.PetModels[petId] 를 복제해서 비춤.
+	PetViewport — 식물 3D 모습을 UI 안에 (ViewportFrame)
+	서버 PlantVisualService 가 만든 ReplicatedStorage.PetModels[식물 id] (식물 134종) 를 복제해서 비춤.
 	  PetViewport.new(petId, { silhouette = true })  → 발견 전 "검은 실루엣"
-	  PetViewport.spin(viewport)                      → 천천히 빙글 (부화 팝업 한 개에만)
+	  PetViewport.spin(viewport)                      → 천천히 빙글 (성체 카드 한 개에만)
 	아직 모델 도서관이 안 왔으면 동그라미를 보여 주고 도착하면 채움.
 ]]
 

@@ -8,7 +8,9 @@
 	        → 사쿠라 나무 프롬프트(6판: 성체 바치기 / 씨앗 뽑기) → 펫 고르기 창에서 카드 고르고 확인
 	          → 보낸 Remote 이름·인자 확인 → 결과 이벤트(SakuraResult · 6판 PlantGrown/FruitPicked/FruitsSold/FeedResult)
 	          (6판: 퓨전 머신·제단·비밀 통로 없앰 · 5판: 퀘스트·선물 창 없앰)
-	        6판 "씨앗을 훔치세요": 식물 id (sprout_daisy·puppy_grass·owl_oak…) 로 Snapshot 을 만듦. 클라 화면은 [6판 수석 임시] 상태 (선임이 다시 꾸밈)
+	        6판 "씨앗을 훔치세요": 식물 id (sprout_daisy·puppy_grass·owl_oak…) 로 Snapshot 을 만듦.
+	          정원 식물 창(열매 따기·먹이기·팔기 확인 창) · 열매 가방 창 · 판매 가판대 "열매 팔기" · 건너뛰기 창(전부/절반)
+	          · 정원 프롬프트(열매 따기·물 주기, GardenPlant/IncubatingEgg) · 물방울 · 아우라 켜기/끄기(PlantFxController)
 	        → 무기 손 모양 붙이기·휘두르기, 폰 화면에서 버튼 크기(46px 이상) 계산 확인
 	task.wait 는 바로 멈추고(무한 루프 방지), task.delay 는 바로 실행합니다.
 ]]
@@ -482,39 +484,45 @@ tag(incubator, "SakuraIncubator")
 -- (5판: 마법의 숲 퀘스트 문 QuestGate 없앰)
 local crystal = worldPart("SakuraCrystal_c1", roblox.Vector3.new(3, 1, 3))
 tag(crystal, "SakuraCrystal")
--- 2판 월드 흉내: 우리 펫(PenPet) · 우리 안 부화 중 알 · 업그레이드 표지판 · 판매 가게(가까이) · 트레일 상점
-local penPet = Instance.new("Model")
-penPet.Name = "sprout_daisy"
-local penPetRoot = worldPart("Root", roblox.Vector3.new(20, 1, 20), nil, penPet)
-penPet.PrimaryPart = penPetRoot
-penPet:SetAttribute("PetUid", "p1")
-penPet:SetAttribute("OwnerUserId", 77)
-penPet.Parent = Workspace
-penPet:SetAttribute("Height", 3)
--- 5판: 서버 PetVisualService 가 붙이는 쓰다듬기 프롬프트 (Root > Attachment "PromptAttach" > ProximityPrompt "PetPrompt")
-local function petPrompt(rootPart)
-	local attach = Instance.new("Attachment")
-	attach.Name = "PromptAttach"
-	attach.Parent = rootPart
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "PetPrompt"
-	prompt.ActionText = "쓰다듬기"
-	prompt.Parent = attach
-	return prompt
+-- 6판 월드 흉내: 정원 성체(GardenPlant 파트 + 자식 식물 모델 Sway) · 자라는 씨앗(IncubatingEgg) · 업그레이드 표지판 · 판매 가판대 · 트레일 상점
+local function gardenPlant(uid, owner, petId, pos, fruits)
+	local p = worldPart("Plant_" .. uid, pos, roblox.Vector3.new(2.4, 3.8, 2.4))
+	p:SetAttribute("PlantUid", uid)
+	p:SetAttribute("OwnerUserId", owner)
+	p:SetAttribute("PlotIndex", if owner == 77 then 1 else 2)
+	p:SetAttribute("PetId", petId)
+	p:SetAttribute("Size", "normal")
+	p:SetAttribute("Stage", "adult")
+	p:SetAttribute("Fruits", fruits)
+	p:SetAttribute("FruitMax", 5)
+	p:SetAttribute("VisualHeight", 4)
+	-- 서버 PlantVisualService 가 붙이는 식물 모델 (이름 = 식물 id, PrimaryPart Root, Attr Sway)
+	local model = Instance.new("Model")
+	model.Name = petId
+	local mroot = worldPart("Root", pos, roblox.Vector3.new(1, 1, 1), model)
+	model.PrimaryPart = mroot
+	model:SetAttribute("Sway", true)
+	model.Parent = p
+	tag(p, "GardenPlant")
+	return p, model
 end
-local myPetPrompt = petPrompt(penPetRoot)
-tag(penPet, "PenPet")
--- 남의 우리 펫 (uid 가 내 펫과 같은 "p1" — 사람마다 uid 를 따로 매겨 겹칠 수 있음)
-local otherPet = Instance.new("Model")
-otherPet.Name = "puppy_grass"
-local otherPetRoot = worldPart("Root", roblox.Vector3.new(200, 1, 20), nil, otherPet)
-otherPet.PrimaryPart = otherPetRoot
-otherPet:SetAttribute("PetUid", "p1")
-otherPet:SetAttribute("OwnerUserId", 12345)
-otherPet:SetAttribute("Height", 3)
-otherPet.Parent = Workspace
-local otherPetPrompt = petPrompt(otherPetRoot)
-tag(otherPet, "PenPet")
+-- 내 성체 p1 · 남의 성체 (uid 가 내 것과 같은 "p1" — 사람마다 uid 를 따로 매겨 겹칠 수 있음)
+local myPlant, myPlantModel = gardenPlant("p1", 77, "sprout_daisy", roblox.Vector3.new(20, 1, 20), 2)
+local otherPlant = gardenPlant("p1", 12345, "puppy_grass", roblox.Vector3.new(200, 1, 20), 1)
+-- 서버가 꺼 둔 아우라 (AuraFx 태그 파트 아래 ParticleEmitter·PointLight) — 가까운 것 / 먼 것
+local function auraPart(name, pos)
+	local p = worldPart(name, pos, roblox.Vector3.new(1, 1, 1))
+	local e = Instance.new("ParticleEmitter")
+	e.Enabled = false
+	e.Parent = p
+	local l = Instance.new("PointLight")
+	l.Enabled = false
+	l.Parent = p
+	tag(p, "AuraFx")
+	return p, e, l
+end
+local nearAura, nearAuraEmitter, nearAuraLight = auraPart("Aura", roblox.Vector3.new(22, 1, 20))
+local farAura, farAuraEmitter = auraPart("Aura", roblox.Vector3.new(600, 1, 600))
 -- 5판: 허브 스폰 광장 랭킹판 (MapBuilder 가 세우는 판 파트)
 local lbBoard = worldPart("LeaderboardBoard", roblox.Vector3.new(-26, 9, -150), roblox.Vector3.new(16, 12, 0.8))
 tag(lbBoard, "LeaderboardBoard")
@@ -595,6 +603,9 @@ local function body()
 			"TrailController",
 			-- 5판
 			"PetFxController",
+			-- 6판
+			"FruitBagController",
+			"PlantFxController",
 			"LeaderboardController",
 			"TutorialController",
 		}
@@ -761,7 +772,7 @@ local function body()
 	end
 
 	print("[창 (2판 원작 스타일)]")
-	for _, w in { "Index", "Pets", "Shop", "Settings", "Trail" } do
+	for _, w in { "Index", "Pets", "Shop", "Settings", "Trail", "FruitBag", "Sakura" } do
 		Windows.open(w)
 		check(Windows.isOpen(w), "창 열기 " .. w)
 	end
@@ -836,22 +847,97 @@ local function body()
 	check(claimAll and claimAll.Visible and claimAll.Text == "모두 획득 (1)!", "모두 획득 (1)! 버튼")
 	check(click(claimAll) and lastSent("ClaimIndexReward").args[1] == "all", "ClaimIndexReward(all) 보냄")
 	check(click(playerGui:FindFirstChild("NextPet", true)), "다음 펫 > 버튼")
-	-- 6판 정원 식물 창 (5판 펫 창): 열매 따기 / 열매 모두 따기 / 판매 가판대 근처면 뽑아서 팔기
-	Windows.open("Pets")
-	check(click(playerGui:FindFirstChild("PickFruit", true)), "카드 '열매 따기' 누름")
-	local pf = lastSent("PickFruit")
-	check(pf and typeof(pf.args[1]) == "string" and pf.args[1] ~= "all", "PickFruit(uid) 보냄")
-	check(
-		clickText("열매 모두 따기") and lastSent("PickFruit").args[1] == "all",
-		"열매 모두 따기 → PickFruit(all)"
-	)
-	check(lastSent("EquipPet") == nil and lastSent("EquipBest") == nil, "6판: 장착 Remote 는 안 보냄")
-	local sell = playerGui:FindFirstChild("Sell", true)
-	check(
-		sell ~= nil and string.find(sell.Text, "뽑아서 팔기", 1, true) ~= nil,
-		"판매 가판대 근처: 카드에 뽑아서 팔기 버튼 (" .. tostring(sell and sell.Text) .. ")"
-	)
-	check(click(sell) and lastSent("SellPlant") ~= nil, "SellPlant(uid) 보냄")
+	-- 6판 정원 식물 창: 열매 따기 / 열매 모두 따기 / 먹이기 / 뽑아서 팔기(확인 창)
+	local function dialogRoot(name)
+		local screen0 = playerGui:FindFirstChild("StealAnEggUI")
+		local layer = screen0 and screen0:FindFirstChild("Dialogs")
+		return layer and layer:FindFirstChild(name)
+	end
+	do
+		Windows.open("Pets")
+		local petsWin = playerGui:FindFirstChild("Windows", true):FindFirstChild("Pets")
+		local slotsText = petsWin:FindFirstChild("Slots", true)
+		check(
+			slotsText and slotsText.Text == "정원 8/9  ·  성체 6",
+			"정원 칸 글 '정원 8/9 · 성체 6': " .. tostring(slotsText and slotsText.Text)
+		)
+		local p1Card = petsWin:FindFirstChild("p1", true)
+		check(p1Card ~= nil, "성체 카드 (p1)")
+		local p1Next = p1Card and p1Card:FindFirstChild("NextFruit")
+		check(
+			p1Next and string.find(p1Next.Text, "다음 열매", 1, true) ~= nil,
+			"카드에 다음 열매 남은 초: " .. tostring(p1Next and p1Next.Text)
+		)
+		local p3Next = petsWin:FindFirstChild("p3", true):FindFirstChild("NextFruit")
+		check(p3Next and p3Next.Text == "열매 가득! 따 주세요", "열매 5개면 '열매 가득!'")
+		local p1Value = p1Card and p1Card:FindFirstChild("FruitValue")
+		check(
+			p1Value and string.find(p1Value.Text, "열매 1개 10 코인", 1, true) ~= nil,
+			"카드에 열매 1개 값: " .. tostring(p1Value and p1Value.Text)
+		)
+		check(click(p1Card and p1Card:FindFirstChild("PickFruit")), "카드 '열매 따기' 누름")
+		local pf = lastSent("PickFruit")
+		check(pf and pf.args[1] == "p1", "PickFruit(p1) 보냄")
+		check(
+			click(petsWin:FindFirstChild("PickAllFruit", true)) and lastSent("PickFruit").args[1] == "all",
+			"열매 모두 따기(PickAllFruit) → PickFruit(all)"
+		)
+		check(lastSent("EquipPet") == nil and lastSent("EquipBest") == nil, "6판: 장착 Remote 는 안 보냄")
+		local sell = p1Card and p1Card:FindFirstChild("Sell")
+		check(
+			sell ~= nil and string.find(sell.Text, "팔기", 1, true) ~= nil,
+			"카드에 뽑아서 팔기 버튼 (" .. tostring(sell and sell.Text) .. ")"
+		)
+		local beforeSell = #sent
+		check(click(sell) and dialogRoot("ConfirmDialog") ~= nil, "팔기 → 확인 창")
+		check(#sent == beforeSell, "확인 전에는 안 보냄")
+		local confirmBody = dialogRoot("ConfirmDialog"):FindFirstChild("Body", true)
+		check(
+			confirmBody
+				and string.find(confirmBody.Text, "200 코인", 1, true)
+				and string.find(confirmBody.Text, "열매 2개", 1, true),
+			"확인 창 글 (값 200 코인 · 달린 열매 2개): "
+				.. (string.gsub(tostring(confirmBody and confirmBody.Text), "\n", " / "))
+		)
+		check(click(dialogRoot("ConfirmDialog"):FindFirstChild("ConfirmNo", true)), "취소 누름")
+		check(dialogRoot("ConfirmDialog") == nil and #sent == beforeSell, "취소 → 창 닫힘, 안 보냄")
+		click(sell)
+		check(click(dialogRoot("ConfirmDialog"):FindFirstChild("ConfirmYes", true)), "확인 누름")
+		check(lastSent("SellPlant") and lastSent("SellPlant").args[1] == "p1", "SellPlant(p1) 보냄")
+		-- 먹이기: 성체 카드 → 열매 고르기 → FeedFruit(plantUid, fruitId)
+		Windows.open("Pets")
+		local p4Card = playerGui:FindFirstChild("Windows", true):FindFirstChild("Pets"):FindFirstChild("p4", true)
+		check(click(p4Card and p4Card:FindFirstChild("Feed")), "황금 부엉이 참나무 카드 '먹이기' 누름")
+		check(Windows.isOpen("PetPicker"), "열매 고르기 창")
+		local fruitCard = pickerRoot() and pickerRoot():FindFirstChild("sprout_daisy", true)
+		local fruitInfo = fruitCard and fruitCard:FindFirstChild("Info")
+		check(
+			fruitInfo and string.find(fruitInfo.Text, "돌연변이", 1, true) ~= nil,
+			"열매 카드에 돌연변이 확률: " .. tostring(fruitInfo and fruitInfo.Text)
+		)
+		check(pickCard("sprout_daisy"), "아기 데이지 열매 고름")
+		pickerConfirm()
+		local feed = lastSent("FeedFruit")
+		check(feed and feed.args[1] == "p4" and feed.args[2] == "sprout_daisy", "FeedFruit(p4, sprout_daisy) 보냄")
+		-- 열매 가방 창 → 열매 카드 '먹이기' → 성체 고르기
+		Windows.open("FruitBag")
+		local bagWin = playerGui:FindFirstChild("Windows", true):FindFirstChild("FruitBag")
+		local summary = bagWin:FindFirstChild("Summary", true)
+		check(
+			summary
+				and string.find(summary.Text, "열매 3 / 300", 1, true)
+				and string.find(summary.Text, "30 코인", 1, true),
+			"열매 가방 위 글: " .. tostring(summary and summary.Text)
+		)
+		local daisyFruit = bagWin:FindFirstChild("Fruit_sprout_daisy", true)
+		check(daisyFruit and daisyFruit:FindFirstChild("Count").Text == "×3", "열매 칸 '×3'")
+		check(click(daisyFruit and daisyFruit:FindFirstChild("FeedButton")), "열매 칸 '먹이기' 누름")
+		check(Windows.isOpen("PetPicker"), "성체 고르기 창")
+		check(pickCard("p8"), "성체 (얼음 강아지풀) 고름")
+		pickerConfirm()
+		feed = lastSent("FeedFruit")
+		check(feed and feed.args[1] == "p8" and feed.args[2] == "sprout_daisy", "FeedFruit(p8, sprout_daisy) 보냄")
+	end
 	Windows.open("Settings")
 	check(clickText("켜짐"), "설정 토글")
 
@@ -863,7 +949,7 @@ local function body()
 		local s = Ui.fitScale(roblox.Vector2.new(holder.Size.X.Offset, holder.Size.Y.Offset))
 		return (button and button.Size.Y.Offset or 0) * s
 	end
-	for _, w in { "Index", "Pets", "Shop", "Settings", "PetPicker", "Trail" } do
+	for _, w in { "Index", "Pets", "Shop", "Settings", "PetPicker", "Trail", "FruitBag", "Sakura" } do
 		local holder = windowsLayer and windowsLayer:FindFirstChild(w)
 		local header = holder and holder:FindFirstChild("Header", true)
 		local x = header and header:FindFirstChild("Button")
@@ -875,6 +961,13 @@ local function body()
 	local pickButton = playerGui:FindFirstChild("PickFruit", true)
 	check(px(pickButton, "Pets") >= 45.9, string.format("열매 따기 버튼 %.1fpx", px(pickButton, "Pets")))
 	check(px(playerGui:FindFirstChild("Sell", true), "Pets") >= 45.9, "뽑아서 팔기 버튼 46px 이상")
+	check(px(playerGui:FindFirstChild("Feed", true), "Pets") >= 45.9, "먹이기 버튼 46px 이상")
+	check(px(playerGui:FindFirstChild("PickAllFruit", true), "Pets") >= 45.9, "열매 모두 따기 46px 이상")
+	Windows.open("FruitBag")
+	check(px(playerGui:FindFirstChild("FeedButton", true), "FruitBag") >= 45.9, "열매 가방 먹이기 46px 이상")
+	Windows.open("Sakura")
+	check(px(playerGui:FindFirstChild("OfferButton", true), "Sakura") >= 45.9, "사쿠라 성체 바치기 46px 이상")
+	check(px(playerGui:FindFirstChild("DrawButton", true), "Sakura") >= 45.9, "사쿠라 씨앗 뽑기 46px 이상")
 	Windows.open("Index")
 	check(px(playerGui:FindFirstChild("Claim", true), "Index") >= 45.9, "인덱스 획득! 버튼 46px 이상")
 	check(px(playerGui:FindFirstChild("ClaimAll", true), "Index") >= 45.9, "인덱스 모두 획득 46px 이상")
@@ -899,49 +992,88 @@ local function body()
 		Hud0.koreanClock(238) == "3분 58초" and Hud0.koreanClock(52) == "52초 안에",
 		"시간 글자 '3분 58초' / '52초 안에'"
 	)
-	-- 알 버튼 → 알 창 ("성장하는 달걀" 패널: 성장 중 탭 + 가방 탭)
-	check(click(playerGui:FindFirstChild("EggButton", true)), "주황 알 버튼 누름")
+	-- 씨앗 버튼 → "자라는 씨앗" 패널 (자라는 중 탭 + 가방 탭)
+	check(click(playerGui:FindFirstChild("EggButton", true)), "빨간 씨앗 버튼 누름")
 	local panel = playerGui:FindFirstChild("GrowingEggs", true)
-	check(panel and panel.Visible, "성장하는 달걀 패널 열림")
+	check(panel and panel.Visible, "자라는 씨앗 패널 열림")
 	local list = panel and panel:FindFirstChild("List")
 	check(
 		list and list.Visible and list:FindFirstChild("i1") and list:FindFirstChild("i2"),
-		"성장 중 탭: 놓인 알 2줄"
+		"자라는 중 탭: 심은 씨앗 2줄"
 	)
 	local tabGrow = panel and panel:FindFirstChild("Tab_grow")
 	local tabBag = panel and panel:FindFirstChild("Tab_bag")
 	check(
-		tabGrow and tabGrow.Text == "성장 중 2/8",
-		"탭 글자 '성장 중 2/8': " .. tostring(tabGrow and tabGrow.Text)
+		tabGrow and tabGrow.Text == "자라는 중 2 · 정원 8/9",
+		"탭 글자 '자라는 중 2 · 정원 8/9' (정원 칸 = 씨앗 + 성체 / penSlots): "
+			.. tostring(tabGrow and tabGrow.Text)
 	)
 	check(tabBag and tabBag.Text == "가방 2/50", "탭 글자 '가방 2/50': " .. tostring(tabBag and tabBag.Text))
 	local readyRow = list and list:FindFirstChild("i2")
 	local readyTime = readyRow and readyRow:FindFirstChild("Time", true)
 	check(
-		readyTime and readyTime.Text == "부화 가능!",
-		"다 자란 알 줄 '부화 가능!': " .. tostring(readyTime and readyTime.Text)
+		readyTime and readyTime.Text == "곧 성체!",
+		"다 자란 씨앗 줄 '곧 성체!': " .. tostring(readyTime and readyTime.Text)
 	)
 	local youngRow = list and list:FindFirstChild("i1")
 	local youngTime = youngRow and youngRow:FindFirstChild("Time", true)
 	check(
 		youngTime and youngTime.Text == "2s",
-		"자라는 알 남은 시간 '2s': " .. tostring(youngTime and youngTime.Text)
+		"자라는 씨앗 남은 시간 '2s': " .. tostring(youngTime and youngTime.Text)
 	)
+	local youngName = youngRow and youngRow:FindFirstChild("EggName")
 	check(
-		readyRow and readyRow:FindFirstChild("EggName") and readyRow.EggName.Text ~= "",
-		"줄에 펫 이름: " .. tostring(readyRow and readyRow:FindFirstChild("EggName") and readyRow.EggName.Text)
+		youngName and youngName.Text == "강아지풀 · 봉오리",
+		"줄에 식물 이름 · 단계 (60% = 봉오리): " .. tostring(youngName and youngName.Text)
 	)
-	check(click(readyRow and readyRow:FindFirstChild("Play")), "▶ 버튼 (다 자란 씨앗)")
-	check(lastSent("HatchEgg") == nil, "6판: ▶ 는 안내만 (HatchEgg 없음, 다 자라면 저절로 성체)")
+	-- 건너뛰기: ⏩ → 창 (전부 / 절반 + 가격) → SkipGrowth
+	local beforeSkip = #sent
+	check(click(readyRow and readyRow:FindFirstChild("Skip")), "⏩ 버튼 (다 자란 씨앗)")
+	check(
+		#sent == beforeSkip and dialogRoot("SkipDialog") == nil,
+		"다 자란 씨앗은 건너뛰기 창 없이 안내만"
+	)
+	check(click(youngRow and youngRow:FindFirstChild("Skip")), "⏩ 버튼 (자라는 씨앗)")
+	local skipDialog = dialogRoot("SkipDialog")
+	check(skipDialog ~= nil, "건너뛰기 창 열림")
+	local skipAll = skipDialog and skipDialog:FindFirstChild("SkipAll", true)
+	local skipHalf = skipDialog and skipDialog:FindFirstChild("SkipHalf", true)
+	check(
+		skipAll and skipAll.Text == "전부 · 10 코인" and skipHalf and skipHalf.Text == "절반 · 10 코인",
+		"가격 (남은 2초 → 1분 올림 × 10 코인 × 일반 1): "
+			.. tostring(skipAll and skipAll.Text)
+			.. " / "
+			.. tostring(skipHalf and skipHalf.Text)
+	)
+	check(#sent == beforeSkip, "창만 열고는 안 보냄")
+	check(click(skipAll), "'전부' 누름")
+	local sk = lastSent("SkipGrowth")
+	check(sk and sk.args[1] == "i1" and sk.args[2] == "all", "SkipGrowth(i1, all) 보냄")
+	check(dialogRoot("SkipDialog") == nil, "누르면 창 닫힘")
+	local Inc0 = ctrl("IncubatorController")
+	check(Inc0.openSkip("i1"), "openSkip(i1)")
+	check(click(dialogRoot("SkipDialog"):FindFirstChild("SkipHalf", true)), "'절반' 누름")
+	sk = lastSent("SkipGrowth")
+	check(sk and sk.args[1] == "i1" and sk.args[2] == "half", "SkipGrowth(i1, half) 보냄")
+	-- 코인이 모자라면 회색 + 안 보냄
+	player:SetAttribute("Money", 5)
+	Inc0.openSkip("i1")
+	local poorAll = dialogRoot("SkipDialog"):FindFirstChild("SkipAll", true)
+	check(poorAll and poorAll.Active == false, "코인이 모자라면 '전부' 회색")
+	beforeSkip = #sent
+	click(poorAll)
+	check(#sent == beforeSkip, "코인이 모자라면 안 보냄")
+	player:SetAttribute("Money", 12345)
+	check(not Inc0.openSkip("nope"), "없는 씨앗은 창 안 열림")
 	local pickUpButton = youngRow and youngRow:FindFirstChild("PickUp")
-	check(pickUpButton and pickUpButton.Visible, "자라는 알 줄에 '가방' (다시 줍기) 버튼")
+	check(pickUpButton and pickUpButton.Visible, "자라는 씨앗 줄에 '가방' (다시 줍기) 버튼")
 	check(
 		click(pickUpButton) and lastSent("PickUpPlacedEgg") and lastSent("PickUpPlacedEgg").args[1] == "i1",
 		"'가방' 버튼 → PickUpPlacedEgg(i1)"
 	)
 	check(
 		readyRow and readyRow:FindFirstChild("PickUp") and not readyRow.PickUp.Visible,
-		"다 자란 알은 '가방' 버튼 숨김 (부화만)"
+		"다 자란 씨앗은 '가방' 버튼 숨김"
 	)
 	-- 가방 탭: 알 카드 (희귀도 색·펫 이름·크기·돌연변이·놓기)
 	check(click(tabBag), "가방 탭 누름")
@@ -997,7 +1129,7 @@ local function body()
 	local ok1 = Inc.previewAt(okSpot.x, okSpot.z)
 	check(ok1 and ghost.Color.G > ghost.Color.R, "우리 안 빈자리 = 초록")
 	local hint = placeBar:FindFirstChild("PlaceHint")
-	check(hint and string.find(hint.Text, "놓을 수 있어요", 1, true), "안내: " .. tostring(hint and hint.Text))
+	check(hint and string.find(hint.Text, "심을 수 있어요", 1, true), "안내: " .. tostring(hint and hint.Text))
 	local yard = MapLayout.toWorld(1, 25, 0)
 	local ok2, reason2 = Inc.previewAt(yard.x, yard.z)
 	check(not ok2 and ghost.Color.R > ghost.Color.G, "우리 밖(앞마당) = 빨강")
@@ -1068,37 +1200,67 @@ local function body()
 		})
 	end
 	fire("DataUpdate", "incubators", { incubators = full })
-	check(not Inc.beginPlace("e1") and not Inc.isPlacing(), "우리 8개 가득 → 놓기 모드 안 됨")
+	check(
+		not Inc.beginPlace("e1") and not Inc.isPlacing(),
+		"정원 가득 (씨앗 8 + 성체 6 ≥ 9칸) → 심기 모드 안 됨"
+	)
 	fire("DataUpdate", "incubators", { incubators = savedIncubators })
 	fire("DataUpdate", "eggs", { eggs = savedEggs })
 
 	check(
 		click(playerGui:FindFirstChild("PetsButton", true)) and Windows.isOpen("Pets"),
-		"주황 발바닥 버튼 → 펫 창"
+		"주황 식물 버튼 → 정원 식물 창"
 	)
-	Windows.close()
-	-- 우리 안 부화 중 알: 이름표는 서버 것("에그 1m 52s"), 클라는 프롬프트 2개
-	check(growingEgg:FindFirstChild("GrowTag") == nil, "클라 이름표 없음 (서버 이름표만)")
-	local hatchPrompt = growingEgg:FindFirstChild("HatchPrompt")
 	check(
-		hatchPrompt and hatchPrompt.ActionText == "성체!" and hatchPrompt.Enabled,
-		"다 자란 내 씨앗: '성체!' (안내) 프롬프트 켜짐"
+		click(playerGui:FindFirstChild("FruitButton", true)) and Windows.isOpen("FruitBag"),
+		"초록 열매 버튼 → 열매 가방 창"
 	)
+	local fruitBadge = playerGui:FindFirstChild("FruitBadge", true)
+	check(
+		fruitBadge and fruitBadge.Text == "0/300",
+		"열매 배지 (Attr FruitCount 없음 → 0/300): " .. tostring(fruitBadge and fruitBadge.Text)
+	)
+	player:SetAttribute("FruitCount", 12)
+	sigOf(player, "Attr_FruitCount"):Fire()
+	check(fruitBadge.Text == "12/300", "Attr FruitCount 12 → 배지 '12/300'")
+	Windows.close()
+	-- 내 자라는 씨앗: 이름표는 서버 것, 클라는 "집기"(E) · "건너뛰기"(R) · "물 주기"(F, PetFxController)
+	check(growingEgg:FindFirstChild("GrowTag") == nil, "클라 이름표 없음 (서버 이름표만)")
+	check(growingEgg:FindFirstChild("HatchPrompt") == nil, "6판: '부화' 프롬프트 없음")
+	local readySkip = growingEgg:FindFirstChild("SkipPrompt")
+	check(readySkip and not readySkip.Enabled, "다 자란 내 씨앗: '건너뛰기' 프롬프트 꺼짐")
 	check(
 		growingEgg:FindFirstChild("PickUpPrompt") and not growingEgg.PickUpPrompt.Enabled,
-		"다 자란 알: '집기' 프롬프트 꺼짐"
+		"다 자란 씨앗: '집기' 프롬프트 꺼짐"
 	)
-	check(trigger(hatchPrompt) and lastSent("HatchEgg") == nil, "6판: 프롬프트는 안내만 (HatchEgg 없음)")
 	local pickPrompt = youngEgg:FindFirstChild("PickUpPrompt")
 	check(
 		pickPrompt and pickPrompt.ActionText == "집기" and pickPrompt.Enabled,
-		"자라는 내 알: '집기' 프롬프트 켜짐"
+		"자라는 내 씨앗: '집기' 프롬프트 켜짐"
 	)
-	check(not youngEgg.HatchPrompt.Enabled, "자라는 씨앗: '성체!' 프롬프트 꺼짐")
-	check(trigger(pickPrompt) and lastSent("PickUpPlacedEgg").args[1] == "i1", "'집기' → PickUpPlacedEgg(i1)")
+	local youngSkip = youngEgg:FindFirstChild("SkipPrompt")
 	check(
-		othersEgg:FindFirstChild("HatchPrompt") == nil and othersEgg:FindFirstChild("PickUpPrompt") == nil,
-		"남의 알은 프롬프트 없음"
+		youngSkip
+			and youngSkip.Enabled
+			and youngSkip.ActionText == "건너뛰기"
+			and youngSkip.KeyboardKeyCode == roblox.Enum.KeyCode.R,
+		"자라는 씨앗: '건너뛰기'(R) 프롬프트 켜짐"
+	)
+	check(trigger(youngSkip) and dialogRoot("SkipDialog") ~= nil, "'건너뛰기' 프롬프트 → 건너뛰기 창")
+	click(dialogRoot("SkipDialog"):FindFirstChild("DialogCancel", true))
+	check(dialogRoot("SkipDialog") == nil, "취소 → 창 닫힘")
+	check(trigger(pickPrompt) and lastSent("PickUpPlacedEgg").args[1] == "i1", "'집기' → PickUpPlacedEgg(i1)")
+	local youngWater = youngEgg:FindFirstChild("WaterPrompt", true)
+	check(
+		youngWater and youngWater.Enabled and youngWater.KeyboardKeyCode == roblox.Enum.KeyCode.F,
+		"자라는 씨앗: '물 주기'(F) 프롬프트"
+	)
+	check(trigger(youngWater) and lastSent("PetPet").args[1] == "i1", "씨앗 물 주기 → PetPet(i1)")
+	check(
+		othersEgg:FindFirstChild("SkipPrompt") == nil
+			and othersEgg:FindFirstChild("PickUpPrompt") == nil
+			and othersEgg:FindFirstChild("GardenPromptAttach") == nil,
+		"남의 씨앗은 프롬프트 없음"
 	)
 	-- 떨어진 알 카운트다운
 	local dropTimer = droppedEgg:FindFirstChild("DropTimer")
@@ -1118,11 +1280,30 @@ local function body()
 		trigger(signPrompt) and lastSent("PurchaseUpgrade").args[1] == "Treadmill",
 		"표지판 → PurchaseUpgrade(Treadmill)"
 	)
-	-- 판매 가게 / 트레일 상점 프롬프트
+	-- 판매 가판대: "열매 팔기"(E) → SellFruits / "식물 팔기"(F) → 정원 식물 창 · 트레일 상점 프롬프트
+	local sellFruits = sellStall:FindFirstChild("SellFruitsPrompt")
 	check(
-		trigger(sellStall:FindFirstChild("SellPrompt")) and Windows.isOpen("Pets"),
-		"판매 가게 프롬프트 → 펫 창"
+		sellFruits
+			and sellFruits.ActionText == "열매 팔기"
+			and sellFruits.KeyboardKeyCode == roblox.Enum.KeyCode.E
+			and string.find(sellFruits.ObjectText, "열매 12개", 1, true) ~= nil,
+		"판매 가판대 '열매 팔기' 프롬프트: " .. tostring(sellFruits and sellFruits.ObjectText)
 	)
+	check(trigger(sellFruits) and lastSent("SellFruits") ~= nil, "'열매 팔기' → SellFruits()")
+	player:SetAttribute("FruitCount", 0)
+	sigOf(player, "Attr_FruitCount"):Fire()
+	check(sellFruits.ObjectText == "열매가 없어요", "열매 0개: '열매가 없어요'")
+	local beforeSellFruits = #sent
+	trigger(sellFruits)
+	check(#sent == beforeSellFruits, "열매가 없으면 안 보냄 (안내만)")
+	player:SetAttribute("FruitCount", 3)
+	sigOf(player, "Attr_FruitCount"):Fire()
+	local sellPlantPrompt = sellStall:FindFirstChild("SellPrompt")
+	check(
+		sellPlantPrompt and sellPlantPrompt.KeyboardKeyCode == roblox.Enum.KeyCode.F,
+		"'식물 팔기' 프롬프트는 F (열매 팔기 E 와 안 겹침)"
+	)
+	check(trigger(sellPlantPrompt) and Windows.isOpen("Pets"), "'식물 팔기' → 정원 식물 창")
 	check(
 		trigger(trailShop:FindFirstChild("TrailPrompt")) and Windows.isOpen("Trail"),
 		"트레일 상점 프롬프트 → 트레일 창"
@@ -1193,36 +1374,74 @@ local function body()
 	end
 	check(playerGui:FindFirstChild("AltarStatus", true) == nil, "제단 상태 글 없음")
 
-	print("[6판 사쿠라 나무: 성체 바치기 → 크리스탈 → 씨앗 뽑기]")
-	local sakuraPrompt = promptOf(incubator, "SakuraPrompt")
-	check(
-		sakuraPrompt and sakuraPrompt.ActionText == "성체 바치기" and sakuraPrompt.ObjectText == "사쿠라 나무",
-		"크리스탈 3개: 프롬프트 '성체 바치기' ("
-			.. tostring(sakuraPrompt and sakuraPrompt.ActionText)
-			.. ")"
-	)
-	check(trigger(sakuraPrompt), "사쿠라 프롬프트 누름")
-	check(Windows.isOpen("PetPicker"), "성체 고르기 창 열림")
-	check(pickerRoot() and pickerRoot():FindFirstChild("i1", true) == nil, "자라는 씨앗은 못 고름 (성체만)")
-	check(pickCard("p5"), "성체 (수정 설강화) 고름")
-	pickerConfirm()
-	local offer = lastSent("SakuraOffer")
-	check(offer and offer.args[1] == "p5", "SakuraOffer(성체 uid) 보냄")
-	fire("SakuraResult", { kind = "offered", consumed = "p5", petId = "crystal_snowdrop", gained = 5, crystals = 8 })
-	check(true, "바치기 연출")
-	player:SetAttribute("SakuraCrystals", 12)
-	sigOf(player, "Attr_SakuraCrystals"):Fire()
-	check(sakuraPrompt.ActionText == "씨앗 뽑기", "크리스탈 12개: 프롬프트 '씨앗 뽑기'")
-	check(trigger(sakuraPrompt) and lastSent("SakuraDraw") ~= nil, "씨앗 뽑기 → SakuraDraw()")
-	fire("SakuraResult", {
-		kind = "draw",
-		petId = "spirit_blossom",
-		egg = { uid = "e9", petId = "spirit_blossom", size = "normal", mutations = {} },
-		crystals = 2,
-	})
-	check(true, "정령 벚꽃 씨앗 연출")
-	player:SetAttribute("SakuraCrystals", 3)
-	sigOf(player, "Attr_SakuraCrystals"):Fire()
+	do
+		print("[6판 사쿠라 나무: 창 → 성체 바치기 / 씨앗 뽑기]")
+		local sakuraPrompt = promptOf(incubator, "SakuraPrompt")
+		check(
+			sakuraPrompt
+				and sakuraPrompt.ActionText == "바치기 · 뽑기"
+				and sakuraPrompt.ObjectText == "사쿠라 나무",
+			"사쿠라 프롬프트 '바치기 · 뽑기' ("
+				.. tostring(sakuraPrompt and sakuraPrompt.ActionText)
+				.. ")"
+		)
+		check(trigger(sakuraPrompt) and Windows.isOpen("Sakura"), "프롬프트 → 사쿠라 창")
+		local sakuraWin = playerGui:FindFirstChild("Windows", true):FindFirstChild("Sakura")
+		local crystalText = sakuraWin:FindFirstChild("Crystals", true)
+		check(crystalText and string.find(crystalText.Text, "크리스탈 3개", 1, true), "창에 크리스탈 3개")
+		local drawButton = sakuraWin:FindFirstChild("DrawButton", true)
+		check(
+			drawButton and drawButton.Active == false and string.find(drawButton.Text, "크리스탈 10", 1, true),
+			"크리스탈 3개: '씨앗 뽑기 · 크리스탈 10' 회색 ("
+				.. tostring(drawButton and drawButton.Text)
+				.. ")"
+		)
+		local beforeDraw = #sent
+		click(drawButton)
+		check(#sent == beforeDraw, "모자라면 SakuraDraw 안 보냄 (안내만)")
+		check(click(sakuraWin:FindFirstChild("OfferButton", true)), "'성체 바치기' 누름")
+		check(Windows.isOpen("PetPicker"), "성체 고르기 창 열림")
+		check(
+			pickerRoot() and pickerRoot():FindFirstChild("i1", true) == nil,
+			"자라는 씨앗은 못 고름 (성체만)"
+		)
+		local p5Card = pickerRoot() and pickerRoot():FindFirstChild("p5", true)
+		local p5Info = p5Card and p5Card:FindFirstChild("Info")
+		check(
+			p5Info and string.find(p5Info.Text, "크리스탈 +", 1, true) ~= nil,
+			"카드에 크리스탈 미리보기: " .. tostring(p5Info and p5Info.Text)
+		)
+		check(pickCard("p5"), "성체 (수정 설강화) 고름")
+		pickerConfirm()
+		local offer = lastSent("SakuraOffer")
+		check(offer and offer.args[1] == "p5", "SakuraOffer(성체 uid) 보냄")
+		fire(
+			"SakuraResult",
+			{ kind = "offered", consumed = "p5", petId = "crystal_snowdrop", gained = 5, crystals = 8 }
+		)
+		check(true, "바치기 연출")
+		player:SetAttribute("SakuraCrystals", 12)
+		sigOf(player, "Attr_SakuraCrystals"):Fire()
+		check(trigger(sakuraPrompt) and Windows.isOpen("Sakura"), "다시 사쿠라 창")
+		check(drawButton.Active == true, "크리스탈 12개: '씨앗 뽑기' 켜짐")
+		check(click(drawButton) and lastSent("SakuraDraw") ~= nil, "씨앗 뽑기 → SakuraDraw()")
+		holdDelays = true
+		fire("SakuraResult", {
+			kind = "draw",
+			petId = "spirit_blossom",
+			egg = { uid = "e9", petId = "spirit_blossom", size = "normal", mutations = {} },
+			crystals = 2,
+		})
+		local seedPop = playerGui:FindFirstChild("SakuraSeedPopup", true)
+		check(
+			seedPop and seedPop:FindFirstChild("SeedName").Text == "정령 벚꽃 씨앗!",
+			"정령 벚꽃 씨앗 팝업: " .. tostring(seedPop and seedPop:FindFirstChild("SeedName").Text)
+		)
+		holdDelays = false
+		Windows.close()
+		player:SetAttribute("SakuraCrystals", 3)
+		sigOf(player, "Attr_SakuraCrystals"):Fire()
+	end
 
 	print("[5판: 퀘스트·선물 없앰]")
 	check(playerGui:FindFirstChild("QuestPanel", true) == nil, "퀘스트 패널 없음")
@@ -1293,6 +1512,39 @@ local function body()
 		fruitInterval = 27,
 	})
 	check(true, "PlantGrown (성체가 됨) 연출")
+	do
+		local grownPop = playerGui:FindFirstChild("HatchPopup", true)
+		local grownCard = grownPop and grownPop:FindFirstChild("Card")
+		check(
+			grownCard and grownCard:FindFirstChild("Title").Text == "성체가 됐어요!",
+			"성체 카드 '성체가 됐어요!'"
+		)
+		local grownFruit = grownCard and grownCard:FindFirstChild("Fruit")
+		check(
+			grownFruit and string.find(grownFruit.Text, "열매 1개 2.7K 코인 · 27초마다", 1, true) ~= nil,
+			"성체 카드 열매 값·간격: " .. tostring(grownFruit and grownFruit.Text)
+		)
+		check(grownCard and grownCard:FindFirstChild("New") ~= nil, "도감 새 발견이면 'NEW!'")
+		local grownFooter = grownCard and grownCard:FindFirstChild("Footer")
+		check(
+			grownFooter and string.find(grownFooter.Text, "도감 새 발견", 1, true) ~= nil,
+			"성체 카드 아래 글: " .. tostring(grownFooter and grownFooter.Text)
+		)
+		click(grownCard and grownCard:FindFirstChild("Ok"))
+		-- 접속 때 오프라인으로 여러 그루가 한꺼번에 → 카드는 4장까지만
+		local Hatch = ctrl("HatchController")
+		for i = 1, 9 do
+			fire("__resetWaits") -- 카드 빙글 루프의 Wait 횟수를 비움 (스텁이 400번에서 멈춤)
+			Hatch.show({
+				pet = { petId = "sprout_daisy", size = "normal", mutations = {} },
+				fruitValue = 10,
+				fruitInterval = 30,
+				delay = 0,
+				title = "t" .. i,
+			})
+		end
+		check(Hatch.queued() <= 4, "성체 카드 줄은 4장까지: " .. Hatch.queued())
+	end
 	fire("EggGranted", {
 		egg = { uid = "e4", petId = "blossom_fairy", size = "normal", mutations = {} },
 		queued = false,
@@ -1303,11 +1555,34 @@ local function body()
 		"선물 씨앗 토스트 '가방에 들어갔어요'"
 	)
 	holdDelays = false
-	-- 6판 열매 이벤트 (화면 연출은 선임 — 받는 곳이 없어도·있어도 안 터지면 됨)
-	fire("FruitPicked", { plantUid = "p1", petId = "sprout_daisy", count = 2, value = 20 })
-	fire("FruitsSold", { count = 5, coins = 450 })
-	fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop", mutation = "frozen" })
-	fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop" })
+	do
+		-- 6판 열매 이벤트 연출
+		holdDelays = true
+		fire("FruitPicked", { plantUid = "p1", petId = "sprout_daisy", count = 2, value = 20 })
+		local fruitPop = myPlant:FindFirstChild("FruitPop")
+		check(
+			fruitPop
+				and fruitPop:FindFirstChild("Fruits").Text == "+열매 2"
+				and fruitPop:FindFirstChild("Value").Text == "20 코인",
+			"FruitPicked → 내 성체 위 '+열매 2' / '20 코인'"
+		)
+		check(otherPlant:FindFirstChild("FruitPop") == nil, "같은 uid 의 남의 성체에는 안 뜸")
+		fire("FruitsSold", { count = 5, coins = 450 })
+		local soldPop = playerGui:FindFirstChild("FruitsSoldPopup", true)
+		check(soldPop and soldPop:FindFirstChild("Coins").Text == "+450 코인", "FruitsSold → 화면 '+450 코인'")
+		fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop", mutation = "frozen" })
+		local feedPop = myPlant:FindFirstChild("FeedPop")
+		check(
+			feedPop and string.find(feedPop:FindFirstChild("Text").Text, "!", 1, true) ~= nil,
+			"FeedResult(얼음) → 식물 위 돌연변이 이름: "
+				.. tostring(feedPop and feedPop:FindFirstChild("Text").Text)
+		)
+		feedPop.Parent = nil
+		fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop" })
+		feedPop = myPlant:FindFirstChild("FeedPop")
+		check(feedPop and feedPop:FindFirstChild("Text").Text == "냠냠", "FeedResult(안 붙음) → '냠냠'")
+		holdDelays = false
+	end
 	check(
 		handlers["PetsSold"] == nil and handlers["HatchResult"] == nil,
 		"5판 PetsSold·HatchResult 받는 곳 없음"
@@ -1634,8 +1909,8 @@ local function body()
 	local targetPart = guide and guide:FindFirstChild("TutorialTarget")
 	local markerGui = targetPart and targetPart:FindFirstChild("TutorialMarker")
 	check(
-		markerGui and markerGui.Enabled and markerGui.Text.Text == "알 훔치기!",
-		"1단계: 숲 둥지 알 표시 '알 훔치기!'"
+		markerGui and markerGui.Enabled and markerGui.Text.Text == "씨앗 훔치기!",
+		"1단계: 숲 둥지 씨앗 표시 '씨앗 훔치기!'"
 	)
 	check(
 		targetPart and (targetPart.CFrame.Position - roblox.Vector3.new(0, 1, 60)).Magnitude < 0.01,
@@ -1656,14 +1931,14 @@ local function body()
 	check(playerGui:FindFirstChild("ZoneBanner", true).Position.Y.Offset >= tutBottom, "구역 배너도 패널 아래")
 	check(
 		playerGui:FindFirstChild("PlaceBar", true).Position.Y.Offset >= tutBottom,
-		"알 놓기 안내 줄도 패널 아래"
+		"씨앗 심기 안내 줄도 패널 아래"
 	)
 	tut(2, "안전 구역으로 돌아오기")
 	check(tutPanel.StepBadge.Step.Text == "2/5", "2/5")
 	check(markerGui.Text.Text == "안전 구역", "2단계: '안전 구역' 표시")
 	check(targetPart.CFrame.Position.Z < 0, "2단계: 허브(z < 0) 쪽")
 	tut(3, "핫바에서 씨앗을 골라 정원에 심기")
-	check(markerGui.Text.Text == "우리에 놓기", "3단계: 내 우리 표시")
+	check(markerGui.Text.Text == "정원에 심기", "3단계: 내 정원 표시 '정원에 심기'")
 	check(
 		hotbar:FindFirstChild("BagEgg_e1"):FindFirstChild("TutorialGlow") ~= nil
 			and hotbar:FindFirstChild("BagEgg_e2"):FindFirstChild("TutorialGlow") ~= nil,
@@ -1674,20 +1949,31 @@ local function body()
 		hotbar:FindFirstChild("BagEgg_e1"):FindFirstChild("TutorialGlow") == nil,
 		"다음 단계면 알 칸 반짝 끝"
 	)
-	check(markerGui.Text.Text == "부화!", "4단계: 다 자란 내 알 위 '부화!'")
+	check(
+		markerGui.Text.Text == "곧 성체가 돼요!",
+		"4단계: 가장 많이 자란 내 씨앗 위 '곧 성체가 돼요!' (남은 0초): " .. markerGui.Text.Text
+	)
 	local hl = guide:FindFirstChild("TutorialHighlight")
 	check(hl and hl.Adornee == growingEgg, "4단계: 놓인 알 노란 Highlight")
 	tut(5, "열매 따서 팔기")
 	check(
 		playerGui:FindFirstChild("PetsButton", true):FindFirstChild("TutorialGlow") ~= nil,
-		"5단계: 펫 버튼 반짝"
+		"5단계: 정원(식물) 버튼 반짝"
 	)
-	check(not markerGui.Enabled, "5단계: 3D 표시 없음")
+	check(
+		markerGui.Enabled and (markerGui.Text.Text == "열매 팔기!" or markerGui.Text.Text == "열매 따기!"),
+		"5단계: 가방에 열매 → 판매 가판대 '열매 팔기!' (아니면 열매 달린 식물): "
+			.. markerGui.Text.Text
+	)
 	Windows.open("Pets")
 	Tut.update()
 	local equipGlow = false
 	for _, d in playerGui:GetDescendants() do
-		if d:IsA("TextButton") and d.Name == "PickFruit" and d:FindFirstChild("TutorialGlow") then
+		if
+			d:IsA("TextButton")
+			and (d.Name == "PickFruit" or d.Name == "PickAllFruit")
+			and d:FindFirstChild("TutorialGlow")
+		then
 			equipGlow = true
 		end
 	end
@@ -1698,7 +1984,7 @@ local function body()
 	local donePop = playerGui:FindFirstChild("TutorialDone", true)
 	check(not tutPanel.Visible, "끝나면 패널 숨김")
 	check(
-		donePop and donePop.Card.Reward.Text == "$500 받았어요!",
+		donePop and donePop.Card.Reward.Text == "500 코인 받았어요!",
 		"끝 축하: '" .. tostring(donePop and donePop.Card.Reward.Text) .. "'"
 	)
 	local confetti = 0
@@ -1761,18 +2047,25 @@ local function body()
 	Lb.setExpanded(true)
 	local rowsFrame = lb:FindFirstChild("Rows")
 	local row2 = rowsFrame and rowsFrame:FindFirstChild("Row2")
-	check(rowsFrame and rowsFrame:FindFirstChild("Row3") ~= nil and rowsFrame:FindFirstChild("Row4") == nil, "돈 3줄")
+	check(
+		rowsFrame and rowsFrame:FindFirstChild("Row3") ~= nil and rowsFrame:FindFirstChild("Row4") == nil,
+		"코인 3줄"
+	)
 	check(row2 and row2.PlayerName.Text == "Tester" and row2:GetAttribute("Mine") == true, "내 줄 강조 (2등)")
 	check(
-		rowsFrame.Row1.Value.Text == "$5B" or string.sub(rowsFrame.Row1.Value.Text, 1, 1) == "$",
-		"돈 = Format.money: " .. rowsFrame.Row1.Value.Text
+		string.find(rowsFrame.Row1.Value.Text, "코인", 1, true) ~= nil
+			and string.find(rowsFrame.Row1.Value.Text, "$", 1, true) == nil,
+		'6판 코인 = Format.money ("5B 코인"): ' .. rowsFrame.Row1.Value.Text
 	)
 	check(click(lb:FindFirstChild("LbTab_speed")), "속도 탭")
 	check(
 		rowsFrame.Row1.PlayerName.Text == "Tester" and rowsFrame:FindFirstChild("Row3") == nil,
 		"속도 2줄, 1등 = 나"
 	)
-	check(string.sub(rowsFrame.Row1.Value.Text, 1, 1) ~= "$", "속도 = Format.number: " .. rowsFrame.Row1.Value.Text)
+	check(
+		string.find(rowsFrame.Row1.Value.Text, "코인", 1, true) == nil,
+		"속도 = Format.number: " .. rowsFrame.Row1.Value.Text
+	)
 	check(click(lb:FindFirstChild("LbToggle")) and not Lb.isExpanded() and not rowsFrame.Visible, "접기")
 	check(click(lb:FindFirstChild("LbToggle")) and Lb.isExpanded() and rowsFrame.Visible, "펴기")
 	local boardGui = lbBoard:FindFirstChild("LeaderboardGui")
@@ -1800,35 +2093,91 @@ local function body()
 	)
 	check(boardGui.Back.Column_speed.Line10.Text ~= "", "허브 판 10줄")
 
-	print(
-		"[5판 쓰다듬기 = 6판 물 주기 (클라 PetFxController 는 아직 PenPet 모델 기준 — 선임이 GardenPlant 로)]"
-	)
-	check(myPetPrompt.Enabled, "내 펫 '쓰다듬기' 프롬프트 켜짐")
-	check(not otherPetPrompt.Enabled, "남의 펫 프롬프트는 내 화면에서 꺼짐")
-	check(
-		trigger(myPetPrompt) and lastSent("PetPet") and lastSent("PetPet").args[1] == "p1",
-		"쓰다듬기 → PetPet(p1)"
-	)
-	local beforePet = #sent
-	trigger(otherPetPrompt)
-	check(#sent == beforePet, "남의 펫은 안 보냄")
-	holdDelays = true
-	fire("PetPetted", 77, "p1")
-	local hearts = penPetRoot:FindFirstChild("PetHearts")
-	check(hearts and hearts.AlwaysOnTop and hearts:FindFirstChild("Heart1").Text == "♥", "내 펫 위 '♥' 하트")
-	check(
-		otherPetRoot:FindFirstChild("PetHearts") == nil,
-		"같은 uid 의 남의 펫에는 안 뜸 (주인으로 거름)"
-	)
-	fire("PetPetted", 12345, "p1")
-	check(otherPetRoot:FindFirstChild("PetHearts") ~= nil, "남이 자기 펫을 쓰다듬으면 그 펫 위에 하트")
-	holdDelays = false
-	local Pf = ctrl("PetFxController")
-	check(not Pf.petted(77, "nope"), "없는 펫이면 연출 없음")
-	check(Pf.findPet(77, "p1") == penPet and Pf.findPet(12345, "p1") == otherPet, "주인 + uid 로 펫 찾기")
-	-- 폴짝 (서버 자리 위로만): Heartbeat 한 번 돌려도 오류 없음
-	fakeServices.RunService.Heartbeat:Fire(1 / 60)
-	check(true, "폴짝 한 프레임")
+	do
+		print("[6판 정원 프롬프트 · 물 주기 · 아우라 (PetFxController · PlantFxController)]")
+		local myPick = myPlant:FindFirstChild("PickFruitPrompt", true)
+		local myWater = myPlant:FindFirstChild("WaterPrompt", true)
+		check(
+			myPick
+				and myPick.Enabled
+				and myPick.ActionText == "열매 따기 (2)"
+				and myPick.KeyboardKeyCode == roblox.Enum.KeyCode.E,
+			"내 성체 '열매 따기 (2)'(E) 프롬프트: " .. tostring(myPick and myPick.ActionText)
+		)
+		check(
+			myWater and myWater.Enabled and myWater.KeyboardKeyCode == roblox.Enum.KeyCode.F,
+			"내 성체 '물 주기'(F) 프롬프트"
+		)
+		local attach = myPlant:FindFirstChild("GardenPromptAttach")
+		check(
+			attach and math.abs(attach.Position.Y - (-3.8 / 2 + 4 * 0.6)) < 0.01,
+			"프롬프트 높이 = VisualHeight 의 60% (" .. tostring(attach and attach.Position.Y) .. ")"
+		)
+		check(otherPlant:FindFirstChild("GardenPromptAttach") == nil, "남의 성체에는 프롬프트 없음")
+		check(
+			trigger(myPick) and lastSent("PickFruit").args[1] == "p1",
+			"'열매 따기' 프롬프트 → PickFruit(p1)"
+		)
+		check(trigger(myWater) and lastSent("PetPet").args[1] == "p1", "'물 주기' 프롬프트 → PetPet(p1)")
+		-- 열매가 다 따지면 '열매 따기' 꺼짐 (Attr Fruits 바뀜 → 연결 하나로 갱신)
+		myPlant:SetAttribute("Fruits", 0)
+		sigOf(myPlant, "Attr_Fruits"):Fire()
+		check(not myPick.Enabled and myPick.ActionText == "열매 따기 (0)", "열매 0개 → '열매 따기' 꺼짐")
+		myPlant:SetAttribute("Fruits", 2)
+		sigOf(myPlant, "Attr_Fruits"):Fire()
+		local Pf = ctrl("PetFxController")
+		check(not Pf.hookPart(myPlant), "같은 파트는 한 번만 (다시 붙이지 않음)")
+		check(
+			sigOf(myPlant, "Attr_Fruits").Count() == 1,
+			"Fruits 연결 1개 (" .. sigOf(myPlant, "Attr_Fruits").Count() .. ")"
+		)
+		holdDelays = true
+		fire("PetPetted", 77, "p1")
+		local drops = myPlant:FindFirstChild("WaterDrops")
+		check(drops and drops:FindFirstChild("Drop1").Text == "💧", "내 성체 위 물방울 '💧'")
+		check(
+			otherPlant:FindFirstChild("WaterDrops") == nil,
+			"같은 uid 의 남의 성체에는 안 뜸 (주인으로 거름)"
+		)
+		check(
+			not myWater.Enabled and string.find(myWater.ActionText, "초)", 1, true) ~= nil,
+			"물 준 뒤 쿨다운: " .. tostring(myWater.ActionText)
+		)
+		fire("PetPetted", 12345, "p1")
+		check(
+			otherPlant:FindFirstChild("WaterDrops") ~= nil,
+			"남이 자기 식물에 물을 주면 그 식물 위에 물방울"
+		)
+		fire("PetPetted", 77, "i1")
+		check(youngEgg:FindFirstChild("WaterDrops") ~= nil, "자라는 씨앗에 물 주기도 물방울")
+		holdDelays = false
+		check(not Pf.petted(77, "nope"), "없는 식물이면 연출 없음")
+		check(
+			Pf.findPlant(77, "p1") == myPlant and Pf.findPlant(12345, "p1") == otherPlant,
+			"주인 + uid 로 식물 찾기"
+		)
+		-- 파트가 없어지면 연결·프롬프트 정리 (5판 B-3 처럼 쌓이지 않게)
+		local tempPlant = gardenPlant("p77", 77, "puppy_grass", roblox.Vector3.new(30, 1, 20), 1)
+		check(Pf.hookPart(tempPlant), "새 성체 파트에 프롬프트")
+		check(sigOf(tempPlant, "Attr_Fruits").Count() == 1, "연결 1개")
+		sigOf(tempPlant, "Destroying"):Fire()
+		check(
+			sigOf(tempPlant, "Attr_Fruits").Count() == 0 and tempPlant:FindFirstChild("GardenPromptAttach") == nil,
+			"Destroying → 연결 0개 · 프롬프트 지움"
+		)
+		-- 아우라: 100 스터드 안만 켬 / 살랑살랑: 60 스터드 안만
+		local PlantFx = ctrl("PlantFxController")
+		root.Position = roblox.Vector3.new(20, 3, 25)
+		PlantFx.step()
+		check(nearAuraEmitter.Enabled and nearAuraLight.Enabled, "가까운 아우라 파티클·빛 켜짐")
+		check(not farAuraEmitter.Enabled, "먼 아우라는 꺼짐")
+		check(PlantFx.swayCount() == 1, "가까운 성체 1그루만 살랑살랑 (" .. PlantFx.swayCount() .. ")")
+		root.Position = roblox.Vector3.new(400, 3, 400)
+		PlantFx.step()
+		check(not nearAuraEmitter.Enabled and not nearAuraLight.Enabled, "멀어지면 아우라 꺼짐")
+		check(PlantFx.swayCount() == 0, "멀어지면 살랑살랑 멈춤")
+		root.Position = roblox.Vector3.new(0, 3, 0)
+	end
 
 	-- 5판 주임 검수: 서버가 엉터리 모양을 보내도(옛 서버·버그) 새 화면 3개가 안 터지고, 그 뒤 정상 신호는 그대로 처리
 	print("[5판 주임 검수: 엉터리 신호가 와도 안 터짐]")
@@ -1880,6 +2229,29 @@ local function body()
 				{ 77, "", n = 2 },
 				{ 77, string.rep("p", 1000), n = 2 },
 				{ {}, {}, n = 2 },
+			},
+			-- 6판 열매·성체 이벤트
+			FruitPicked = {
+				{ n = 0 },
+				{ "x", n = 1 },
+				{ { plantUid = 5 }, n = 1 },
+				{ { plantUid = "p1", count = 0 / 0, value = "x" }, n = 1 },
+				{ { plantUid = "p1", count = 2 }, n = 1 },
+			},
+			FruitsSold = {
+				{ n = 0 },
+				{ { coins = "x", count = 1 }, n = 1 },
+				{ { coins = 0 / 0, count = 1 }, n = 1 },
+			},
+			FeedResult = {
+				{ n = 0 },
+				{ { plantUid = "p1", mutation = 5 }, n = 1 },
+				{ { plantUid = "p1", mutation = "nope" }, n = 1 },
+			},
+			PlantGrown = {
+				{ n = 0 },
+				{ { plant = "x" }, n = 1 },
+				{ { plant = { petId = 5 }, fruitValue = "x", fruitInterval = 0 / 0 }, n = 1 },
 			},
 		}
 		local broke = {}

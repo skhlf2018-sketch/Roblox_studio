@@ -1,10 +1,11 @@
 --!strict
 --[[
-	Icons — 원작 HUD 그림(카트·책·알·발바닥·신발·돈다발·달·해·쓰레기통·카트·별·자물쇠)을 기본 Frame 으로 그리기
+	Icons — HUD 그림(카트·책·씨앗·새싹·열매·신발·코인·달·해·쓰레기통·별·자물쇠)을 기본 Frame 으로 그리기
 	외부 이미지를 올릴 수 없어서 네모·동그라미 Frame 을 겹쳐 그립니다.
 
 	  Icons.draw("cart", parent, 40)   → 40×40 기준 상자(Frame "Icon") 안에 그림. UIScale 로 크기 맞춤
-	종류: cart, book, egg, paw, shoe, money, moon, sun, trash, star, lock, gear, gift, scroll, sell, trail
+	종류: cart, book, seed, plant, fruit, coin, shoe, moon, sun, trash, star, lock, gear, gift, scroll, sell, trail
+	  6판 "씨앗을 훔치세요": 옛 이름 egg(= seed), paw(= plant), money(= coin) 도 같은 그림 (옛 코드 호환)
 ]]
 
 local Theme = require(script.Parent.Theme)
@@ -58,18 +59,30 @@ DRAW.book = function(h)
 	frame(h, px(10, 21), px(4, 30), Color3.fromRGB(90, 100, 120), 1, -12)
 end
 
-DRAW.egg = function(h)
-	frame(h, px(20, 21), px(26, 33), Color3.fromRGB(255, 236, 190), 1)
-	frame(h, px(15, 15), px(6, 8), Color3.fromRGB(255, 252, 240), 1).BackgroundTransparency = 0.1
+-- 씨앗: 비스듬한 아몬드 + 가운데 줄 + 반짝
+DRAW.seed = function(h)
+	frame(h, px(20, 21), px(20, 32), Color3.fromRGB(205, 150, 80), 1, 20)
+	frame(h, px(20, 21), px(3, 24), Color3.fromRGB(150, 95, 45), 1, 20)
+	frame(h, px(15, 13), px(5, 7), Color3.fromRGB(255, 235, 190), 1, 20).BackgroundTransparency = 0.1
 end
+DRAW.egg = DRAW.seed
 
-DRAW.paw = function(h)
-	local white = Color3.fromRGB(255, 240, 220)
-	frame(h, px(20, 26), px(20, 16), white, 1)
-	frame(h, px(8, 16), px(8, 10), white, 1)
-	frame(h, px(16, 9), px(8, 10), white, 1)
-	frame(h, px(24, 9), px(8, 10), white, 1)
-	frame(h, px(32, 16), px(8, 10), white, 1)
+-- 새싹(식물): 흙 + 줄기 + 잎 두 장
+DRAW.plant = function(h)
+	local green = Color3.fromRGB(90, 200, 80)
+	frame(h, px(20, 33), px(28, 8), Color3.fromRGB(140, 90, 50), 3)
+	frame(h, px(20, 22), px(4, 18), Color3.fromRGB(70, 160, 60), 1)
+	frame(h, px(12, 14), px(16, 9), green, 1, -30)
+	frame(h, px(28, 12), px(16, 9), green, 1, 30)
+end
+DRAW.paw = DRAW.plant
+
+-- 열매: 빨간 동그라미 + 꼭지 + 잎
+DRAW.fruit = function(h)
+	frame(h, px(20, 24), px(26, 24), Color3.fromRGB(240, 70, 70), 1)
+	frame(h, px(14, 19), px(6, 6), Color3.fromRGB(255, 190, 190), 1).BackgroundTransparency = 0.1
+	frame(h, px(20, 10), px(3, 8), Color3.fromRGB(110, 70, 40), 1)
+	frame(h, px(26, 9), px(10, 6), Color3.fromRGB(90, 200, 80), 1, -20)
 end
 
 DRAW.shoe = function(h)
@@ -82,13 +95,16 @@ DRAW.shoe = function(h)
 	frame(plus, px(7, 7), px(3, 8), INK, 0)
 end
 
-DRAW.money = function(h)
-	local green = Color3.fromRGB(80, 200, 70)
+-- 코인: 금화 쌓기
+DRAW.coin = function(h)
+	local gold = Color3.fromRGB(255, 205, 50)
 	for i = 0, 2 do
-		frame(h, px(20 - i * 2, 28 - i * 6), px(32, 12), green:Lerp(Color3.new(1, 1, 1), i * 0.08), 2, -8)
+		frame(h, px(20, 31 - i * 6), px(30, 9), gold:Lerp(Color3.new(1, 1, 1), i * 0.08), 1)
 	end
-	frame(h, px(16, 16), px(6, 12), Color3.fromRGB(255, 220, 60), 1, -8)
+	local top = frame(h, px(20, 14), px(22, 22), gold, 1)
+	frame(top, px(11, 11), px(10, 10), Color3.fromRGB(255, 235, 140), 1)
 end
+DRAW.money = DRAW.coin
 
 DRAW.moon = function(h)
 	frame(h, px(18, 20), px(26, 26), Color3.fromRGB(240, 240, 250), 1)
@@ -158,8 +174,8 @@ DRAW.sell = function(h)
 	t.Size = UDim2.fromScale(1, 1)
 	t.Font = Theme.Font
 	t.TextScaled = true
-	t.Text = "$"
-	t.TextColor3 = Color3.fromRGB(80, 160, 40)
+	t.Text = "C"
+	t.TextColor3 = Color3.fromRGB(170, 110, 20)
 	t.Parent = h
 end
 

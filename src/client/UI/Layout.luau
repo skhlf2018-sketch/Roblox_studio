@@ -8,7 +8,7 @@
 	  Layout.hotbar(area, count, hudScale, touch, leftLimit, jump?) → 핫바 오른쪽·아래 여백, 배율
 	  Layout.jumpZone(area)                         → 터치 점프 버튼 자리 (PlayerModule TouchJump 규칙)
 	  Layout.joystickZone(area)                     → 터치 조이스틱 자리 (왼쪽 아래 정사각형)
-	  5판: Layout.hotbarCapacity / hotbarEggs        → 핫바에 넣을 가방 알 칸 수 (최대 6 + "…n")
+	  5판: Layout.hotbarCapacity / hotbarEggs        → 핫바에 넣을 가방 씨앗 칸 수 (최대 6 + "…n")
 	       Layout.statsRect / timerRect / rightButtons → HudController 와 같은 자리 (다른 패널이 피할 때)
 	       Layout.tutorialPanel / leaderboard        → 튜토리얼 패널(위 가운데)·랭킹판(오른쪽 위) 자리
 
@@ -182,10 +182,10 @@ function Layout.hotbarRect(area: Vector2, plan: HotbarPlan): Rect
 end
 
 ------------------------------------------------------------------
--- 5판: 핫바 알 칸 · 튜토리얼 패널 · 랭킹판 자리
+-- 5판: 핫바 씨앗 칸 · 튜토리얼 패널 · 랭킹판 자리
 ------------------------------------------------------------------
 
-Layout.HOTBAR_EGG_MAX = 6 -- 핫바에 보이는 가방 알 칸 최대 (나머지는 "…n" 칸 → 알 창 가방 탭)
+Layout.HOTBAR_EGG_MAX = 6 -- 핫바에 보이는 가방 씨앗 칸 최대 (나머지는 "…n" 칸 → 씨앗 창 가방 탭)
 
 -- 핫바에 넣을 수 있는 칸 수 (칸이 가장 작은 44px 일 때). Layout.hotbar 와 같은 여백 규칙
 function Layout.hotbarCapacity(area: Vector2, touch: boolean, leftLimit: number, jump: Rect?): number
@@ -202,8 +202,8 @@ function Layout.hotbarCapacity(area: Vector2, touch: boolean, leftLimit: number,
 	return math.max(1, math.floor((room + Layout.SLOT_GAP * minScale) / per))
 end
 
--- 가방 알 칸 수 정하기: capacity = hotbarCapacity, fixed = 도구 칸 + 든 알 칸, bag = 가방 알 수
--- → (보일 알 칸 수, "…n" 칸이 있나). 자리가 모자라도 알 칸 또는 "…n" 칸 하나는 보임
+-- 가방 알 칸 수 정하기: capacity = hotbarCapacity, fixed = 도구 칸 + 든 씨앗 칸, bag = 가방 씨앗 수
+-- → (보일 씨앗 칸 수, "…n" 칸이 있나). 자리가 모자라도 씨앗 칸 또는 "…n" 칸 하나는 보임
 function Layout.hotbarEggs(capacity: number, fixed: number, bag: number): (number, boolean)
 	if bag <= 0 then
 		return 0, false
@@ -231,9 +231,9 @@ function Layout.timerRect(area: Vector2, hudScale: number, touch: boolean): Rect
 	return { x = area.X - 12 - w, y = area.Y - 8 - h, w = w, h = h }
 end
 
--- 오른쪽 알·발바닥 버튼 묶음 (72 × 156, 세로 가운데 0.46 / 작은 터치 화면 0.42)
+-- 오른쪽 씨앗·식물·열매 버튼 묶음 (72 × 240, 세로 가운데 0.46 / 작은 터치 화면 0.42)
 function Layout.rightButtons(area: Vector2, hudScale: number, touch: boolean): Rect
-	local w, h = 72 * hudScale, 156 * hudScale
+	local w, h = 72 * hudScale, 240 * hudScale
 	local fy = if touch and small(area) then 0.42 else 0.46
 	return { x = area.X - 12 - w, y = area.Y * fy - h / 2, w = w, h = h }
 end
@@ -255,7 +255,7 @@ Layout.BOARD_TABS = 26
 Layout.BOARD_ROW = 20
 
 -- 랭킹판 (오른쪽 위). rows = 보일 줄 수 (접혀 있으면 0 → 제목 줄만).
--- PC: 맨 위 오른쪽 / 터치: 오른쪽 위 시간 아래. 펼쳐서 오른쪽 알·발바닥 버튼에 닿으면 그 왼쪽으로 비킴
+-- PC: 맨 위 오른쪽 / 터치: 오른쪽 위 시간 아래. 펼쳐서 오른쪽 씨앗·식물·열매 버튼에 닿으면 그 왼쪽으로 비킴
 function Layout.leaderboard(area: Vector2, hudScale: number, touch: boolean, rows: number): Rect
 	local baseW = if touch then Layout.BOARD_W_TOUCH else Layout.BOARD_W
 	local baseH = Layout.BOARD_HEADER + (if rows > 0 then Layout.BOARD_TABS + rows * Layout.BOARD_ROW + 6 else 0)

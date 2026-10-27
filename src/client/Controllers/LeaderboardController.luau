@@ -7,11 +7,11 @@
 
 	화면 (오른쪽 위, UI/Layout.leaderboard):
 	  - 제목 줄 "🏆 랭킹" + 접기/펴기 버튼 (PC 는 펼친 채 시작, 폰은 접힌 채 시작 — 화면이 좁아서)
-	  - 탭 2개: 돈 / 속도 (Format.money / Format.number), 최대 10줄 "1 이름 값"
+	  - 탭 2개: 코인 / 속도 (Format.money "1.5K 코인" / Format.number), 최대 10줄 "1 이름 값"
 	  - 내 줄(userId == 나) 노란 바탕으로 강조. 1·2·3등은 금·은·동 순위 글자.
-	  - 펼쳐서 오른쪽 알·발바닥 버튼에 닿으면 그 왼쪽으로 비킴. 폰에서는 시간 아래, 튜토리얼 패널과 안 겹침.
+	  - 펼쳐서 오른쪽 씨앗·정원 버튼에 닿으면 그 왼쪽으로 비킴. 폰에서는 시간 아래, 튜토리얼 패널과 안 겹침.
 	  로블록스 기본 플레이어 목록(오른쪽 위)은 이 판과 겹쳐서 끔.
-	허브 스폰 광장 3D 판 (MapBuilder 가 세운 LeaderboardBoard 태그 파트): Front 면에 SurfaceGui — 돈 · 속도 두 칸, 각 10줄.
+	허브 스폰 광장 3D 판 (MapBuilder 가 세운 LeaderboardBoard 태그 파트): Front 면에 SurfaceGui — 코인 · 속도 두 칸, 각 10줄.
 	공개: LeaderboardController.apply(board) / setExpanded(on) / setTab(name) / isExpanded() (테스트도 씀)
 ]]
 
@@ -255,7 +255,7 @@ local function buildBoard(board: BasePart): SurfaceGui
 	title.TextStrokeTransparency = 0
 	title.Text = "🏆 랭킹 TOP 10"
 	title.Parent = back
-	boardRows.money = column(back, "money", "💵 돈", C.moneyGreen, 0)
+	boardRows.money = column(back, "money", "💰 코인", C.moneyGreen, 0)
 	boardRows.speed = column(back, "speed", "👟 속도", C.speedRed, 0.5)
 	gui.Parent = board
 	return gui
@@ -326,7 +326,7 @@ function LeaderboardController.start()
 	toggle.Name = "LbToggle"
 	toggleButton = toggle
 	local tabY = Layout.BOARD_HEADER
-	local m = Ui.button("돈", C.shopGreen, UDim2.new(0.5, -6, 0, Layout.BOARD_TABS - 4), function()
+	local m = Ui.button("코인", C.shopGreen, UDim2.new(0.5, -6, 0, Layout.BOARD_TABS - 4), function()
 		LeaderboardController.setTab("money")
 	end, { position = UDim2.fromOffset(4, tabY), textSize = 16, parent = f })
 	m.Name = "LbTab_money"

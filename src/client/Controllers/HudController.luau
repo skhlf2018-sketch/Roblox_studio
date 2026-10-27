@@ -4,8 +4,9 @@
 
 	  왼쪽 가운데   : 상점(초록·카트) · 인덱스(하늘·책) · [다른 컨트롤러가 더한 버튼] (5판: 퀘스트·선물 버튼 없앰)
 	                  · 슬로우 모드 토글(초록 네모) · 설정(톱니)
-	  왼쪽 아래     : 신발 + 속도(빨강 큰 글씨) / 돈다발 + $돈(초록) / "친구 부스트: +10%"
-	  오른쪽 가운데 : 주황 알 버튼(알 창 = 성장하는 달걀 패널, 배지 = 가방 알 + 부화 가능 수) · 주황 발바닥 버튼(펫 창)
+	  왼쪽 아래     : 신발 + 속도(빨강 큰 글씨) / 코인 + "1.2K 코인"(초록) / "친구 부스트: +10%"
+	  오른쪽 가운데 : 빨간 씨앗 버튼(자라는 씨앗 패널, 배지 = 가방 씨앗 수) · 주황 식물 버튼(정원 식물 창)
+	                  · 초록 열매 버튼(열매 가방 창, 배지 "12/300" = Attr FruitCount / fruitBagMax) — 6판
 	  오른쪽 아래   : 달/해 그림 + "3분 58초" (밤까지 / 낮까지 남은 시간)
 	  위 가운데     : 구역 배너 "Jungle 😬" (ZoneEntered, 없으면 클라 구역 계산)
 
@@ -39,10 +40,12 @@ local ZoneController = require(script.Parent.ZoneController)
 local SoundController = require(script.Parent.SoundController)
 
 local HudController = {}
-HudController.eggBadge = nil :: TextLabel? -- 알 버튼 배지 (IncubatorController 가 숫자를 씀)
+HudController.eggBadge = nil :: TextLabel? -- 씨앗 버튼 배지 (IncubatorController 가 숫자를 씀)
 HudController.showZoneBanner = nil :: ((string, string?) -> ())?
-HudController.petsButton = nil :: TextButton? -- 5판: 튜토리얼 5단계 "펫 장착" 때 TutorialController 가 반짝이게 함
+HudController.petsButton = nil :: TextButton? -- 정원 식물 창 버튼 (튜토리얼 5단계 "열매 따서 팔기" 때 TutorialController 가 반짝이게 함)
 HudController.eggButton = nil :: TextButton?
+HudController.fruitButton = nil :: TextButton? -- 6판: 열매 가방 버튼
+HudController.fruitBadge = nil :: TextLabel? -- "12/300"
 
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
@@ -240,7 +243,7 @@ function HudController.addMenuButton(
 	end
 end
 
--- IncubatorController 가 "성장하는 달걀" 패널 열고 닫기를 알려 줌
+-- IncubatorController 가 "자라는 씨앗" 패널 열고 닫기를 알려 줌
 function HudController.setEggPanelToggle(fn: () -> ())
 	eggPanelToggle = fn
 end
@@ -341,7 +344,7 @@ function HudController.start()
 	local hud = Ui.layer("Hud")
 
 	------------------------------------------------------------------
-	-- 왼쪽 아래: 속도 / 돈 / 친구 부스트
+	-- 왼쪽 아래: 속도 / 코인 / 친구 부스트
 	------------------------------------------------------------------
 	local stats: Frame = Ui.new("Frame", {
 		Name = "Stats",
@@ -370,7 +373,7 @@ function HudController.start()
 	})
 	Icons.draw("money", moneyRow, 46, UDim2.fromOffset(24, 24))
 	local moneyLabel =
-		bigText("$0", 40, C.moneyGreen, { Name = "Money", Position = UDim2.fromOffset(54, 0), Parent = moneyRow })
+		bigText("0 코인", 40, C.moneyGreen, { Name = "Money", Position = UDim2.fromOffset(54, 0), Parent = moneyRow })
 	local boost = bigText(
 		"친구 부스트: +10%",
 		30,
@@ -379,7 +382,7 @@ function HudController.start()
 	)
 	boost.Size = UDim2.fromOffset(330, 40)
 
-	-- 돈: 숫자가 올라가는 애니메이션
+	-- 코인: 숫자가 올라가는 애니메이션
 	local shownMoney = Instance.new("NumberValue")
 	shownMoney.Value = 0
 	shownMoney.Changed:Connect(function(v: number)
@@ -445,13 +448,13 @@ function HudController.start()
 	end)
 
 	------------------------------------------------------------------
-	-- 오른쪽 가운데: 알 버튼 / 발바닥 버튼
+	-- 오른쪽 가운데: 씨앗 버튼 / 식물 버튼 / 열매 버튼
 	------------------------------------------------------------------
 	local right: Frame = Ui.new("Frame", {
 		Name = "RightButtons",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.46, 0),
-		Size = UDim2.fromOffset(72, 156),
+		Size = UDim2.fromOffset(72, 240),
 		BackgroundTransparency = 1,
 		Parent = hud,
 	})
@@ -477,21 +480,61 @@ function HudController.start()
 		Icons.draw(icon, b, 50)
 		return b
 	end
-	local eggButton = squareButton("EggButton", C.eggRed, "egg", 0, function()
+	local eggButton = squareButton("EggButton", C.eggRed, "seed", 0, function()
 		local fn = eggPanelToggle
 		if fn then
 			fn()
 		end
 	end)
-	local petsButton = squareButton("PetsButton", C.pawOrange, "paw", 84, function()
+	local petsButton = squareButton("PetsButton", C.pawOrange, "plant", 84, function()
 		Windows.toggle("Pets")
 	end)
+	-- 6판: 열매 가방 버튼 + 배지 "12/300" (Attr FruitCount / snap.fruitBagMax)
+	local fruitButton = squareButton("FruitButton", C.green, "fruit", 168, function()
+		Windows.toggle("FruitBag")
+	end)
+	local fruitBadge: TextLabel = Ui.new("TextLabel", {
+		Name = "FruitBadge",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 1, -2),
+		Size = UDim2.fromOffset(78, 24),
+		BackgroundColor3 = C.winDark,
+		TextColor3 = C.white,
+		TextSize = 16,
+		Text = "0/300",
+		ZIndex = 5,
+		Parent = fruitButton,
+	})
+	Ui.corner(1).Parent = fruitBadge
+	Ui.stroke(C.white, 2).Parent = fruitBadge
+	local lastFruit = -1
+	local function refreshFruitBadge()
+		local n = player:GetAttribute(Attr.FruitCount)
+		local snap = State.get()
+		local count = if typeof(n) == "number" then n else 0
+		local max = if snap and typeof(snap.fruitBagMax) == "number" then snap.fruitBagMax else 300
+		fruitBadge.Text = string.format("%s/%d", Format.number(count), max)
+		fruitBadge.BackgroundColor3 = if count >= max then C.red elseif count > 0 then C.shopGreen else C.winDark
+		if lastFruit >= 0 and count > lastFruit then
+			Ui.pop(fruitButton, 1.15)
+		end
+		lastFruit = count
+	end
+	player:GetAttributeChangedSignal(Attr.FruitCount):Connect(refreshFruitBadge)
+	State.onChanged(function(section: string)
+		if section == "snapshot" or section == "fruits" then
+			refreshFruitBadge()
+		end
+	end)
+	refreshFruitBadge()
 	local eggBadge = Ui.badge(eggButton)
 	eggBadge.BackgroundColor3 = C.shopGreen
 	eggBadge.Position = UDim2.new(1, -4, 1, -4)
 	HudController.eggBadge = eggBadge
 	HudController.eggButton = eggButton
 	HudController.petsButton = petsButton
+	HudController.fruitButton = fruitButton
+	HudController.fruitBadge = fruitBadge
 
 	------------------------------------------------------------------
 	-- 위 가운데: 구역 배너 ("Jungle 😬")

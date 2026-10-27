@@ -1,6 +1,6 @@
 --!strict
 --[[
-	AnnounceController — 서버 공지("ALL EGG RESET!", "OO 구역에 OO 알 등장!", 밤/낮)를 채팅창 시스템 메시지로
+	AnnounceController — 서버 공지("ALL SEED RESET!", "OO 구역에 OO 씨앗 등장!", 밤/낮)를 채팅창 시스템 메시지로
 	TextChatService 가 없거나 실패하면 출력 창에만 찍음.
 ]]
 

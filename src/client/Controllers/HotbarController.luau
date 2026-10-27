@@ -1,18 +1,18 @@
 --!strict
 --[[
-	HotbarController — 아래 가운데 도구 핫바 (2판 원작: 작은 어두운 칸 · 1 방망이 · 2 곰덫 x3 · 3 알(들고 있을 때만))
+	HotbarController — 아래 가운데 도구 핫바 (2판 원작: 작은 어두운 칸 · 1 방망이 · 2 곰덫 x3 · 3 씨앗(들고 있을 때만)) — 6판 "씨앗을 훔치세요"
 	- 서버가 Backpack 에 넣어 준 Tool(이름 = Remotes.ToolKinds) 을 칸으로 보여 줌. 기본 Roblox 가방 UI 는 끔.
 	- 칸 누르기(또는 숫자키 1~9): 손에 들기 ↔ 내려놓기. 든 상태에서 한 번 더 누르면 사용(UseTool).
 	  손에 든 채 화면을 클릭/터치해도 ToolController 가 UseTool 을 보냄.
-	- 알을 들고 있으면(플레이어 Attribute CarryingEgg) 도구 다음 칸에 알 그림 칸 "EggSlot" (보기용, 누를 수 없음)
-	- 5판 (사장님 지시 "얻은 알은 핫바에 바로"): 가방 알(State.get().eggs)이 도구 뒤에 칸으로 바로 보임 ("BagEgg_<uid>")
-	    · 새로 얻은 알이 맨 앞 (가장 최근 것부터), 최대 Layout.HOTBAR_EGG_MAX(6)칸 + 나머지는 "…n" 칸("MoreEggs" → 알 창 가방 탭)
-	    · 알 칸을 누르면(클릭·톡·숫자키) 바로 알 놓기 모드 (IncubatorController.beginPlace: 초록/빨강 미리보기 → 클릭/톡으로 PlaceEgg)
-	      같은 칸을 한 번 더 누르면 놓기 취소. 놓는 중인 알 칸은 흰 테두리.
-	    · 우리에 놓인(부화 중) 알은 가방에서 빠지므로 핫바에도 안 보임 (성장 중 확인은 오른쪽 알 버튼 창)
-	    · 칸 테두리 = 희귀도 색, 알 그림 = 펫 대표 색, 특별 알 ★
+	- 씨앗을 들고 있으면(플레이어 Attribute CarryingEgg) 도구 다음 칸에 씨앗 그림 칸 "EggSlot" (보기용, 누를 수 없음)
+	- 5판 (사장님 지시 "얻은 씨앗은 핫바에 바로"): 가방 씨앗(State.get().eggs)이 도구 뒤에 칸으로 바로 보임 ("BagEgg_<uid>")
+	    · 새로 얻은 씨앗이 맨 앞 (가장 최근 것부터), 최대 Layout.HOTBAR_EGG_MAX(6)칸 + 나머지는 "…n" 칸("MoreEggs" → 씨앗 창 가방 탭)
+	    · 씨앗 칸을 누르면(클릭·톡·숫자키) 바로 씨앗 심기 모드 (IncubatorController.beginPlace: 초록/빨강 미리보기 → 클릭/톡으로 PlaceEgg)
+	      같은 칸을 한 번 더 누르면 심기 취소. 심는 중인 씨앗 칸은 흰 테두리.
+	    · 정원에 심은(자라는) 씨앗은 가방에서 빠지므로 핫바에도 안 보임 (성장 중 확인은 오른쪽 씨앗 버튼 창)
+	    · 칸 테두리 = 등급 색, 씨앗 그림 = 식물 대표 색, 특별 씨앗 ★
 	- PC 는 아래 가운데. 터치 기기에서는 점프 버튼(오른쪽 아래) 왼쪽으로 비켜서, 조이스틱(왼쪽 아래)과도 안 겹치게.
-	  칸이 많아 자리가 모자라면 배율을 줄이고(칸 44px 까지), 그래도 모자라면 알 칸 수를 줄임. 규칙은 UI/Layout.luau.
+	  칸이 많아 자리가 모자라면 배율을 줄이고(칸 44px 까지), 그래도 모자라면 씨앗 칸 수를 줄임. 규칙은 UI/Layout.luau.
 	공개: HotbarController.eggButtons() (튜토리얼 3단계가 반짝이게 함), HotbarController.refresh()
 ]]
 
@@ -89,7 +89,7 @@ type Entry = {
 
 local eggButtonList: { GuiObject } = {}
 
--- 지금 보이는 가방 알 칸 + "…n" 칸 (튜토리얼 3단계 강조용)
+-- 지금 보이는 가방 씨앗 칸 + "…n" 칸 (튜토리얼 3단계 강조용)
 function HotbarController.eggButtons(): { GuiObject }
 	return table.clone(eggButtonList)
 end
@@ -140,7 +140,7 @@ local function drawTool(kind: string, parent: Instance)
 	end
 end
 
--- 알 그림 (펫 대표 색으로 칠함 — IncubatorController 알 창과 같은 모양)
+-- 씨앗 그림 (식물 대표 색으로 칠함 — IncubatorController 씨앗 창과 같은 모양)
 local function eggIcon(parent: GuiObject, petId: string, size: number): Frame
 	local icon = Icons.draw("egg", parent, size)
 	local ec = Visuals.petColor(petId, 1)
@@ -158,12 +158,16 @@ local function rarityOf(petId: string): string
 	return if pet then pet.rarity else "common"
 end
 
-local function petName(petId: string): string
+-- 씨앗 이름 ("아기 데이지 씨앗", 사쿠라 씨앗 2종은 seedName)
+local function seedName(petId: string): string
 	local pet = Pets.get(petId)
-	return if pet then pet.name else petId
+	if not pet then
+		return petId .. " 씨앗"
+	end
+	return pet.seedName or (pet.name .. " 씨앗")
 end
 
--- 가방 알: 가장 최근에 얻은 알부터 (새 알이 바로 맨 앞 알 칸에 보이게)
+-- 가방 씨앗: 가장 최근에 얻은 씨앗부터 (새 씨앗이 바로 맨 앞 씨앗 칸에 보이게)
 local function bagEggs(): { Types.BagEgg }
 	local snap = State.get()
 	local eggs = if snap then snap.eggs or {} else {}
@@ -231,9 +235,9 @@ function HotbarController.start()
 	local entries: { Entry } = {}
 	local touch = Ui.isTouch()
 	local slotCount = 0
-	local knownEggs: { [string]: boolean }? = nil -- 처음 그린 뒤부터 새 알 칸을 통통
+	local knownEggs: { [string]: boolean }? = nil -- 처음 그린 뒤부터 새 씨앗 칸을 통통
 
-	-- 든 알 칸 (보기용)
+	-- 든 씨앗 칸 (보기용)
 	local eggSlot: Frame = Ui.new("Frame", {
 		Name = "EggSlot",
 		Size = UDim2.fromOffset(Layout.SLOT, Layout.SLOT),
@@ -247,7 +251,7 @@ function HotbarController.start()
 	Icons.draw("egg", eggSlot, 44)
 	keyLabel(eggSlot, true)
 
-	-- "…n" 칸: 핫바에 다 못 보인 가방 알 → 알 창 가방 탭
+	-- "…n" 칸: 핫바에 다 못 보인 가방 씨앗 → 씨앗 창 가방 탭
 	local function openBag()
 		local setTab = IncubatorController.setTab
 		local panel = IncubatorController.panel
@@ -271,7 +275,7 @@ function HotbarController.start()
 		Parent = more,
 	})
 	keyLabel(more, not touch)
-	addTip(more, "알 더 보기 (가방)")
+	addTip(more, "씨앗 더 보기 (가방)")
 
 	-- 실제 점프 버튼(PlayerGui.TouchGui, 로블록스 PlayerModule 이 만듦)이 보이면 그 자리, 아니면 규칙대로
 	local function realJump(): Layout.Rect?
@@ -358,7 +362,7 @@ function HotbarController.start()
 		end
 	end
 
-	-- 알 칸 누르기: 놓기 모드 시작 (같은 알이면 취소)
+	-- 씨앗 칸 누르기: 놓기 모드 시작 (같은 씨앗이면 취소)
 	local function pressEgg(uid: string)
 		if IncubatorController.placingUid() == uid then
 			IncubatorController.cancelPlace()
@@ -396,7 +400,7 @@ function HotbarController.start()
 			})
 		end
 		keyLabel(made, not touch)
-		addTip(made, petName(egg.petId) .. " 알 · 눌러서 놓기")
+		addTip(made, seedName(egg.petId) .. " · 눌러서 정원에 심기")
 		return made
 	end
 
@@ -464,7 +468,7 @@ function HotbarController.start()
 			table.insert(newEntries, { kind = "tool", tool = tool })
 		end
 
-		-- 든 알 칸 (들고 있을 때만)
+		-- 든 씨앗 칸 (들고 있을 때만)
 		local carry = player:GetAttribute(Tags.PlayerAttributes.CarryingEgg)
 		local carrying = typeof(carry) == "string" and carry ~= ""
 		eggSlot.Visible = carrying
@@ -472,7 +476,7 @@ function HotbarController.start()
 			table.insert(newEntries, { kind = "carry" })
 		end
 
-		-- 가방 알 칸 (자리에 맞춰 최대 6칸 + "…n")
+		-- 가방 씨앗 칸 (자리에 맞춰 최대 6칸 + "…n")
 		local eggs = bagEggs()
 		local area, jump, leftLimit = bounds()
 		local capacity = Layout.hotbarCapacity(area, touch, leftLimit, jump)
@@ -500,7 +504,7 @@ function HotbarController.start()
 			table.insert(newEntries, { kind = "egg", uid = egg.uid })
 			table.insert(eggButtonList, s)
 			if not firstBuild and not known[egg.uid] then
-				Ui.pop(s, 1.35) -- 방금 얻은 알
+				Ui.pop(s, 1.35) -- 방금 얻은 씨앗
 			end
 		end
 		for uid, slot in eggSlots do
@@ -514,7 +518,7 @@ function HotbarController.start()
 			nextKnown[egg.uid] = true
 		end
 		if State.get() ~= nil then
-			knownEggs = nextKnown -- 첫 Snapshot 의 알들은 통통 안 함 (그 뒤 새로 들어온 알만)
+			knownEggs = nextKnown -- 첫 Snapshot 의 씨앗들은 통통 안 함 (그 뒤 새로 들어온 씨앗만)
 		end
 		more.Visible = hasMore
 		if hasMore then
@@ -552,7 +556,7 @@ function HotbarController.start()
 		layout() -- 칸 수가 바뀌면 너비·배율 다시
 	end
 	HotbarController.refresh = refresh
-	Ui.onLayout(refresh) -- 화면 크기가 바뀌면 들어가는 알 칸 수도 다시
+	Ui.onLayout(refresh) -- 화면 크기가 바뀌면 들어가는 씨앗 칸 수도 다시
 	-- 로블록스 터치 조작 화면(TouchGui)이 늦게 생기면 그 점프 버튼 자리에 맞춰 다시
 	local playerGui = player:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
@@ -666,7 +670,7 @@ function HotbarController.start()
 		end
 	end)
 	player:GetAttributeChangedSignal(Tags.PlayerAttributes.CarryingEgg):Connect(refresh)
-	-- 가방 알이 바뀌면 (배달·선물 알·놓기·다시 줍기) 알 칸 다시
+	-- 가방 씨앗이 바뀌면 (배달·선물 씨앗·놓기·다시 줍기) 씨앗 칸 다시
 	State.onChanged(function(section: string)
 		if section == "snapshot" or section == "eggs" then
 			refresh()

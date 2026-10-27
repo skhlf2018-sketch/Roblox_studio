@@ -82,7 +82,7 @@ function DebugController.start()
 			)
 		)
 	end)
-	-- 2판 수정: 배달한 알은 알 가방으로 (slot 없음 — BagEgg)
+	-- 2판 수정: 배달한 씨앗은 씨앗 가방으로 (slot 없음 — BagEgg)
 	Net.on(E.EggDelivered, function(record: any)
 		if typeof(record) ~= "table" then
 			return

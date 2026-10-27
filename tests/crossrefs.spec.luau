@@ -226,19 +226,8 @@ return function(T, Loader)
 
 	-- [2판 마무리 임시] 서버가 먼저 만들고 선임이 버튼을 붙이는 중인 Remote. 클라가 보내기 시작하면
 	-- 아래 두 번째 테스트가 실패해서 "이 목록에서 지우라"고 알려 줌 (목록이 저절로 남아 있지 않게).
-	--   (EquipTrail 은 선임이 붙여서 지움)
-	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
-	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
-	--   PetPet (5판): 내 우리 펫 쓰다듬기 — 선임이 펫 ProximityPrompt/클릭을 붙이면 지우기 (서버·REMOTES.md 는 완료)
-	--   [6판 임시] 수석이 서버를 먼저 만들고 선임이 버튼을 붙일 Remote (docs/REMOTES.md 8장 "선임 할 일"):
-	--   FeedFruit: 열매 가방에서 열매 골라 성체에게 먹이기 / SellFruits: 판매 가판대 "열매 팔기" 프롬프트
-	--   SkipGrowth: 자라는 씨앗의 "건너뛰기 (전부/절반)" 버튼
-	--   (PickFruit·SellPlant·SakuraOffer·SakuraDraw·PetPet 은 클라가 이미 보냄)
-	local AWAITING_CLIENT: { [string]: boolean } = {
-		FeedFruit = true,
-		SellFruits = true,
-		SkipGrowth = true,
-	}
+	--   6판 선임: FeedFruit(열매 가방 → 먹이기) · SellFruits(판매 가판대 "열매 팔기") · SkipGrowth(건너뛰기 창) 을 붙여서 비움
+	local AWAITING_CLIENT: { [string]: boolean } = {}
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",
@@ -261,6 +250,9 @@ return function(T, Loader)
 				{
 					DropEgg = "ChaseController",
 					SellPlant = "PetsController", -- 6판: 5판 SellPet 자리 (성체 뽑아서 팔기)
+					SellFruits = "FruitBagController", -- 6판: 판매 가판대 "열매 팔기"
+					FeedFruit = "FruitBagController", -- 6판: 열매 먹이기
+					SkipGrowth = "IncubatorController", -- 6판: 건너뛰기 창 (전부 / 절반)
 					TreadmillLeave = "TreadmillController",
 				}
 			do
@@ -461,7 +453,7 @@ return function(T, Loader)
 			count += 1
 			T.truthy(registered[name], path .. ": 창 '" .. name .. "' 을 등록한 컨트롤러가 없음")
 		end
-		T.eq(count, 4) -- 5판: 선물(Gift) 창 없앰
+		T.eq(count, 5) -- 5판: 선물(Gift) 창 없앰 · 6판: 열매 가방(FruitBag) 창
 	end)
 
 	T.test("Config 안에 NaN/음수/이상한 값 없음 (숫자는 유한, 시간·거리는 0 이상)", function()
@@ -503,15 +495,21 @@ return function(T, Loader)
 	T.suite("참조: 겉모습 데이터(Visuals) ↔ 펫·구역 ↔ 서버 코드")
 
 	local PETVIS = SERVER["src/server/Services/PetVisualService.luau"]
+	local PLANTVIS = SERVER["src/server/Services/PlantVisualService.luau"]
 	local MAPB = SERVER["src/server/Services/MapBuilder.luau"]
 
-	local templates = {}
-	for name in string.gmatch(PETVIS, "\nTEMPLATES%.([%w_]+) =") do
-		templates[name] = true
+	-- 6판: 식물 모양(FORMS.x) · 식물 괴물 소품(MONSTER_EXTRAS.x) · 괴물 몸/머리 종류(kind == "x")
+	local plantForms = {}
+	for name in string.gmatch(PLANTVIS or "", "\nFORMS%.([%w_]+) =") do
+		plantForms[name] = true
 	end
-	local features = {}
-	for name in string.gmatch(PETVIS, "\nF%.([%w_]+) =") do
-		features[name] = true
+	local monsterExtras = {}
+	for name in string.gmatch(PETVIS, "\nMONSTER_EXTRAS%.([%w_]+) =") do
+		monsterExtras[name] = true
+	end
+	local monsterKinds = {}
+	for name in string.gmatch(stripComments(PETVIS), 'kind == "([%w_]+)"') do
+		monsterKinds[name] = true
 	end
 	local decors = {}
 	for name in string.gmatch(MAPB, "\nDECOR%.([%w_]+) =") do
@@ -523,52 +521,64 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"서버 코드에서 체형 템플릿 17종, 장식 70종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
+		"서버 코드에서 식물 모양 16종, 식물 괴물 소품 20종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
 		function()
-			T.eq(#sorted(templates), 17)
-			T.truthy(#sorted(features) >= 70, #sorted(features))
+			T.eq(#sorted(plantForms), 16)
+			T.eq(#Visuals.PLANT_FORMS, 16)
+			T.truthy(#sorted(monsterExtras) >= 20, #sorted(monsterExtras))
 			T.truthy(#sorted(decors) >= 50, #sorted(decors))
 		end
 	)
 
 	T.test(
-		"모든 펫(134종)에 생김새가 있고, 체형·장식이 PetVisualService 에 구현돼 있음",
+		"6판: 모든 식물(134종)에 생김새(Visuals.plantLook)가 있고, 모양이 PlantVisualService 에 구현돼 있음 + 서로 조금씩 다름",
 		function()
+			local seen = {}
+			local usedForms = {}
 			for _, pet in Pets.list do
-				local look = Visuals.pets[pet.id]
-				T.truthy(look, pet.id .. " 생김새 없음")
-				T.truthy(templates[look.body], pet.id .. " 체형 '" .. look.body .. "' 구현 없음")
-				T.eq(#look.colors, 3, pet.id)
-				for _, feature in look.features do
-					T.truthy(features[feature], pet.id .. " 장식 '" .. feature .. "' 구현 없음")
-				end
+				local look = Visuals.plantLook(pet.id)
+				T.truthy(plantForms[look.form], pet.id .. " 모양 '" .. look.form .. "' 구현 없음")
+				usedForms[look.form] = true
+				local key = table.concat({
+					look.form,
+					table.concat(look.petal, ","),
+					table.concat(look.leaf, ","),
+					look.fruitShape,
+					tostring(look.petals),
+					tostring(look.leaves),
+				}, "|")
+				T.falsy(seen[key], pet.id .. " 이 " .. tostring(seen[key]) .. " 와 완전히 같은 모양")
+				seen[key] = pet.id
+				T.truthy(look.petals >= 5 and look.petals <= 8 and look.leaves >= 2 and look.leaves <= 4, pet.id)
+			end
+			for _, form in Visuals.PLANT_FORMS do
+				T.truthy(usedForms[form], "식물 모양 " .. form .. " 을 쓰는 식물이 하나도 없음")
 			end
 		end
 	)
 
-	T.test("경비 전용 모델(Visuals.extra)과 15구역 경비 모양이 다 있고 구현돼 있음", function()
-		for id, look in Visuals.extra do
-			T.truthy(templates[look.body], id .. " 체형 " .. look.body)
-			for _, feature in look.features do
-				T.truthy(features[feature], id .. " 장식 " .. feature)
+	T.test(
+		"6판: 15구역 경비 = 식물 괴물 (Visuals.monsters) 이 다 있고 몸·머리·소품이 PetVisualService 에 구현돼 있음",
+		function()
+			for id, look in Visuals.monsters do
+				T.truthy(look.body == "stalk" or monsterKinds[look.body], id .. " 몸 " .. look.body) -- stalk = 기본 몸
+				T.truthy(look.head == "none" or monsterKinds[look.head], id .. " 머리 " .. look.head)
+				T.eq(#look.colors, 3, id)
+				for _, extra in look.extras do
+					T.truthy(monsterExtras[extra], id .. " 소품 " .. extra)
+				end
+			end
+			for _, biome in Biomes.list do
+				local guard = Visuals.guards[biome.id]
+				T.truthy(guard, biome.id .. " 경비 모양")
+				T.truthy(Visuals.monsters[guard.model], biome.id .. " 경비 모델 " .. guard.model)
+				if guard.darkModel then
+					T.truthy(Visuals.monsters[guard.darkModel], biome.id .. " 어두운 경비 모델")
+				end
+				T.truthy(guard.scale > 0)
 			end
 		end
-		for _, biome in Biomes.list do
-			local guard = Visuals.guards[biome.id]
-			T.truthy(guard, biome.id .. " 경비 모양")
-			T.truthy(
-				Visuals.pets[guard.model] or Visuals.extra[guard.model],
-				biome.id .. " 경비 모델 " .. guard.model
-			)
-			if guard.darkModel then
-				T.truthy(
-					Visuals.pets[guard.darkModel] or Visuals.extra[guard.darkModel],
-					biome.id .. " 어두운 경비 모델"
-				)
-			end
-			T.truthy(guard.scale > 0)
-		end
-	end)
+	)
 
 	local VALID_MATERIALS = setOf({
 		"Plastic",
@@ -696,10 +706,22 @@ return function(T, Loader)
 				T.truthy(type(v) == "number" and v >= 0 and v <= 255, where .. " 값 " .. tostring(v))
 			end
 		end
-		for id, look in Visuals.pets do
+		for _, pet in Pets.list do
+			local look = Visuals.plantLook(pet.id)
+			for _, key in { "leaf", "stem", "petal", "center", "fruit" } do
+				checkColor((look :: any)[key], pet.id .. " " .. key)
+			end
+		end
+		for id, look in Visuals.monsters do
 			for i, c in look.colors do
 				checkColor(c, id .. " 색" .. i)
 			end
+		end
+		for id, theme in Visuals.plantThemes do
+			for _, c in theme.petals do
+				checkColor(c, id .. " petals")
+			end
+			checkColor(theme.leaf, id .. " leaf")
 		end
 		for id, theme in Visuals.biomes do
 			for _, key in { "floor", "trim", "accent", "accent2" } do

@@ -904,10 +904,10 @@ return function(T, Loader)
 			local model = guardOf(w, "forest")
 			w.H.advance(0.2)
 			T.eq(model:GetAttribute("CatchDistance"), 13, "Visuals 키 28")
-			-- 선임 PetVisualService 처럼 겉모습 모델(이름 = Visuals.guards.forest.model "chicken")에 Height 40
+			-- 선임 PetVisualService 처럼 겉모습 모델(이름 = Visuals.guards.forest.model "flytrap_monster")에 Height 40
 			local height = 40
 			local visual = {
-				Name = "chicken",
+				Name = "flytrap_monster",
 				IsA = function(_, className)
 					return className == "Model"
 				end,

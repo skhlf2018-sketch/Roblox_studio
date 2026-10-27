@@ -1,191 +1,130 @@
 --!nocheck
--- 구역 특수 요소: 사쿠라 인큐베이터, 천사&악마 제단·비밀 통로, 무기 표 (5판: 마법의 숲 퀘스트 없앰 → 옛 퀘스트 알은 특별 알)
+-- 구역 특수 요소 (6판): 사쿠라 나무(씨앗 버전), 공지 씨앗, 무기 표. 제단·비밀 통로·퓨전은 사장님 결정으로 없앰
 
 return function(T, Loader)
 	local SakuraRules = Loader.require("ReplicatedStorage/Shared/SakuraRules")
-	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
 	local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
 	local EggSpawn = Loader.require("ReplicatedStorage/Shared/Data/EggSpawn")
 	local Progression = Loader.require("ReplicatedStorage/Shared/Progression")
 	local Weapons = Loader.require("ReplicatedStorage/Shared/Data/Weapons")
 	local Biomes = Loader.require("ReplicatedStorage/Shared/Data/Biomes")
-	local Pets = Loader.require("ReplicatedStorage/Shared/Data/Pets")
+	local Plants = Loader.require("ReplicatedStorage/Shared/Data/Plants")
 	local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
 	local Remotes = Loader.require("ReplicatedStorage/Shared/Remotes")
 	local Tags = Loader.require("ReplicatedStorage/Shared/Tags")
+	local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
 
 	------------------------------------------------------------------
-	T.suite("SakuraRules")
+	T.suite("SakuraRules (6판 씨앗 버전)")
 
-	T.test("블룸끼리는 불가, 자연 돌연변이 위에는 가능", function()
-		T.truthy(SakuraRules.canApply({}))
-		T.truthy(SakuraRules.canApply({ "golden" }))
-		local ok, reason = SakuraRules.canApply({ "silver", "bloom" })
-		T.falsy(ok)
-		T.truthy(#reason > 0)
-		T.falsy(SakuraRules.canApply({ "spirit_bloom" }))
-		local after = SakuraRules.apply({ "rainbow" }, "spirit_bloom")
-		T.eq(#after, 2)
-		T.eq(after[2], "spirit_bloom")
-		T.eq(#SakuraRules.apply({ "bloom" }, "spirit_bloom"), 1, "이미 블룸이면 그대로")
+	T.test("바치기: 등급이 높을수록 크리스탈이 많음, 모르는 식물 0", function()
+		T.eq(SakuraRules.crystalsFor("sprout_daisy"), Config.SAKURA_OFFER_CRYSTALS.common)
+		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), Config.SAKURA_OFFER_CRYSTALS.super_ultradivine)
+		T.eq(SakuraRules.crystalsFor("없는식물"), 0)
+		T.truthy(SakuraRules.crystalsFor("rune_rose") > SakuraRules.crystalsFor("owl_oak"))
 	end)
 
-	T.test("블룸 97.5% / 스피릿 블룸 2.5% (20만 회)", function()
+	T.test("뽑기: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (20만 회), 크리스탈 10개", function()
 		local rand = T.rng(31)
 		local spirit = 0
 		local n = 200000
 		for _ = 1, n do
-			if SakuraRules.roll(rand) == "spirit_bloom" then
+			if SakuraRules.roll(rand) == "spirit_blossom" then
 				spirit += 1
 			end
 		end
 		T.near(spirit / n, 0.025, 0.002)
-		T.eq(SakuraRules.roll(T.constant(0)), "bloom")
-		T.eq(SakuraRules.roll(T.constant(0.999)), "spirit_bloom")
+		T.eq(SakuraRules.roll(T.constant(0)), "blossom_fairy")
+		T.eq(SakuraRules.roll(T.constant(0.999)), "spirit_blossom")
+		T.eq(Config.SAKURA_DRAW_COST, 10)
+		T.truthy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST))
+		T.falsy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST - 1))
+		T.eq(#SakuraRules.seedIds(), 2)
 	end)
 
-	T.test("해금 제물: uid 없으면 수입이 가장 낮은 학, 학이 없으면 nil", function()
-		local pets = {
-			{ uid = "p1", petId = "crane", size = "giant", mutations = {} },
-			{ uid = "p2", petId = "chicken", size = "normal", mutations = {} },
-			{ uid = "p3", petId = "crane", size = "normal", mutations = {} },
-		}
-		local incomes = { 100, 1, 10 }
-		local function incomeOf(i)
-			return incomes[i]
-		end
-		T.eq(SakuraRules.pickOffering(pets, incomeOf, nil), 3)
-		T.eq(SakuraRules.pickOffering(pets, incomeOf, "p1"), 1)
-		T.eq(SakuraRules.pickOffering(pets, incomeOf, "p2"), nil, "학이 아닌 펫은 못 바침")
-		T.eq(SakuraRules.pickOffering({ pets[2] }, incomeOf, nil), nil)
-		T.truthy(SakuraRules.canAfford(Config.SAKURA_APPLY_COST))
-		T.falsy(SakuraRules.canAfford(Config.SAKURA_APPLY_COST - 1))
+	T.test("5판 해금·블룸 규칙과 상수는 없음", function()
+		T.eq(SakuraRules.pickOffering, nil)
+		T.eq(SakuraRules.hasBloom, nil)
+		T.eq(Config.SAKURA_UNLOCK_PET, nil)
+		T.eq(Config.SAKURA_APPLY_COST, nil)
+		T.eq(Remotes.ToServer.SakuraApply, nil)
+		T.eq(Remotes.ToServer.SakuraDraw, "SakuraDraw")
 	end)
 
 	------------------------------------------------------------------
-	T.suite("AltarRules")
+	T.suite("6판: 제단·비밀 통로·퓨전 없앰")
 
-	local function offer(userId, petId, side, uid)
-		return { userId = userId, petId = petId, side = side, petUid = uid or ("p" .. userId) }
-	end
-	local function always()
-		return true
-	end
-
-	T.test("제물 쪽: 천국/지옥 둥지 펫만", function()
-		T.eq(AltarRules.sideOfPet("pegasus"), "light")
-		T.eq(AltarRules.sideOfPet("toro"), "dark")
-		T.eq(AltarRules.sideOfPet("chicken"), nil)
-		T.eq(AltarRules.sideOfPet("ring_guard"), nil)
-		T.eq(AltarRules.sideOfPet("equinox"), nil)
-	end)
-
-	T.test("같은 주기, 서로 다른 두 사람이 양쪽에 바치면 짝", function()
-		local state = AltarRules.new(5)
-		T.falsy(AltarRules.add(state, offer(1, "toro", "light"), 5), "쪽이 다른 펫")
-		T.truthy(AltarRules.add(state, offer(1, "light_dove", "light"), 5))
-		local ok, reason = AltarRules.add(state, offer(1, "toro", "dark"), 5)
-		T.falsy(ok, "혼자 양쪽 불가")
-		T.eq(reason, "already")
-		local a, b = AltarRules.tryPair(state, always)
-		T.eq(a, nil, "아직 지옥 쪽 없음")
-		T.truthy(AltarRules.add(state, offer(2, "toro", "dark"), 5))
-		a, b = AltarRules.tryPair(state, always)
-		T.eq(a.userId, 1)
-		T.eq(b.userId, 2)
-		T.eq(AltarRules.pendingCount(state, "light"), 0)
-		T.eq(AltarRules.pendingCount(state, "dark"), 0)
-	end)
-
-	T.test("주기가 바뀌면 기다리던 제물 취소, 유효하지 않은 제물은 건너뜀", function()
-		local state = AltarRules.new(1)
-		AltarRules.add(state, offer(1, "light_dove", "light"), 1)
-		local expired = AltarRules.rollover(state, 2)
-		T.eq(#expired, 1)
-		T.eq(AltarRules.pendingCount(state, "light"), 0)
-		AltarRules.add(state, offer(3, "light_dove", "light"), 2)
-		AltarRules.add(state, offer(4, "winged_lamb", "light"), 2)
-		AltarRules.add(state, offer(5, "imp", "dark"), 2)
-		local a, b = AltarRules.tryPair(state, function(o)
-			return o.userId ~= 3 -- 3번은 나감
-		end)
-		T.eq(a.userId, 4)
-		T.eq(b.userId, 5)
-		T.truthy(AltarRules.add(state, offer(6, "imp", "dark"), 2))
-		T.truthy(AltarRules.cancel(state, 6))
-		T.falsy(AltarRules.cancel(state, 6))
-		T.eq(#AltarRules.rollover(state, 2), 0, "같은 주기면 그대로")
-	end)
-
-	T.test("링 가드 80% / 링로드 20%", function()
-		local rand = T.rng(8)
-		local lord = 0
-		local n = 100000
-		for _ = 1, n do
-			if AltarRules.rollRingEgg(rand) == "ringlord" then
-				lord += 1
-			end
+	T.test("모듈·Remote·태그·Config·맵 자리가 다 없음", function()
+		for _, path in
+			{
+				"ReplicatedStorage/Shared/AltarRules",
+				"ReplicatedStorage/Shared/FusionRules",
+				"ServerScriptService/Server/Services/AltarService",
+				"ServerScriptService/Server/Services/FusionService",
+				"ServerScriptService/Server/Services/IncomeService",
+				"ServerScriptService/Server/Services/RewardService",
+			}
+		do
+			T.falsy(pcall(Loader.get, path), path .. " 가 남아 있음")
 		end
-		T.near(lord / n, 0.2, 0.005)
-		T.truthy(Pets.get(AltarRules.RING_GUARD) and Pets.get(AltarRules.RINGLORD))
-	end)
-
-	T.test("비밀 통로 레시피 (순서 무관), 크기는 작은 쪽", function()
-		T.eq(AltarRules.recipeFor("pegasus", "skeleton_horse").result, "equinox")
-		T.eq(AltarRules.recipeFor("skeleton_horse", "pegasus").result, "equinox")
-		T.eq(AltarRules.recipeFor("world_burner", "archangel").result, "aetheron")
-		T.eq(AltarRules.recipeFor("pegasus", "archangel"), nil)
-		T.eq(AltarRules.recipeFor("pegasus", "pegasus"), nil)
-		T.eq(AltarRules.shrineSize("giant", "big"), "big")
-		T.eq(AltarRules.shrineSize("normal", "huge"), "normal")
-		for _, recipe in AltarRules.RECIPES do
-			T.eq(Pets.get(recipe.result).source, "fusion", recipe.result)
+		for _, name in
+			{ "FuseRequest", "AltarOffer", "ShrineFuse", "HatchEgg", "EquipPet", "UnequipPet", "EquipBest", "SellPet" }
+		do
+			T.eq(Remotes.ToServer[name], nil, name)
 		end
+		for _, name in
+			{ "FusionResult", "AltarUpdate", "ShrineResult", "PetsSold", "HatchResult", "OfflineIncome", "IncomeTick" }
+		do
+			T.eq(Remotes.ToClient[name], nil, name)
+		end
+		T.eq(Tags.Altar, nil)
+		T.eq(Tags.Shrine, nil)
+		T.eq(Tags.FusionMachine, nil)
+		T.eq(Config.ALTAR_RADIUS, nil)
+		T.eq(Config.FUSION_RADIUS, nil)
+		T.eq(MapLayout.specials.altarLight, nil)
+		T.eq(MapLayout.specials.shrine, nil)
+		T.truthy(MapLayout.specials.sakuraIncubator)
+		T.eq(MapLayout.plot(1).fusion, nil)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("5판: 퀘스트 없앰 → 옛 퀘스트 알 2종은 초기화 특별 알")
+	T.suite("공지 씨앗 (5판 특별 알·제단 펫 자리)")
 
-	T.test(
-		"지터버그·영혼 세계 수호자: source = special, 둥지 풀에는 없음, EXTRA_SPECIALS 확률 8% / 1%",
-		function()
-			T.eq(Pets.get("jitterbug").source, "special")
-			T.eq(Pets.get("spirit_world_guardian").source, "special")
-			for _, pet in EggRoll.nestPool("enchanted_forest", nil) do
-				T.truthy(pet.source == "nest", pet.id .. " 는 둥지 펫이어야 함")
+	T.test("source = special 식물: 둥지 풀에는 없고, 전부 EXTRA_SPECIALS 에 있음", function()
+		local chances = {}
+		for _, entry in EggSpawn.EXTRA_SPECIALS do
+			local plant = Plants.get(entry.petId)
+			T.truthy(plant and plant.source == "special", entry.petId)
+			T.truthy(entry.chance > 0 and entry.chance < 1, entry.petId)
+			chances[entry.petId] = entry.chance
+		end
+		T.eq(chances.dancing_mushroom, 0.08)
+		T.eq(chances.world_tree, 0.01)
+		for _, plant in Plants.list do
+			if plant.source == "special" then
+				T.truthy(chances[plant.id], plant.id .. " 를 얻을 길이 없음")
 			end
-			local chances = {}
-			for _, entry in EggSpawn.EXTRA_SPECIALS do
-				local pet = Pets.get(entry.petId)
-				T.truthy(pet and pet.source == "special", entry.petId)
-				T.truthy(entry.chance > 0 and entry.chance < 1, entry.petId)
-				chances[entry.petId] = entry.chance
-			end
-			T.eq(chances.jitterbug, 0.08)
-			T.eq(chances.spirit_world_guardian, 0.01)
-			-- source = special 인 펫은 전부 EXTRA_SPECIALS 에 있음 (못 얻는 펫이 없게)
-			for _, pet in Pets.list do
-				if pet.source == "special" then
-					T.truthy(chances[pet.id], pet.id .. " 를 얻을 길이 없음")
+		end
+		for _, biome in Biomes.list do
+			for _, side in biome.sides or { false } do
+				for _, plant in EggRoll.nestPool(biome.id, side or nil) do
+					T.eq(plant.source, "nest", plant.id)
 				end
 			end
 		end
-	)
+	end)
 
-	T.test(
-		"마법의 숲 망치는 여전히 10종 전부 (옛 퀘스트 알 포함), 퀘스트 모듈·상수는 없음",
-		function()
-			local need = Progression.weaponRequirement("enchanted_forest")
-			T.eq(#need, 10)
-			T.eq(Config.QUEST_SECRET_EGG_CHANCE, nil)
-			T.falsy(pcall(Loader.require, "ReplicatedStorage/Shared/QuestRules"), "QuestRules 모듈이 남아 있음")
-			T.falsy(
-				pcall(Loader.require, "ReplicatedStorage/Shared/Data/Quests"),
-				"Data/Quests 모듈이 남아 있음"
-			)
-			T.eq(Pets.get("dog").hatchSeconds, 3, "5판: 개 알 3초")
+	T.test("사쿠라 씨앗 2종은 사쿠라 나무 뽑기로만 (둥지·공지 씨앗에 없음)", function()
+		for _, id in SakuraRules.seedIds() do
+			T.eq(Plants.get(id).source, "sakura", id)
+			for _, entry in EggSpawn.EXTRA_SPECIALS do
+				T.truthy(entry.petId ~= id, id)
+			end
 		end
-	)
+		T.eq(#Progression.weaponRequirement("cherry_blossom"), 8)
+		T.eq(#Progression.weaponRequirement("enchanted_forest"), 10)
+	end)
 
 	------------------------------------------------------------------
 	T.suite("Weapons")
@@ -242,10 +181,10 @@ return function(T, Loader)
 		for _, name in Remotes.ToServer do
 			T.truthy(Remotes.RateLimits[name], name)
 		end
-		T.eq(Remotes.ToServer.FuseRequest, "FuseRequest")
+		T.eq(Remotes.ToServer.PickFruit, "PickFruit")
 		T.eq(Remotes.ToClient.QuestUpdate, nil, "5판: 퀘스트 Remote 없앰")
 		T.eq(Remotes.ToServer.ClaimFreeReward, nil, "5판: 무료 보상 Remote 없앰")
-		T.eq(Tags.Altar, "Altar")
+		T.eq(Tags.GardenPlant, "GardenPlant")
 		T.eq(Tags.QuestGate, nil, "5판: 퀘스트 문 태그 없앰")
 		T.eq(Tags.SakuraIncubator, "SakuraIncubator")
 	end)

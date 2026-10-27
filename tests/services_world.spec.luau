@@ -118,7 +118,13 @@ return function(T, Loader)
 						-- 일반 스폰은 가중치가 있는 펫만 (비밀 이상은 그 구역 중심 ±2 안일 때만)
 						T.truthy(EggRoll.nestWeight(pet) > 0, pet.id)
 					else
-						T.truthy(pet.rarity == "secret" or pet.rarity == "eternal" or pet.rarity == "divine", pet.id)
+						T.truthy(
+							pet.rarity == "secret"
+								or pet.rarity == "eternity"
+								or pet.rarity == "divine"
+								or pet.rarity == "super_ultradivine",
+							pet.id
+						)
 					end
 					if pet.biome == "angels_demons" then
 						T.eq(pet.side, if cycle % 2 == 1 then "light" else "dark", pet.id .. " 주기 " .. cycle)
@@ -146,9 +152,15 @@ return function(T, Loader)
 				local rare = announces(w.H, "rareEgg")
 				for i = seen + 1, #rare do
 					local a = rare[i]
-					T.truthy(a.rarity == "secret" or a.rarity == "eternal" or a.rarity == "divine", a.rarity)
 					T.truthy(
-						string.find(a.text, "구역에", 1, true) and string.find(a.text, "알 등장!", 1, true),
+						a.rarity == "secret"
+							or a.rarity == "eternity"
+							or a.rarity == "divine"
+							or a.rarity == "super_ultradivine",
+						a.rarity
+					)
+					T.truthy(
+						string.find(a.text, "구역에", 1, true) and string.find(a.text, "씨앗 등장!", 1, true),
 						a.text
 					)
 					local egg = findEgg(w.H, a.eggUid)
@@ -185,7 +197,7 @@ return function(T, Loader)
 			T.eq(w.data.stats.eggsStolen, 1)
 			local alert = w.H.sent(w.player, "RunAlert")[1][1]
 			T.eq(alert.egg.biomeId, "forest")
-			T.eq(alert.guardName, "닭")
+			T.eq(alert.guardName, "덥석 파리지옥")
 			T.near(alert.guardSpeed, 9, 1e-9, "숲 추천 10 × (1 - 보통 알 0.1)")
 			T.near(alert.yourSpeed, w.Config.STARTING_SPEED * (1 - penalty), 1e-9)
 			T.near(
@@ -208,7 +220,7 @@ return function(T, Loader)
 			w.H.setPhase("Night")
 			pressE(w, egg)
 			T.eq(egg:GetAttribute("EggState"), "Nest")
-			T.truthy(w.H.hasNotify(w.player, "error", "밤에는 알을 훔칠 수 없어요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "밤에는 씨앗을 훔칠 수 없어요"))
 			w.H.setPhase("Day")
 			-- 기절
 			w.session.stunnedUntil = w.H.clock() + 3
@@ -226,7 +238,7 @@ return function(T, Loader)
 			local second = nestEgg(w.H, "forest")
 			pressE(w, second)
 			T.eq(second:GetAttribute("EggState"), "Nest")
-			T.truthy(w.H.hasNotify(w.player, "error", "이미 알을 들고 있어요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "이미 씨앗을 들고 있어요"))
 			local thief = w.H.newPlayer(1002, "Thief")
 			w.H.login(thief)
 			w.H.spawn(thief, egg.Position.X, egg.Position.Y, egg.Position.Z)
@@ -255,16 +267,16 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"5판: 옛 퀘스트 알(영혼 세계 수호자)도 공지 특별 알로 놓이고, 퀘스트 없이 누구나 바로 주움",
+		"6판: 공지 씨앗(세계수)도 공지 특별 씨앗으로 놓이고, 퀘스트 없이 누구나 바로 주움",
 		function()
 			local w = eggWorld()
-			local uid = w.EggService.spawnSpecialEgg("enchanted_forest", "spirit_world_guardian", { announce = true })
+			local uid = w.EggService.spawnSpecialEgg("enchanted_forest", "world_tree", { announce = true })
 			local egg = findEgg(w.H, uid)
 			T.truthy(egg and egg:GetAttribute("Special"))
 			T.eq(egg:GetAttribute("QuestOnly"), nil, "퀘스트 전용 표시 없음")
 			T.eq(egg:GetAttribute("BiomeId"), "enchanted_forest")
 			local rare = announces(w.H, "rareEgg")
-			T.eq(rare[#rare].petId, "spirit_world_guardian")
+			T.eq(rare[#rare].petId, "world_tree")
 			T.eq(rare[#rare].eggUid, uid)
 			T.eq(rare[#rare].questOnly, nil)
 			T.falsy(string.find(rare[#rare].text, "퀘스트", 1, true))
@@ -275,7 +287,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"5판: 초기화 100번 — EXTRA_SPECIALS(지터버그 8%)가 마법의 숲에 공지되며 놓이고, 같은 초기화의 다른 특별 알을 안 지움",
+		"5판: 초기화 100번 — EXTRA_SPECIALS(춤추는 버섯 8%)가 마법의 숲에 공지되며 놓이고, 같은 초기화의 다른 특별 알을 안 지움",
 		function()
 			local w = eggWorld()
 			local seen = #announces(w.H, "rareEgg")
@@ -287,10 +299,10 @@ return function(T, Loader)
 					local a = rare[i]
 					local egg = findEgg(w.H, a.eggUid)
 					T.truthy(egg and egg:GetAttribute("Special"), "공지한 알이 그대로 있음 " .. a.petId)
-					if a.petId == "jitterbug" or a.petId == "spirit_world_guardian" then
+					if a.petId == "dancing_mushroom" or a.petId == "world_tree" then
 						T.eq(a.biomeId, "enchanted_forest")
 						T.eq(egg:GetAttribute("BiomeId"), "enchanted_forest")
-						if a.petId == "jitterbug" then
+						if a.petId == "dancing_mushroom" then
 							jitter += 1
 						end
 					end
@@ -298,7 +310,7 @@ return function(T, Loader)
 				seen = #rare
 				T.eq(#eggParts(w.H), 120, "알 수는 그대로 " .. cycle)
 			end
-			T.truthy(jitter >= 2 and jitter <= 20, "지터버그 공지 " .. jitter .. "번 (100번 × 8% ≈ 8)")
+			T.truthy(jitter >= 2 and jitter <= 20, "춤추는 버섯 공지 " .. jitter .. "번 (100번 × 8% ≈ 8)")
 			w.H.uninstall()
 		end
 	)
@@ -621,7 +633,7 @@ return function(T, Loader)
 			T.eq(egg.Position.Z, z)
 			T.eq(w.player.attrs.CarryingEgg, "")
 			T.eq(w.player.attrs.CarryWeightKg, 0)
-			T.truthy(w.H.hasNotify(w.player, "info", "알을 내려놓았어요"))
+			T.truthy(w.H.hasNotify(w.player, "info", "씨앗을 내려놓았어요"))
 			local before = #w.H.notifications(w.player)
 			w.H.client(w.player, "DropEgg") -- 알 없음
 			T.eq(#w.H.notifications(w.player), before)
@@ -732,7 +744,7 @@ return function(T, Loader)
 		session.carryingUid = "e1"
 		session.carryPenalty = penalty
 		w.SpeedService.refresh(player)
-		local egg = { petId = "chicken", biomeId = "forest", uid = "e1" }
+		local egg = { petId = "sprout_daisy", biomeId = "forest", uid = "e1" }
 		for k, v in extra or {} do
 			egg[k] = v
 		end
@@ -756,7 +768,10 @@ return function(T, Loader)
 				count += 1
 				T.eq(model:GetAttribute("State"), "Sleeping")
 				T.eq(model:GetAttribute("TargetUserId"), 0)
-				T.eq(model:GetAttribute("GuardName"), if biome.id == "angels_demons" then "천사" else biome.guardName)
+				T.eq(
+					model:GetAttribute("GuardName"),
+					if biome.id == "angels_demons" then "천사 백합" else biome.guardName
+				)
 				local root = guardRoot(model)
 				local home = w.H.MapLayout.guardHome(biome.id)
 				T.eq(root.Position.X, home.x)
@@ -829,7 +844,7 @@ return function(T, Loader)
 			local k = w.H.eggs.knockouts[1]
 			T.eq(k.player, w.player)
 			T.eq(k.cause, "guard")
-			T.eq(k.by, "닭")
+			T.eq(k.by, "덥석 파리지옥")
 			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), 0)
 			T.eq(#w.H.sent(w.player, "ChaseEnded"), 1)
 			_ = egg
@@ -1103,9 +1118,9 @@ return function(T, Loader)
 
 	T.test("천사&악마 경비 이름은 이번 주기 쪽에 따라 천사/악마로 바뀜", function()
 		local w = guardWorld()
-		T.eq(guardOf(w, "angels_demons"):GetAttribute("GuardName"), "천사")
+		T.eq(guardOf(w, "angels_demons"):GetAttribute("GuardName"), "천사 백합")
 		w.H.setPhase("Day", 2)
-		T.eq(guardOf(w, "angels_demons"):GetAttribute("GuardName"), "악마")
+		T.eq(guardOf(w, "angels_demons"):GetAttribute("GuardName"), "악마 장미")
 		w.H.uninstall()
 	end)
 

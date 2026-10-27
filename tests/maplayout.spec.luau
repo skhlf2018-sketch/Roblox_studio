@@ -83,7 +83,7 @@ return function(T, Loader)
 			T.near(px + yx, 70, 1e-9)
 			T.truthy(px > yx * 1.5, "우리가 약 2/3")
 			-- 스폰·러닝머신·퓨전·판매대·표지판은 앞마당 안
-			for name, spot in { spawn = p.spawn, treadmill = p.treadmill, fusion = p.fusion, sellStall = p.sellStall } do
+			for name, spot in { spawn = p.spawn, treadmill = p.treadmill, sellStall = p.sellStall } do
 				T.truthy(MapLayout.inRect(p.yardRect, spot.x, spot.z), name .. " 앞마당 안 " .. i)
 			end
 			for name, spot in p.signs do
@@ -199,7 +199,7 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("EggPlacement (2판 수정: 우리 안 원하는 자리에 알 놓기 규칙)")
+	T.suite("EggPlacement (2판 수정: 정원(우리) 안 원하는 자리에 씨앗 심기 규칙)")
 
 	local EggPlacement = Loader.require("ReplicatedStorage/Shared/EggPlacement")
 
@@ -249,8 +249,8 @@ return function(T, Loader)
 			table.insert(placed, { x = s.x, z = s.z, size = "giant" })
 		end
 		T.eq(EggPlacement.firstFreeGrid("normal", placed), nil)
-		T.truthy(string.find(EggPlacement.message("full"), "8개까지", 1, true))
-		T.truthy(string.find(EggPlacement.message("outside"), "우리", 1, true))
+		T.truthy(string.find(EggPlacement.message("full"), "정원이 가득 찼어요", 1, true))
+		T.truthy(string.find(EggPlacement.message("outside"), "정원", 1, true))
 		T.truthy(string.find(EggPlacement.message("tooClose"), "가까워요", 1, true))
 		T.truthy(#EggPlacement.message(nil) > 0)
 	end)

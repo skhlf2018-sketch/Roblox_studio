@@ -1,6 +1,7 @@
 --!strict
 --[[
 	Sessions — 접속 중인 플레이어마다 서버 런타임 상태 (저장 안 되는 것) + 저장 데이터 참조
+	(6판: 자동 수입이 없어져 incomePerSecond 칸 없앰. 물 주기 식물별 쿨다운은 cooldowns["water:" .. uid])
 
 	data 는 DataService 가 불러온 뒤에만 채워집니다 (loaded = true).
 	다른 서비스는 Sessions.getLoaded(player) 로 (session, data) 를 한 번에 받으세요.
@@ -28,9 +29,8 @@ export type Session = {
 	effectiveSpeed: number,
 	carrySpeed: number,
 	walkSpeed: number,
-	incomePerSecond: number,
 	hasGrowthPass: boolean,
-	hasMoneyPass: boolean,
+	hasMoneyPass: boolean, -- 6판: 열매 판매 코인 × 2 (플래그만)
 	inSafeZone: boolean,
 	cooldowns: { [string]: number },
 	moveExemptUntil: number, -- 이 시각(os.clock)까지 위치 검증 쉼 (서버 순간이동·래그돌)
@@ -67,7 +67,6 @@ function Sessions.create(player: Player): Session
 		effectiveSpeed = 0,
 		carrySpeed = 0,
 		walkSpeed = 16,
-		incomePerSecond = 0,
 		hasGrowthPass = false, -- 게임패스는 1차 버전에서 꺼 둠 (플래그만)
 		hasMoneyPass = false,
 		inSafeZone = false,

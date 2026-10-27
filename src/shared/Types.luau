@@ -1,82 +1,95 @@
 --!strict
 --[[
 	Types — 서버/클라가 같이 쓰는 타입 (저장 데이터 모양, Remote 로 오가는 데이터 모양)
+
+	6판 "씨앗을 훔치세요" 용어 (칸 이름은 5판 그대로 둔 곳이 많음 — 큰 이름 바꾸기는 위험해서):
+	  petId = 식물 id (Data/Plants) · pets = 정원의 성체 식물 · incubators = 정원에 심어 자라는 씨앗 ·
+	  eggs = 씨앗 가방 · fruits = 열매 가방 · money = 코인 · penLevel/penSlots = 정원 레벨/정원 칸 수
 ]]
 
 export type Phase = "Day" | "Night" | "Intermission"
 
--- 보관함에 있는 펫 1마리
+-- 정원에 심어진 성체 식물 1그루 (6판, 저장됨). 5판 "보관함 펫" 자리라 타입 이름은 PetRecord 그대로 (PlantRecord 별칭)
+-- 씨앗이 다 자라면 그 자리(x, z)·uid 그대로 이 모양이 됨. 정원 칸을 차지함 (SellPlant 로 뽑아서 팔면 빔)
 export type PetRecord = {
 	uid: string,
-	petId: string,
+	petId: string, -- 식물 id
 	size: string,
 	mutations: { string },
+	x: number, -- 심은 자리 = 베이스 기준(로컬) 좌표 (MapLayout.toWorld(plotIndex, x, z) → 월드)
+	z: number,
+	fruits: number, -- 달려 있는 열매 수 (0 ~ Config.FRUIT_MAX_PER_PLANT)
+	fruitProgress: number, -- 다음 열매까지 쌓인 초 (0 ~ fruitIntervalSeconds)
 }
+export type PlantRecord = PetRecord
 
--- 가방에 있는 알 1개 (2판 수정, 저장됨): 허브에 들고 들어온 알 · 선물 알(제단·비밀 통로·개발 명령 /egg) · 우리에서 다시 주운 알.
--- 가방 속 알은 자라지 않음 (progress 그대로). PlaceEgg 로 우리에 놓으면 같은 uid 로 IncubatorRecord 가 됨
+-- 가방에 있는 씨앗 1개 (저장됨): 허브에 들고 들어온 씨앗 · 선물 씨앗(사쿠라 나무 뽑기·개발 명령 /seed) · 정원에서 다시 주운 씨앗.
+-- 가방 속 씨앗은 자라지 않음 (progress 그대로). PlaceEgg 로 정원에 심으면 같은 uid 로 IncubatorRecord 가 됨
 export type BagEgg = {
 	uid: string,
-	petId: string,
+	petId: string, -- 식물 id
 	size: string,
 	mutations: { string },
 	biomeId: string,
-	special: boolean, -- 초기화 특별 알이었나 (빛남 연출용)
-	progress: number, -- 지금까지 자란 시간(초) — 우리에서 다시 주운 알은 그대로 남음
-	required: number, -- 다 자라는 데 필요한 시간(초) = 원본 부화 시간 그대로 (2판 수정: ÷3 없앰)
+	special: boolean, -- 초기화 공지 씨앗이었나 (빛남 연출용)
+	progress: number, -- 지금까지 자란 시간(초) — 정원에서 다시 주운 씨앗은 그대로 남음
+	required: number, -- 성체까지 필요한 시간(초) = Data/Plants.growSeconds
 }
 
--- 우리에 놓여 자라는 알 1개 (저장됨)
+-- 정원에 심어 자라는 씨앗 1개 (저장됨). 다 자라면(progress >= required) 그 자리에서 PetRecord(성체)가 됨
 export type IncubatorRecord = {
 	uid: string,
-	petId: string,
+	petId: string, -- 식물 id
 	size: string,
 	mutations: { string },
 	biomeId: string,
 	special: boolean,
-	-- 2판 수정: 놓은 자리 = 베이스 기준(로컬) 좌표 (MapLayout.toWorld(plotIndex, x, z) → 월드). 슬롯 번호 없음
+	-- 심은 자리 = 베이스 기준(로컬) 좌표 (MapLayout.toWorld(plotIndex, x, z) → 월드). 슬롯 번호 없음
 	x: number,
 	z: number,
-	slot: number?, -- [2판 수정 전 부화 슬롯 번호 — 서버는 이제 안 씀(nil). 클라 IncubatorController 교체 후 지움]
-	progress: number, -- 지금까지 자란 시간(초)
-	required: number, -- 다 자라는 데 필요한 시간(초) = 원본 부화 시간 그대로 (2판 수정: ÷3 없앰)
+	slot: number?, -- [2판 수정 전 부화 슬롯 번호 — 서버는 안 씀(nil). 클라 IncubatorController 교체 후 지움]
+	progress: number, -- 지금까지 자란 시간(초) → 성장 단계 = GardenRules.stage(progress, required)
+	required: number, -- 성체까지 필요한 시간(초)
 }
 
--- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 5)
+-- 6판: 열매 가방의 한 칸 (같은 식물 열매끼리 묶음). 키 = 그 열매를 맺은 식물 id
+export type FruitStack = {
+	count: number, -- 열매 수
+	value: number, -- 이 칸 열매 전부의 코인 값 합 (딸 때 크기·돌연변이까지 반영한 값을 더함)
+}
+export type FruitBag = { [string]: FruitStack }
+
+-- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 6)
 export type PlayerData = {
 	version: number,
-	money: number,
+	money: number, -- 코인
 	speed: number, -- 모은 속도 (트레일 배율 적용 전)
-	pets: { PetRecord },
-	equipped: { string }, -- 장착된 펫 uid 목록
-	penLevel: number,
+	pets: { PetRecord }, -- 6판: 정원의 성체 식물 (자라는 씨앗 + 성체 ≤ 정원 칸 수)
+	penLevel: number, -- 정원 레벨 (Upgrades.Pen)
 	treadmillLevel: number, -- 0 = 잠김
 	trails: { string }, -- 산 트레일 id 목록
-	indexDiscovered: { [string]: boolean }, -- 도감 발견 (petId → true)
-	indexClaimed: { [string]: boolean }, -- 도감 보상 수령 (petId → true)
+	indexDiscovered: { [string]: boolean }, -- 도감 발견 (성체가 된 식물 id → true)
+	indexClaimed: { [string]: boolean }, -- 도감 보상 수령 (식물 id → true)
 	indexCompleteClaimed: boolean,
 	tools: { [string]: number }, -- 소모 도구 개수 (bearTrap)
-	incubators: { IncubatorRecord }, -- 우리에 놓인 알 (최대 Config.PLACED_EGG_MAX)
+	incubators: { IncubatorRecord }, -- 정원에 심어 자라는 씨앗
 	lastSaveTime: number, -- os.time()
 	nextUid: number,
 	stats: { [string]: number },
-	-- 버전 2 (2단계)
 	weapons: { string }, -- 해금한 구역 무기 id (Data/Weapons, 기본 방망이 제외)
 	sakuraCrystals: number, -- 사쿠라 크리스탈 개수
-	sakuraUnlocked: boolean, -- 사쿠라 인큐베이터 해금 (학 바침)
-	shrineUsed: { [string]: boolean }, -- 비밀 통로 합성 사용 (결과 petId → true, 계정당 1번)
-	-- 버전 3 (2판 마무리)
 	equippedTrail: string, -- 장착한 트레일 id (trails 안에 있는 것만), "none" = 장착 안 함
-	-- 버전 4 (2판 수정): 2단계 eggQueue(선물 알 대기 줄)는 없어지고 가방으로 합쳐짐
-	eggs: { BagEgg }, -- 알 가방 (최대 Config.EGG_INVENTORY_MAX)
-	-- 버전 5 (5판): 퀘스트(quests, questsRewarded)·무료 보상(freeRewardClaimed) 칸 없앰
+	eggs: { BagEgg }, -- 씨앗 가방 (최대 Config.EGG_INVENTORY_MAX)
 	tutorialStep: number, -- 튜토리얼 단계 1~5, 6(Data/Tutorial.DONE) = 끝남
+	-- 버전 6 (6판)
+	fruits: FruitBag, -- 열매 가방 (열매 합 최대 Config.FRUIT_BAG_MAX)
+	-- (6판에서 없앤 칸: equipped(장착), sakuraUnlocked(인큐베이터 해금), shrineUsed(비밀 통로))
 }
 
--- 알 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)
+-- 씨앗 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)
 export type EggInfo = {
 	uid: string,
-	petId: string,
+	petId: string, -- 식물 id
 	biomeId: string,
 	rarity: string,
 	size: string,
@@ -84,39 +97,37 @@ export type EggInfo = {
 	special: boolean,
 }
 
--- 5판: 튜토리얼 상황 (TutorialUpdate / Snapshot.tutorial / DataUpdate("tutorial")) — shared/TutorialRules.view
+-- 튜토리얼 상황 (TutorialUpdate / Snapshot.tutorial / DataUpdate("tutorial")) — shared/TutorialRules.view
 export type TutorialView = {
 	step: number, -- 지금 단계 1 ~ total, 끝나면 total + 1
 	total: number, -- 단계 수 (5)
-	text: string, -- 큰 글씨 ("숲에서 알 훔치기" ...)
+	text: string, -- 큰 글씨 ("숲에서 씨앗 훔치기" ...)
 	hint: string, -- 작은 설명 (끝나면 "")
 	done: boolean,
-	reward: number?, -- 끝내는 순간의 TutorialUpdate 에만: 받은 돈 (500)
+	reward: number?, -- 끝내는 순간의 TutorialUpdate 에만: 받은 코인 (500)
 }
 
 -- 5판: 랭킹판 한 줄 (LeaderboardUpdate)
 export type LeaderboardEntry = {
 	name: string, -- 표시 이름 (DisplayName)
-	value: number, -- 돈 또는 속도
+	value: number, -- 코인 또는 속도
 	userId: number, -- 내 줄 강조·아바타 사진용
 }
 
 -- 5판: 랭킹판 (LeaderboardUpdate, 10초마다 서버 전체). 큰 값부터 최대 10줄
 export type Leaderboard = {
-	money: { LeaderboardEntry },
+	money: { LeaderboardEntry }, -- 코인
 	speed: { LeaderboardEntry }, -- 실효 속도 (Attr Speed 와 같은 숫자)
 }
 
 -- 클라이언트로 보내는 전체 상태 (Snapshot)
 export type Snapshot = {
-	money: number,
+	money: number, -- 코인
 	speed: number,
 	effectiveSpeed: number,
-	incomePerSecond: number,
-	pets: { PetRecord },
-	equipped: { string },
-	penLevel: number,
-	penSlots: number,
+	pets: { PetRecord }, -- 6판: 정원의 성체 식물
+	penLevel: number, -- 정원 레벨
+	penSlots: number, -- 정원 칸 수 (자라는 씨앗 + 성체 식물이 이만큼까지)
 	treadmillLevel: number,
 	trails: { string },
 	equippedTrail: string, -- "none" = 장착 안 함
@@ -126,19 +137,17 @@ export type Snapshot = {
 	indexCompleteClaimed: boolean,
 	unlockedWeapons: { string },
 	tools: { [string]: number },
-	incubators: { IncubatorRecord }, -- 우리에 놓인 알 (x, z = 베이스 기준 좌표)
-	eggs: { BagEgg }, -- 2판 수정: 알 가방
-	eggInventoryMax: number, -- 가방 상한 (Config.EGG_INVENTORY_MAX)
-	placedEggMax: number, -- 우리에 놓을 수 있는 알 수 (Config.PLACED_EGG_MAX)
+	incubators: { IncubatorRecord }, -- 정원에 심어 자라는 씨앗 (x, z = 베이스 기준 좌표)
+	eggs: { BagEgg }, -- 씨앗 가방
+	eggInventoryMax: number, -- 씨앗 가방 상한 (Config.EGG_INVENTORY_MAX)
+	placedEggMax: number, -- [호환] = penSlots (5판 "우리에 놓을 수 있는 알 수" 칸 — 선임 정리 후 지움)
+	fruits: FruitBag, -- 6판: 열매 가방
+	fruitBagMax: number, -- 6판: 열매 가방 상한 (Config.FRUIT_BAG_MAX)
 	plotIndex: number,
 	saveEnabled: boolean,
-	-- 2단계
 	sakuraCrystals: number,
-	sakuraUnlocked: boolean,
-	shrineUsed: { [string]: boolean },
-	petInventoryMax: number,
-	-- 5판 (퀘스트 quests/questsDone·무료 보상 freeRewardClaimed 는 없어짐)
 	tutorial: TutorialView,
+	-- (6판에서 없앤 칸: incomePerSecond, equipped, sakuraUnlocked, shrineUsed, petInventoryMax)
 }
 
 return {}

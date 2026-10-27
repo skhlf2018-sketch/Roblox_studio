@@ -1,9 +1,9 @@
 --!strict
 --[[
-	SakuraController — 벚꽃 구역 사쿠라 인큐베이터 (Tag SakuraIncubator) + 사쿠라 크리스탈 (Tag SakuraCrystal)
-	- 프롬프트: 해금 전 "학 바치기" / 해금 후 "꽃피우기" (Attr SakuraUnlocked)
-	- 해금 전: 학(crane) 고르기(1마리) → SakuraOffer(uid)
-	- 해금 후: 부화 중 알 + 보관 펫 고르기(1개) → SakuraApply(uid). 블룸이 이미 있으면 회색 (SakuraRules.hasBloom)
+	SakuraController — 벚꽃 구역 사쿠라 나무 (Tag SakuraIncubator) + 사쿠라 크리스탈 (Tag SakuraCrystal)
+	[6판 수석 임시 — 선임이 다시 꾸밀 예정] 씨앗 버전: 해금·블룸 없음.
+	- 프롬프트: 크리스탈이 SAKURA_DRAW_COST 이상이면 "씨앗 뽑기" → SakuraDraw(), 아니면 "성체 바치기" → 성체 고르기 → SakuraOffer(uid)
+	- SakuraResult kind "offered"(바침 → 크리스탈) / "draw"(특별 씨앗 → 가방, petId)
 	- 크리스탈 개수(Attr SakuraCrystals): 창 제목 + 인큐베이터 위 이름표(내 화면)
 	- SakuraResult → 해금: 배너 + 꽃잎 / 블룸: 분홍 꽃잎 팝업 / 스피릿 블룸: 보라 빛기둥 + 큰 팝업
 	- 크리스탈: 반짝이 + 천천히 빙글 (내 화면)
@@ -19,11 +19,9 @@ local Config = require(Shared.Data.Config)
 local Pets = require(Shared.Data.Pets)
 local SakuraRules = require(Shared.SakuraRules)
 local Remotes = require(Shared.Remotes)
-local Types = require(Shared.Types)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
-local State = require(Client.State)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
 local PetPicker = require(Client.UI.PetPicker)
@@ -45,10 +43,6 @@ local function crystals(): number
 	return if typeof(n) == "number" then n else 0
 end
 
-local function unlocked(): boolean
-	return Players.LocalPlayer:GetAttribute(Attr.SakuraUnlocked) == true
-end
-
 local function myRoot(): BasePart?
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
@@ -63,25 +57,25 @@ local function tooFar(part: BasePart): () -> boolean
 	end
 end
 
+-- 6판: 정원의 성체 식물 1그루 바치기 → 크리스탈 (어떤 식물이든, 등급이 높을수록 많이)
 local function openOffer(part: BasePart)
-	local crane = Pets.get(Config.SAKURA_UNLOCK_PET)
-	local craneName = if crane then crane.name else "학"
+	local function title(): string
+		return string.format("사쿠라 나무 · 크리스탈 %d개", crystals())
+	end
 	PetPicker.open({
-		title = "사쿠라 인큐베이터 (잠김)",
+		title = title(),
+		liveTitle = title,
 		color = Color3.fromRGB(240, 110, 170),
-		hint = craneName .. " 1마리를 바치면 인큐베이터가 영원히 열려요!",
+		hint = string.format(
+			"성체 1그루를 바치면 크리스탈 (등급이 높을수록 많이)! 크리스탈 %d개로 특별 씨앗 뽑기",
+			Config.SAKURA_DRAW_COST
+		),
 		count = 1,
 		items = function(): { PetPicker.Item }
-			local list: { PetPicker.Item } = {}
-			for _, item in PetPicker.myPets() do
-				if item.petId == Config.SAKURA_UNLOCK_PET then
-					table.insert(list, item)
-				end
-			end
-			return list
+			return PetPicker.myPets()
 		end,
-		empty = craneName .. " 펫이 없어요! 벚꽃 구역에서 " .. craneName .. " 알을 훔쳐 와요.",
-		confirmText = "학 바치기",
+		empty = "바칠 성체 식물이 없어요! 정원에서 씨앗을 키워 와요.",
+		confirmText = "바치기",
 		onConfirm = function(selected: { PetPicker.Item })
 			Net.send(Remotes.ToServer.SakuraOffer, selected[1].uid)
 		end,
@@ -89,59 +83,19 @@ local function openOffer(part: BasePart)
 	})
 end
 
-local function openApply(part: BasePart)
-	local function title(): string
-		return string.format("사쿠라 인큐베이터 · 크리스탈 %d개", crystals())
+-- 6판: 크리스탈로 특별 씨앗 뽑기 (벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5%) — 결과는 SakuraResult kind "draw"
+local function drawSeed()
+	if not SakuraRules.canAfford(crystals()) then
+		NotifyController.toast(
+			string.format(
+				"크리스탈이 %d개 필요해요! (성체 바치기 · 벚꽃 씨앗 배달 · 초기화 때 줍기)",
+				Config.SAKURA_DRAW_COST
+			),
+			"error"
+		)
+		return
 	end
-	PetPicker.open({
-		title = title(),
-		liveTitle = title,
-		color = Color3.fromRGB(240, 110, 170),
-		hint = string.format(
-			"크리스탈 %d개 → 블룸(×1.5) 97.5%% / 스피릿 블룸(×3) 2.5%%",
-			Config.SAKURA_APPLY_COST
-		),
-		count = 1,
-		items = function(): { PetPicker.Item }
-			local list = PetPicker.myEggs()
-			for _, item in PetPicker.myPets() do
-				table.insert(list, item)
-			end
-			return list
-		end,
-		filters = {
-			{
-				id = "nobloom",
-				label = "블룸 없는 것만",
-				default = true,
-				test = function(item: PetPicker.Item): boolean
-					return not SakuraRules.hasBloom(item.mutations)
-				end,
-			},
-		},
-		check = function(item: PetPicker.Item): (boolean, string?)
-			if SakuraRules.hasBloom(item.mutations) then
-				return false, "이미 블룸"
-			end
-			return true, nil
-		end,
-		ready = function(): (boolean, string?)
-			if not SakuraRules.canAfford(crystals()) then
-				return false,
-					string.format(
-						"크리스탈이 %d개 필요해요! (벚꽃 알 배달 / 초기화 때 둥지 근처에서 줍기)",
-						Config.SAKURA_APPLY_COST
-					)
-			end
-			return true, nil
-		end,
-		empty = "꽃피울 알이나 펫이 없어요!",
-		confirmText = "꽃피우기!",
-		onConfirm = function(selected: { PetPicker.Item })
-			Net.send(Remotes.ToServer.SakuraApply, selected[1].uid)
-		end,
-		closeWhen = tooFar(part),
-	})
+	Net.send(Remotes.ToServer.SakuraDraw)
 end
 
 -- 블룸 팝업 (가운데, 2.5초)
@@ -202,31 +156,6 @@ local function bloomPopup(spirit: boolean, targetName: string)
 	task.delay(2.6, function()
 		holder:Destroy()
 	end)
-end
-
-local function nameOfTarget(uid: string): string
-	local snap = State.get()
-	if snap then
-		for _, record in (snap.incubators or {}) :: { Types.IncubatorRecord } do
-			if record.uid == uid then
-				local pet = Pets.get(record.petId)
-				return (if pet then pet.name else record.petId) .. " 알"
-			end
-		end
-		for _, record in (snap.eggs or {}) :: { Types.BagEgg } do
-			if record.uid == uid then
-				local pet = Pets.get(record.petId)
-				return (if pet then pet.name else record.petId) .. " 알"
-			end
-		end
-		for _, record in (snap.pets or {}) :: { Types.PetRecord } do
-			if record.uid == uid then
-				local pet = Pets.get(record.petId)
-				return if pet then pet.name else record.petId
-			end
-		end
-	end
-	return "대상"
 end
 
 -- 인큐베이터 위 이름표 (내 화면): 크리스탈 수 + 잠김/열림
@@ -290,14 +219,15 @@ function SakuraController.start()
 	local handle = WorldPrompt.attach({
 		tag = Tags.SakuraIncubator,
 		name = "SakuraPrompt",
+		-- [6판 수석 임시] 크리스탈이 뽑기만큼 있으면 "씨앗 뽑기", 아니면 "성체 바치기" (두 가지를 따로 고르는 창은 선임)
 		action = function(): string
-			return if unlocked() then "꽃피우기" else "학 바치기"
+			return if SakuraRules.canAfford(crystals()) then "씨앗 뽑기" else "성체 바치기"
 		end,
-		object = "사쿠라 인큐베이터",
+		object = "사쿠라 나무",
 		distance = 12,
 		onTrigger = function(part: BasePart)
-			if unlocked() then
-				openApply(part)
+			if SakuraRules.canAfford(crystals()) then
+				drawSeed()
 			else
 				openOffer(part)
 			end
@@ -313,14 +243,11 @@ function SakuraController.start()
 				labels[part] = label
 			end
 			local l = label :: TextLabel
-			l.Text = if unlocked()
-				then string.format("크리스탈 %d개 · 열림", crystals())
-				else string.format("잠김 · 학을 바쳐요 (크리스탈 %d개)", crystals())
+			l.Text = string.format("크리스탈 %d개 · 뽑기 %d개", crystals(), Config.SAKURA_DRAW_COST)
 		end
 		-- 크리스탈 수가 바뀌면 열린 창(확인 버튼)도 다시
 		PetPicker.refresh()
 	end
-	player:GetAttributeChangedSignal(Attr.SakuraUnlocked):Connect(refresh)
 	player:GetAttributeChangedSignal(Attr.SakuraCrystals):Connect(refresh)
 	CollectionService:GetInstanceAddedSignal(Tags.SakuraIncubator):Connect(function()
 		task.defer(refresh)
@@ -353,17 +280,18 @@ function SakuraController.start()
 		end
 		local part = nearestIncubator()
 		local pos = if part then part.Position + Vector3.new(0, 4, 0) else nil
-		if payload.kind == "unlocked" then
+		if payload.kind == "offered" then
+			-- 6판: 성체를 바침 → 크리스탈
 			SoundController.play("Unlock")
-			NotifyController.banner("사쿠라 인큐베이터가 열렸어요!", Color3.fromRGB(255, 130, 190))
 			if pos then
 				Fx.petals(pos, PINK, 80)
 				Fx.burst(pos, Color3.fromRGB(255, 230, 245), 40, 1, 14)
 			end
-		else
-			local spirit = payload.mutation == "spirit_bloom"
+		elseif payload.kind == "draw" then
+			-- 6판: 특별 씨앗 뽑기 (정령 벚꽃 씨앗이면 보라 빛기둥)
+			local spirit = payload.petId == "spirit_blossom"
 			SoundController.play(if spirit then "SpiritBloom" else "Bloom")
-			bloomPopup(spirit, nameOfTarget(tostring(payload.targetUid)))
+			bloomPopup(spirit, Pets.seedName(tostring(payload.petId)))
 			if pos then
 				Fx.petals(pos, if spirit then SPIRIT else PINK, if spirit then 140 else 70)
 				if spirit then

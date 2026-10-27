@@ -43,7 +43,7 @@ return function(T, Loader)
 		T.eq(Biomes.sideForCycle(ad, 2), "dark")
 		T.eq(Biomes.sideForCycle(ad, 3), "light")
 		T.eq(Biomes.sideForCycle(Biomes.get("forest"), 1), nil)
-		T.eq(Biomes.guardDisplayName(ad, "dark"), "악마")
-		T.eq(Biomes.guardDisplayName(Biomes.get("forest"), nil), "닭")
+		T.eq(Biomes.guardDisplayName(ad, "dark"), "악마 장미") -- 6판: 식물 괴물
+		T.eq(Biomes.guardDisplayName(Biomes.get("forest"), nil), "덥석 파리지옥")
 	end)
 end

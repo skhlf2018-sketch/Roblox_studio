@@ -1,6 +1,9 @@
 --!strict
 --[[
 	PetsController — 펫 창 (보관함 · 장착 · Equip Best)
+	[6판 수석 임시 — 선임이 "정원 식물" 창으로 다시 꾸밀 예정] 장착 개념이 없어져서:
+	  "최고 펫 장착"(EquipBest) → "열매 모두 따기" PickFruit("all"), 카드의 장착/해제 → "열매 따기" PickFruit(uid),
+	  판매(SellPet) → 뽑아서 팔기 SellPlant(uid) (값 = GardenRules.sellPrice = 열매 1개 값 × 20)
 	- 위: 장착 칸 "장착 3/7", "최고 펫 장착" 버튼(EquipBest), 쪽 넘기기
 	- 카드: 3D 펫, 이름(희귀도 색), 초당 수입(Economy.recordIncome), 크기/돌연변이, 장착/해제 버튼
 	- 장착한 펫이 먼저, 그다음 수입 높은 순. 한 쪽에 18마리.
@@ -20,6 +23,7 @@ local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
 local Economy = require(Shared.Economy)
+local GardenRules = require(Shared.GardenRules)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Types = require(Shared.Types)
@@ -71,7 +75,7 @@ local function detail(record: Types.PetRecord): string
 end
 
 function PetsController.start()
-	local window = Ui.window(NAME, "펫", Theme.Menu.pets, SIZE, function()
+	local window = Ui.window(NAME, "정원 식물", Theme.Menu.pets, SIZE, function()
 		Windows.close(NAME)
 	end)
 	local content = window.content
@@ -88,8 +92,8 @@ function PetsController.start()
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = top,
 	})
-	local bestButton = Ui.button("최고 펫 장착", C.orange, UDim2.fromOffset(210, 50), function()
-		Net.send(Remotes.ToServer.EquipBest)
+	local bestButton = Ui.button("열매 모두 따기", C.orange, UDim2.fromOffset(210, 50), function()
+		Net.send(Remotes.ToServer.PickFruit, "all")
 	end, {
 		anchor = Vector2.new(0.5, 0.5),
 		position = UDim2.fromScale(0.5, 0.5),
@@ -118,7 +122,7 @@ function PetsController.start()
 	gridLayout.Parent = grid
 	Ui.padding(6).Parent = grid
 	local empty = Ui.label(
-		"아직 펫이 없어요! 알을 훔쳐서 베이스에서 부화시켜요.",
+		"아직 성체 식물이 없어요! 씨앗을 훔쳐서 정원에 심어요.",
 		UDim2.new(1, 0, 0, 60),
 		26,
 		C.white,
@@ -139,16 +143,8 @@ function PetsController.start()
 		if not snap then
 			return
 		end
-		local equippedSet: { [string]: boolean } = {}
-		for _, uid in (snap.equipped or {}) :: { string } do
-			equippedSet[uid] = true
-		end
 		local list = table.clone(snap.pets or {})
 		table.sort(list, function(a: Types.PetRecord, b: Types.PetRecord): boolean
-			local ea, eb = equippedSet[a.uid] == true, equippedSet[b.uid] == true
-			if ea ~= eb then
-				return ea
-			end
 			local ia, ib = Economy.recordIncome(a), Economy.recordIncome(b)
 			if ia ~= ib then
 				return ia > ib
@@ -173,11 +169,8 @@ function PetsController.start()
 		grid.Position = UDim2.fromOffset(0, topH + 20)
 		grid.Size = UDim2.new(1, 0, 1, -(topH + 20))
 		local slots = snap.penSlots or 0
-		local equippedCount = #(snap.equipped or {})
-		local maxText = if typeof((snap :: any).petInventoryMax) == "number"
-			then "/" .. tostring((snap :: any).petInventoryMax)
-			else ""
-		slotsLabel.Text = string.format("장착 %d/%d  ·  보관함 %d%s", equippedCount, slots, #list, maxText)
+		local used = #list + #(snap.incubators or {})
+		slotsLabel.Text = string.format("정원 %d/%d  ·  성체 %d", used, slots, #list)
 		local pages = math.max(1, math.ceil(#list / PAGE))
 		page = math.clamp(page, 1, pages)
 		pageLabel.Text = string.format("%d/%d", page, pages)
@@ -187,7 +180,7 @@ function PetsController.start()
 			local pet = Pets.get(record.petId)
 			local rarityId = if pet then pet.rarity else "common"
 			local rcolor = Theme.rarityColor(rarityId)
-			local isEquipped = equippedSet[record.uid] == true
+			local isEquipped = false -- 6판: 장착 없음
 			local card = Ui.card(
 				UDim2.fromOffset(140, cardH),
 				if isEquipped then Color3.fromRGB(78, 70, 34) else Color3.fromRGB(62, 64, 78),
@@ -221,43 +214,33 @@ function PetsController.start()
 				Parent = card,
 			})
 			local uid = record.uid
-			if isEquipped then
-				Ui.button(
-					"해제",
-					C.red,
-					UDim2.new(1, -14, 0, buttonH),
-					function()
-						Net.send(Remotes.ToServer.UnequipPet, uid)
-					end,
-					{ anchor = Vector2.new(0.5, 1), position = UDim2.new(0.5, 0, 1, -6), textSize = 22, parent = card }
-				)
-			else
-				local full = equippedCount >= slots
+			do
+				local fruits = tonumber(record.fruits) or 0
 				local b = Ui.button(
-					if full then "가득 참" else "장착",
-					if full then C.gray else C.green,
+					string.format("열매 따기 %d/%d", fruits, Config.FRUIT_MAX_PER_PLANT),
+					if fruits > 0 then C.green else C.gray,
 					UDim2.new(1, -14, 0, buttonH),
 					function()
-						Net.send(Remotes.ToServer.EquipPet, uid)
+						Net.send(Remotes.ToServer.PickFruit, uid)
 					end,
 					{
 						anchor = Vector2.new(0.5, 1),
 						position = UDim2.new(0.5, 0, 1, -6),
-						textSize = 22,
+						textSize = 20,
 						parent = card,
 						sound = "Equip",
 					}
 				)
-				b.Name = "Equip"
+				b.Name = "PickFruit"
 			end
 			if sellNear then
-				local price = Economy.recordIncome(record) * Config.PET_SELL_SECONDS
+				local price = GardenRules.sellPrice(record)
 				local sell = Ui.button(
-					"판매 " .. Format.money(price),
+					"뽑아서 팔기 " .. Format.number(price),
 					C.eggRed,
 					UDim2.new(1, -14, 0, buttonH),
 					function()
-						Net.trySend(Remotes.ToServer.SellPet, uid)
+						Net.trySend(Remotes.ToServer.SellPlant, uid)
 					end,
 					{
 						anchor = Vector2.new(0.5, 1),
@@ -272,11 +255,11 @@ function PetsController.start()
 		end
 	end
 
-	-- 판매 가게 프롬프트 "펫 팔기" → 이 창 (판매 버튼이 보임)
+	-- 판매 가판대 프롬프트 "식물 팔기" → 이 창 (뽑아서 팔기 버튼이 보임)
 	WorldPrompt.attach({
 		tag = Tags.SellStall,
 		name = "SellPrompt",
-		action = "펫 팔기",
+		action = "식물 팔기",
 		object = "판매",
 		distance = Config.SELL_RADIUS - 2,
 		onTrigger = function()

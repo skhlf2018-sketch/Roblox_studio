@@ -1,6 +1,7 @@
 --!strict
 --[[
 	MapLayout — 2판 맵 배치 (순수 데이터 + 함수, 로블록스 API 없음 → Lune 테스트 가능)
+	6판 "씨앗을 훔치세요": 좌표는 그대로. 우리(pen) = 정원, 알 = 씨앗. 퓨전 머신·제단·비밀 통로 자리는 없앰.
 
 	서버 로직(구역 판정·배달·경비·러닝머신)과 선임 MapBuilder(맵 짓기)·클라(ZoneController)가
 	모두 이 모듈 한 곳의 숫자를 씁니다. 좌표는 스터드, 위에서 본 x(좌우) / z(앞뒤).
@@ -20,10 +21,10 @@
 	베이스(플롯) 하나 (왼쪽 베이스, 복도 쪽 = +x):
 	   x=-110 (벽)        x=-64             x=-40 (복도 쪽 앞)
 	     ┌──────────────────┬────────────────┐ z = 중심+30
-	     │   펫 우리 (pen)   │   앞마당 (yard) │
+	     │  정원 (pen)       │   앞마당 (yard) │
 	     │ petRect(뒤)       │ 러닝머신 v=-19  │
-	     │ 알: 우리 아무 데나 │ 스폰 v=0       │
-	     │   (PlaceEgg)     │ 퓨전 v=+19     │
+	     │ 씨앗: 정원 아무 데나│ 스폰 v=0       │
+	     │   (PlaceEgg)     │ (6판: 퓨전 없음) │
 	     └──────────────────┴────────────────┘ z = 중심-30
 	   - 깊이(d=70, x 방향) 중 뒤쪽 46 = 우리, 앞쪽 24 = 앞마당. 폭(w=60, z 방향).
 	   - 오른쪽 베이스는 x 를 뒤집은 거울 모양 (z 방향 배치는 같음).
@@ -65,7 +66,6 @@ export type Plot = {
 	yardRect: Rect, -- 앞마당 (복도 쪽 1/3)
 	spawn: XZ,
 	treadmill: XZ,
-	fusion: XZ,
 	sellStall: XZ,
 	signs: PlotSigns,
 }
@@ -210,7 +210,6 @@ local function buildPlot(index: number, side: string, cz: number): Plot
 		yardRect = rect(frontX, frontX - facing * yardU, cz - w / 2, cz + w / 2),
 		spawn = at(midYard, 0),
 		treadmill = at(midYard, -19),
-		fusion = at(midYard, 19),
 		sellStall = at(5, 9),
 		signs = {
 			owner = at(1, 0), -- 앞 가장자리 가운데 (주인 이름)
@@ -318,7 +317,7 @@ end
 ------------------------------------------------------------------
 MapLayout.hubSpots = {
 	mainSpawn = { x = 0, z = -140 } :: XZ, -- 베이스가 없는 8번째 사람 / 기본 스폰
-	sellStall = { x = 60, z = -232 } :: XZ, -- "판매" 가게 (판매 = SellPet, 14 스터드 안)
+	sellStall = { x = 60, z = -232 } :: XZ, -- "판매" 가게 (6판: 열매 팔기 SellFruits·성체 팔기 SellPlant, 14 스터드 안)
 	trailShop = { x = 60, z = -268 } :: XZ, -- 트레일 상점 (빨강·흰 줄무늬 천막)
 	eventPortal = { x = 92, z = -250 } :: XZ, -- 이벤트 포털 (장식)
 	safeLine = { x = 0, z = 0 } :: XZ, -- "안전 구역" 글씨·점선 (z = 0)
@@ -371,11 +370,8 @@ local function special(biomeId: string, x: number, dz: number): Special
 end
 
 MapLayout.specials = {
-	sakuraIncubator = special("cherry_blossom", -62, 0), -- Tag SakuraIncubator
-	altarLight = special("angels_demons", -55, 0), -- Tag Altar, Side = "light"
-	altarDark = special("angels_demons", 55, 0), -- Tag Altar, Side = "dark"
-	shrine = special("angels_demons", -96, 30), -- Tag Shrine (폭포 옆 비밀 통로, 왼쪽 벽 가까이)
-	-- (5판: 마법의 숲 퀘스트 문 questGate 는 퀘스트와 함께 없앰)
+	sakuraIncubator = special("cherry_blossom", -62, 0), -- Tag SakuraIncubator (6판: 사쿠라 나무, 씨앗 버전)
+	-- (5판: 마법의 숲 퀘스트 문 questGate 없앰 · 6판: 천사&악마 제단 altarLight/altarDark·비밀 통로 shrine 없앰, 베이스 plot.fusion 없앰)
 }
 
 ------------------------------------------------------------------

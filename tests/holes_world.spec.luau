@@ -67,7 +67,7 @@ return function(T, Loader)
 		session.carryingUid = "e1"
 		session.carryPenalty = penalty
 		w.SpeedService.refresh(player)
-		w.H.carry(player, { petId = "chicken", biomeId = biomeId, uid = "e1" })
+		w.H.carry(player, { petId = "sprout_daisy", biomeId = biomeId, uid = "e1" })
 	end
 
 	local function standIn(w, player, biomeId, dx)
@@ -290,65 +290,73 @@ return function(T, Loader)
 		return w.data.incubators[#w.data.incubators]
 	end
 
+	-- 심은 씨앗 이름표 글 (BaseService.seedText 와 같은 모양): "<씨앗 이름>\n<단계> · <남은 성장 시간>"
+	local function seedLabel(record)
+		local GardenRules = Loader.require("ReplicatedStorage/Shared/GardenRules")
+		return string.format(
+			"%s\n%s · %s",
+			Pets.seedName(record.petId),
+			GardenRules.stageName(GardenRules.stage(record.progress, record.required)),
+			Format.duration(Economy.timerSeconds(record.progress, record.required))
+		)
+	end
+
 	T.test(
-		"우리 알 이름표: 5분짜리 알은 낮 1초에 5m 0s → 4m 59s, 밤 1초에 4m 29s 로 (30 줄어듦) — 낮→밤 전환에서 '9s' 로 튀지 않음",
+		"정원 씨앗 이름표: 5분짜리 씨앗은 낮 1초에 5m → 4m 59s, 밤 1초에 30 줄어듦 — 낮→밤 전환에서 ÷30 으로 튀지 않음",
 		function()
 			local w = labelWorld()
-			local petId
-			for _, pet in Pets.list do
-				if pet.hatchSeconds == 300 or (pet.hatchSeconds >= 300 and pet.hatchSeconds <= 900 and not petId) then
-					petId = pet.id
-				end
-			end
-			local pet = Pets.get(petId)
+			local petId = "frost_pine"
+			local plant = Pets.get(petId)
+			T.eq(plant.growSeconds, 300)
 			local record = placeEggOf(w, petId)
 			local label = w.labels[#w.labels]
-			T.eq(label.Text, pet.name .. "\n" .. Format.duration(pet.hatchSeconds), "처음")
+			T.eq(label.Text, plant.name .. " 씨앗\n새싹 · 5m", "처음")
 			local required = record.required
 			w.H.advance(1.05)
-			T.eq(label.Text, pet.name .. "\n" .. Format.duration(required - record.progress), "낮 1초")
+			T.eq(label.Text, seedLabel(record), "낮 1초")
 			T.near(required - record.progress, required - 1, 0.1)
 			local before = required - record.progress
 			w.H.setPhase("Night")
 			w.H.advance(1.05)
 			local after = required - record.progress
 			T.near(before - after, 30, 1.5, "밤 1초 = 30 줄어듦")
-			T.eq(label.Text, pet.name .. "\n" .. Format.duration(after), "밤 1초 뒤 글")
+			T.eq(label.Text, seedLabel(record), "밤 1초 뒤 글")
 			T.truthy(after > before / 30, "÷30 으로 튀지 않음")
 			w.H.setPhase("Day")
 			w.H.advance(1.05)
 			local day2 = required - record.progress
 			T.near(after - day2, 1, 0.1, "다시 낮 1초 = 1")
-			T.eq(label.Text, pet.name .. "\n" .. Format.duration(day2))
+			T.eq(label.Text, seedLabel(record))
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"다 자라면 이름표 '부화 준비 완료!', 개 알(3초)은 낮 3초면 다 자람 · 밤이면 0.1초 만에",
+		"강아지풀 씨앗(3초): 이름표 새싹 → 줄기 → … 낮 3초면 성체 (성체 이름표 '열매 1/5'), 밤이면 0.1초 만에",
 		function()
 			local w = labelWorld()
-			local record = placeEggOf(w, "dog")
+			local record = placeEggOf(w, "puppy_grass")
 			local label = w.labels[#w.labels]
-			T.eq(record.required, 3, "개 알 3초")
-			T.eq(label.Text, "개\n3s")
+			T.eq(record.required, 3, "강아지풀 3초")
+			T.eq(label.Text, "강아지풀 씨앗\n새싹 · 3s")
 			w.H.advance(1.05)
-			T.eq(label.Text, "개\n2s")
+			T.eq(label.Text, "강아지풀 씨앗\n줄기 · 2s")
 			w.H.advance(2)
-			T.truthy(record.progress >= record.required)
-			T.eq(label.Text, "개\n부화 준비 완료!")
+			T.eq(#w.data.incubators, 0)
+			T.eq(#w.data.pets, 1, "성체가 됨")
+			T.eq(w.labels[#w.labels].Text, "강아지풀\n열매 1/" .. Config.FRUIT_MAX_PER_PLANT, "성체 이름표")
 			w.H.uninstall()
 			local n = labelWorld()
 			n.H.setPhase("Night")
-			local r2 = placeEggOf(n, "dog")
+			placeEggOf(n, "puppy_grass")
 			n.H.advance(1.05)
-			T.truthy(r2.progress >= r2.required, "밤: 첫 1초에 다 자람")
+			T.eq(#n.data.pets, 1, "밤: 첫 1초에 성체")
 			n.H.uninstall()
 		end
 	)
 
 	T.test(
-		"개발 명령 /egg dog → 가방에 개 알(부화 3초), /grow 로 바로 다 자람, 알 번호는 중복 없음",
+		"개발 명령 /seed puppy_grass → 가방에 강아지풀 씨앗(3초), 씨앗 번호는 중복 없음, 옛 /egg 는 없는 명령",
 		function()
 			local H = ServerHarness.install(Loader, T)
 			H.startNet()
@@ -361,11 +369,12 @@ return function(T, Loader)
 			local session, data = H.login(p)
 			session.plotIndex = 1
 			H.Players.PlayerAdded:Fire(p)
-			p.Chatted:Fire("/egg dog")
-			p.Chatted:Fire("/egg dog")
-			p.Chatted:Fire("/egg nosuchpet")
+			p.Chatted:Fire("/seed puppy_grass")
+			p.Chatted:Fire("/seed puppy_grass")
+			p.Chatted:Fire("/seed nosuchplant")
+			p.Chatted:Fire("/egg puppy_grass")
 			T.eq(#data.eggs, 2)
-			T.eq(data.eggs[1].petId, "dog")
+			T.eq(data.eggs[1].petId, "puppy_grass")
 			T.eq(data.eggs[1].required, 3)
 			T.truthy(data.eggs[1].uid ~= data.eggs[2].uid)
 			H.uninstall()
@@ -474,9 +483,8 @@ return function(T, Loader)
 				"UpgradeService",
 				"TreadmillService",
 				"ToolService",
-				"FusionService",
+				"FruitService",
 				"SakuraService",
-				"AltarService",
 			}
 		do
 			w[name] = H.server("Services/" .. name)
@@ -490,9 +498,18 @@ return function(T, Loader)
 		local x, z = H.plotSpot(1)
 		H.spawn(w.player, x, 3, z)
 		H.giveBackpack(w.player)
-		w.PetService.addPet(w.player, { uid = "p1", petId = "chicken", size = "normal", mutations = {} })
-		w.BaseService.grantEgg(w.player, "dog", "normal", {}, "dev")
-		w.BaseService.grantEgg(w.player, "chicken", "normal", {}, "dev")
+		w.PetService.addPlant(w.player, {
+			uid = "p1",
+			petId = "sprout_daisy",
+			size = "normal",
+			mutations = {},
+			x = -30,
+			z = -20,
+			fruits = 2,
+			fruitProgress = 0,
+		})
+		w.BaseService.grantEgg(w.player, "puppy_grass", "normal", {}, "dev")
+		w.BaseService.grantEgg(w.player, "sprout_daisy", "normal", {}, "dev")
 		return w
 	end
 
@@ -502,8 +519,9 @@ return function(T, Loader)
 			d.money,
 			d.speed,
 			#d.pets,
-			#d.equipped,
 			#d.eggs,
+			d.fruits.owl_oak and d.fruits.owl_oak.count or 0,
+			d.sakuraCrystals,
 			#d.incubators,
 			d.tutorialStep,
 			d.penLevel,
@@ -572,7 +590,7 @@ return function(T, Loader)
 					end
 				end
 			end
-			T.truthy(calls > 500, "던진 횟수 " .. calls)
+			T.truthy(calls > 400, "던진 횟수 " .. calls)
 			T.eq(#w.H.warnings, 0, "처리 중 오류가 난 Remote 가 있음: " .. table.concat(w.H.warnings, " / "))
 			T.eq(stateOf(w), before, "엉터리 인자로 게임 상태가 바뀜")
 			w.H.uninstall()
@@ -612,15 +630,15 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"남의 알 uid · 이미 놓은 알 uid 로 PlaceEgg / PickUpPlacedEgg / HatchEgg 해도 아무 일 없음",
+		"남의 씨앗 uid · 이미 심은 씨앗 uid 로 PlaceEgg / PickUpPlacedEgg / SkipGrowth 해도 아무 일 없음",
 		function()
 			local w = fuzzWorld()
 			local other = w.H.newPlayer(2002, "Victim")
 			local otherSession, otherData = w.H.login(other)
 			otherSession.plotIndex = 2
-			w.BaseService.grantEgg(other, "dog", "normal", {}, "dev")
+			w.BaseService.grantEgg(other, "puppy_grass", "normal", {}, "dev")
 			local victimEgg = otherData.eggs[1].uid
-			local mine = w.data.eggs[1].uid
+			local mine = w.data.eggs[2].uid -- 아기 데이지(10초): 시험 중에 성체가 되지 않게
 			local x, z = w.H.plotSpot(1)
 			-- 남이 가진 알 uid (우연히 내 번호와 같아도 내 데이터 기준으로만 찾음)
 			w.H.advance(4)
@@ -637,7 +655,7 @@ return function(T, Loader)
 			w.H.advance(4)
 			w.H.client(w.player, "PickUpPlacedEgg", victimEgg)
 			T.eq(#otherData.eggs, 1, "남의 알은 그대로")
-			w.H.client(w.player, "HatchEgg", victimEgg)
+			w.H.client(w.player, "SkipGrowth", victimEgg, "all")
 			T.eq(#otherData.eggs, 1)
 			T.eq(#w.H.warnings, 0)
 			w.H.uninstall()

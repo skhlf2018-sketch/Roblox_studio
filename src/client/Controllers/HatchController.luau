@@ -1,6 +1,6 @@
 --!strict
 --[[
-	HatchController — 부화 결과 팝업 (HatchResult)
+	HatchController — 성체 결과 팝업 (6판 PlantGrown, 5판 부화 HatchResult 자리)
 	펫 카드: 희귀도 색 테두리 + 빙글 도는 3D 펫 + 뒤에서 도는 빛살 + "NEW!" (도감 첫 발견) + 초당 수입.
 	잠깐 흔들리는 알 → 펑! 하고 카드가 나오는 순서 (기대감 → 보상).
 	FusionResult 도 같은 카드 (1.3초 뒤, "희귀도 UP!/크기 UP!" 리본 + 수입 3마리 합 → 결과 + 보너스 돌연변이).
@@ -316,17 +316,22 @@ function HatchController.show(payload: any)
 end
 
 function HatchController.start()
-	Net.on(Remotes.ToClient.HatchResult, function(payload: any)
-		HatchController.show(payload)
-	end)
-	-- 퓨전 결과도 같은 카드로 (FusionResult 의 pet/income/isNew/equipped 가 HatchResult 와 같은 모양).
-	-- FusionController 가 머신에서 빛 모으기 연출을 하는 동안(1.3초) 기다렸다가 카드.
-	Net.on(Remotes.ToClient.FusionResult, function(payload: any)
-		if typeof(payload) == "table" then
-			payload.fusion = true
-			payload.delay = 1.3
-			HatchController.show(payload)
+	-- [6판 수석 임시] 씨앗이 정원에서 성체가 됨 (PlantGrown { plant, isNew, fruitValue, fruitInterval }) → 같은 카드.
+	-- 5판 HatchResult·FusionResult 는 없어짐. 카드 글·모양(식물·열매)은 선임이 다시 꾸밀 예정
+	Net.on(Remotes.ToClient.PlantGrown, function(payload: any)
+		if typeof(payload) ~= "table" or typeof(payload.plant) ~= "table" then
+			return
 		end
+		local interval = tonumber(payload.fruitInterval) or 0
+		HatchController.show({
+			pet = payload.plant,
+			isNew = payload.isNew,
+			income = if interval > 0 then (tonumber(payload.fruitValue) or 0) / interval else 0,
+			title = "성체가 됐어요!",
+			footer = "열매 1개 "
+				.. Format.number(tonumber(payload.fruitValue) or 0)
+				.. " 코인 — 따서 팔아요!",
+		})
 	end)
 end
 

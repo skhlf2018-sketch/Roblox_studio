@@ -15,6 +15,7 @@
 	      3 핫바에서 알 놓기    → 핫바의 알 칸(HotbarController.eggButtons) 노란 테두리 반짝 + 내 우리 표시 "우리에 놓기"
 	      4 부화!               → 내 우리에 놓인 알 노란 Highlight + 머리 위 "부화!" (아직 자라는 중이면 "자라는 중…")
 	      5 펫 장착             → 오른쪽 발바닥(펫) 버튼 반짝, 펫 창이 열려 있으면 "장착" 버튼들 반짝
+	        (6판 수석 임시: 5단계 "열매 따서 팔기" — 정원 식물 창의 "열매 따기"(PickFruit) 버튼들 반짝. 판매 가판대 가리키기는 선임)
 	  - 끝(reward): 색종이 + 팡파레(TutorialDone) + "튜토리얼 끝! / $500 받았어요!" (3.6초)
 	  - 매 프레임 연출(RenderStepped)·0.25초 갱신 루프는 튜토리얼 중일 때만 돎. 끝나면 둘 다 끊고, /tutorial reset 으로 다시 시작되면 다시 연결
 	공개: TutorialController.view() / update() / celebrate(reward) / panelRect() / running() (테스트도 씀)
@@ -371,7 +372,7 @@ local function equipButtons(): { GuiObject }
 	local win = Ui.layer("Windows"):FindFirstChild("Pets")
 	if win then
 		for _, d in win:GetDescendants() do
-			if d:IsA("TextButton") and d.Name == "Equip" and d.Visible then
+			if d:IsA("TextButton") and d.Name == "PickFruit" and d.Visible then -- 6판: 정원 식물 창 "열매 따기" (5판 "장착")
 				table.insert(list, d)
 			end
 		end

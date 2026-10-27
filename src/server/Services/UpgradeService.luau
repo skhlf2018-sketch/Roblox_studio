@@ -1,10 +1,11 @@
 --!strict
 --[[
-	UpgradeService — 우리(Pen) / 러닝머신(Treadmill) / 트레일(Trail) 구매
+	UpgradeService — 정원(Pen, 5판 우리) / 러닝머신(Treadmill) / 트레일(Trail) 구매 (6판: 코인으로)
+	정원 업그레이드 = 정원 칸 수 (자라는 씨앗 + 성체 식물이 이만큼까지, Upgrades.Pen 7 → 18칸)
 
 	Remote: PurchaseUpgrade(kind: "Pen" | "Treadmill" | "Trail", trailId: string?)
 	  - 가격·효과는 shared/Data/Upgrades.luau (설계문서 9장 표)
-	  - 러닝머신 0레벨 = 잠김, 1레벨 구매($1K) = 해금
+	  - 러닝머신 0레벨 = 잠김, 1레벨 구매(1K 코인) = 해금
 	  - 트레일은 순서 상관없이 아무거나 살 수 있음, **장착한 트레일 하나**만 적용 (사면 바로 장착)
 
 	Remote: EquipTrail(trailId | "none") — 가진 트레일로 바꿔 끼기, "none" 이면 해제 (data.equippedTrail)
@@ -33,7 +34,7 @@ local Attr = Tags.PlayerAttributes
 local UpgradeService = {}
 
 local function notEnough(player: Player, cost: number)
-	Net.notify(player, "error", "돈이 부족해요! (" .. Format.money(cost) .. " 필요)")
+	Net.notify(player, "error", "코인이 부족해요! (" .. Format.number(cost) .. " 코인 필요)")
 end
 
 function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
@@ -44,7 +45,7 @@ function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
 	if kind == Remotes.UpgradeKinds.Pen then
 		local cost = Economy.nextPenCost(data.penLevel)
 		if not cost then
-			Net.notify(player, "info", "우리가 이미 최대 레벨이에요.")
+			Net.notify(player, "info", "정원이 이미 최대 레벨이에요.")
 			return
 		end
 		if not Wallet.trySpend(player, cost) then
@@ -56,7 +57,7 @@ function UpgradeService.purchase(player: Player, kind: string, trailId: string?)
 		Net.notify(
 			player,
 			"success",
-			string.format("우리 %d레벨! 장착 칸 %d개", data.penLevel, Economy.penSlots(data.penLevel))
+			string.format("정원 %d레벨! 정원 칸 %d개", data.penLevel, Economy.penSlots(data.penLevel))
 		)
 	elseif kind == Remotes.UpgradeKinds.Treadmill then
 		local cost = Economy.nextTreadmillCost(data.treadmillLevel)

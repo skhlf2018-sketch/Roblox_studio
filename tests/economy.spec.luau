@@ -1,74 +1,63 @@
 --!nocheck
--- 수입·부화 시간·러닝머신·트레일·오프라인 수입
+-- 6판 Economy: 열매 값·성장 시간·정원 칸·러닝머신·트레일·오프라인 성장 (자동 수입·장착·오프라인 수입은 없어짐)
 
 return function(T, Loader)
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
+	local Plants = Loader.require("ReplicatedStorage/Shared/Data/Plants")
+	local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
 
-	T.suite("Economy")
+	T.suite("Economy (6판)")
 
-	T.test("펫 수입 = 기본 × 3 × 크기 × 돌연변이", function()
-		T.eq(Economy.petIncome("chicken", "normal", {}), 3)
-		T.eq(Economy.petIncome("chicken", "big", { "golden" }), 1 * 3 * 1.5 * 2)
-		T.eq(Economy.petIncome("brr_brr_patapim", "giant", {}), 1800 * 3 * 6)
-		T.eq(Economy.petIncome("없는펫", "normal", {}), 0)
+	T.test("열매 1개 값 = 식물 열매 값 × 크기 × 돌연변이 (5판 ×3 없음)", function()
+		local daisy = Plants.get("sprout_daisy").fruitValue -- 10
+		T.eq(Economy.fruitValue("sprout_daisy", "normal", {}), daisy)
+		T.eq(Economy.fruitValue("sprout_daisy", "big", { "golden" }), daisy * 1.5 * 2)
+		T.eq(Economy.fruitValue("sprout_daisy", "giant", { "rainbow", "burning" }), daisy * 6 * 2.5 * 1.5)
+		T.eq(Economy.fruitValue("없는식물", "normal", {}), 0)
+		T.eq(Economy.recordFruitValue({ petId = "owl_oak", size = "huge", mutations = {} }), 180 * 3)
+		T.eq(Economy.petIncome, nil, "5판 펫 수입 함수는 없어짐")
+		T.eq(Economy.totalIncome, nil)
+		T.eq(Economy.offlineIncome, nil)
 	end)
 
-	T.test("돌연변이 중첩 곱 (균열 2.75 × 혼란 2.75 = 7.5625)", function()
-		T.near(Economy.mutationMultiplier({ "fractured", "chaos" }), 7.5625, 1e-9)
-		T.near(Economy.mutationMultiplier({ "rainbow", "spirit_bloom" }), 7.5, 1e-9)
+	T.test("열매 간격 · 초당 코인 환산(표시용) = 열매 값 ÷ 간격", function()
+		local p = Plants.get("firefly_lily")
+		T.eq(Economy.fruitInterval("firefly_lily"), p.fruitIntervalSeconds)
+		T.eq(Economy.fruitInterval("없음"), math.huge)
+		T.near(
+			Economy.recordIncome({ petId = "firefly_lily", size = "normal", mutations = {} }),
+			p.fruitValue / p.fruitIntervalSeconds,
+			1e-12
+		)
+		T.eq(Economy.recordIncome({ petId = "없음", size = "normal", mutations = {} }), 0)
+	end)
+
+	T.test("돌연변이 중첩 곱 (황금 2 × 불 1.5 = 3, 무지개 2.5 × 번개 2 = 5)", function()
+		T.near(Economy.mutationMultiplier({ "golden", "burning" }), 3, 1e-9)
+		T.near(Economy.mutationMultiplier({ "rainbow", "shocked" }), 5, 1e-9)
 		T.eq(Economy.mutationMultiplier({}), 1)
 		T.eq(Economy.mutationMultiplier({ "모름" }), 1)
 	end)
 
-	T.test("돌연변이 조합 규칙: 자연 돌연변이 2개 불가, 자연+블룸 가능", function()
+	T.test("돌연변이 조합 규칙: 자연 2개 불가, 원소 2개 불가, 자연 + 원소 가능", function()
 		T.falsy(Economy.isValidMutationSet({ "silver", "golden" }))
-		T.truthy(Economy.isValidMutationSet({ "golden", "bloom" }))
-		T.falsy(Economy.isValidMutationSet({ "bloom", "spirit_bloom" }))
-		T.truthy(Economy.isValidMutationSet({ "fractured", "chaos", "parasite" }))
+		T.falsy(Economy.isValidMutationSet({ "frozen", "burning" }))
+		T.truthy(Economy.isValidMutationSet({ "golden", "frozen" }))
+		T.falsy(Economy.isValidMutationSet({ "bloom" }), "6판에 없는 돌연변이")
 	end)
 
-	T.test("장착된 펫만 합산, 중복 uid 는 한 번만", function()
-		local pets = {
-			{ uid = "p1", petId = "chicken", size = "normal", mutations = {} },
-			{ uid = "p2", petId = "dog", size = "normal", mutations = {} },
-			{ uid = "p3", petId = "bear", size = "normal", mutations = {} },
-		}
-		T.eq(Economy.totalIncome(pets, { "p1", "p2" }), 3 + 6)
-		T.eq(Economy.totalIncome(pets, { "p1", "p1", "없음" }), 3)
-		T.eq(Economy.totalIncome(pets, { "p3" }, 2), 240 * 3 * 2)
+	T.test("성장 시간 = Plants.growSeconds (hatchSeconds 는 별칭), 낮 1초 = 1, 밤 30배", function()
+		T.eq(Economy.growSeconds("puppy_grass"), 3)
+		T.eq(Economy.growSeconds("sprout_daisy"), 10)
+		T.eq(Economy.growSeconds("crystal_snowdrop"), 3600, "전설 1시간")
+		T.eq(Economy.growSeconds("rune_rose"), 86400, "비밀 1일")
+		T.eq(Economy.growSeconds("rainbow_thunder_tree"), 7 * 86400, "슈퍼 울트라디바인 7일")
+		T.eq(Economy.hatchSeconds("sprout_daisy"), 10)
+		T.eq(Economy.growSeconds("없는식물"), 1)
+		T.eq(Economy.remainingSeconds(0, 10, Economy.growthRate(false, false)), 10)
+		T.near(Economy.remainingSeconds(0, 10, Economy.growthRate(true, false)), 1 / 3, 1e-9)
+		T.eq(Economy.remainingSeconds(0, 300, Economy.growthRate(true, false)), 10, "희귀 5분은 밤 10초 내내")
 	end)
-
-	T.test("Equip Best: 수입 높은 순으로 칸 수만큼", function()
-		local pets = {
-			{ uid = "p1", petId = "chicken", size = "normal", mutations = {} },
-			{ uid = "p2", petId = "bear", size = "normal", mutations = {} },
-			{ uid = "p3", petId = "chicken", size = "giant", mutations = { "rainbow" } }, -- 1*3*6*2.5 = 45
-			{ uid = "p4", petId = "dog", size = "normal", mutations = {} },
-		}
-		local best = Economy.bestEquipSet(pets, 2)
-		T.eq(#best, 2)
-		T.eq(best[1], "p2")
-		T.eq(best[2], "p3")
-		T.eq(#Economy.bestEquipSet(pets, 10), 4)
-	end)
-
-	T.test(
-		"2판 수정 부화 시간 = 원작 그대로 (÷3 없음, 하한 없음) — 닭 10초 · 전설 5분 · 비밀 1.5시간 · 신성 24시간",
-		function()
-			T.eq(Economy.hatchSeconds("chicken"), 10)
-			T.eq(Economy.hatchSeconds("brr_brr_patapim"), 300, "전설 5분")
-			T.eq(Economy.hatchSeconds("king_snake"), 5400, "비밀 1.5시간")
-			T.eq(Economy.hatchSeconds("ghost_king"), 86400, "신성 24시간")
-			T.eq(Economy.hatchSeconds("jitterbug"), 20)
-			T.eq(Economy.hatchSeconds("없는펫"), 1)
-			-- 수입·러닝머신은 그대로 ×3
-			T.eq(Economy.growthMultiplier(), 3)
-			-- 낮 1초 = 1초, 밤 1초 = 30초 → 닭은 낮 10초, 밤 1초 안에
-			T.eq(Economy.remainingSeconds(0, 10, Economy.growthRate(false, false)), 10)
-			T.near(Economy.remainingSeconds(0, 10, Economy.growthRate(true, false)), 1 / 3, 1e-9)
-			T.eq(Economy.remainingSeconds(0, 300, Economy.growthRate(true, false)), 10, "전설은 밤 10초 내내")
-		end
-	)
 
 	T.test("성장 속도: 밤 30배, 게임패스 2배, 둘 다 60배", function()
 		T.eq(Economy.growthRate(false, false), 1)
@@ -77,7 +66,7 @@ return function(T, Loader)
 		T.eq(Economy.growthRate(true, true), 60)
 	end)
 
-	T.test("부화 진행: 밤 10초면 300초만큼 자람, 필요량에서 멈춤", function()
+	T.test("성장 진행: 밤 10초면 300초만큼 자람, 필요량에서 멈춤 (= 성체)", function()
 		local p, ready = Economy.advanceIncubation(0, 1800, 10, 30)
 		T.eq(p, 300)
 		T.falsy(ready)
@@ -85,9 +74,10 @@ return function(T, Loader)
 		T.eq(p, 1800)
 		T.truthy(ready)
 		T.eq(Economy.remainingSeconds(900, 1800, 30), 30)
+		T.eq(Economy.timerSeconds(1700, 1800), 100)
 	end)
 
-	T.test("우리 칸 / 다음 비용", function()
+	T.test("정원 칸 (5판 우리 칸 숫자 그대로) / 다음 비용", function()
 		T.eq(Economy.penSlots(1), 7)
 		T.eq(Economy.penSlots(11), 18)
 		T.eq(Economy.penSlots(99), 18)
@@ -95,28 +85,28 @@ return function(T, Loader)
 		T.eq(Economy.nextPenCost(11), nil)
 	end)
 
-	T.test("러닝머신: 잠김 0, 걸음당 속도 × 러닝머신 배율 × 초당 걸음", function()
-		local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
-		local k = Config.TREADMILL_MULTIPLIER * Config.TREADMILL_STEPS_PER_SECOND
-		T.eq(Economy.treadmillGainPerSecond(0), 0)
-		T.eq(Economy.treadmillGainPerSecond(1), 2 * k)
-		T.eq(Economy.treadmillGainPerSecond(10), 2000 * k)
-		T.eq(Economy.treadmillGainPerSecond(10, 2), 4000 * k)
-		T.eq(Economy.nextTreadmillCost(0), 1000)
-		T.eq(Economy.nextTreadmillCost(10), nil)
-	end)
-
-	T.test("보관함 넘침: 장착 안 된 펫 중 수입이 가장 낮은 펫", function()
-		local pets = {
-			{ uid = "p1", petId = "chicken", size = "normal", mutations = {} }, -- 3 (장착)
-			{ uid = "p2", petId = "bear", size = "normal", mutations = {} },
-			{ uid = "p3", petId = "dog", size = "normal", mutations = {} }, -- 6
-			{ uid = "p4", petId = "chicken", size = "big", mutations = {} }, -- 4.5
-		}
-		T.eq(Economy.cheapestUnequipped(pets, { "p1" }), "p4")
-		T.eq(Economy.cheapestUnequipped(pets, {}), "p1")
-		T.eq(Economy.cheapestUnequipped(pets, { "p1", "p2", "p3", "p4" }), nil)
-	end)
+	T.test(
+		"러닝머신: 잠김 0, 걸음당 속도 × 러닝머신 배율(4) × 초당 걸음, 최대 20레벨 = 정확히 1초 1,000,000",
+		function()
+			local k = Config.TREADMILL_MULTIPLIER * Config.TREADMILL_STEPS_PER_SECOND
+			T.eq(Config.TREADMILL_MULTIPLIER, 4)
+			T.eq(Economy.treadmillGainPerSecond(0), 0)
+			T.eq(Economy.treadmillGainPerSecond(1), 8, "1레벨 8/초 (5판 6/초 근처)")
+			T.eq(Economy.treadmillGainPerSecond(1), 2 * k)
+			T.eq(Economy.treadmillGainPerSecond(10), 2000 * k)
+			T.eq(Economy.treadmillGainPerSecond(20), 1000000, "부동소수 오차 없이 1M")
+			T.eq(Economy.treadmillGainPerSecond(99), 1000000, "최대 레벨 위로는 그대로")
+			T.eq(Economy.treadmillGainPerSecond(10, 2), 4000 * k)
+			T.eq(Economy.nextTreadmillCost(0), 1000)
+			T.eq(Economy.nextTreadmillCost(10), 3e15)
+			T.eq(Economy.nextTreadmillCost(19), 60e18)
+			T.eq(Economy.nextTreadmillCost(20), nil)
+			local Format = Loader.require("ReplicatedStorage/Shared/Format")
+			T.eq(Format.number(60e18), "60Qi", "Qi 단위 표시")
+			T.eq(Format.number(2.2e18), "2.2Qi")
+			T.eq(Format.number(1e21), "1Sx")
+		end
+	)
 
 	T.test("트레일: 가장 높은 배율 하나만 (중첩 아님)", function()
 		T.eq(Economy.bestTrailMultiplier({}), 1)
@@ -136,16 +126,11 @@ return function(T, Loader)
 		T.eq(Economy.bestTrailId({ "모름" }), "none")
 	end)
 
-	T.test("오프라인 수입: 차이 × 초당 수입, 상한 24시간, 시계 역행 0", function()
-		local amount, seconds = Economy.offlineIncome(100, 1000, 1000 + 3600)
-		T.eq(amount, 360000)
-		T.eq(seconds, 3600)
-		amount, seconds = Economy.offlineIncome(100, 1000, 1000 + 10 * 86400)
-		T.eq(seconds, 86400)
-		T.eq(amount, 8640000)
-		amount = Economy.offlineIncome(100, 5000, 1000)
-		T.eq(amount, 0)
-		amount = Economy.offlineIncome(100, 0, 1000) -- 첫 접속
-		T.eq(amount, 0)
+	T.test("오프라인 성장 시간: 차이, 상한 24시간, 시계 역행·첫 접속 0", function()
+		T.eq(Economy.offlineGrowthSeconds(1000, 1000 + 3600), 3600)
+		T.eq(Economy.offlineGrowthSeconds(1000, 1000 + 10 * 86400), 86400)
+		T.eq(Economy.offlineGrowthSeconds(5000, 1000), 0)
+		T.eq(Economy.offlineGrowthSeconds(0, 1000), 0)
+		T.eq(Config.OFFLINE_GROWTH_CAP_SECONDS, 86400)
 	end)
 end

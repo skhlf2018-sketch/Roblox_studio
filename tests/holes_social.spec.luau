@@ -1,6 +1,6 @@
 --!nocheck
 --[[
-	5판 주임 검수 — 구멍 찾기 2: 랭킹판 · 쓰다듬기 · 퀘스트/선물 제거 · Remote 막 던지기
+	5판 주임 검수 — 구멍 찾기 2: 랭킹판 · 물 주기(6판, 5판 쓰다듬기 자리) · 퀘스트/선물 제거 · 공지 씨앗
 	  social.spec 이 "정상 경로"를 봤다면, 여기서는 경계값·엉터리 입력·남은 찌꺼기를 찾습니다.
 ]]
 
@@ -298,15 +298,32 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("5판 구멍 찾기: 쓰다듬기 (PetPet → PetPetted) — 전부 조용히 무시")
+	T.suite(
+		"6판 구멍 찾기: 물 주기 (PetPet → PetPetted, 5판 쓰다듬기 자리) — 전부 조용히 무시"
+	)
+
+	-- 정원 성체 하나 (PetService.addPlant)
+	local function plantRecord(uid, petId, x, z)
+		return {
+			uid = uid,
+			petId = petId,
+			size = "normal",
+			mutations = {},
+			x = x or -20,
+			z = z or 0,
+			fruits = 0,
+			fruitProgress = 0,
+		}
+	end
 
 	local function petWorld()
 		local w = world()
 		w.PetService.start()
 		w.player, w.session, w.data = join(w, 1001, "Owner")
 		w.session.plotIndex = 1
-		w.PetService.addPet(w.player, { uid = "p1", petId = "chicken", size = "normal", mutations = {} })
-		w.PetService.addPet(w.player, { uid = "p2", petId = "dog", size = "normal", mutations = {} }, false)
+		w.Config.WATER_COOLDOWN = 0 -- 식물마다 60초 쿨다운은 아래 따로 시험 (여기서는 입력 검사만)
+		w.PetService.addPlant(w.player, plantRecord("p1", "sprout_daisy", -20, 0))
+		w.PetService.addPlant(w.player, plantRecord("p2", "puppy_grass", -20, 10))
 		w.rect = w.MapLayout.penRect(1)
 		w.cx = (w.rect.xMin + w.rect.xMax) / 2
 		w.cz = (w.rect.zMin + w.rect.zMax) / 2
@@ -367,13 +384,13 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"남의 펫 uid: 다른 사람 보관함·장착 uid 를 보내도 무시, 같은 uid 이름(p1)이 겹쳐도 내 것만",
+		"남의 식물 uid: 다른 사람 정원 uid 를 보내도 무시, 같은 uid 이름(p1)이 겹쳐도 내 것만",
 		function()
 			local w = petWorld()
 			local other, otherSession, otherData = join(w, 2002, "Other")
 			otherSession.plotIndex = 2
-			w.PetService.addPet(other, { uid = "p77", petId = "bear", size = "normal", mutations = {} })
-			w.PetService.addPet(other, { uid = "p1", petId = "bear", size = "normal", mutations = {} }) -- 이름 겹침
+			w.PetService.addPlant(other, plantRecord("p77", "owl_oak", -20, 0))
+			w.PetService.addPlant(other, plantRecord("p1", "owl_oak", -20, 10)) -- 이름 겹침
 			w.H.client(w.player, "PetPet", "p77")
 			T.eq(#petted(w), 0, "남의 p77")
 			-- 나는 p1 이 있으니 통과하지만 알림은 "내" UserId 로
@@ -386,21 +403,29 @@ return function(T, Loader)
 		end
 	)
 
-	T.test(
-		"장착 안 한 펫(보관함에만) · 장착을 풀면 바로 무시 · 다시 장착하면 됨",
-		function()
-			local w = petWorld()
-			w.H.client(w.player, "PetPet", "p2")
-			T.eq(#petted(w), 0, "보관함에만 있는 펫")
-			w.H.client(w.player, "UnequipPet", "p1")
-			w.H.client(w.player, "PetPet", "p1")
-			T.eq(#petted(w), 0, "장착 해제한 펫")
-			w.H.client(w.player, "EquipPet", "p1")
-			w.H.client(w.player, "PetPet", "p1")
-			T.eq(#petted(w), 1, "다시 장착하면 됨")
-			w.H.uninstall()
-		end
-	)
+	T.test("뽑아서 판 성체는 바로 무시, 정원에 자라는 씨앗은 됨 (성장 +10초)", function()
+		local w = petWorld()
+		w.PetService.removePlants(w.player, { "p2" })
+		w.H.client(w.player, "PetPet", "p2")
+		T.eq(#petted(w), 0, "없어진 성체")
+		table.insert(w.data.incubators, {
+			uid = "i9",
+			petId = "owl_oak",
+			size = "normal",
+			mutations = {},
+			biomeId = "forest",
+			special = false,
+			x = -30,
+			z = -20,
+			progress = 0,
+			required = 240,
+		})
+		w.H.advance(1.1)
+		w.H.client(w.player, "PetPet", "i9")
+		T.eq(#petted(w), 1, "자라는 씨앗")
+		T.eq(w.data.incubators[1].progress, 10)
+		w.H.uninstall()
+	end)
 
 	T.test(
 		"거리: 우리 가장자리에서 19.9 는 되고 20.1 은 안 됨 — 앞·뒤·옆·대각선 모두 (대각선은 축별이 아니라 진짜 거리)",
@@ -455,7 +480,7 @@ return function(T, Loader)
 			w.H.advance(1.1)
 			local other, otherSession = join(w, 2002, "Other")
 			otherSession.plotIndex = 2
-			w.PetService.addPet(other, { uid = "p1", petId = "bear", size = "normal", mutations = {} })
+			w.PetService.addPlant(other, plantRecord("p1", "owl_oak"))
 			local r2 = w.MapLayout.penRect(2)
 			w.H.spawn(other, (r2.xMin + r2.xMax) / 2, 3, (r2.zMin + r2.zMax) / 2)
 			w.H.client(w.player, "PetPet", "p1")
@@ -503,13 +528,29 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("저장 데이터가 어긋난 경우(장착 목록에 보관함에 없는 uid): 무시", function()
-		local w = petWorld()
-		table.insert(w.data.equipped, "ghost")
-		w.H.client(w.player, "PetPet", "ghost")
-		T.eq(#petted(w), 0, "장착 목록에만 있고 pets 에 없는 uid")
-		w.H.uninstall()
-	end)
+	T.test(
+		"가방 속 씨앗 uid · 도감에만 있는 식물 id 로는 물 주기 안 됨 (정원에 있어야 함)",
+		function()
+			local w = petWorld()
+			w.data.indexDiscovered.ghost = true
+			table.insert(w.data.eggs, {
+				uid = "i50",
+				petId = "sprout_daisy",
+				size = "normal",
+				mutations = {},
+				biomeId = "forest",
+				special = false,
+				progress = 0,
+				required = 10,
+			})
+			w.H.client(w.player, "PetPet", "i50")
+			w.H.advance(1.1)
+			w.H.client(w.player, "PetPet", "ghost")
+			T.eq(#petted(w), 0)
+			T.eq(w.data.eggs[1].progress, 0, "가방 속 씨앗은 안 자람")
+			w.H.uninstall()
+		end
+	)
 
 	T.test(
 		"정상이면 PetPetted(ownerUserId, uid) 가 서버 전체에 딱 한 번, 인자는 정확히 2개",
@@ -545,6 +586,30 @@ return function(T, Loader)
 			w.H.client(w.player, "PetPet", "p1")
 			T.eq(#petted(w), 2)
 			w.PetService.petPet = real
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"식물마다 60초 쿨다운 경계: 59.9초 뒤는 안내만, 60초 뒤는 됨, 다른 식물은 바로 됨, 거부돼도 쿨다운을 다시 시작하지 않음",
+		function()
+			local w = petWorld()
+			w.Config.WATER_COOLDOWN = 60
+			w.H.client(w.player, "PetPet", "p1")
+			T.eq(#petted(w), 1)
+			w.H.advance(1.1)
+			w.H.client(w.player, "PetPet", "p2")
+			T.eq(#petted(w), 2, "다른 식물은 바로")
+			w.H.advance(58.7) -- p1 은 59.8초째
+			w.H.client(w.player, "PetPet", "p1")
+			T.eq(#petted(w), 2, "59.8초는 아직")
+			T.truthy(w.H.hasNotify(w.player, "info", "또 물을 줄 수 있어요"))
+			w.H.advance(0.3) -- 60.1초째
+			w.H.client(w.player, "PetPet", "p1")
+			T.eq(#petted(w), 2, "거부 직후 1초 연타 막기 (사람마다 1초)")
+			w.H.advance(1.1)
+			w.H.client(w.player, "PetPet", "p1")
+			T.eq(#petted(w), 3, "60초 지나면 됨 (거부된 시도가 60초를 다시 시작하지 않음)")
 			w.H.uninstall()
 		end
 	)
@@ -737,7 +802,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"옛 퀘스트 알 2종(지터버그 · 영혼 세계 수호자): 여전히 EXTRA_SPECIALS 로 둥지에 나옴 — 400번 초기화에서 둘 다, 공지와 함께, 자기 구역에",
+		"6판 공지 씨앗 4종(춤추는 버섯·세계수·황혼 꽃·균형의 나무): EXTRA_SPECIALS 로 둥지에 나옴 — 400번 초기화에서 전부, 공지와 함께, 자기 구역에",
 		function()
 			local H = ServerHarness.install(Loader, T, { realEgg = true })
 			H.startNet()
@@ -747,7 +812,7 @@ return function(T, Loader)
 			EggService.start()
 			H.setPhase("Intermission", 1)
 			H.setPhase("Day", 1)
-			local seen = { jitterbug = 0, spirit_world_guardian = 0 }
+			local seen = { dancing_mushroom = 0, world_tree = 0, twilight_bloom = 0, balance_tree = 0 }
 			for cycle = 2, 401 do
 				H.setPhase("Intermission", cycle)
 				for _, egg in H.map.folders.Eggs.children do
@@ -760,59 +825,69 @@ return function(T, Loader)
 					end
 				end
 			end
-			-- 확률: 지터버그 8% → 400번 중 약 32, 영혼 세계 수호자 1% → 약 4
-			T.truthy(seen.jitterbug >= 12 and seen.jitterbug <= 70, "지터버그 " .. seen.jitterbug .. "번")
-			T.truthy(seen.spirit_world_guardian >= 1, "영혼 세계 수호자 " .. seen.spirit_world_guardian .. "번")
+			-- 확률: 춤추는 버섯 8% → 400번 중 약 32, 황혼 꽃 5% → 약 20, 세계수·균형의 나무 1% → 약 4
+			T.truthy(
+				seen.dancing_mushroom >= 12 and seen.dancing_mushroom <= 70,
+				"춤추는 버섯 " .. seen.dancing_mushroom .. "번"
+			)
+			T.truthy(
+				seen.twilight_bloom >= 5 and seen.twilight_bloom <= 45,
+				"황혼 꽃 " .. seen.twilight_bloom .. "번"
+			)
+			T.truthy(seen.world_tree >= 1, "세계수 " .. seen.world_tree .. "번")
+			T.truthy(seen.balance_tree >= 1, "균형의 나무 " .. seen.balance_tree .. "번")
 			-- 둘 다 알 파트에서 직접 확인했으니, 데이터 표도 일치
 			local listed = {}
 			for _, entry in EggSpawn.EXTRA_SPECIALS do
 				listed[entry.petId] = entry.chance
 				T.eq(Pets.get(entry.petId).source, "special")
 			end
-			T.eq(listed.jitterbug, 0.08)
-			T.eq(listed.spirit_world_guardian, 0.01)
+			T.eq(listed.dancing_mushroom, 0.08)
+			T.eq(listed.world_tree, 0.01)
+			T.eq(listed.twilight_bloom, 0.05)
+			T.eq(listed.balance_tree, 0.01)
 			-- 공지도 그만큼 나갔는지
 			local rareAnnounces = 0
 			for _, args in H.remotes.Announce.firedAll do
-				if
-					args[1].kind == "rareEgg"
-					and (args[1].petId == "jitterbug" or args[1].petId == "spirit_world_guardian")
-				then
+				if args[1].kind == "rareEgg" and seen[args[1].petId] ~= nil then
 					rareAnnounces += 1
 				end
 			end
-			T.truthy(rareAnnounces >= seen.jitterbug + seen.spirit_world_guardian - 2, "공지 " .. rareAnnounces)
+			local total = seen.dancing_mushroom + seen.world_tree + seen.twilight_bloom + seen.balance_tree
+			T.truthy(rareAnnounces >= total - 2, "공지 " .. rareAnnounces)
 			H.uninstall()
 		end
 	)
 
 	T.test(
-		"EggRoll.rollExtraSpecials: 난수 0 이면 둘 다, 난수 0.999 이면 아무것도 안 나옴, 모르는 펫 id 는 건너뜀",
+		"EggRoll.rollExtraSpecials: 난수 0 이면 4종 다, 난수 0.999 이면 아무것도 안 나옴, 모르는 식물 id 는 건너뜀",
 		function()
 			local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
 			local EggSpawn = Loader.require("ReplicatedStorage/Shared/Data/EggSpawn")
 			local all = EggRoll.rollExtraSpecials(T.constant(0))
-			T.eq(#all, 2)
+			T.eq(#all, 4)
 			T.eq(#EggRoll.rollExtraSpecials(T.constant(0.999)), 0)
 			-- 가장자리: 정확히 chance 이면 안 나옴(rand() < chance)
-			T.eq(#EggRoll.rollExtraSpecials(T.constant(0.01)), 1, "0.01 → 지터버그(8%)만")
+			T.eq(#EggRoll.rollExtraSpecials(T.constant(0.01)), 2, "0.01 → 춤추는 버섯(8%)·황혼 꽃(5%)만")
 			-- 모르는 펫 id 가 섞이면 건너뜀
 			table.insert(EggSpawn.EXTRA_SPECIALS, { petId = "no_such_pet", chance = 1 })
 			local ok, list = pcall(EggRoll.rollExtraSpecials, T.constant(0))
 			table.remove(EggSpawn.EXTRA_SPECIALS)
 			T.truthy(ok, "모르는 펫 id 에 터짐")
-			T.eq(#list, 2)
+			T.eq(#list, 4)
 			-- 통계
 			local rng = T.rng(99)
-			local counts = { jitterbug = 0, spirit_world_guardian = 0 }
+			local counts = { dancing_mushroom = 0, world_tree = 0, twilight_bloom = 0, balance_tree = 0 }
 			local N = 20000
 			for _ = 1, N do
 				for _, pet in EggRoll.rollExtraSpecials(rng) do
 					counts[pet.id] += 1
 				end
 			end
-			T.near(counts.jitterbug / N, 0.08, 0.01)
-			T.near(counts.spirit_world_guardian / N, 0.01, 0.004)
+			T.near(counts.dancing_mushroom / N, 0.08, 0.01)
+			T.near(counts.twilight_bloom / N, 0.05, 0.008)
+			T.near(counts.world_tree / N, 0.01, 0.004)
+			T.near(counts.balance_tree / N, 0.01, 0.004)
 		end
 	)
 end

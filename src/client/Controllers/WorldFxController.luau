@@ -262,17 +262,9 @@ function WorldFxController.start()
 			penPets[uid] = inst
 		end
 	end)
-	-- 장착 펫이 돈을 벌 때마다 "+$34K" (서버 IncomeTick: 내 펫만 옴)
-	Net.onLater(Remotes.ToClient.IncomeTick, function(payload: any)
-		if typeof(payload) ~= "table" then
-			return
-		end
-		local model = penPets[tostring(payload.petUid)]
-		local amount = tonumber(payload.amount)
-		if model and model.Parent and amount and amount > 0 then
-			popMoney(model, amount)
-		end
-	end)
+	-- [6판 수석 임시] 자동 수입 팝업(IncomeTick)은 없어짐. 선임: 열매를 딴 식물(GardenPlant 파트, Attr PlantUid) 위에
+	--   FruitPicked { plantUid, value } 로 "+코인" 팝업 (popMoney 는 Model 용 — 파트용으로 바꿔 쓰기)
+	--   성체 파트는 BaseService 의 GardenPlant 태그 파트 (Attr PlantUid) — 선임이 식물 모델·열매 연출로 바꿀 예정
 	-- 자는 경비 머리 위 Z 둥실둥실 (서버 PetVisualService 의 SleepZ 빌보드)
 	local zLabels: { { label: TextLabel, base: UDim2, phase: number } } = {}
 	local function watchZ(guard: Instance)
@@ -442,7 +434,7 @@ function WorldFxController.start()
 			burst(pad.Position + Vector3.new(0, 1, 0), Color3.fromRGB(255, 240, 120), 30, 0.9, 12)
 		end
 	end)
-	Net.on(E.HatchResult, function()
+	Net.on(E.PlantGrown, function()
 		local head = myHead()
 		if head then
 			burst(head.Position, Color3.fromRGB(255, 235, 140), 50, 1, 14)

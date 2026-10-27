@@ -1,5 +1,5 @@
 --!nocheck
--- 가중치 추첨, 크기/돌연변이 확률, 둥지 풀, 특별 알 추첨
+-- 가중치 추첨, 크기/돌연변이 확률, 둥지 풀(6판: 구역 등급표), 특별 씨앗 추첨
 
 return function(T, Loader)
 	local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
@@ -33,7 +33,7 @@ return function(T, Loader)
 		T.near(counts.giant / n, 0.02, 0.002, "giant")
 	end)
 
-	T.test("자연 돌연변이 ≈ 실버 5% / 골든 2% / 레인보우 0.5%", function()
+	T.test("자연 돌연변이 ≈ 실버 5% / 황금 2% / 무지개 0.5%", function()
 		local rand = T.rng(999)
 		local counts = { silver = 0, golden = 0, rainbow = 0, none = 0 }
 		local n = 400000
@@ -46,7 +46,7 @@ return function(T, Loader)
 		T.near(counts.rainbow / n, 0.005, 0.0007, "rainbow")
 	end)
 
-	T.test("둥지 풀: 퀘스트/합성/제단 펫 제외, 천사&악마는 쪽별", function()
+	T.test("둥지 풀: 공지 씨앗·사쿠라 씨앗 제외, 천사&악마는 쪽별", function()
 		T.eq(#EggRoll.nestPool("forest", nil), 8)
 		T.eq(#EggRoll.nestPool("enchanted_forest", nil), 8)
 		local light = EggRoll.nestPool("angels_demons", "light")
@@ -58,26 +58,30 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"2판 수정 구역 중심 희귀도: 숲 1(일반) → 유령 성 10(신성), 구역 순서대로 안 내려감",
+		"6판 구역 등급 가중치: 등급을 표대로 고르고 그 등급 안에서 고르게 (식물 가중치 = 등급 가중치 ÷ 같은 등급 수)",
 		function()
-			local expected = { 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 9, 9, 10 }
-			local prev = 0
-			for i, b in Biomes.list do
-				local c = EggRoll.centerRarity(b.id)
-				T.eq(c, expected[i], b.id)
-				T.truthy(c >= prev, "증가 " .. b.id)
-				prev = c
-			end
-			T.eq(EggRoll.centerRarity("forest"), 1)
-			T.eq(EggRoll.centerRarity("haunted_castle"), 10)
-			T.eq(EggRoll.centerRarity("없는구역"), 1)
+			T.eq(EggRoll.centerRarity, nil, "5판 중심 희귀도 방식은 없앰")
+			-- 숲: 일반 60 (3종) / 고급 35 (3종) / 희귀 5 (2종)
+			local odds = EggRoll.nestOdds("forest", nil)
+			T.near(odds.sprout_daisy, 0.60 / 3, 1e-9)
+			T.near(odds.puppy_grass, 0.60 / 3, 1e-9)
+			T.near(odds.mossy_fern, 0.35 / 3, 1e-9)
+			T.near(odds.owl_oak, 0.05 / 2, 1e-9)
+			T.eq(EggRoll.rarityWeight("forest", "epic"), 0)
+			T.eq(EggRoll.rarityWeight("없는구역", "common"), 0)
+			-- 천사&악마: 쪽마다 같은 확률표 (신화 45 / 코스믹 45 / 비밀 10)
+			local light = EggRoll.nestOdds("angels_demons", "light")
+			local dark = EggRoll.nestOdds("angels_demons", "dark")
+			T.near(light.halo_daisy, 0.45 / 3, 1e-9)
+			T.near(dark.horn_thistle, 0.45 / 3, 1e-9)
+			T.near(light.heaven_tree, 0.10 / 2, 1e-9)
+			T.eq(light.horn_thistle, nil, "지옥 쪽 식물은 천국 주기에 안 나옴")
 		end
 	)
 
 	T.test(
-		"일반 추첨: 앞 구역은 비밀/영원/신성이 안 나오고(중심 ±2 밖 = 특별 알로만), 뒤 구역은 보통 둥지에도 나옴, 구역 펫 8종 안에서만",
+		"일반 추첨: 구역 둥지 풀 안에서만, 구역 표에 없는 등급은 안 나옴, 슈퍼 울트라디바인은 일반 추첨에 안 나옴",
 		function()
-			local Rarities = Loader.require("ReplicatedStorage/Shared/Data/Rarities")
 			local rand = T.rng(42)
 			for _, b in Biomes.list do
 				local side = Biomes.sideForCycle(b, 1)
@@ -85,65 +89,53 @@ return function(T, Loader)
 				for _, p in EggRoll.nestPool(b.id, side) do
 					pool[p.id] = true
 				end
-				local center = EggRoll.centerRarity(b.id)
 				for _ = 1, 300 do
 					local pet = EggRoll.rollNestPet(b.id, side, rand)
 					T.truthy(pet, b.id .. " 추첨 결과")
 					T.truthy(pool[pet.id], b.id .. " 풀 밖 " .. pet.id)
-					local order = Rarities.order(pet.rarity)
-					if order >= Rarities.order("secret") then
-						T.truthy(math.abs(order - center) <= 2, b.id .. " 앞 구역에 일반 스폰 " .. pet.id)
-					end
+					T.truthy(EggRoll.rarityWeight(b.id, pet.rarity) > 0, b.id .. " 표 밖 등급 " .. pet.rarity)
+					T.truthy(
+						pet.rarity ~= "super_ultradivine",
+						b.id .. " 슈퍼 울트라디바인이 일반 둥지에"
+					)
 				end
 			end
-			-- 정글(중심 3)의 킹 스네이크(비밀)는 일반 추첨 0 → 초기화 특별 알로만
-			T.eq(EggRoll.nestOdds("jungle", nil).king_snake, 0)
-			-- 유령 성(중심 10)은 신성 유령 왕이 가장 자주
 			local castle = EggRoll.nestOdds("haunted_castle", nil)
-			for id, p in castle do
-				T.truthy(castle.ghost_king >= p, "유령 왕이 가장 흔함 " .. id)
-			end
+			T.eq(castle.rainbow_thunder_tree, 0)
+			T.eq(castle.sky_pillar_flower, 0)
 		end
 	)
 
 	T.test(
-		"2판 수정 희귀도 범위 (사장님): 숲 10만 번 추첨에서 전설 < 3%·일반+고급 대부분, 유령 성에서 비밀 이상 > 50%",
+		"등급 비율 (10만 번): 숲 일반 ≈ 60% · 고급 ≈ 35% · 희귀 ≈ 5%, 유령 성 영원 ≈ 55% · 신성 ≈ 45%",
 		function()
-			local Rarities = Loader.require("ReplicatedStorage/Shared/Data/Rarities")
-			local function share(biomeId, test)
+			local function shares(biomeId)
 				local rand = T.rng(2026)
-				local hits = 0
+				local counts = {}
 				local n = 100000
 				for _ = 1, n do
 					local pet = EggRoll.rollNestPet(biomeId, nil, rand)
-					if test(Rarities.order(pet.rarity)) then
-						hits += 1
-					end
+					counts[pet.rarity] = (counts[pet.rarity] or 0) + 1
 				end
-				return hits / n
+				for k, v in counts do
+					counts[k] = v / n
+				end
+				return counts
 			end
-			local legendary = Rarities.order("legendary")
-			local secret = Rarities.order("secret")
-			local forestLegend = share("forest", function(o)
-				return o >= legendary
-			end)
-			T.truthy(forestLegend < 0.03, "숲 전설 이상 " .. forestLegend)
-			local forestLow = share("forest", function(o)
-				return o <= Rarities.order("uncommon")
-			end)
-			T.truthy(forestLow > 0.75, "숲 일반·고급 " .. forestLow)
-			local castleHigh = share("haunted_castle", function(o)
-				return o >= secret
-			end)
-			T.truthy(castleHigh > 0.5, "유령 성 비밀 이상 " .. castleHigh)
-			-- 확률표(nestOdds)와 맞는지
-			T.near(EggRoll.nestOdds("forest", nil).brr_brr_patapim, 0.05 / 3.05, 1e-9)
+			local forest = shares("forest")
+			T.near(forest.common, 0.60, 0.01)
+			T.near(forest.uncommon, 0.35, 0.01)
+			T.near(forest.rare, 0.05, 0.005)
+			T.eq(forest.epic, nil)
+			local castle = shares("haunted_castle")
+			T.near(castle.eternity, 0.55, 0.01)
+			T.near(castle.divine, 0.45, 0.01)
 		end
 	)
 
-	T.test("숲 확률: 닭이 파타핌보다 자주, 합 1", function()
+	T.test("숲 확률표 합 1, 아기 데이지가 부엉이 참나무보다 자주", function()
 		local odds = EggRoll.nestOdds("forest", nil)
-		T.truthy(odds.chicken > odds.brr_brr_patapim)
+		T.truthy(odds.sprout_daisy > odds.owl_oak)
 		local sum = 0
 		for _, v in odds do
 			sum += v
@@ -151,26 +143,29 @@ return function(T, Loader)
 		T.near(sum, 1, 1e-9)
 	end)
 
-	T.test("특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음", function()
-		local specials = EggRoll.rollSpecials("haunted_castle", nil, T.constant(0))
-		T.eq(#specials, EggSpawn.MAX_SPECIALS_PER_BIOME)
-		T.eq(specials[1].rarity, "divine")
-		T.eq(specials[2].rarity, "eternal")
-		T.eq(#EggRoll.rollSpecials("haunted_castle", nil, T.constant(0.99)), 0)
-		-- 숲에는 비밀/영원/신성 펫이 없음
-		T.eq(#EggRoll.rollSpecials("forest", nil, T.constant(0)), 0)
-		-- 정글은 비밀(킹 스네이크)만
-		local jungle = EggRoll.rollSpecials("jungle", nil, T.constant(0))
-		T.eq(#jungle, 1)
-		T.eq(jungle[1].id, "king_snake")
-	end)
+	T.test(
+		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (슈퍼 울트라디바인은 유령 성에서만)",
+		function()
+			local specials = EggRoll.rollSpecials("haunted_castle", nil, T.constant(0))
+			T.eq(#specials, EggSpawn.MAX_SPECIALS_PER_BIOME)
+			T.eq(specials[1].rarity, "super_ultradivine")
+			T.eq(specials[2].rarity, "divine")
+			T.eq(#EggRoll.rollSpecials("haunted_castle", nil, T.constant(0.99)), 0)
+			-- 숲에는 비밀 이상 식물이 없음
+			T.eq(#EggRoll.rollSpecials("forest", nil, T.constant(0)), 0)
+			-- 타이탄 사원(신화·코스믹·비밀)은 비밀만
+			local titan = EggRoll.rollSpecials("titan_temple", nil, T.constant(0))
+			T.eq(#titan, 1)
+			T.eq(titan[1].rarity, "secret")
+		end
+	)
 
-	T.test("특별 추첨 확률 ≈ 표 값 (정글 비밀 8%)", function()
+	T.test("특별 추첨 확률 ≈ 표 값 (타이탄 사원 비밀 8%)", function()
 		local rand = T.rng(7)
 		local hits = 0
 		local n = 100000
 		for _ = 1, n do
-			if #EggRoll.rollSpecials("jungle", nil, rand) > 0 then
+			if #EggRoll.rollSpecials("titan_temple", nil, rand) > 0 then
 				hits += 1
 			end
 		end
@@ -201,7 +196,7 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("모든 둥지 펫 id 는 Pets 에 존재", function()
+	T.test("모든 둥지 식물 id 는 Plants 에 존재", function()
 		for _, b in Biomes.list do
 			for _, side in b.sides or { false } do
 				for _, p in EggRoll.nestPool(b.id, side or nil) do

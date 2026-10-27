@@ -1,15 +1,18 @@
 --!strict
 --[[
-	Economy — 수입·부화 시간·러닝머신·트레일·오프라인 수입 계산 (순수 로직, Lune 테스트 대상)
+	Economy — 열매 값·성장 시간·정원 칸·러닝머신·트레일 계산 (6판 "씨앗을 훔치세요", 순수 로직, Lune 테스트 대상)
 
-	데이터 표(Pets, Upgrades)는 원본 숫자를 그대로 두고,
-	GROWTH_MULTIPLIER 는 오직 이 모듈에서만 적용합니다 (펫 수입 ×G, 러닝머신 ×G).
-	2판 수정: 부화 시간에는 안 씀 (원작 부화 시간 그대로, 밤 30배만).
+	6판: 자동 수입 없음 (코인 = 열매를 따서 판매 가판대에 팔기). 데이터 표(Data/Plants)의 숫자를 그대로 씀
+	  (5판 GROWTH_MULTIPLIER ×3 는 없앰 — 러닝머신 배율 Config.TREADMILL_MULTIPLIER 만 남음).
+	  열매 1개 값 = 식물 열매 값(Plants.fruitValue) × 크기 배율(Sizes.incomeMultiplier) × 돌연변이 배율(곱)
+	  recordIncome = 열매로 환산한 초당 코인 (표시용 — 정원 이름표·도감 등)
+	  성장 시간 = Plants.growSeconds (밤 30배는 growthRate)
+	  정원 칸 수 = Upgrades.Pen 칸 수 (penSlots — 5판 우리 장착 칸 숫자 그대로)
 ]]
 
 local Data = script.Parent.Data
 local Config = require(Data.Config)
-local Pets = require(Data.Pets)
+local Plants = require(Data.Plants)
 local Sizes = require(Data.Sizes)
 local Mutations = require(Data.Mutations)
 local Upgrades = require(Data.Upgrades)
@@ -19,12 +22,8 @@ type PetRecord = Types.PetRecord
 
 local Economy = {}
 
-function Economy.growthMultiplier(): number
-	return Config.GROWTH_MULTIPLIER
-end
-
 ------------------------------------------------------------------
--- 수입
+-- 열매 값
 ------------------------------------------------------------------
 
 function Economy.sizeMultiplier(sizeId: string): number
@@ -44,7 +43,7 @@ function Economy.mutationMultiplier(mutations: { string }): number
 	return total
 end
 
--- 같은 group 돌연변이가 2개 이상이면 false (예: 실버+골든 동시 불가)
+-- 같은 group 돌연변이가 2개 이상이면 false (예: 실버+황금 동시 불가)
 function Economy.isValidMutationSet(mutations: { string }): boolean
 	local seen: { [string]: boolean } = {}
 	for _, id in mutations do
@@ -60,92 +59,50 @@ function Economy.isValidMutationSet(mutations: { string }): boolean
 	return true
 end
 
--- 펫 1마리 초당 수입 = 기본(원본) × G × 크기 × 돌연변이
-function Economy.petIncome(petId: string, sizeId: string, mutations: { string }): number
-	local pet = Pets.get(petId)
-	if not pet then
+-- 열매 1개 값(코인) = 식물 열매 값 × 크기 × 돌연변이. 모르는 식물이면 0
+function Economy.fruitValue(petId: string, sizeId: string, mutations: { string }): number
+	local plant = Plants.get(petId)
+	if not plant then
 		return 0
 	end
-	return pet.income
-		* Config.GROWTH_MULTIPLIER
-		* Economy.sizeMultiplier(sizeId)
-		* Economy.mutationMultiplier(mutations)
+	return plant.fruitValue * Economy.sizeMultiplier(sizeId) * Economy.mutationMultiplier(mutations)
 end
 
-function Economy.recordIncome(record: PetRecord): number
-	return Economy.petIncome(record.petId, record.size, record.mutations)
+function Economy.recordFruitValue(record: { petId: string, size: string, mutations: { string } }): number
+	return Economy.fruitValue(record.petId, record.size, record.mutations)
 end
 
--- 장착된 펫들의 초당 수입 합 (moneyMultiplier: 게임패스·부스터, 기본 1)
-function Economy.totalIncome(records: { PetRecord }, equippedUids: { string }, moneyMultiplier: number?): number
-	local byUid: { [string]: PetRecord } = {}
-	for _, record in records do
-		byUid[record.uid] = record
-	end
-	local total = 0
-	local counted: { [string]: boolean } = {}
-	for _, uid in equippedUids do
-		local record = byUid[uid]
-		if record and not counted[uid] then
-			counted[uid] = true
-			total += Economy.recordIncome(record)
-		end
-	end
-	return total * (moneyMultiplier or 1)
+-- 열매 맺는 간격(초). 모르는 식물이면 math.huge (열매 안 맺음)
+function Economy.fruitInterval(petId: string): number
+	local plant = Plants.get(petId)
+	return if plant then math.max(1, plant.fruitIntervalSeconds) else math.huge
 end
 
--- Equip Best: 수입이 높은 순서로 slots 마리의 uid (수입은 정렬 전에 한 번만 계산)
-type Entry = { uid: string, income: number }
-
-function Economy.bestEquipSet(records: { PetRecord }, slots: number): { string }
-	local entries: { Entry } = table.create(#records)
-	for i, record in records do
-		entries[i] = { uid = record.uid, income = Economy.recordIncome(record) }
+-- 열매로 환산한 초당 코인 (표시용, 6판은 자동으로 들어오지 않음)
+function Economy.recordIncome(record: { petId: string, size: string, mutations: { string } }): number
+	local interval = Economy.fruitInterval(record.petId)
+	if interval == math.huge then
+		return 0
 	end
-	table.sort(entries, function(a: Entry, b: Entry): boolean
-		if a.income == b.income then
-			return a.uid < b.uid
-		end
-		return a.income > b.income
-	end)
-	local result: { string } = {}
-	for i = 1, math.min(slots, #entries) do
-		table.insert(result, entries[i].uid)
-	end
-	return result
-end
-
--- 보관함이 넘칠 때 팔 펫: 장착 안 된 펫 중 수입이 가장 낮은 펫의 uid (없으면 nil)
-function Economy.cheapestUnequipped(records: { PetRecord }, equippedUids: { string }): string?
-	local equipped: { [string]: boolean } = {}
-	for _, uid in equippedUids do
-		equipped[uid] = true
-	end
-	local bestUid: string? = nil
-	local bestIncome = math.huge
-	for _, record in records do
-		if not equipped[record.uid] then
-			local income = Economy.recordIncome(record)
-			if income < bestIncome or (income == bestIncome and bestUid ~= nil and record.uid < bestUid) then
-				bestUid, bestIncome = record.uid, income
-			end
-		end
-	end
-	return bestUid
+	return Economy.recordFruitValue(record) / interval
 end
 
 ------------------------------------------------------------------
--- 부화
+-- 성장 (씨앗 → 성체)
 ------------------------------------------------------------------
 
--- 실제 부화 시간(초) = 원본 그대로 (2판 수정, 사장님 "모든 알이 3초로 끝나면 안 됨": ÷ GROWTH_MULTIPLIER 없앰,
--- 하한 없음). 닭 10초 · 전설 5분 · 비밀 1.5시간 · 신성 12~24시간. 빨라지는 건 밤 30배(growthRate)뿐
-function Economy.hatchSeconds(petId: string): number
-	local pet = Pets.get(petId)
-	if not pet then
+-- 성체까지 시간(초) = Data/Plants.growSeconds (낮 기준). 강아지풀 3초 · 일반 약 10초 · … · 슈퍼 울트라디바인 7~8일
+function Economy.growSeconds(petId: string): number
+	local plant = Plants.get(petId)
+	if not plant then
 		return 1
 	end
-	return pet.hatchSeconds
+	return plant.growSeconds
+end
+
+-- [5판 호환 이름] = growSeconds
+function Economy.hatchSeconds(petId: string): number
+	return Economy.growSeconds(petId)
 end
 
 -- 1초에 몇 초만큼 자라나: 밤 30배, 성장 2배 게임패스
@@ -160,13 +117,13 @@ function Economy.growthRate(isNight: boolean, hasGrowthPass: boolean): number
 	return rate
 end
 
--- 알 성장 진행: (새 진행도, 다 자랐나)
+-- 씨앗 성장 진행: (새 진행도, 다 자랐나 = 성체)
 function Economy.advanceIncubation(progress: number, required: number, dt: number, rate: number): (number, boolean)
 	local nextProgress = math.min(required, progress + math.max(0, dt) * rate)
 	return nextProgress, nextProgress >= required
 end
 
--- 알 위 타이머에 보여 줄 숫자 = 남은 "알 시간"(초). 밤에는 이 숫자가 1초에 30씩 줄고, 낮이면 1씩 줆
+-- 씨앗 위 타이머에 보여 줄 숫자 = 남은 "성장 시간"(초). 밤에는 이 숫자가 1초에 30씩 줄고, 낮이면 1씩 줆
 -- (4판: 밤이 되자마자 표시가 ÷30 으로 확 줄었다가 낮에 다시 늘어나던 것을 고침 — 숫자는 그대로, 줄어드는 빠르기만 바뀜)
 function Economy.timerSeconds(progress: number, required: number): number
 	return math.max(0, required - progress)
@@ -189,7 +146,7 @@ function Economy.penSlots(level: number): number
 	return entry.slots
 end
 
--- 다음 우리 레벨 비용 (최대면 nil)
+-- 다음 정원 레벨 비용 (최대면 nil)
 function Economy.nextPenCost(level: number): number?
 	local entry = Upgrades.Pen[level + 1]
 	return if entry then entry.cost else nil
@@ -203,7 +160,7 @@ function Economy.treadmillPerStep(level: number): number
 	return entry.perStep
 end
 
--- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × 러닝머신 배율(기본 G = 3) × 초당 걸음 × 부스터
+-- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × 러닝머신 배율(6판 4) × 초당 걸음 × 부스터 (20레벨 = 1,000,000/초)
 function Economy.treadmillGainPerSecond(level: number, boost: number?): number
 	return Economy.treadmillPerStep(level)
 		* Config.TREADMILL_MULTIPLIER
@@ -248,24 +205,15 @@ function Economy.trailMultiplier(equippedTrailId: string?): number
 end
 
 ------------------------------------------------------------------
--- 오프라인 수입
+-- 오프라인 (6판: 오프라인 수입 없음 — 씨앗이 자라고 성체가 열매를 맺을 뿐)
 ------------------------------------------------------------------
 
--- (지급액, 인정된 오프라인 초). 상한 24시간, 시계가 거꾸로면 0.
-function Economy.offlineIncome(incomePerSecond: number, lastSaveTime: number, now: number): (number, number)
-	if lastSaveTime <= 0 or incomePerSecond <= 0 then
-		return 0, 0
-	end
-	local seconds = math.clamp(now - lastSaveTime, 0, Config.OFFLINE_INCOME_CAP_SECONDS)
-	return math.floor(incomePerSecond * seconds * Config.OFFLINE_INCOME_RATE), seconds
-end
-
--- 오프라인 동안 부화 슬롯 알이 자란 시간 (밤 가속 없음, 상한 24시간)
+-- 오프라인 동안 정원에 심은 씨앗이 자란 시간·성체가 열매를 맺은 시간 (밤 가속 없음, 상한 24시간). 시계가 거꾸로면 0
 function Economy.offlineGrowthSeconds(lastSaveTime: number, now: number): number
 	if lastSaveTime <= 0 then
 		return 0
 	end
-	return math.clamp(now - lastSaveTime, 0, Config.OFFLINE_INCOME_CAP_SECONDS)
+	return math.clamp(now - lastSaveTime, 0, Config.OFFLINE_GROWTH_CAP_SECONDS)
 end
 
 return Economy

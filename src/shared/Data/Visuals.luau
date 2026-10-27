@@ -3,6 +3,11 @@
 	Visuals — 생김새 데이터 (색·체형·장식·구역 테마). 순수 데이터 (로블록스 API 없음).
 
 	선임 담당. 서버 PetVisualService / EggVisualService / MapBuilder 와 클라 연출이 읽습니다.
+
+	[6판 수석 임시 변경 — 선임이 식물 모양으로 바꿀 때까지] 식물 id(Data/Plants) 가 5판 펫 id 를 대신해서,
+	  pets 표 열쇠를 같은 구역·같은 순서의 새 식물 id 로 기계적으로 바꿈 (모양은 아직 5판 동물).
+	  경비 겉모습(Visuals.guards)은 옛 펫 id 그대로 extra 표로 옮김 (PetVisualService GUARD_EXTRAS 가 그 id 로 찾음).
+	  rarityEffects/eggLooks/specialEggs: eternal → eternity, + super_ultradivine. mutationLooks + frozen/burning/shocked.
 	색은 RGB 0~255 배열. Material 은 Enum.Material 이름(문자열).
 
 	펫 체형(body) 템플릿 17종:
@@ -141,176 +146,188 @@ local GLOW: PetOpts = { glow = true }
 local GHOST: PetOpts = { ghostly = true, glow = true }
 
 -- 1. 숲
-pet("chicken", "bird", "white", "cream", "yellow", "comb")
-pet("dog", "quad", "tan", "cream", "dbrown", "ears_floppy")
-pet("bird", "bird", "blue", "sky", "yellow", "crest")
-pet("burrowing_owl", "bird", "brown", "tan", "yellow", "owl_eyes")
-pet("raccoon", "quad", "gray", "white", "black", "ears_pointy,mask,stripes")
-pet("bear", "quad", "brown", "tan", "dbrown", "ears_round")
-pet("fox", "quad", "orange", "white", "dark", "ears_pointy,tail_fluffy")
-pet("brr_brr_patapim", "humanoid", "brown", "tan", "dgreen", "leaves")
+pet("sprout_daisy", "bird", "white", "cream", "yellow", "comb")
+pet("puppy_grass", "quad", "tan", "cream", "dbrown", "ears_floppy")
+pet("acorn_sprout", "bird", "blue", "sky", "yellow", "crest")
+pet("mossy_fern", "bird", "brown", "tan", "yellow", "owl_eyes")
+pet("bell_mushroom", "quad", "gray", "white", "black", "ears_pointy,mask,stripes")
+pet("honey_tulip", "quad", "brown", "tan", "dbrown", "ears_round")
+pet("owl_oak", "quad", "orange", "white", "dark", "ears_pointy,tail_fluffy")
+pet("firefly_lily", "humanoid", "brown", "tan", "dgreen", "leaves")
 
 -- 2. 호수
-pet("frog", "frog", "green", "lime", "yellow", "")
-pet("duckling", "bird", "yellow", "cream", "orange", "")
-pet("catfish", "fish", "gray", "tan", "dark", "whiskers")
-pet("turtle", "turtle", "green", "brown", "lime", "")
-pet("trulimero_trulicina", "fish", "sky", "white", "gray", "cat_ears,legs_short")
-pet("swan", "bird", "white", "cream", "orange", "long_neck")
-pet("axolotl", "lizard", "pink", "white", "hotpink", "gills")
-pet("leviathan", "snake", "navy", "teal", "cyan", "fins,spikes", GLOW)
+pet("water_clover", "frog", "green", "lime", "yellow", "")
+pet("ripple_reed", "bird", "yellow", "cream", "orange", "")
+pet("bubble_cress", "fish", "gray", "tan", "dark", "whiskers")
+pet("lotus_pad", "turtle", "green", "brown", "lime", "")
+pet("dewdrop_iris", "fish", "sky", "white", "gray", "cat_ears,legs_short")
+pet("frog_lily", "bird", "white", "cream", "orange", "long_neck")
+pet("moon_lotus", "lizard", "pink", "white", "hotpink", "gills")
+pet("rain_willow", "snake", "navy", "teal", "cyan", "fins,spikes", GLOW)
 
 -- 3. 사막
-pet("jerboa", "quad", "tan", "cream", "pink", "ears_long")
-pet("fennec", "quad", "cream", "white", "orange", "ears_big,tail_fluffy")
-pet("camel", "quad", "tan", "cream", "brown", "hump,long_neck")
-pet("tob_tobi_tob_tob", "blob", "tan", "cream", "red", "hat")
-pet("snake", "snake", "green", "yellow", "dgreen", "")
-pet("scorpion", "bug", "brown", "tan", "red", "claws,stinger")
-pet("sand_spider", "spider", "tan", "brown", "red", "")
-pet("royal_sphinx", "quad", "gold", "navy", "cyan", "pharaoh", GLOW)
+pet("sand_sprout", "quad", "tan", "cream", "pink", "ears_long")
+pet("pebble_cactus", "quad", "cream", "white", "orange", "ears_big,tail_fluffy")
+pet("dune_grass", "quad", "tan", "cream", "brown", "hump,long_neck")
+pet("sun_aloe", "blob", "tan", "cream", "red", "hat")
+pet("camel_thorn", "snake", "green", "yellow", "dgreen", "")
+pet("mirage_rose", "bug", "brown", "tan", "red", "claws,stinger")
+pet("pharaoh_palm", "spider", "tan", "brown", "red", "")
+pet("scorpion_cactus", "quad", "gold", "navy", "cyan", "pharaoh", GLOW)
 
 -- 4. 정글
-pet("toucan", "bird", "black", "white", "orange", "beak_big")
-pet("chimpanzee", "humanoid", "dbrown", "tan", "black", "ears_round")
-pet("crocodile", "lizard", "dgreen", "lime", "yellow", "spikes,teeth")
-pet("gorilla", "humanoid", "dark", "gray", "black", "brow")
-pet("orangutini_ananassini", "humanoid", "orange", "yellow", "green", "pineapple")
-pet("spider", "spider", "black", "red", "purple", "")
-pet("tiger", "quad", "orange", "white", "black", "ears_round,stripes")
-pet("king_snake", "snake", "red", "black", "gold", "crown,stripes")
+pet("banana_leaf", "bird", "black", "white", "orange", "beak_big")
+pet("vine_twist", "humanoid", "dbrown", "tan", "black", "ears_round")
+pet("parrot_flower", "lizard", "dgreen", "lime", "yellow", "spikes,teeth")
+pet("drum_gourd", "humanoid", "dark", "gray", "black", "brow")
+pet("monkey_fruit", "humanoid", "orange", "yellow", "green", "pineapple")
+pet("jungle_pitcher", "spider", "black", "red", "purple", "")
+pet("tiger_orchid", "quad", "orange", "white", "black", "ears_round,stripes")
+pet("thunder_bamboo", "snake", "red", "black", "gold", "crown,stripes")
 
 -- 5. 눈
-pet("penguin", "penguin", "black", "white", "orange", "")
-pet("walrus", "blob", "brown", "tan", "white", "tusks,whiskers")
-pet("polar_bear", "quad", "white", "cream", "black", "ears_round")
-pet("sabertooth_tiger", "quad", "tan", "cream", "white", "fangs,ears_round")
-pet("mammoth", "quad", "brown", "dbrown", "cream", "tusks,trunk,ears_big")
-pet("king_mammoth", "quad", "ice", "sky", "gold", "tusks,trunk,crown", GLOW)
-pet("yeti", "humanoid", "white", "sky", "dark", "horns")
-pet("ice_dragon", "dragon", "ice", "white", "cyan", "crystals,horns", GLOW)
+pet("snow_bell", "penguin", "black", "white", "orange", "")
+pet("frost_pine", "blob", "brown", "tan", "white", "tusks,whiskers")
+pet("ice_cactus", "quad", "white", "cream", "black", "ears_round")
+pet("penguin_tulip", "quad", "tan", "cream", "white", "fangs,ears_round")
+pet("aurora_fern", "quad", "brown", "dbrown", "cream", "tusks,trunk,ears_big")
+pet("icicle_rose", "quad", "ice", "sky", "gold", "tusks,trunk,crown", GLOW)
+pet("yeti_cabbage", "humanoid", "white", "sky", "dark", "horns")
+pet("crystal_snowdrop", "dragon", "ice", "white", "cyan", "crystals,horns", GLOW)
 
 -- 6. 화산
-pet("lava_gecko", "lizard", "red", "orange", "lava", "lava_spots")
-pet("lava_frog", "frog", "dark", "lava", "lava", "lava_spots")
-pet("flaming_bull", "quad", "dred", "red", "gold", "horns,flame")
-pet("lava_iguana", "lizard", "orange", "red", "black", "spikes")
-pet("chillin_chili", "blob", "red", "red", "green", "stem,sunglasses")
-pet("cerberus", "quad", "dark", "red", "lava", "three_heads,eyes_glow")
-pet("phoenix", "bird", "lava", "gold", "red", "flame,crest", GLOW)
-pet("lava_dragon", "dragon", "dark", "lava", "gold", "flame,horns", GLOW)
+pet("ember_sprout", "lizard", "red", "orange", "lava", "lava_spots")
+pet("lava_moss", "frog", "dark", "lava", "lava", "lava_spots")
+pet("ash_pepper", "quad", "dred", "red", "gold", "horns,flame")
+pet("flame_sunflower", "lizard", "orange", "red", "black", "spikes")
+pet("magma_cactus", "blob", "red", "red", "green", "stem,sunglasses")
+pet("smoke_tulip", "quad", "dark", "red", "lava", "three_heads,eyes_glow")
+pet("phoenix_lily", "bird", "lava", "gold", "red", "flame,crest", GLOW)
+pet("volcano_rose", "dragon", "dark", "lava", "gold", "flame,horns", GLOW)
 
 -- 7. 심연의 바다
-pet("parrotfish", "fish", "teal", "pink", "yellow", "")
-pet("swordfish", "fish", "navy", "sky", "white", "sword_nose")
-pet("shark", "fish", "gray", "white", "dark", "fin_big,teeth")
-pet("orca", "whale", "black", "white", "gray", "fin_big")
-pet("whale_shark", "whale", "navy", "white", "sky", "spots")
-pet("beluga_whale", "whale", "white", "ice", "gray", "")
-pet("kraken", "jelly", "purple", "red", "pink", "eyes_glow,tentacles_thick")
-pet("el_maja", "fish", "gold", "teal", "white", "crown,fin_big", GLOW)
+pet("coral_bloom", "fish", "teal", "pink", "yellow", "")
+pet("kelp_tower", "fish", "navy", "sky", "white", "sword_nose")
+pet("glow_anemone", "fish", "gray", "white", "dark", "fin_big,teeth")
+pet("pearl_shell_flower", "whale", "black", "white", "gray", "fin_big")
+pet("jelly_tulip", "whale", "navy", "white", "sky", "spots")
+pet("deep_lantern", "whale", "white", "ice", "gray", "")
+pet("whale_kelp", "jelly", "purple", "red", "pink", "eyes_glow,tentacles_thick")
+pet("abyss_orchid", "fish", "gold", "teal", "white", "crown,fin_big", GLOW)
 
 -- 8. 선사시대
-pet("dodo", "bird", "gray", "white", "yellow", "beak_big")
-pet("pterodactyl", "bird", "tan", "brown", "orange", "crest,bat_wings")
-pet("ankylosaurus", "quad", "olive", "tan", "brown", "spikes,club")
-pet("triceratops", "quad", "green", "tan", "cream", "frill")
-pet("bronto", "quad", "lime", "green", "tan", "long_neck")
-pet("tralaledon", "fish", "sky", "white", "blue", "legs_short,sneakers,teeth")
-pet("t_rex", "dino", "dgreen", "lime", "white", "teeth")
-pet("mosasaurus", "fish", "navy", "teal", "white", "teeth,fin_big", GLOW)
+pet("fossil_fern", "bird", "gray", "white", "yellow", "beak_big")
+pet("amber_moss", "bird", "tan", "brown", "orange", "crest,bat_wings")
+pet("giant_horsetail", "quad", "olive", "tan", "brown", "spikes,club")
+pet("dino_eggplant", "quad", "green", "tan", "cream", "frill")
+pet("tar_flower", "quad", "lime", "green", "tan", "long_neck")
+pet("cycad_king", "fish", "sky", "white", "blue", "legs_short,sneakers,teeth")
+pet("claw_vine", "dino", "dgreen", "lime", "white", "teeth")
+pet("mammoth_tree", "fish", "navy", "teal", "white", "teeth,fin_big", GLOW)
 
 -- 9. 코스믹
-pet("centapede", "snake", "purple", "violet", "cyan", "legs_many,eyes_glow")
-pet("cosmic_lizard", "lizard", "navy", "violet", "cyan", "stars", GLOW)
-pet("cosmic_gorilla", "humanoid", "navy", "purple", "cyan", "stars,brow", GLOW)
-pet("la_vacca_saturno_saturnita", "quad", "white", "black", "violet", "planet_ring,spots,horns")
-pet("cosmic_dragon", "dragon", "navy", "violet", "cyan", "stars,horns", GLOW)
-pet("cosmic_skeleton_boss", "humanoid", "bone", "purple", "cyan", "skull,crown", GLOW)
-pet("eternal_luna_dragon", "dragon", "silver", "sky", "gold", "moon,horns", GLOW)
-pet("unicorn", "quad", "white", "pink", "gold", "horn,mane", GLOW)
+pet("star_mushroom", "snake", "purple", "violet", "cyan", "legs_many,eyes_glow")
+pet("comet_tulip", "lizard", "navy", "violet", "cyan", "stars", GLOW)
+pet("moon_cabbage", "humanoid", "navy", "purple", "cyan", "stars,brow", GLOW)
+pet("nebula_rose", "quad", "white", "black", "violet", "planet_ring,spots,horns")
+pet("planet_pumpkin", "dragon", "navy", "violet", "cyan", "stars,horns", GLOW)
+pet("meteor_cactus", "humanoid", "bone", "purple", "cyan", "skull,crown", GLOW)
+pet("galaxy_tree", "dragon", "silver", "sky", "gold", "moon,horns", GLOW)
+pet("blackhole_lily", "quad", "white", "pink", "gold", "horn,mane", GLOW)
 
 -- 10. 벚꽃
-pet("crane", "bird", "white", "black", "red", "long_neck,comb")
-pet("salamander", "lizard", "orange", "black", "yellow", "spots")
-pet("red_panda", "quad", "orange", "white", "dbrown", "ears_pointy,tail_fluffy")
-pet("snowy_owl", "bird", "white", "gray", "yellow", "owl_eyes")
-pet("koi", "fish", "white", "orange", "red", "spots,whiskers")
-pet("stag", "quad", "brown", "cream", "tan", "antlers")
-pet("oni_tiger", "quad", "red", "black", "gold", "horns,stripes,eyes_glow", GLOW)
-pet("kitsune", "quad", "white", "red", "pink", "ears_pointy,nine_tails", GLOW)
+pet("petal_sprout", "bird", "white", "black", "red", "long_neck,comb")
+pet("lantern_peony", "lizard", "orange", "black", "yellow", "spots")
+pet("tea_camellia", "quad", "orange", "white", "dbrown", "ears_pointy,tail_fluffy")
+pet("koi_lotus", "bird", "white", "gray", "yellow", "owl_eyes")
+pet("bonsai_pine", "fish", "white", "orange", "red", "spots,whiskers")
+pet("fan_ginkgo", "quad", "brown", "cream", "tan", "antlers")
+pet("moon_plum", "quad", "red", "black", "gold", "horns,stripes,eyes_glow", GLOW)
+pet("dragon_wisteria", "quad", "white", "red", "pink", "ears_pointy,nine_tails", GLOW)
 
 -- 11. 타이탄 사원
-pet("crustacia", "bug", "red", "orange", "cream", "claws")
-pet("spideron", "spider", "gray", "gold", "red", "armor")
-pet("bladehide", "quad", "gray", "silver", "red", "blades")
-pet("mantaris", "bug", "lime", "dgreen", "gold", "scythe_arms,wings")
-pet("rhinotaur", "humanoid", "gray", "tan", "gold", "horn,armor")
-pet("mutant_shark", "fish", "lime", "purple", "gray", "fin_big,eyes_glow,teeth")
-pet("gorilla_king", "humanoid", "dark", "gold", "red", "crown,brow", GLOW)
-pet("nightflame", "dragon", "black", "violet", "purple", "flame,horns", GLOW)
+pet("stone_lotus", "bug", "red", "orange", "cream", "claws")
+pet("pillar_cactus", "spider", "gray", "gold", "red", "armor")
+pet("titan_moss", "quad", "gray", "silver", "red", "blades")
+pet("golden_vine", "bug", "lime", "dgreen", "gold", "scythe_arms,wings")
+pet("relic_rose", "humanoid", "gray", "tan", "gold", "horn,armor")
+pet("gong_flower", "fish", "lime", "purple", "gray", "fin_big,eyes_glow,teeth")
+pet("colossus_tree", "humanoid", "dark", "gold", "red", "crown,brow", GLOW)
+pet("temple_bloom", "dragon", "black", "violet", "purple", "flame,horns", GLOW)
 
 -- 12. 천사 & 악마 — 천국
-pet("light_dove", "bird", "white", "cream", "gold", "halo")
-pet("winged_lamb", "quad", "white", "cream", "gold", "wool,wings")
-pet("sacred_moth", "bug", "cream", "gold", "white", "wings")
-pet("holy_peacock", "bird", "teal", "gold", "white", "peacock_tail,crest")
-pet("pure_jellyfish", "jelly", "white", "sky", "gold", "halo", GLOW)
-pet("centaur", "quad", "tan", "white", "gold", "torso")
-pet("pegasus", "quad", "white", "sky", "gold", "wings,mane", GLOW)
-pet("archangel", "humanoid", "white", "gold", "sky", "wings,halo", GLOW)
+pet("halo_daisy", "bird", "white", "cream", "gold", "halo")
+pet("feather_fern", "quad", "white", "cream", "gold", "wool,wings")
+pet("cloud_cotton", "bug", "cream", "gold", "white", "wings")
+pet("harp_lily", "bird", "teal", "gold", "white", "peacock_tail,crest")
+pet("dawn_rose", "jelly", "white", "sky", "gold", "halo", GLOW)
+pet("angel_trumpet", "quad", "tan", "white", "gold", "torso")
+pet("heaven_tree", "quad", "white", "sky", "gold", "wings,mane", GLOW)
+pet("seraph_lotus", "humanoid", "white", "gold", "sky", "wings,halo", GLOW)
 -- 12. 천사 & 악마 — 지옥
-pet("flame_sprite", "ghost", "lava", "orange", "yellow", "flame", GLOW)
-pet("toro", "quad", "dark", "red", "gold", "horns")
-pet("imp", "humanoid", "red", "dark", "yellow", "horns,tail_devil")
-pet("demon_hound", "quad", "dark", "red", "lava", "horns,eyes_glow")
-pet("gargoyle", "humanoid", "gray", "dark", "red", "bat_wings,horns")
-pet("razorfang", "quad", "dark", "silver", "red", "fangs,blades")
-pet("skeleton_horse", "quad", "bone", "dark", "cyan", "skull,mane", GLOW)
-pet("world_burner", "dragon", "dark", "lava", "red", "flame,horns,eyes_glow", GLOW)
+pet("horn_thistle", "ghost", "lava", "orange", "yellow", "flame", GLOW)
+pet("bat_flower", "quad", "dark", "red", "gold", "horns")
+pet("shadow_ivy", "humanoid", "red", "dark", "yellow", "horns,tail_devil")
+pet("trident_cactus", "quad", "dark", "red", "lava", "horns,eyes_glow")
+pet("devil_pepper", "humanoid", "gray", "dark", "red", "bat_wings,horns")
+pet("lava_nightshade", "quad", "dark", "silver", "red", "fangs,blades")
+pet("inferno_tree", "quad", "bone", "dark", "cyan", "skull,mane", GLOW)
+pet("demon_rose", "dragon", "dark", "lava", "red", "flame,horns,eyes_glow", GLOW)
 -- 12. 천사 & 악마 — 중립/합성
-pet("ring_guard", "humanoid", "silver", "gold", "sky", "ring,helmet")
-pet("ringlord", "humanoid", "gold", "purple", "white", "ring,crown", GLOW)
-pet("equinox", "quad", "white", "dark", "gold", "wings,horn,mane", GLOW)
-pet("aetheron", "dragon", "white", "gold", "violet", "halo,horns", GLOW)
+pet("twilight_bloom", "humanoid", "silver", "gold", "sky", "ring,helmet")
+pet("balance_tree", "humanoid", "gold", "purple", "white", "ring,crown", GLOW)
+pet("blossom_fairy", "quad", "white", "dark", "gold", "wings,horn,mane", GLOW)
+pet("spirit_blossom", "dragon", "white", "gold", "violet", "halo,horns", GLOW)
 
 -- 13. 마법의 숲
-pet("prism_gecko", "lizard", "cyan", "pink", "violet", "crystals", GLOW)
-pet("petal_beetle", "bug", "pink", "green", "white", "flower")
-pet("enchanted_bluejay", "bird", "blue", "white", "cyan", "crest", GLOW)
-pet("astral_jackalope", "quad", "violet", "white", "cyan", "ears_long,antlers", GLOW)
-pet("spirit_panda", "quad", "white", "black", "mint", "ears_round,eyes_glow", GLOW)
-pet("starry_fox", "quad", "navy", "violet", "yellow", "ears_pointy,tail_fluffy,stars", GLOW)
-pet("celestial_sunlion", "quad", "gold", "orange", "white", "mane,halo", GLOW)
-pet("royal_skywhale", "whale", "sky", "white", "gold", "crown,wings", GLOW)
-pet("jitterbug", "bug", "lime", "yellow", "cyan", "wings,eyes_glow", GLOW)
-pet("spirit_world_guardian", "humanoid", "mint", "white", "cyan", "antlers,halo", GHOST)
+pet("fairy_bell", "lizard", "cyan", "pink", "violet", "crystals", GLOW)
+pet("wish_dandelion", "bug", "pink", "green", "white", "flower")
+pet("glow_toadstool", "bird", "blue", "white", "cyan", "crest", GLOW)
+pet("unicorn_ivy", "quad", "violet", "white", "cyan", "ears_long,antlers", GLOW)
+pet("rune_rose", "quad", "white", "black", "mint", "ears_round,eyes_glow", GLOW)
+pet("spell_lily", "quad", "navy", "violet", "yellow", "ears_pointy,tail_fluffy,stars", GLOW)
+pet("elder_tree", "quad", "gold", "orange", "white", "mane,halo", GLOW)
+pet("crystal_willow", "whale", "sky", "white", "gold", "crown,wings", GLOW)
+pet("dancing_mushroom", "bug", "lime", "yellow", "cyan", "wings,eyes_glow", GLOW)
+pet("world_tree", "humanoid", "mint", "white", "cyan", "antlers,halo", GHOST)
 
 -- 14. 사탕 왕국
-pet("gummy_bear", "humanoid", "red", "pink", "white", "ears_round", { material = "Glass", glow = false })
-pet("lollipop_bunny", "quad", "pink", "white", "hotpink", "ears_long,lollipop")
-pet("cotton_candy_sheep", "quad", "pink", "sky", "white", "wool")
-pet("donut_turtle", "turtle", "tan", "pink", "yellow", "icing,sprinkles")
-pet("candy_unicorn", "quad", "pink", "sky", "white", "horn,mane,sprinkles", GLOW)
-pet("marshmallow_golem", "humanoid", "white", "pink", "cream", "buttons")
-pet("choco_dragon", "dragon", "choco", "cream", "pink", "sprinkles,horns", GLOW)
-pet("candy_king", "humanoid", "pink", "gold", "sky", "crown,lollipop", GLOW)
+pet("lollipop_flower", "humanoid", "red", "pink", "white", "ears_round", { material = "Glass", glow = false })
+pet("gummy_cactus", "quad", "pink", "white", "hotpink", "ears_long,lollipop")
+pet("cotton_candy_tree", "quad", "pink", "sky", "white", "wool")
+pet("chocolate_tulip", "turtle", "tan", "pink", "yellow", "icing,sprinkles")
+pet("candy_cane_reed", "quad", "pink", "sky", "white", "horn,mane,sprinkles", GLOW)
+pet("donut_sunflower", "humanoid", "white", "pink", "cream", "buttons")
+pet("cake_rose", "dragon", "choco", "cream", "pink", "sprinkles,horns", GLOW)
+pet("sugar_crown", "humanoid", "pink", "gold", "sky", "crown,lollipop", GLOW)
 
 -- 15. 유령 성
-pet("ghost_cat", "quad", "white", "violet", "cyan", "ears_pointy,eyes_glow", GHOST)
-pet("pumpkin_spider", "spider", "orange", "dgreen", "black", "pumpkin")
-pet("vampire_bat", "bird", "dark", "purple", "red", "bat_wings,fangs,ears_pointy")
-pet("skeleton_wolf", "quad", "bone", "dark", "cyan", "skull,ears_pointy", GLOW)
-pet("mummy_tiger", "quad", "cream", "tan", "orange", "bandages,ears_round,eyes_glow")
-pet("zombie_bear", "quad", "zombie", "dgreen", "red", "stitches,ears_round")
-pet("phantom_knight", "humanoid", "silver", "violet", "cyan", "helmet,sword", GHOST)
-pet("ghost_king", "ghost", "white", "violet", "gold", "crown", GHOST)
+pet("ghost_lily", "quad", "white", "violet", "cyan", "ears_pointy,eyes_glow", GHOST)
+pet("pumpkin_vine", "spider", "orange", "dgreen", "black", "pumpkin")
+pet("bat_orchid", "bird", "dark", "purple", "red", "bat_wings,fangs,ears_pointy")
+pet("candle_mushroom", "quad", "bone", "dark", "cyan", "skull,ears_pointy", GLOW)
+pet("skull_rose", "quad", "cream", "tan", "orange", "bandages,ears_round,eyes_glow")
+pet("moon_ghost_tree", "quad", "zombie", "dgreen", "red", "stitches,ears_round")
+pet("rainbow_thunder_tree", "humanoid", "silver", "violet", "cyan", "helmet,sword", GHOST)
+pet("sky_pillar_flower", "ghost", "white", "violet", "gold", "crown", GHOST)
 
 -- 펫이 아닌 경비 전용 모양
 local extra: { [string]: PetVisual } = {}
 do
 	local saved = pets
 	pets = extra
+	-- 6판: 경비 겉모습은 아직 5판 동물 모양 (선임이 식물 괴물로 바꿀 때까지) — 옛 펫 id 그대로 여기에
+	pet("chicken", "bird", "white", "cream", "yellow", "comb")
+	pet("swan", "bird", "white", "cream", "orange", "long_neck")
+	pet("scorpion", "bug", "brown", "tan", "red", "claws,stinger")
+	pet("tiger", "quad", "orange", "white", "black", "ears_round,stripes")
+	pet("yeti", "humanoid", "white", "sky", "dark", "horns")
+	pet("cerberus", "quad", "dark", "red", "lava", "three_heads,eyes_glow")
+	pet("beluga_whale", "whale", "white", "ice", "gray", "")
+	pet("t_rex", "dino", "dgreen", "lime", "white", "teeth")
+	pet("cosmic_skeleton_boss", "humanoid", "bone", "purple", "cyan", "skull,crown", GLOW)
+	pet("oni_tiger", "quad", "red", "black", "gold", "horns,stripes,eyes_glow", GLOW)
+	pet("gorilla_king", "humanoid", "dark", "gold", "red", "crown,brow", GLOW)
 	pet("spirit", "ghost", "mint", "cyan", "white", "antlers", GHOST)
 	pet("gingerbread_giant", "humanoid", "ginger", "white", "red", "buttons,icing")
 	pet("grim_reaper", "ghost", "black", "dark", "violet", "hood,scythe,eyes_glow", { glow = true })
@@ -372,8 +389,10 @@ Visuals.rarityEffects = {
 	mythic = { highlight = C.red, particle = "sparkle", particleColor = C.red },
 	cosmic = { highlight = C.violet, particle = "sparkle", particleColor = C.violet, light = C.violet },
 	secret = { highlight = C.black, particle = "smoke", particleColor = C.black },
-	eternal = { highlight = C.cyan, particle = "sparkle", particleColor = C.cyan, light = C.cyan },
+	eternity = { highlight = C.cyan, particle = "sparkle", particleColor = C.cyan, light = C.cyan },
 	divine = { highlight = C.white, particle = "rainbow", light = C.pink },
+	-- 6판 (수석 임시값, 선임이 빛기둥·번개로 바꿀 예정): 슈퍼 울트라디바인
+	super_ultradivine = { highlight = C.gold, particle = "rainbow", light = C.yellow },
 } :: { [string]: { highlight: Color?, particle: string?, particleColor: Color?, light: Color? } }
 
 Visuals.mutationLooks =
@@ -386,6 +405,10 @@ Visuals.mutationLooks =
 		fractured = { color = { 120, 60, 200 }, material = "Glass" },
 		parasite = { color = { 110, 160, 40 } },
 		chaos = { color = { 230, 60, 60 }, material = "Neon" },
+		-- 6판 열매 먹이기 돌연변이 (수석 임시값 — 선임이 얼음·불꽃·번개 효과로)
+		frozen = { color = { 170, 230, 255 }, material = "Ice" },
+		burning = { color = { 255, 110, 40 }, material = "Neon" },
+		shocked = { color = { 255, 240, 90 }, material = "Neon" },
 	} :: { [string]: { color: Color, material: string?, reflectance: number?, cycle: boolean?, petals: Color? } }
 
 -- 4판: 알 껍데기 등급별 모양 (EggVisualService, 매끈한 타원 알 + 띠·점). 껍데기 색 = shell (없으면 등급 색을 파스텔로),
@@ -409,15 +432,17 @@ Visuals.eggLooks = {
 		spot = { 170, 100, 255 },
 		spotNeon = true,
 	},
-	eternal = { pattern = "diamonds", spot = { 255, 255, 255 }, spotNeon = true },
+	eternity = { pattern = "diamonds", spot = { 255, 255, 255 }, spotNeon = true },
 	divine = { pattern = "rainbow", shell = { 255, 255, 255 } },
+	super_ultradivine = { pattern = "rainbow", shell = { 255, 245, 160 }, stripe = { 255, 200, 40 } }, -- 6판 (수석 임시값)
 } :: { [string]: EggLook }
 
--- 특별 알(비밀/영원/신성) 빔 색과 글자
+-- 특별 씨앗(비밀/영원/신성/슈퍼 울트라디바인) 빔 색과 글자
 Visuals.specialEggs = {
-	secret = { text = "비밀 알!", color = { 40, 40, 40 }, textColor = C.white },
-	eternal = { text = "영원 알!", color = C.cyan, textColor = { 0, 50, 50 } },
-	divine = { text = "신성 알!", color = C.pink, textColor = C.white },
+	secret = { text = "비밀 씨앗!", color = { 40, 40, 40 }, textColor = C.white },
+	eternity = { text = "영원 씨앗!", color = C.cyan, textColor = { 0, 50, 50 } },
+	divine = { text = "신성 씨앗!", color = C.pink, textColor = C.white },
+	super_ultradivine = { text = "슈퍼 울트라디바인 씨앗!", color = C.gold, textColor = { 60, 20, 90 } }, -- 6판 (수석 임시값)
 } :: { [string]: { text: string, color: Color, textColor: Color } }
 
 ------------------------------------------------------------------

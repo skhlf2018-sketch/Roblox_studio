@@ -198,26 +198,16 @@ function SoundController.start()
 	Net.on(E.EggDelivered, function()
 		SoundController.play("Deliver")
 	end)
-	Net.on(E.HatchResult, function(payload: any)
-		local pet = if typeof(payload) == "table" then payload.pet else nil
-		local def = if pet then Pets.get(pet.petId) else nil
+	-- 6판: 씨앗이 성체가 됨 (5판 부화 HatchResult 자리 — 소리는 그대로 Hatch/HatchRare). 오프라인 수입·퓨전 소리는 없어짐
+	Net.on(E.PlantGrown, function(payload: any)
+		local plant = if typeof(payload) == "table" then payload.plant else nil
+		local def = if typeof(plant) == "table" then Pets.get(tostring(plant.petId)) else nil
 		local rare = def ~= nil and Rarities.order(def.rarity) >= 5
 		SoundController.play(if rare then "HatchRare" else "Hatch")
 	end)
-	Net.on(E.OfflineIncome, function()
-		SoundController.play("Offline")
+	Net.on(E.FruitsSold, function()
+		SoundController.play("Sell")
 	end)
-	local fusionRemote = (E :: { [string]: string }).FusionResult
-	if fusionRemote then
-		task.spawn(function()
-			Net.on(fusionRemote, function()
-				-- FusionController 의 빛 모으기(1.2초)가 끝나는 순간 "펑!"
-				task.delay(1.2, function()
-					SoundController.play("Fusion")
-				end)
-			end)
-		end)
-	end
 	Net.on(E.IndexRewarded, function()
 		SoundController.play("Reward")
 	end)

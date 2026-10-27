@@ -1,19 +1,20 @@
 --!strict
 --[[
-	TutorialService — 처음 온 사람 튜토리얼 5단계 (5판, 사장님 지시). 단계·글은 shared/Data/Tutorial, 규칙은 shared/TutorialRules
+	TutorialService — 처음 온 사람 튜토리얼 5단계 (6판 "씨앗을 훔치세요", 사장님 지시). 단계·글은 shared/Data/Tutorial,
+	규칙은 shared/TutorialRules
 
-	저장: data.tutorialStep (1~5 = 지금 단계, 6 = 끝). 새 사람은 1, 이미 놀던 사람은 마이그레이션 때 6.
+	저장: data.tutorialStep (1~5 = 지금 단계, 6 = 끝). 새 사람·6판 초기화로 온 사람은 1.
 	진행 (기존 서비스 신호 → TutorialRules.advance):
-	  EggService.pickedUp   알을 주움            1 → 2
-	  EggService.lost       든 알을 놓침         2 → 1
+	  EggService.pickedUp   씨앗을 주움          1 → 2
+	  EggService.lost       든 씨앗을 놓침       2 → 1
 	  BaseService.delivered 가방에 들어감        1, 2 → 3
-	  BaseService.placed    우리에 놓음          3 → 4
-	  BaseService.unplaced  다시 가방으로        4 → 3 (우리가 비었을 때)
-	  BaseService.hatched   부화                 3, 4 → 5   (튜토리얼 중엔 자동 장착 안 함: BaseService/TutorialRules.holdsAutoEquip)
-	  PetService.equipChanged 장착               5 → 끝 (장착 펫 1마리 이상)
+	  BaseService.placed    정원에 심음          3 → 4
+	  BaseService.unplaced  다시 가방으로        4 → 3 (정원에 자라는 씨앗·성체가 없을 때)
+	  BaseService.grown     성체가 됨            3, 4 → 5   (성체는 열매 1개를 단 채 생김 — Config.FRUITS_ON_ADULT)
+	  FruitService.sold     열매를 팖            5 → 끝
 	단계가 바뀌면: data 저장 + TutorialUpdate(TutorialView) + DataUpdate("tutorial", { tutorial }) (State 가 합침)
-	끝나면: 돈 + Data/Tutorial.REWARD_MONEY($500), Notify, TutorialUpdate { done = true, reward = 500 } (한 번만)
-	접속 때: TutorialRules.normalize 로 저장된 단계를 지금 상태에 맞춤 (알 든 채 나갔으면 2 → 1 등) → 끝나지 않았으면 TutorialUpdate.
+	끝나면: 코인 + Data/Tutorial.REWARD_MONEY(500), Notify, TutorialUpdate { done = true, reward = 500 } (한 번만)
+	접속 때: TutorialRules.normalize 로 저장된 단계를 지금 상태에 맞춤 (씨앗 든 채 나갔으면 2 → 1 등) → 끝나지 않았으면 TutorialUpdate.
 	개발 명령: /tutorial reset → TutorialService.reset (1단계부터 다시, 보상도 다시 받음)
 ]]
 
@@ -24,6 +25,7 @@ local Tutorial = require(Shared.Data.Tutorial)
 local TutorialRules = require(Shared.TutorialRules)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
+local FruitRules = require(Shared.FruitRules)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
@@ -31,7 +33,7 @@ local Snapshot = require(Server.Snapshot)
 local Wallet = require(script.Parent.Wallet)
 local EggService = require(script.Parent.EggService)
 local BaseService = require(script.Parent.BaseService)
-local PetService = require(script.Parent.PetService)
+local FruitService = require(script.Parent.FruitService)
 
 local TutorialService = {}
 
@@ -45,8 +47,8 @@ local function contextFor(player: Player): TutorialRules.Context?
 		carrying = EggService.getCarried(player) ~= nil,
 		bagEggs = #data.eggs,
 		placedEggs = #data.incubators,
-		pets = #data.pets,
-		equipped = #data.equipped,
+		plants = #data.pets,
+		fruits = FruitRules.bagCount(data.fruits),
 	}
 end
 
@@ -68,7 +70,7 @@ local function setStep(player: Player, step: number)
 		Net.notify(
 			player,
 			"success",
-			"튜토리얼 끝! 보상 " .. Format.money(Tutorial.REWARD_MONEY) .. " 을 받았어요!"
+			"튜토리얼 끝! 보상 " .. Format.number(Tutorial.REWARD_MONEY) .. " 코인을 받았어요!"
 		)
 		send(player, step, Tutorial.REWARD_MONEY)
 	else
@@ -132,11 +134,11 @@ function TutorialService.start()
 	BaseService.unplaced:connect(function(player: Player)
 		TutorialService.record(player, "unplace")
 	end)
-	BaseService.hatched:connect(function(player: Player)
-		TutorialService.record(player, "hatch")
+	BaseService.grown:connect(function(player: Player)
+		TutorialService.record(player, "grown")
 	end)
-	PetService.equipChanged:connect(function(player: Player)
-		TutorialService.record(player, "equip")
+	FruitService.sold:connect(function(player: Player)
+		TutorialService.record(player, "sell")
 	end)
 end
 

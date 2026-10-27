@@ -1,8 +1,8 @@
 --!nocheck
 --[[
-	ServerHarness — 서버 서비스(PetService, BaseService, AltarService ...)의 "진짜 코드"를 Lune 에서 돌려 보는 작은 가짜 세상
+	ServerHarness — 서버 서비스(PetService, BaseService, FruitService ...)의 "진짜 코드"를 Lune 에서 돌려 보는 작은 가짜 세상
 
-	왜: 순수 로직(Economy, FusionRules ...)은 이미 테스트가 있지만, 서비스가 그 로직을 올바르게 이어 붙였는지
+	왜: 순수 로직(Economy, FruitRules ...)은 이미 테스트가 있지만, 서비스가 그 로직을 올바르게 이어 붙였는지
 	    (돈이 빠졌나, 알림이 갔나, 저장 데이터가 바뀌었나, 시간이 지나면 수입이 쌓이나)는 서비스를 실제로 돌려 봐야 압니다.
 
 	무엇을 가짜로 만드나 (로블록스 엔진 부분만):
@@ -11,8 +11,8 @@
 	  - Instance.new("RemoteEvent") 등 최소한의 가짜 → 진짜 server/Net.luau 가 그대로 올라옴 (레이트 리밋·pcall 포함)
 	  - Players / CollectionService / DataStoreService 등 서비스, 가짜 플레이어·캐릭터
 	  - 맵(MapBuilder)·알(EggService)·월드 UI(Gui, Landmarks)·주기(CycleService) 서비스는 아래 mockModules 에서 가짜로 교체
-	진짜 그대로 쓰는 것: Sessions, Snapshot, Wallet, SpeedService, PetService, IndexService, UpgradeService, RewardService,
-	  BaseService, FusionService, AltarService, SakuraService, TutorialService, LeaderboardService, AntiCheatService,
+	진짜 그대로 쓰는 것: Sessions, Snapshot, Wallet, SpeedService, PetService, IndexService, UpgradeService, FruitService,
+	  BaseService, SakuraService, TutorialService, LeaderboardService, AntiCheatService,
 	  DataService, DevCommands, Net ...
 	5판: H.login 의 기본 데이터는 튜토리얼을 끝낸 사람 (튜토리얼 중엔 부화한 펫을 자동 장착하지 않으므로 옛 테스트가 그대로 돌게).
 	     튜토리얼 테스트는 H.login(player, { tutorialStep = 1 }). 가짜 EggService 도 pickedUp / lost 신호를 냄.

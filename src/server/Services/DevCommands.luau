@@ -1,21 +1,22 @@
 --!strict
 --[[
-	DevCommands — 테스트용 채팅 명령
+	DevCommands — 테스트용 채팅 명령 (6판 "씨앗을 훔치세요")
 	  - Config.DEV_USER_IDS 가 비어 있으면: 스튜디오에서만, 누구나 (실서버에서는 아예 연결 안 됨)
 	  - DEV_USER_IDS 에 UserId 를 넣으면: 그 사람만 (스튜디오·실서버 둘 다)
 	주임·선임이 뒤 구역을 바로 시험해 볼 수 있게.
 	받는 길: Player.Chatted + TextChatService 의 TextChatCommand (새 채팅에서 Chatted 가 안 올 때 대비, 같은 메시지는 한 번만)
 
-	  /money 1e9        돈 더하기
+	  /coins 1e9        코인 더하기 (/money 도 같음)
 	  /speed 1e9        속도 더하기
 	  /skip             지금 낮/밤/대기 단계를 바로 끝냄
-	  /grow             우리에 놓인 내 알을 전부 다 자란 상태로
+	  /grow             정원에 심은 내 씨앗을 전부 바로 성체로
 	  /trap 5           곰덫 개수 더하기
 	  /crystal 5        사쿠라 크리스탈 더하기
-	  /pet crane 3      펫 바로 받기 (퓨전·제단·합성 시험용, 최대 20마리)
-	  /tutorial reset   (5판) 튜토리얼을 1단계부터 다시 (보상도 다시 받음)
-	  /zone lake        (2판) 그 구역 입구로 순간이동 (구역 id 또는 번호 1~15, "hub" = 허브 기본 스폰) — 긴 복도 시험용
-	  /egg axolotl      (3판) 그 펫의 알을 가방에 바로 넣기 (알 놓기·부화·밤 30배 시험용)
+	  /seed moon_lotus  그 식물의 씨앗을 가방에 바로 넣기 (심기·성장·밤 30배 시험용) — 5판 /egg
+	  /plant star_mushroom 3  정원 빈자리에 그 식물 성체를 바로 (최대 20그루, 정원 칸까지, 열매 1개 달림) — 5판 /pet
+	  /fruit 20 [식물id]  열매 가방에 열매 받기 (식물 id 를 안 쓰면 정원 첫 성체의 열매, 없으면 아기 데이지)
+	  /tutorial reset   튜토리얼을 1단계부터 다시 (보상도 다시 받음)
+	  /zone lake        그 구역 입구로 순간이동 (구역 id 또는 번호 1~15, "hub" = 허브 기본 스폰) — 긴 복도 시험용
 ]]
 
 local RunService = game:GetService("RunService")
@@ -23,8 +24,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Data.Config)
-local Pets = require(ReplicatedStorage.Shared.Data.Pets)
+local Plants = require(ReplicatedStorage.Shared.Data.Plants)
 local MapLayout = require(ReplicatedStorage.Shared.Data.MapLayout)
+local FruitRules = require(ReplicatedStorage.Shared.FruitRules)
+local Types = require(ReplicatedStorage.Shared.Types)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
@@ -41,10 +44,12 @@ local SakuraService = require(script.Parent.SakuraService)
 local TutorialService = require(script.Parent.TutorialService)
 local EggService = require(script.Parent.EggService)
 local BaseService = require(script.Parent.BaseService)
+local FruitService = require(script.Parent.FruitService)
 
 local DevCommands = {}
 
-local COMMAND_NAMES = { "money", "speed", "skip", "grow", "trap", "crystal", "pet", "tutorial", "zone", "egg" }
+local COMMAND_NAMES =
+	{ "coins", "money", "speed", "skip", "grow", "trap", "crystal", "seed", "plant", "fruit", "tutorial", "zone" }
 
 local function isAllowed(player: Player): boolean
 	if #Config.DEV_USER_IDS > 0 then
@@ -79,6 +84,35 @@ local function teleportTo(player: Player, target: MapLayout.XZ): boolean
 	return true
 end
 
+-- /plant: 정원 빈자리에 성체 count 그루 (정원 칸·빈 자리가 있는 만큼). 심은 수
+local function plantNow(player: Player, data: Types.PlayerData, petId: string, count: number): number
+	local planted = 0
+	for _ = 1, count do
+		local spot = BaseService.freeGardenSpot(player, "normal")
+		if not spot or not PetService.hasGardenRoom(player) then
+			break
+		end
+		local ok = PetService.addPlant(player, {
+			uid = DataSchema.newUid(data, "p"),
+			petId = petId,
+			size = "normal",
+			mutations = {},
+			x = spot.x,
+			z = spot.z,
+			fruits = math.min(Config.FRUITS_ON_ADULT, Config.FRUIT_MAX_PER_PLANT),
+			fruitProgress = 0,
+		})
+		if not ok then
+			break
+		end
+		planted += 1
+	end
+	if planted > 0 then
+		IndexService.discover(player, petId)
+	end
+	return planted
+end
+
 local function handle(player: Player, message: string)
 	if not isAllowed(player) then
 		return
@@ -92,7 +126,7 @@ local function handle(player: Player, message: string)
 		return
 	end
 	local amount = Validate.finiteNumber(tonumber(arg)) or 0
-	if command == "money" and amount > 0 then
+	if (command == "money" or command == "coins") and amount > 0 then
 		Wallet.addMoney(player, amount)
 	elseif command == "speed" and amount > 0 then
 		Wallet.addSpeed(player, amount)
@@ -103,24 +137,34 @@ local function handle(player: Player, message: string)
 			record.progress = record.required
 		end
 		Snapshot.section(player, "incubators")
+		BaseService.growReadyNow(player)
 	elseif command == "trap" and amount > 0 then
 		data.tools.bearTrap = (data.tools.bearTrap or 0) + math.floor(amount)
 		ToolService.refreshTools(player)
 		Snapshot.section(player, "tools")
 	elseif command == "crystal" and amount > 0 then
 		SakuraService.addCrystals(player, amount)
-	elseif command == "pet" and arg ~= nil and Pets.get(arg) then
+	elseif command == "plant" and arg ~= nil and Plants.get(arg) then
 		local count = math.clamp(math.floor(Validate.finiteNumber(tonumber(arg2)) or 1), 1, 20)
-		for _ = 1, count do
-			PetService.addPet(
-				player,
-				{ uid = DataSchema.newUid(data, "p"), petId = arg, size = "normal", mutations = {} }
-			)
+		if plantNow(player, data, arg, count) == 0 then
+			Net.notify(player, "error", "[개발] 정원에 빈자리가 없어요")
+			return
 		end
-		IndexService.discover(player, arg)
+	elseif command == "fruit" and amount > 0 then
+		local wanted = arg2 or ""
+		local fruitId: string = if wanted ~= "" and Plants.get(wanted)
+			then wanted
+			elseif data.pets[1] then data.pets[1].petId
+			else "sprout_daisy"
+		local plant = Plants.get(fruitId)
+		if not plant then
+			return
+		end
+		FruitRules.addToBag(data.fruits, fruitId, math.floor(amount), plant.fruitValue)
+		FruitService.refreshBag(player)
 	elseif command == "tutorial" and arg == "reset" then
 		TutorialService.reset(player)
-	elseif command == "egg" and arg ~= nil and Pets.get(arg) then
+	elseif command == "seed" and arg ~= nil and Plants.get(arg) then
 		if not BaseService.grantEgg(player, arg, "normal", {}, "dev") then
 			return
 		end

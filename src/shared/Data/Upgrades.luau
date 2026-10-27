@@ -2,9 +2,12 @@
 --[[
 	Upgrades — 베이스 업그레이드 (설계문서 9장 표 그대로)
 
-	- Pen: 우리 레벨 → 장착 칸 수. level 1 은 무료(시작 상태)
-	- Treadmill: 러닝머신 레벨 → 한 걸음당 속도(원본). level 0 = 잠김, level 1 구매 = 해금($1K)
-	  실제 증가량은 Economy.treadmillGainPerSecond (× GROWTH_MULTIPLIER)
+	- Pen: 정원 레벨 → 정원 칸 수 (6판: 자라는 씨앗 + 성체 식물, 5판 우리 장착 칸 숫자 그대로). level 1 은 무료(시작 상태)
+	- Treadmill: 러닝머신 레벨 → 한 걸음당 속도(원본). level 0 = 잠김, level 1 구매 = 해금(1K 코인)
+	  실제 증가량은 Economy.treadmillGainPerSecond = 걸음당 속도 × Config.TREADMILL_MULTIPLIER(4) × 1걸음/초
+	  6판 (사장님 추가 지시): 20레벨까지, 최대 레벨이면 1초에 속도 정확히 1,000,000 (250,000 × 4).
+	  1~10레벨 숫자는 5판 그대로 (배율만 3 → 4: 1레벨 6 → 8/초), 11~20레벨은 2,000 → 250,000 을 약 1.6배씩,
+	  비용은 10레벨(1Qa)부터 약 3배씩 (Format: Qa = 1e15, Qi = 1e18)
 	- Trails: 속도 배율. 중첩 아님 — **장착한 트레일 하나**만 적용 (원작 장착/장착 해제 버튼).
 	  사면 바로 장착. NO_TRAIL("none") = 장착 안 함 (배율 1)
 ]]
@@ -26,6 +29,7 @@ local M = 1e6
 local B = 1e9
 local T = 1e12
 local Qa = 1e15
+local Qi = 1e18
 
 local Pen: { PenLevel } = {
 	{ level = 1, cost = 0, slots = 7 },
@@ -42,7 +46,7 @@ local Pen: { PenLevel } = {
 }
 
 local Treadmill: { TreadmillLevel } = {
-	{ level = 1, cost = 1 * K, perStep = 2 }, -- 해금 비용 $1,000
+	{ level = 1, cost = 1 * K, perStep = 2 }, -- 해금 비용 1,000 코인
 	{ level = 2, cost = 15 * K, perStep = 5 },
 	{ level = 3, cost = 250 * K, perStep = 12 },
 	{ level = 4, cost = 5 * M, perStep = 30 },
@@ -52,6 +56,17 @@ local Treadmill: { TreadmillLevel } = {
 	{ level = 8, cost = 2 * T, perStep = 500 },
 	{ level = 9, cost = 50 * T, perStep = 1000 },
 	{ level = 10, cost = 1 * Qa, perStep = 2000 },
+	-- 6판: 11 ~ 20레벨 (최대 1초 1M)
+	{ level = 11, cost = 3 * Qa, perStep = 3000 },
+	{ level = 12, cost = 9 * Qa, perStep = 5000 },
+	{ level = 13, cost = 27 * Qa, perStep = 8000 },
+	{ level = 14, cost = 80 * Qa, perStep = 12000 },
+	{ level = 15, cost = 240 * Qa, perStep = 20000 },
+	{ level = 16, cost = 720 * Qa, perStep = 30000 },
+	{ level = 17, cost = 2.2 * Qi, perStep = 50000 },
+	{ level = 18, cost = 6.5 * Qi, perStep = 80000 },
+	{ level = 19, cost = 20 * Qi, perStep = 150000 },
+	{ level = 20, cost = 60 * Qi, perStep = 250000 },
 }
 
 local Trails: { Trail } = {

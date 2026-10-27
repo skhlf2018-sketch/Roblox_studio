@@ -1,21 +1,21 @@
 --!strict
 --[[
-	EggRoll — 둥지 알 추첨 (순수 로직, Lune 테스트 대상)
+	EggRoll — 둥지 씨앗 추첨 (6판 "씨앗을 훔치세요", 순수 로직, Lune 테스트 대상). 파일 이름은 5판 그대로 (알 → 씨앗)
 
 	난수는 밖에서 주입합니다: rand() 는 [0, 1) 숫자를 돌려주는 함수.
 	  서버: local rng = Random.new(); local rand = function() return rng:NextNumber() end
 	  테스트: 고정 시드 난수로 결과 재현
+	6판: 구역마다 등급 가중치 표(Data/EggSpawn.BIOME_RARITY_WEIGHTS)로 등급을 고르고, 그 등급 식물 중에서 고르게.
+	     (5판 centerRarity / 거리 가중치 방식은 없앰)
 ]]
 
 local Data = script.Parent.Data
-local Pets = require(Data.Pets)
+local Plants = require(Data.Plants)
 local Sizes = require(Data.Sizes)
 local Mutations = require(Data.Mutations)
-local Biomes = require(Data.Biomes)
-local Rarities = require(Data.Rarities)
 local EggSpawn = require(Data.EggSpawn)
 
-type Pet = Pets.Pet
+type Pet = Plants.Plant
 
 export type RandomFn = () -> number
 
@@ -94,10 +94,10 @@ function EggRoll.rollTraits(rand: RandomFn): EggTraits
 	}
 end
 
--- 둥지에 나올 수 있는 펫 (source = "nest", sides 가 있는 구역은 이번 쪽만)
+-- 둥지에 나올 수 있는 식물 (source = "nest", sides 가 있는 구역은 이번 쪽만)
 function EggRoll.nestPool(biomeId: string, side: string?): { Pet }
 	local pool: { Pet } = {}
-	for _, pet in Pets.inBiome(biomeId) do
+	for _, pet in Plants.inBiome(biomeId) do
 		if pet.source == "nest" and (pet.side == nil or pet.side == side) then
 			table.insert(pool, pet)
 		end
@@ -105,58 +105,51 @@ function EggRoll.nestPool(biomeId: string, side: string?): { Pet }
 	return pool
 end
 
-local biomeIndex: { [string]: number } = {}
-for i, biome in Biomes.list do
-	biomeIndex[biome.id] = i
-end
-local specialRarity: { [string]: boolean } = {}
-for _, id in EggSpawn.SPECIAL_RARITIES do
-	specialRarity[id] = true
+-- 6판: 그 구역 등급 가중치 (EggSpawn.BIOME_RARITY_WEIGHTS, 없으면 0)
+function EggRoll.rarityWeight(biomeId: string, rarityId: string): number
+	local weights = EggSpawn.BIOME_RARITY_WEIGHTS[biomeId]
+	local w = if weights then weights[rarityId] else nil
+	return if w and w > 0 then w else 0
 end
 
--- 2판 수정: 구역 순서(1~15)에 따른 중심 희귀도 (1 일반 → 10 신성, 선형 + 반올림). 모르는 구역은 1
-function EggRoll.centerRarity(biomeId: string): number
-	local i = biomeIndex[biomeId] or 1
-	local count = #Biomes.list
-	local t = if count > 1 then (i - 1) / (count - 1) else 0
-	local first, last = EggSpawn.CENTER_RARITY_FIRST, EggSpawn.CENTER_RARITY_LAST
-	return math.round(first + (last - first) * t)
-end
-
--- 일반 추첨 가중치: 펫 희귀도와 그 구역 중심의 차이로 (EggSpawn 주석). 비밀 이상은 중심 ±2 밖이면 0
-function EggRoll.nestWeight(pet: Pet): number
-	local order = Rarities.order(pet.rarity)
-	if order <= 0 then
+-- 일반 추첨 가중치 (6판): 그 등급 가중치 ÷ 둥지 풀 안 같은 등급 식물 수 (EggSpawn 주석)
+--   side 를 주면 그 쪽 풀로 셈 (천사&악마). 안 주면 식물 자신의 쪽(없으면 "light")
+function EggRoll.nestWeight(pet: Pet, side: string?): number
+	local w = EggRoll.rarityWeight(pet.biome, pet.rarity)
+	if w <= 0 or pet.source ~= "nest" then
 		return 0
 	end
-	local d = math.abs(order - EggRoll.centerRarity(pet.biome))
-	local near = EggSpawn.DISTANCE_WEIGHTS[d + 1]
-	if near then
-		return near
+	local count = 0
+	for _, other in EggRoll.nestPool(pet.biome, side or pet.side or "light") do
+		if other.rarity == pet.rarity then
+			count += 1
+		end
 	end
-	return if specialRarity[pet.rarity] then EggSpawn.SPECIAL_FAR_WEIGHT else EggSpawn.FAR_WEIGHT
+	return if count > 0 then w / count else 0
 end
 
--- 일반 추첨 1마리 (앞 구역의 비밀/영원/신성은 제외, 뒤 구역은 보통 둥지에도 나옴)
+-- 일반 추첨 1개 (등급 가중치 → 그 등급 안에서 고르게). 슈퍼 울트라디바인은 안 나옴
 function EggRoll.rollNestPet(biomeId: string, side: string?, rand: RandomFn): Pet?
-	return EggRoll.weightedPick(EggRoll.nestPool(biomeId, side), EggRoll.nestWeight, rand)
+	return EggRoll.weightedPick(EggRoll.nestPool(biomeId, side), function(pet: Pet): number
+		return EggRoll.nestWeight(pet, side)
+	end, rand)
 end
 
--- 일반 추첨에서 각 펫이 나올 확률 (0~1) — 테스트·밸런스 확인용
+-- 일반 추첨에서 각 식물이 나올 확률 (0~1) — 테스트·밸런스 확인용
 function EggRoll.nestOdds(biomeId: string, side: string?): { [string]: number }
 	local pool = EggRoll.nestPool(biomeId, side)
 	local total = 0
 	for _, pet in pool do
-		total += EggRoll.nestWeight(pet)
+		total += EggRoll.nestWeight(pet, side)
 	end
 	local odds: { [string]: number } = {}
 	for _, pet in pool do
-		odds[pet.id] = if total > 0 then EggRoll.nestWeight(pet) / total else 0
+		odds[pet.id] = if total > 0 then EggRoll.nestWeight(pet, side) / total else 0
 	end
 	return odds
 end
 
--- 초기화 때 특별 추첨: 이번에 놓일 특별 알 펫 목록 (희귀한 것부터, 최대 MAX_SPECIALS_PER_BIOME)
+-- 초기화 때 특별 추첨: 이번에 놓일 공지 씨앗 식물 목록 (희귀한 것부터, 최대 MAX_SPECIALS_PER_BIOME)
 function EggRoll.rollSpecials(biomeId: string, side: string?, rand: RandomFn): { Pet }
 	local pool = EggRoll.nestPool(biomeId, side)
 	local result: { Pet } = {}
@@ -181,11 +174,11 @@ function EggRoll.rollSpecials(biomeId: string, side: string?, rand: RandomFn): {
 	return result
 end
 
--- 5판: 둥지 풀 밖 특별 알(EggSpawn.EXTRA_SPECIALS, 옛 퀘스트 알) 추첨 — 이번 초기화에 놓일 펫 목록 (모르는 펫은 건너뜀)
+-- 둥지 풀 밖 공지 씨앗(EggSpawn.EXTRA_SPECIALS) 추첨 — 이번 초기화에 놓일 식물 목록 (모르는 id 는 건너뜀)
 function EggRoll.rollExtraSpecials(rand: RandomFn): { Pet }
 	local result: { Pet } = {}
 	for _, entry in EggSpawn.EXTRA_SPECIALS do
-		local pet = Pets.get(entry.petId)
+		local pet = Plants.get(entry.petId)
 		if pet and rand() < entry.chance then
 			table.insert(result, pet)
 		end
@@ -193,7 +186,7 @@ function EggRoll.rollExtraSpecials(rand: RandomFn): { Pet }
 	return result
 end
 
--- 1..count 중 서로 다른 칸 n 개를 무작위로 (특별 알 둥지 위치 고르기)
+-- 1..count 중 서로 다른 칸 n 개를 무작위로 (특별 씨앗 둥지 위치 고르기)
 function EggRoll.pickDistinct(count: number, n: number, rand: RandomFn): { number }
 	local indices: { number } = table.create(count)
 	for i = 1, count do

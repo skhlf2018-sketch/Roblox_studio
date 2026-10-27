@@ -2382,7 +2382,7 @@ end
 --   펫은 우리 "뒤쪽 2/3" 에 격자로 줄 맞춰 서서 모두 LookVector 쪽을 봄 (앞 1/3 은 부화 중 알 자리).
 ------------------------------------------------------------------
 
-local MAX_PEN = 18
+local _MAX_PEN = 18 -- [6판] 우리 펫 진열을 꺼서 지금은 안 씀 (선임 정리 예정)
 local PEN_SCALE = 1.3
 local PEN_FOOTPRINT = 3.4 -- 크기 1 펫 한 마리가 차지하는 폭(스터드, 대략). 칸이 좁으면 이것에 맞춰 줄임
 local SIZE_SCALE: { [string]: number } = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 }
@@ -2407,21 +2407,10 @@ local function penPart(index: number): BasePart?
 	return nil
 end
 
-local function penRecords(data: Types.PlayerData): { Types.PetRecord }
-	local byUid: { [string]: Types.PetRecord } = {}
-	for _, r in data.pets do
-		byUid[r.uid] = r
-	end
+-- [6판 수석 임시] 정원의 성체 식물은 BaseService 가 심은 자리에 GardenPlant 파트로 보여 줌 (장착 개념 없음).
+-- 걸어 다니는 우리 펫(PenPet) 진열은 끔 — 선임이 GardenPlant 자리에 식물 모델을 붙이면서 이 함수·stepPens 정리.
+local function penRecords(_data: Types.PlayerData): { Types.PetRecord }
 	local list: { Types.PetRecord } = {}
-	for _, uid in data.equipped do
-		local r = byUid[uid]
-		if r then
-			table.insert(list, r)
-			if #list >= MAX_PEN then
-				break
-			end
-		end
-	end
 	return list
 end
 

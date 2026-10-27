@@ -1,6 +1,7 @@
 --!nocheck
 --[[
-	서비스 테스트 2: BaseService(배달 → 알 가방·우리에 알 놓기·부화·성장), FusionService, AltarService, SakuraService
+	서비스 테스트 2 (6판): BaseService(배달 → 씨앗 가방·정원에 심기·성장 → 성체·건너뛰기), SakuraService(씨앗 버전)
+	(6판: FusionService·AltarService 는 사장님 결정으로 없앰 — 열매는 tests/garden.spec)
 	(5판: QuestService 는 없앰 — 튜토리얼은 tests/tutorial.spec, 랭킹판·쓰다듬기는 tests/social.spec)
 	진짜 서비스 코드 + 진짜 shared 규칙을 ServerHarness 위에서 돌립니다 (가상 시간).
 ]]
@@ -32,21 +33,10 @@ return function(T, Loader)
 		return p, session, data
 	end
 
-	local function addPet(w, petId, size, mutations, player, data)
-		local record = {
-			uid = w.DataSchema.newUid(data or w.data, "p"),
-			petId = petId,
-			size = size or "normal",
-			mutations = mutations or {},
-		}
-		w.PetService.addPet(player or w.player, record)
-		return record
-	end
-
 	-- 가방을 n 개 채움 (선물 알)
 	local function fillBag(w, n, player)
 		for _ = 1, n do
-			w.BaseService.grantEgg(player or w.player, "chicken", "normal", {}, "altar")
+			w.BaseService.grantEgg(player or w.player, "sprout_daisy", "normal", {}, "sakura")
 		end
 	end
 
@@ -64,7 +54,7 @@ return function(T, Loader)
 			local x, z = w.H.plotSpot(1)
 			w.H.spawn(player, x, 3, z)
 		end
-		w.BaseService.grantEgg(player, petId, size or "normal", mutations or {}, "altar")
+		w.BaseService.grantEgg(player, petId, size or "normal", mutations or {}, "sakura")
 		local egg = data.eggs[#data.eggs]
 		local spots = {}
 		for _, r in data.incubators do
@@ -93,29 +83,29 @@ return function(T, Loader)
 		local w = world()
 		local B = w.BaseService
 		T.eq(w.Config.EGG_INVENTORY_MAX, 50)
-		T.eq(B.grantEgg(w.player, "ring_guard", "big", { "golden" }, "altar"), "bag")
+		T.eq(B.grantEgg(w.player, "rune_rose", "big", { "golden" }, "sakura"), "bag")
 		T.eq(#w.data.eggs, 1)
 		T.eq(#w.data.incubators, 0, "우리에 저절로 놓이지 않음")
 		local first = w.data.eggs[1]
-		T.eq(first.petId, "ring_guard")
+		T.eq(first.petId, "rune_rose")
 		T.eq(first.size, "big")
 		T.eq(first.mutations[1], "golden")
-		T.eq(first.required, w.Economy.hatchSeconds("ring_guard"), "필요 시간 = 원작 그대로")
+		T.eq(first.required, w.Economy.hatchSeconds("rune_rose"), "필요 시간 = 원작 그대로")
 		T.eq(first.progress, 0)
 		T.eq(first.uid, "i1")
 		local granted = w.H.sent(w.player, "EggGranted")[1][1]
 		T.eq(granted.egg.uid, "i1")
 		T.eq(granted.queued, false)
-		T.eq(granted.source, "altar")
+		T.eq(granted.source, "sakura")
 		local update = w.H.sent(w.player, "DataUpdate")
 		T.eq(update[#update][1], "eggs")
 		T.eq(#update[#update][2].eggs, 1)
 		fillBag(w, w.Config.EGG_INVENTORY_MAX - 1)
 		T.eq(#w.data.eggs, 50)
-		T.eq(B.grantEgg(w.player, "jitterbug", "normal", {}, "dev"), nil, "51번째는 자리 없음")
+		T.eq(B.grantEgg(w.player, "dancing_mushroom", "normal", {}, "dev"), nil, "51번째는 자리 없음")
 		T.falsy(B.canReceiveEgg(w.player))
 		T.eq(#w.data.eggs, 50)
-		T.eq(B.grantEgg(w.player, "없는펫", "normal", {}, "altar"), nil)
+		T.eq(B.grantEgg(w.player, "없는펫", "normal", {}, "sakura"), nil)
 		T.eq(w.data.eggQueue, nil, "대기 줄 없음")
 		w.H.uninstall()
 	end)
@@ -132,18 +122,18 @@ return function(T, Loader)
 			B.delivered:connect(function(_, record)
 				table.insert(signals, record)
 			end)
-			w.H.carry(w.player, { petId = "chicken", biomeId = "forest", size = "huge", mutations = { "silver" } })
+			w.H.carry(w.player, { petId = "sprout_daisy", biomeId = "forest", size = "huge", mutations = { "silver" } })
 			B.deliver(w.player)
 			T.eq(#w.data.eggs, 1)
 			T.eq(#w.data.incubators, 0)
 			local egg = w.data.eggs[1]
-			T.eq(egg.petId, "chicken")
+			T.eq(egg.petId, "sprout_daisy")
 			T.eq(egg.size, "huge")
 			T.eq(egg.mutations[1], "silver")
 			T.eq(egg.biomeId, "forest")
 			T.eq(egg.uid, "i1")
 			T.eq(egg.progress, 0)
-			T.eq(egg.required, w.Economy.hatchSeconds("chicken"))
+			T.eq(egg.required, w.Economy.hatchSeconds("sprout_daisy"))
 			T.eq(egg.special, false)
 			T.eq(egg.slot, nil)
 			T.eq(w.data.stats.eggsDelivered, 1)
@@ -159,7 +149,7 @@ return function(T, Loader)
 			B.deliver(w.player)
 			T.eq(#w.data.eggs, 1)
 			-- 특별 알은 special 표시가 남음
-			w.H.carry(w.player, { petId = "dog", biomeId = "forest", special = true })
+			w.H.carry(w.player, { petId = "puppy_grass", biomeId = "forest", special = true })
 			B.deliver(w.player)
 			T.truthy(w.data.eggs[2].special)
 			w.H.uninstall()
@@ -172,16 +162,16 @@ return function(T, Loader)
 			local w = world()
 			local B = w.BaseService
 			fillBag(w, 50)
-			w.H.carry(w.player, { petId = "dog", biomeId = "forest" })
+			w.H.carry(w.player, { petId = "puppy_grass", biomeId = "forest" })
 			B.deliver(w.player)
 			B.deliver(w.player)
 			T.eq(w.H.eggs.taken, 0, "알을 안 가져감")
 			T.truthy(w.H.eggs.carried[w.player], "알은 계속 들고 있음")
 			T.eq(#w.data.eggs, 50)
-			T.eq(countNotify(w, "알 가방이 가득 찼어요"), 1, "3초 안에는 한 번만")
+			T.eq(countNotify(w, "씨앗 가방이 가득 찼어요"), 1, "3초 안에는 한 번만")
 			w.H.advance(3.1)
 			B.deliver(w.player)
-			T.eq(countNotify(w, "알 가방이 가득 찼어요"), 2)
+			T.eq(countNotify(w, "씨앗 가방이 가득 찼어요"), 2)
 			-- 가방을 하나 비우면 (우리에 놓기) 배달됨
 			table.remove(w.data.eggs, 1)
 			B.deliver(w.player)
@@ -199,7 +189,7 @@ return function(T, Loader)
 			w.session.walkSpeed = 16
 			-- 1000스터드 떨어진 곳에서 방금 주웠는데 벌써 배달 → 최소 49초 걸려야 함
 			w.H.carry(w.player, {
-				petId = "chicken",
+				petId = "sprout_daisy",
 				biomeId = "forest",
 				pickedPosition = w.H.vec(0, 0, 1020),
 				originAt = w.H.clock(),
@@ -212,7 +202,7 @@ return function(T, Loader)
 			T.truthy(w.H.hasNotify(w.player, "error", "비정상적인 움직임"))
 			-- 충분히 시간이 지난 뒤면 정상 배달
 			w.H.carry(w.player, {
-				petId = "chicken",
+				petId = "sprout_daisy",
 				biomeId = "forest",
 				pickedPosition = w.H.vec(0, 0, 1020),
 				originAt = w.H.clock() - 60,
@@ -230,7 +220,7 @@ return function(T, Loader)
 			local B = w.BaseService
 			B.start()
 			w.H.spawn(w.player, 30, 3, 10) -- 숲
-			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+			w.H.carry(w.player, { petId = "sprout_daisy", biomeId = "forest" })
 			w.H.advance(1)
 			T.eq(#w.data.eggs, 0, "구역 안")
 			w.H.teleport(w.player, 30, 3, 0) -- 허브 경계선 위 = 숲 (z ≥ 0)
@@ -246,13 +236,13 @@ return function(T, Loader)
 			local late, lateSession, lateData = playerWith(w, 1099, "Late")
 			lateSession.plotIndex = 0
 			w.H.spawn(late, -30, 3, 5)
-			w.H.carry(late, { petId = "dog", biomeId = "forest" })
+			w.H.carry(late, { petId = "puppy_grass", biomeId = "forest" })
 			w.H.advance(0.4)
 			T.eq(#lateData.eggs, 0)
 			w.H.teleport(late, -30, 3, -5)
 			w.H.advance(0.4)
 			T.eq(#lateData.eggs, 1, "베이스 없어도 가방으로")
-			T.eq(lateData.eggs[1].petId, "dog")
+			T.eq(lateData.eggs[1].petId, "puppy_grass")
 			w.H.uninstall()
 		end
 	)
@@ -263,7 +253,7 @@ return function(T, Loader)
 		B.start()
 		local hx, hz = w.H.hubSpot()
 		w.H.spawn(w.player, hx, 30, hz)
-		w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+		w.H.carry(w.player, { petId = "sprout_daisy", biomeId = "forest" })
 		w.H.advance(1)
 		T.eq(#w.data.eggs, 0)
 		w.H.teleport(w.player, hx, 3, hz)
@@ -279,7 +269,7 @@ return function(T, Loader)
 			local B = w.BaseService
 			B.start()
 			w.H.spawn(w.player, 0, 3, 80) -- 숲
-			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+			w.H.carry(w.player, { petId = "sprout_daisy", biomeId = "forest" })
 			w.H.advance(0.2) -- 위치 기록
 			w.H.teleport(w.player, 0, 3, -5) -- 85스터드 순간이동 (0.2초 허용은 약 13)
 			w.H.advance(0.2)
@@ -299,7 +289,7 @@ return function(T, Loader)
 			B.start()
 			local zx, zz = w.H.zoneSpot("lake")
 			w.H.spawn(w.player, zx, 3, zz)
-			w.H.carry(w.player, { petId = "chicken", biomeId = "forest" })
+			w.H.carry(w.player, { petId = "sprout_daisy", biomeId = "forest" })
 			w.H.advance(0.2)
 			w.H.setPhase("Night")
 			local spawn = w.H.MapLayout.plot(1).spawn
@@ -314,7 +304,7 @@ return function(T, Loader)
 			fillBag(w, 49)
 			local hx, hz = w.H.hubSpot()
 			w.H.teleport(w.player, hx, 3, hz)
-			w.H.carry(w.player, { petId = "dog", biomeId = "forest" })
+			w.H.carry(w.player, { petId = "puppy_grass", biomeId = "forest" })
 			w.H.setPhase("Day")
 			w.H.setPhase("Night")
 			T.eq(w.player.Character.root.Position.Z, hz, "허브 안이면 순간이동 안 함")
@@ -403,7 +393,7 @@ return function(T, Loader)
 		function()
 			local w = placeWorld()
 			local B = w.BaseService
-			B.grantEgg(w.player, "chicken", "big", { "silver" }, "altar")
+			B.grantEgg(w.player, "sprout_daisy", "big", { "silver" }, "sakura")
 			local uid = w.data.eggs[1].uid
 			w.H.clearSent()
 			local x, z = penWorld(w, -12.34, 5.06)
@@ -434,7 +424,7 @@ return function(T, Loader)
 			T.eq(part:GetAttribute("PlotIndex"), 1)
 			T.eq(part:GetAttribute("Ready"), false)
 			-- 놓인 알만 자람, 가방 속 알은 그대로
-			B.grantEgg(w.player, "dog", "normal", {}, "altar")
+			B.grantEgg(w.player, "puppy_grass", "normal", {}, "sakura")
 			w.H.advance(3)
 			T.near(record.progress, 3, 1e-9, "놓인 알은 자람")
 			T.eq(part:GetAttribute("Progress"), record.progress)
@@ -450,7 +440,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"PlaceEgg 거부: 우리 밖(앞마당·울타리 2 안·남의 우리) / 다른 알과 너무 가까움(큰 알은 더 멀리) / 8개 초과 / 멀리서 / 베이스 없음",
+		"PlaceEgg 거부: 우리 밖(앞마당·울타리 2 안·남의 우리) / 다른 씨앗과 너무 가까움(큰 씨앗은 더 멀리) / 정원 칸 초과 / 멀리서 / 베이스 없음",
 		function()
 			local w = placeWorld()
 			local B = w.BaseService
@@ -461,7 +451,7 @@ return function(T, Loader)
 			end
 			-- 우리 밖
 			T.falsy(try(20, 0), "앞마당")
-			T.truthy(w.H.hasNotify(w.player, "error", "우리(울타리) 안에만"))
+			T.truthy(w.H.hasNotify(w.player, "error", "정원(울타리) 안에만"))
 			T.falsy(try(9.5, 0), "울타리에서 2 안쪽까지만 (우리 끝 11)")
 			T.falsy(try(0, 28.5), "옆 울타리")
 			T.falsy(try(0, 0, nil, 2), "남의 우리 (2번 베이스 자리)")
@@ -473,20 +463,19 @@ return function(T, Loader)
 			T.truthy(w.H.hasNotify(w.player, "error", "너무 가까워요"))
 			T.truthy(try(0, 4), "딱 4 는 됨")
 			-- 큰 알: 초거대(지름 4.8)끼리는 4.8
-			B.grantEgg(w.player, "bear", "giant", {}, "altar")
-			B.grantEgg(w.player, "bear", "giant", {}, "altar")
+			B.grantEgg(w.player, "pharaoh_palm", "giant", {}, "sakura")
+			B.grantEgg(w.player, "pharaoh_palm", "giant", {}, "sakura")
 			local g1, g2 = w.data.eggs[#w.data.eggs - 1].uid, w.data.eggs[#w.data.eggs].uid
 			T.truthy(try(-20, 0, g1))
 			T.falsy(try(-20, 4.5, g2), "초거대끼리 4.5 는 겹침")
 			T.truthy(try(-20, 4.8, g2), "초거대끼리 4.8 은 됨")
 			T.eq(#w.data.incubators, 5)
-			-- 8개까지
+			-- 6판: 정원 칸 수(1레벨 7칸)까지
 			T.truthy(try(-30, -20))
 			T.truthy(try(-30, -10))
-			T.truthy(try(-30, 0))
-			T.eq(#w.data.incubators, w.Config.PLACED_EGG_MAX)
-			T.falsy(try(-30, 10), "9번째")
-			T.truthy(w.H.hasNotify(w.player, "error", "8개까지"))
+			T.eq(#w.data.incubators, w.H.shared("Economy").penSlots(1))
+			T.falsy(try(-30, 10), "8번째")
+			T.truthy(w.H.hasNotify(w.player, "error", "정원이 가득 찼어요"))
 			-- 멀리서 (내 베이스 밖, 그 자리에서 14 넘게)
 			table.remove(w.data.incubators, 1)
 			w.H.teleport(w.player, 0, 3, 100)
@@ -513,9 +502,9 @@ return function(T, Loader)
 			local w = placeWorld()
 			local other, _, otherData = playerWith(w, 1002, "Other")
 			otherData.nextUid = 100
-			w.BaseService.grantEgg(other, "chicken", "normal", {}, "altar")
+			w.BaseService.grantEgg(other, "sprout_daisy", "normal", {}, "sakura")
 			local theirs = otherData.eggs[1].uid
-			w.BaseService.grantEgg(w.player, "chicken", "normal", {}, "altar")
+			w.BaseService.grantEgg(w.player, "sprout_daisy", "normal", {}, "sakura")
 			local mine = w.data.eggs[1].uid
 			local x, z = penWorld(w, 0, 0)
 			w.H.client(w.player, "PlaceEgg", theirs, x, z)
@@ -554,7 +543,7 @@ return function(T, Loader)
 		function()
 			local w = placeWorld()
 			local B = w.BaseService
-			local record = placeNew(w, "ghost_king")
+			local record = placeNew(w, "moon_ghost_tree")
 			w.H.advance(5)
 			T.near(record.progress, 5, 1e-9)
 			w.H.client(w.player, "PickUpPlacedEgg", record.uid)
@@ -576,7 +565,7 @@ return function(T, Loader)
 			fillBag(w, 50)
 			T.falsy(B.pickUpEgg(w.player, w.data.incubators[1].uid))
 			T.eq(#w.data.incubators, 1)
-			T.truthy(w.H.hasNotify(w.player, "error", "알 가방이 가득 찼어요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "씨앗 가방이 가득 찼어요"))
 			-- 끄면 거부
 			table.remove(w.data.eggs, 1)
 			T.eq(w.Config.ALLOW_EGG_PICKUP, true)
@@ -587,113 +576,133 @@ return function(T, Loader)
 			w.H.uninstall()
 		end
 	)
-
 	------------------------------------------------------------------
-	T.suite("서비스: BaseService 부화")
+	T.suite("서비스: BaseService 성장 → 성체 (6판: 부화 버튼 없음, 그 자리에서 성체)")
+
+	local function seedPart(w, uid)
+		for _, part in w.H.map.folders.Incubating.children do
+			if part:GetAttribute("EggUid") == uid then
+				return part
+			end
+		end
+		return nil
+	end
+	local function plantPart(w, uid)
+		for _, part in w.H.map.folders.Incubating.children do
+			if part:GetAttribute("PlantUid") == uid then
+				return part
+			end
+		end
+		return nil
+	end
 
 	T.test(
-		"다 자라기 전에는 부화 거부, 다 자라면 펫이 보관함·우리에 들어가고 도감 발견",
+		"다 자라면 그 자리·uid 그대로 성체 + 열매 1개, 도감 발견, PlantGrown·알림·신호, 씨앗 파트 → GardenPlant 파트",
 		function()
 			local w = world()
 			local B = w.BaseService
-			local record = placeNew(w, "brr_brr_patapim", "giant")
-			B.hatch(w.player, record.uid)
-			T.eq(#w.data.incubators, 1, "아직 안 자람")
-			T.eq(#w.data.pets, 0)
-			T.truthy(w.H.hasNotify(w.player, "error", "아직 다 자라지 않았어요"))
-
-			record.progress = record.required
+			B.start()
+			local grown = {}
+			B.grown:connect(function(_, plant)
+				table.insert(grown, plant)
+			end)
+			local record = placeNew(w, "puppy_grass", "giant", { "golden" }) -- 3초 (튜토리얼)
+			T.eq(record.required, 3)
+			T.truthy(seedPart(w, record.uid), "심은 씨앗 파트")
 			w.H.clearSent()
-			B.hatch(w.player, record.uid)
+			w.H.advance(3.1)
 			T.eq(#w.data.incubators, 0)
 			T.eq(#w.data.pets, 1)
-			local pet = w.data.pets[1]
-			T.eq(pet.petId, "brr_brr_patapim")
-			T.eq(pet.size, "giant")
-			T.eq(pet.uid, "p2", "uid 카운터는 알(i1) 다음")
-			T.eq(w.data.equipped[1], pet.uid)
+			local plant = w.data.pets[1]
+			T.eq(plant.uid, record.uid, "같은 uid")
+			T.eq(plant.x, record.x, "같은 자리")
+			T.eq(plant.z, record.z)
+			T.eq(plant.size, "giant")
+			T.eq(plant.mutations[1], "golden")
+			T.eq(plant.fruits, w.Config.FRUITS_ON_ADULT)
+			T.eq(plant.fruitProgress, 0)
 			T.eq(w.data.stats.eggsHatched, 1)
-			T.truthy(w.data.indexDiscovered.brr_brr_patapim)
-			local result = w.H.sent(w.player, "HatchResult")[1][1]
+			T.truthy(w.data.indexDiscovered.puppy_grass, "도감 발견")
+			local result = w.H.sent(w.player, "PlantGrown")[1][1]
+			T.eq(result.plant.uid, record.uid)
 			T.truthy(result.isNew)
-			T.truthy(result.equipped)
-			T.falsy(result.sold)
-			T.eq(result.income, 1800 * 3 * 6)
-			T.eq(#w.H.map.folders.Incubating.children, 0, "우리에서 알 파트가 사라짐")
-			-- 같은 알을 또 부화하려 해도 없음
-			B.hatch(w.player, record.uid)
-			T.eq(#w.data.pets, 1)
+			T.eq(result.fruitValue, w.Pets.get("puppy_grass").fruitValue * 6 * 2)
+			T.eq(result.fruitInterval, w.Pets.get("puppy_grass").fruitIntervalSeconds)
+			T.truthy(w.H.hasNotify(w.player, "success", "성체가 됐어요"))
+			T.eq(#grown, 1)
+			T.eq(seedPart(w, record.uid), nil, "씨앗 파트는 사라짐")
+			local part = plantPart(w, record.uid)
+			T.truthy(part, "GardenPlant 파트")
+			T.eq(part:GetAttribute("Stage"), "adult")
+			T.eq(part:GetAttribute("Fruits"), 1)
+			T.eq(part:GetAttribute("FruitMax"), w.Config.FRUIT_MAX_PER_PLANT)
+			T.eq(part:GetAttribute("OwnerUserId"), w.player.UserId)
+			T.eq(w.H.remotes.HatchEgg, nil, "부화 Remote 는 없음")
+			-- 한 번 더 지나도 또 성체가 되지 않음
+			w.H.advance(3)
+			T.eq(#w.H.sent(w.player, "PlantGrown"), 1)
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"남의 알 uid / 가방 속 알 / 이상한 uid 로 부화 요청해도 아무 일 없음 (Remote)",
+		"성장 단계: 씨앗 파트 Attribute Stage 가 새싹(0~25%) → 줄기(25~60%) → 봉오리(60~99%) → 성체",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local record = placeNew(w, "sprout_daisy") -- 10초
+			local part = seedPart(w, record.uid)
+			T.eq(part:GetAttribute("Stage"), "sprout")
+			w.H.advance(3) -- 30%
+			T.eq(part:GetAttribute("Stage"), "stem")
+			w.H.advance(4) -- 70%
+			T.eq(part:GetAttribute("Stage"), "bud")
+			T.eq(part:GetAttribute("Ready"), false)
+			w.H.advance(3.1)
+			T.eq(#w.data.pets, 1, "100% = 성체")
+			T.eq(w.H.shared("GardenRules").stage(5, 10), "stem")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"정원이 꽉 찬 채로 다 자라도 성체가 됨 (씨앗이 이미 칸을 차지), 남의 씨앗은 안 건드림",
 		function()
 			local w = world()
 			local B = w.BaseService
 			B.start()
 			local other, _, otherData = playerWith(w, 1002, "Other")
-			local theirs = placeNew(w, "jitterbug", "normal", {}, other, otherData)
-			theirs.progress = theirs.required
-			w.H.client(w.player, "HatchEgg", theirs.uid) -- 내 데이터에는 없는 uid
-			T.eq(#otherData.incubators, 1)
-			T.eq(#otherData.pets, 0)
-			for _, bad in { 5, "", "../x", string.rep("z", 49), {} } do
-				w.H.client(w.player, "HatchEgg", bad)
+			local theirs = placeNew(w, "rune_rose", "normal", {}, other, otherData)
+			for _ = 1, 7 do
+				placeNew(w, "puppy_grass")
 			end
-			T.eq(#w.data.pets, 0)
-			-- 가방 속 알은 다 자랐어도 부화 안 됨 (우리에 놓아야 함)
-			w.H.advance(3)
-			B.grantEgg(w.player, "jitterbug", "normal", {}, "dev")
-			w.data.eggs[1].progress = w.data.eggs[1].required
-			w.H.client(w.player, "HatchEgg", w.data.eggs[1].uid)
-			T.eq(#w.data.pets, 0)
-			T.eq(#w.data.eggs, 1)
-			-- 주인이 부화하면 정상
-			w.H.client(other, "HatchEgg", theirs.uid)
-			T.eq(#otherData.pets, 1)
+			T.eq(#w.data.incubators, 7, "1레벨 정원 7칸")
+			w.H.advance(3.1)
+			T.eq(#w.data.incubators, 0)
+			T.eq(#w.data.pets, 7)
+			T.eq(#otherData.incubators, 1)
+			T.eq(theirs.progress > 0, true)
+			T.eq(#otherData.pets, 0)
 			w.H.uninstall()
 		end
 	)
 
-	T.test("보관함이 가득 찬 상태에서 제일 싼 펫이 부화되면 sold=true, 돈으로 바뀜", function()
-		local w = world()
-		local B = w.BaseService
-		for _ = 1, 500 do
-			addPet(w, "bear")
-		end
-		T.eq(#w.data.pets, 500)
-		local record = placeNew(w, "chicken")
-		record.progress = record.required
-		w.H.clearSent()
-		B.hatch(w.player, record.uid)
-		T.eq(#w.data.pets, 500)
-		local result = w.H.sent(w.player, "HatchResult")[1][1]
-		T.truthy(result.sold)
-		T.falsy(result.equipped)
-		T.eq(w.data.money, 3 * 60)
-		w.H.uninstall()
-	end)
-
-	------------------------------------------------------------------
-	T.suite("서비스: BaseService 알 자라기 (우리에 놓인 알만, 밤 30배, 오프라인)")
-
-	T.test("낮에는 1초에 1초씩, 밤에는 30배, 다 자라면 한 번만 알림", function()
+	T.test("낮에는 1초에 1초씩, 밤에는 30배, 다 자라면 성체 알림 한 번", function()
 		local w = world()
 		local B = w.BaseService
 		B.start()
-		local record = placeNew(w, "jitterbug") -- 20초 (2판 수정: 원작 그대로)
-		T.eq(record.required, 20)
+		local record = placeNew(w, "bell_mushroom") -- 60초
+		T.eq(record.required, 60)
 		w.H.advance(3)
 		T.near(record.progress, 3, 1e-9)
-		T.eq(countNotify(w, "다 자랐어요"), 0, "아직 안 자라서 알림 없음")
+		T.eq(countNotify(w, "성체가 됐어요"), 0, "아직 안 자라서 알림 없음")
 		w.H.setPhase("Night")
-		w.H.advance(1)
-		T.eq(record.progress, record.required, "밤 1초 = 30초 → 다 자람")
-		T.eq(countNotify(w, "다 자랐어요"), 1)
+		w.H.advance(2)
+		T.eq(#w.data.pets, 1, "밤 2초 = 60초 → 성체")
+		T.eq(countNotify(w, "성체가 됐어요"), 1)
 		w.H.advance(5)
-		T.eq(countNotify(w, "다 자랐어요"), 1, "다 자란 뒤 계속 알리지 않음")
+		T.eq(countNotify(w, "성체가 됐어요"), 1, "계속 알리지 않음")
 		w.H.uninstall()
 	end)
 
@@ -702,7 +711,7 @@ return function(T, Loader)
 		local B = w.BaseService
 		B.start()
 		w.session.hasGrowthPass = true
-		local record = placeNew(w, "ghost_king") -- 86400초
+		local record = placeNew(w, "moon_ghost_tree") -- 5일
 		w.H.advance(10)
 		T.near(record.progress, 20, 1e-9, "낮 2배")
 		w.H.setPhase("Night")
@@ -712,26 +721,139 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"오프라인 동안 자란 만큼 (놓인 알만, 밤 가속 없음), 아주 오래 비워도 필요량에서 멈춤",
+		"오프라인 동안 자란 만큼 (심은 씨앗만, 밤 가속 없음), 다 자란 것은 접속하자마자 성체 (알림 한 번에)",
 		function()
 			local w = world()
 			local B = w.BaseService
-			local record = placeNew(w, "ghost_king")
-			B.grantEgg(w.player, "ghost_king", "normal", {}, "altar")
+			local record = placeNew(w, "moon_ghost_tree")
+			B.grantEgg(w.player, "moon_ghost_tree", "normal", {}, "sakura")
 			w.data.lastSaveTime = w.H.time() - 100
 			B.onPlayerReady(w.player)
 			T.near(record.progress, 100, 1e-9)
-			T.eq(w.data.eggs[1].progress, 0, "가방 속 알은 오프라인에도 안 자람")
-			w.data.lastSaveTime = w.H.time() - 30 * 86400
-			B.onPlayerReady(w.player)
-			T.eq(record.progress, record.required, "한 달 비웠으면 다 자람 (넘치지는 않음)")
-			-- 첫 접속(lastSaveTime 0) 은 안 자람
+			T.eq(w.data.eggs[1].progress, 0, "가방 속 씨앗은 오프라인에도 안 자람")
+			-- 짧은 씨앗 2개 + 한 달 비움 → 둘 다 성체, 알림은 "씨앗 2개" 한 번
 			local w2 = world()
-			local record2 = placeNew(w2, "ghost_king")
-			w2.data.lastSaveTime = 0
+			placeNew(w2, "sprout_daisy")
+			placeNew(w2, "puppy_grass")
+			w2.data.lastSaveTime = w2.H.time() - 30 * 86400
+			w2.H.clearSent()
 			w2.BaseService.onPlayerReady(w2.player)
-			T.eq(record2.progress, 0)
-			w2.H.uninstall()
+			T.eq(#w2.data.incubators, 0)
+			T.eq(#w2.data.pets, 2)
+			T.truthy(w2.H.hasNotify(w2.player, "success", "씨앗 2개가 성체가 됐어요"))
+			T.eq(#w2.H.sent(w2.player, "PlantGrown"), 2)
+			-- 첫 접속(lastSaveTime 0) 은 안 자람
+			local w3 = world()
+			local record3 = placeNew(w3, "moon_ghost_tree")
+			w3.data.lastSaveTime = 0
+			w3.BaseService.onPlayerReady(w3.player)
+			T.eq(record3.progress, 0)
+			w3.H.uninstall()
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite("서비스: BaseService 건너뛰기 (SkipGrowth: 남은 1분당 10코인 × 등급 배수)")
+
+	T.test(
+		"전부(all): 부엉이 참나무(희귀 ×4, 4분) = 160 코인 → 바로 성체 / 코인이 모자라면 거부",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local record = placeNew(w, "owl_oak") -- 240초
+			w.data.money = 159
+			w.H.client(w.player, "SkipGrowth", record.uid, "all")
+			T.eq(w.data.money, 159, "코인 안 빠짐")
+			T.eq(record.progress, 0)
+			T.truthy(w.H.hasNotify(w.player, "error", "코인이 부족해요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "160 코인 필요"))
+			w.data.money = 1000
+			w.H.client(w.player, "SkipGrowth", record.uid, "all")
+			T.eq(w.data.money, 1000 - 160)
+			T.eq(#w.data.incubators, 0)
+			T.eq(#w.data.pets, 1, "바로 성체")
+			T.eq(w.data.stats.skips, 1)
+			T.eq(#w.H.sent(w.player, "PlantGrown"), 1)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"절반(half): 남은 시간의 절반만, 가격도 그만큼 (남은 2분 → 80 코인), 분은 올림",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			local record = placeNew(w, "owl_oak")
+			w.data.money = 1000
+			w.H.client(w.player, "SkipGrowth", record.uid, "half")
+			T.eq(w.data.money, 1000 - 80)
+			T.near(record.progress, 120, 1e-9)
+			T.eq(#w.data.pets, 0, "아직 성체 아님")
+			T.truthy(w.H.hasNotify(w.player, "success", "절반"))
+			-- 조금 자란 뒤 남은 시간의 절반 = 1분이 안 됨 → 1분으로 올림 → 40 코인
+			w.H.advance(1)
+			local before = w.data.money
+			w.H.advance(1) -- 레이트 리밋 여유
+			w.H.client(w.player, "SkipGrowth", record.uid, "half")
+			T.eq(before - w.data.money, 40)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"등급 배수: 비밀 룬 장미 전부 = 1440분 × 10 × 100 = 1,440,000 코인, 슈퍼 울트라디바인은 × 500",
+		function()
+			local w = world()
+			local GardenRules = w.H.shared("GardenRules")
+			T.eq(GardenRules.skipCost("rune_rose", 0, 86400, "all"), 1440 * 10 * 100)
+			T.eq(GardenRules.skipCost("rainbow_thunder_tree", 0, 7 * 86400, "all"), 7 * 1440 * 10 * 500)
+			T.eq(GardenRules.skipCost("sprout_daisy", 0, 10, "all"), 10, "10초도 1분으로 올림")
+			T.eq(GardenRules.skipCost("sprout_daisy", 10, 10, "all"), 0, "다 자랐으면 0")
+			T.eq(GardenRules.skipCost("없는식물", 0, 10, "all"), nil)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"SkipGrowth 이상한 요청: 모드가 틀림 / 가방 속 씨앗 / 남의 씨앗 / 성체 uid / 이상한 인자는 아무 일 없음",
+		function()
+			local w = world()
+			local B = w.BaseService
+			B.start()
+			w.data.money = 1e9
+			local record = placeNew(w, "owl_oak")
+			local other, _, otherData = playerWith(w, 1002, "Other")
+			otherData.nextUid = 500 -- uid 는 사람마다 따로 매겨서 겹칠 수 있음 → 내 것과 다른 번호로
+			local theirs = placeNew(w, "owl_oak", "normal", {}, other, otherData)
+			B.grantEgg(w.player, "owl_oak", "normal", {}, "dev")
+			local bagUid = w.data.eggs[#w.data.eggs].uid
+			for _, args in
+				{
+					{ record.uid, "quarter" },
+					{ record.uid },
+					{ record.uid, 5 },
+					{ bagUid, "all" },
+					{ theirs.uid, "all" },
+					{ 12, "all" },
+					{ "", "all" },
+				}
+			do
+				w.H.advance(1)
+				w.H.client(w.player, "SkipGrowth", table.unpack(args))
+			end
+			T.eq(w.data.money, 1e9)
+			T.eq(theirs.progress > 0 and theirs.progress < theirs.required, true)
+			T.eq(#otherData.pets, 0)
+			-- 성체가 된 식물 uid 로는 건너뛸 게 없음
+			w.H.client(w.player, "SkipGrowth", record.uid, "all")
+			local spent = 1e9 - w.data.money
+			T.truthy(spent > 0)
+			w.H.advance(1)
+			w.H.client(w.player, "SkipGrowth", record.uid, "all")
+			T.eq(1e9 - w.data.money, spent, "성체는 건너뛰기 없음")
+			w.H.uninstall()
 		end
 	)
 
@@ -766,276 +888,9 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("서비스: FusionService (퓨전 머신)")
-
-	local function fuseWorld()
-		local w = world()
-		w.FusionService = w.H.server("Services/FusionService")
-		w.FusionService.start()
-		local x, z = w.H.plotSpot(1) -- 내 베이스 앞마당 (퓨전 머신 파트가 없으면 "내 베이스 안" 이면 됨)
-		w.H.spawn(w.player, x, 3, z)
-		return w
-	end
-
-	T.test(
-		"닭 3마리 → 새: 재료는 사라지고 결과는 보관함·우리에, 결과 알림·도감",
-		function()
-			local w = fuseWorld()
-			local a, b, c = addPet(w, "chicken"), addPet(w, "chicken"), addPet(w, "chicken")
-			local fused = {}
-			w.FusionService.fused:connect(function(_, pet)
-				table.insert(fused, pet)
-			end)
-			w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-			T.eq(#w.data.pets, 1)
-			local pet = w.data.pets[1]
-			T.eq(pet.petId, "bird")
-			T.eq(w.data.equipped[1], pet.uid, "빈 칸이라 자동 장착")
-			T.eq(#w.data.equipped, 1, "재료의 장착은 풀림")
-			T.truthy(w.data.indexDiscovered.bird)
-			T.eq(w.data.stats.fusions, 1)
-			T.eq(#fused, 1)
-			local result = w.H.sent(w.player, "FusionResult")[1][1]
-			T.eq(#result.consumed, 3)
-			T.truthy(result.upgraded)
-			T.truthy(result.isNew)
-			T.truthy(result.income >= result.inputIncome)
-			T.truthy(w.H.hasNotify(w.player, "success", "합성 성공"))
-			w.H.uninstall()
-		end
+	T.suite(
+		"서비스: SakuraService (6판 사쿠라 나무: 성체 바치기 → 크리스탈 → 특별 씨앗 뽑기)"
 	)
-
-	T.test("거부: 종류가 다름 / 같은 펫 두 번 / 없는 펫 / 남의 펫 — 재료는 그대로", function()
-		local w = fuseWorld()
-		local a, b = addPet(w, "chicken"), addPet(w, "chicken")
-		local d = addPet(w, "dog")
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, d.uid)
-		T.truthy(w.H.hasNotify(w.player, "error", "똑같은 종류"))
-		w.H.advance(4) -- 레이트 리밋(burst 3) 회복
-		w.H.client(w.player, "FuseRequest", a.uid, a.uid, b.uid)
-		T.truthy(w.H.hasNotify(w.player, "error", "두 번 넣을 수 없어요"))
-		w.H.advance(4)
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, "p999")
-		T.truthy(w.H.hasNotify(w.player, "error", "가지고 있지 않은 펫"))
-		T.eq(#w.data.pets, 3)
-		-- 남의 펫 (uid 가 내 것과 안 겹치게 번호를 크게)
-		local other, _, otherData = playerWith(w, 1002, "Other")
-		otherData.nextUid = 100
-		w.H.spawn(other, 0, 3, 0)
-		local x = addPet(w, "chicken", "normal", {}, other, otherData)
-		local y = addPet(w, "chicken", "normal", {}, other, otherData)
-		local z = addPet(w, "chicken", "normal", {}, other, otherData)
-		w.H.advance(4)
-		w.H.clearSent()
-		w.H.client(w.player, "FuseRequest", x.uid, y.uid, z.uid)
-		T.eq(#otherData.pets, 3, "남의 펫은 못 씀")
-		T.eq(#w.data.pets, 3)
-		T.truthy(w.H.hasNotify(w.player, "error", "가지고 있지 않은 펫"), "요청이 실제로 처리됐는지")
-		-- 이상한 인자
-		w.H.advance(4)
-		w.H.client(w.player, "FuseRequest", 1, 2, 3)
-		w.H.client(w.player, "FuseRequest", a.uid)
-		T.eq(#w.data.pets, 3)
-		w.H.uninstall()
-	end)
-
-	T.test("거부: 퓨전 머신(내 베이스)에서 멀면 / 캐릭터가 없으면", function()
-		local w = fuseWorld()
-		local a, b, c = addPet(w, "chicken"), addPet(w, "chicken"), addPet(w, "chicken")
-		w.H.teleport(w.player, 0, 3, 0) -- 베이스 밖 (복도)
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-		T.eq(#w.data.pets, 3)
-		T.truthy(w.H.hasNotify(w.player, "error", "퓨전 머신 가까이"))
-		w.H.advance(4)
-		w.player.Character = nil
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-		T.eq(#w.data.pets, 3)
-		w.H.advance(4)
-		local px, pz = w.H.plotSpot(1)
-		w.H.spawn(w.player, px, 3, pz)
-		w.session.plotIndex = 0 -- 베이스 없는 사람
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-		T.eq(#w.data.pets, 3)
-		w.H.advance(4)
-		w.session.plotIndex = 1 -- 되돌리면 정상 (위 거부가 진짜 그 이유 때문이었는지 확인)
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-		T.eq(#w.data.pets, 1)
-		w.H.uninstall()
-	end)
-
-	T.test("거부: 더 강해질 수 없는 펫 (거대 파타핌 3마리) — 재료 그대로", function()
-		local w = fuseWorld()
-		local a = addPet(w, "brr_brr_patapim", "huge")
-		local b = addPet(w, "brr_brr_patapim", "huge")
-		local c = addPet(w, "brr_brr_patapim", "huge")
-		w.H.client(w.player, "FuseRequest", a.uid, b.uid, c.uid)
-		T.eq(#w.data.pets, 3)
-		T.truthy(w.H.hasNotify(w.player, "error", "더 강해질 수 없어서"))
-		w.H.uninstall()
-	end)
-
-	T.test("퓨전은 레이트 리밋 (burst 3)", function()
-		local w = fuseWorld()
-		local a = addPet(w, "chicken")
-		for _ = 1, 10 do
-			w.H.client(w.player, "FuseRequest", a.uid, "p500", "p501")
-		end
-		T.eq(#w.H.notifications(w.player), 3, "3번까지만 처리")
-		w.H.uninstall()
-	end)
-
-	------------------------------------------------------------------
-	T.suite("서비스: AltarService (제단 짝 맞추기·비밀 통로 합성)")
-
-	local function altarWorld()
-		local w = world()
-		w.AltarService = w.H.server("Services/AltarService")
-		w.AltarService.start()
-		w.A, w.sa, w.da = w.player, w.session, w.data
-		w.B, w.sb, w.db = playerWith(w, 1002, "Bee")
-		w.H.spawn(w.A, 0, 3, 0)
-		w.H.spawn(w.B, 0, 3, 0)
-		return w
-	end
-
-	local function offer(w, player, uid, altarName)
-		w.H.landmarks.nearName = altarName
-		w.H.client(player, "AltarOffer", uid)
-		w.H.advance(1.1) -- 레이트 리밋 회복
-	end
-
-	T.test(
-		"서로 다른 두 사람이 같은 주기에 양쪽 제단에 바치면 둘 다 링 가드/링로드 알",
-		function()
-			local w = altarWorld()
-			local dove = addPet(w, "light_dove", "normal", {}, w.A, w.da)
-			local sprite = addPet(w, "flame_sprite", "normal", {}, w.B, w.db)
-			offer(w, w.A, dove.uid, "AltarLight")
-			T.eq(#w.da.pets, 1, "짝을 기다리는 동안 펫은 그대로")
-			T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 1)
-			T.eq(w.H.sent(w.A, "AltarUpdate")[1][1].status, "pending")
-			offer(w, w.B, sprite.uid, "AltarDark")
-			T.eq(#w.da.pets, 0)
-			T.eq(#w.db.pets, 0)
-			T.eq(#w.da.eggs, 1)
-			T.eq(#w.db.eggs, 1)
-			T.truthy(w.da.eggs[1].petId == "ring_guard" or w.da.eggs[1].petId == "ringlord")
-			T.truthy(w.db.eggs[1].petId == "ring_guard" or w.db.eggs[1].petId == "ringlord")
-			T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 0)
-			local paired = w.H.sent(w.A, "AltarUpdate")
-			T.eq(paired[#paired][1].status, "paired")
-			T.eq(paired[#paired][1].partner, "Bee")
-			w.H.uninstall()
-		end
-	)
-
-	T.test("같은 사람이 양쪽 제단에 두 번 바치는 건 불가 (한 주기에 한 번)", function()
-		local w = altarWorld()
-		local dove = addPet(w, "light_dove", "normal", {}, w.A, w.da)
-		local imp = addPet(w, "imp", "normal", {}, w.A, w.da)
-		offer(w, w.A, dove.uid, "AltarLight")
-		offer(w, w.A, imp.uid, "AltarDark")
-		T.eq(#w.da.pets, 2, "아무것도 안 사라짐")
-		T.truthy(w.H.hasNotify(w.A, "error", "이미 제물을 바쳤어요"))
-		T.eq(#w.da.eggs, 0)
-		w.H.uninstall()
-	end)
-
-	T.test("틀린 쪽 펫 / 제단에서 멀리 / 일반 펫은 거부", function()
-		local w = altarWorld()
-		local sprite = addPet(w, "flame_sprite", "normal", {}, w.A, w.da)
-		local chicken = addPet(w, "chicken", "normal", {}, w.A, w.da)
-		offer(w, w.A, sprite.uid, "AltarLight")
-		T.truthy(w.H.hasNotify(w.A, "error", "천국 제단에는 천국 쪽 펫만"))
-		offer(w, w.A, chicken.uid, "AltarLight")
-		offer(w, w.A, sprite.uid, nil) -- 제단에서 멀리
-		T.truthy(w.H.hasNotify(w.A, "error", "제단 가까이에서"))
-		T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 0)
-		T.eq(#w.da.pets, 2)
-		w.H.uninstall()
-	end)
-
-	T.test(
-		"주기가 바뀌면 기다리던 제물 취소 (펫은 남고 알림), 나간 사람 제물도 취소",
-		function()
-			local w = altarWorld()
-			local dove = addPet(w, "light_dove", "normal", {}, w.A, w.da)
-			offer(w, w.A, dove.uid, "AltarLight")
-			w.H.setPhase("Day", 2)
-			local updates = w.H.sent(w.A, "AltarUpdate")
-			T.eq(updates[#updates][1].status, "expired")
-			T.eq(#w.da.pets, 1)
-			T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 0)
-			-- 새 주기에서 다시 바칠 수 있음
-			offer(w, w.A, dove.uid, "AltarLight")
-			T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 1)
-			w.AltarService.onPlayerLeaving(w.A)
-			T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 0)
-			w.H.uninstall()
-		end
-	)
-
-	T.test(
-		"기다리는 사이 제물 펫이 없어졌으면 그 제물은 건너뛰고 새 사람은 계속 기다림",
-		function()
-			local w = altarWorld()
-			local dove = addPet(w, "light_dove", "normal", {}, w.A, w.da)
-			local sprite = addPet(w, "flame_sprite", "normal", {}, w.B, w.db)
-			offer(w, w.A, dove.uid, "AltarLight")
-			w.PetService.removePets(w.A, { dove.uid }) -- 몰래 팔았다고 치자
-			offer(w, w.B, sprite.uid, "AltarDark")
-			T.eq(#w.db.pets, 1, "짝이 없으니 B 의 펫은 그대로")
-			T.eq(#w.db.eggs, 0)
-			w.H.uninstall()
-		end
-	)
-
-	T.test("알 받을 자리(알 가방 50)가 없으면 제물을 못 바침", function()
-		local w = altarWorld()
-		w.player = w.A
-		local dove = addPet(w, "light_dove", "normal", {}, w.A, w.da)
-		fillBag(w, w.Config.EGG_INVENTORY_MAX, w.A)
-		offer(w, w.A, dove.uid, "AltarLight")
-		T.truthy(w.H.hasNotify(w.A, "error", "알을 받을 자리가 없어요"))
-		T.eq(w.H.landmarks.parts.AltarLight:GetAttribute("PendingCount"), 0)
-		w.H.uninstall()
-	end)
-
-	T.test("비밀 통로 합성: 페가수스 + 스켈레톤 말 → 에퀴녹스 알, 계정당 한 번", function()
-		local w = altarWorld()
-		local p1 = addPet(w, "pegasus", "big", {}, w.A, w.da)
-		local p2 = addPet(w, "skeleton_horse", "huge", {}, w.A, w.da)
-		w.H.landmarks.nearName = nil
-		w.H.client(w.A, "ShrineFuse", p1.uid, p2.uid)
-		T.eq(#w.da.pets, 2, "비밀 통로에서 멀면 거부")
-		w.H.advance(3)
-		w.H.landmarks.nearName = "SecretShrine"
-		w.H.client(w.A, "ShrineFuse", p1.uid, p2.uid)
-		T.eq(#w.da.pets, 0)
-		T.eq(#w.da.eggs, 1)
-		T.eq(w.da.eggs[1].petId, "equinox")
-		T.eq(w.da.eggs[1].size, "big", "두 펫 중 작은 크기")
-		T.truthy(w.da.shrineUsed.equinox)
-		-- 두 번째 시도
-		local q1 = addPet(w, "pegasus", "normal", {}, w.A, w.da)
-		local q2 = addPet(w, "skeleton_horse", "normal", {}, w.A, w.da)
-		w.H.advance(5)
-		w.H.client(w.A, "ShrineFuse", q1.uid, q2.uid)
-		T.eq(#w.da.pets, 2, "계정당 한 번")
-		T.truthy(w.H.hasNotify(w.A, "error", "계정당 한 번만"))
-		-- 틀린 조합
-		local chicken = addPet(w, "chicken", "normal", {}, w.A, w.da)
-		w.H.advance(5)
-		w.H.client(w.A, "ShrineFuse", q1.uid, chicken.uid)
-		T.truthy(w.H.hasNotify(w.A, "error", "합성할 수 없어요"))
-		w.H.advance(5)
-		w.H.client(w.A, "ShrineFuse", q1.uid, q1.uid)
-		T.eq(#w.da.pets, 3)
-		w.H.uninstall()
-	end)
-
-	------------------------------------------------------------------
-	T.suite("서비스: SakuraService (사쿠라 인큐베이터·크리스탈)")
 
 	local function sakuraWorld()
 		local w = world()
@@ -1046,94 +901,121 @@ return function(T, Loader)
 		return w
 	end
 
-	T.test("학을 바치면 인큐베이터 해금 (학 없으면/멀면/이미 열었으면 거부)", function()
-		local w = sakuraWorld()
-		w.H.client(w.player, "SakuraOffer")
-		T.truthy(w.H.hasNotify(w.player, "error", "학 펫이 있어야"))
-		addPet(w, "crane")
-		local chicken = addPet(w, "chicken")
-		w.H.landmarks.nearName = nil
-		w.H.advance(3)
-		w.H.client(w.player, "SakuraOffer")
-		T.falsy(w.data.sakuraUnlocked)
-		T.truthy(w.H.hasNotify(w.player, "error", "사쿠라 인큐베이터 가까이"))
-		w.H.landmarks.nearName = "SakuraIncubator"
-		w.H.advance(3)
-		w.H.client(w.player, "SakuraOffer", chicken.uid) -- 학이 아닌 펫
-		T.falsy(w.data.sakuraUnlocked)
-		w.H.advance(3)
-		w.H.client(w.player, "SakuraOffer", 12345) -- 이상한 인자는 무시
-		T.falsy(w.data.sakuraUnlocked)
-		w.H.advance(3)
-		w.H.client(w.player, "SakuraOffer")
-		T.truthy(w.data.sakuraUnlocked)
-		T.eq(#w.data.pets, 1, "학만 사라짐")
-		T.eq(w.data.pets[1].petId, "chicken")
-		T.truthy(w.player.attrs.SakuraUnlocked)
-		T.eq(w.H.sent(w.player, "SakuraResult")[1][1].kind, "unlocked")
-		w.H.uninstall()
-	end)
+	-- 정원 빈자리에 성체 하나 (PetService.addPlant)
+	local function addPlant(w, petId)
+		local spots = {}
+		for _, r in w.data.pets do
+			table.insert(spots, { x = r.x, z = r.z, size = r.size })
+		end
+		local spot = w.EggPlacement.firstFreeGrid("normal", spots)
+		local record = {
+			uid = w.DataSchema.newUid(w.data, "p"),
+			petId = petId,
+			size = "normal",
+			mutations = {},
+			x = spot.x,
+			z = spot.z,
+			fruits = 0,
+			fruitProgress = 0,
+		}
+		assert(w.PetService.addPlant(w.player, record))
+		return record
+	end
 
 	T.test(
-		"크리스탈 1개로 블룸: 펫·가방 속 알·우리에 놓인 알에 붙고, 이미 블룸이 있으면 거부(크리스탈 안 씀)",
+		"성체를 바치면 등급별 크리스탈 (멀면·성체가 아니면·이상한 인자면 거부), 정원 자리가 빔",
 		function()
 			local w = sakuraWorld()
-			w.data.sakuraUnlocked = true
-			local pet = addPet(w, "chicken")
-			w.H.client(w.player, "SakuraApply", pet.uid)
-			T.truthy(w.H.hasNotify(w.player, "error", "크리스탈이"), "크리스탈 없음")
-			T.eq(#pet.mutations, 0)
-			w.SakuraService.addCrystals(w.player, 3)
-			T.eq(w.player.attrs.SakuraCrystals, 3)
+			local daisy = addPlant(w, "sprout_daisy") -- 일반 1개
+			local rose = addPlant(w, "rune_rose") -- 비밀 20개
+			w.H.landmarks.nearName = nil
+			w.H.client(w.player, "SakuraOffer", daisy.uid)
+			T.eq(#w.data.pets, 2)
+			T.truthy(w.H.hasNotify(w.player, "error", "사쿠라 나무 가까이"))
+			w.H.landmarks.nearName = "SakuraIncubator"
 			w.H.advance(3)
-			w.H.client(w.player, "SakuraApply", pet.uid)
-			T.eq(w.data.sakuraCrystals, 2)
-			T.eq(#pet.mutations, 1)
-			T.truthy(pet.mutations[1] == "bloom" or pet.mutations[1] == "spirit_bloom")
+			w.H.client(w.player, "SakuraOffer", "p999") -- 없는 성체
+			T.truthy(w.H.hasNotify(w.player, "error", "바칠 성체 식물"))
 			w.H.advance(3)
-			w.H.client(w.player, "SakuraApply", pet.uid) -- 이미 블룸
-			T.eq(w.data.sakuraCrystals, 2, "거부되면 크리스탈 안 씀")
-			T.truthy(w.H.hasNotify(w.player, "error", "이미 블룸"))
-			-- 가방 속 알 (2판 수정)
-			w.BaseService.grantEgg(w.player, "dog", "normal", { "golden" }, "altar")
-			local egg = w.data.eggs[1]
+			w.H.client(w.player, "SakuraOffer", 12345)
+			w.H.client(w.player, "SakuraOffer")
+			T.eq(#w.data.pets, 2)
+			T.eq(w.data.sakuraCrystals, 0)
 			w.H.advance(3)
-			w.H.clearSent()
-			w.H.client(w.player, "SakuraApply", egg.uid)
-			T.eq(w.data.sakuraCrystals, 1)
-			T.eq(#egg.mutations, 2, "골든 위에 블룸 중첩")
-			T.eq(w.H.sent(w.player, "SakuraResult")[1][1].target, "egg")
-			local sentEggs = false
-			for _, args in w.H.sent(w.player, "DataUpdate") do
-				sentEggs = sentEggs or args[1] == "eggs"
-			end
-			T.truthy(sentEggs, "가방 다시 보냄")
-			-- 우리에 놓인 알 (내 베이스에서 놓고 인큐베이터로 돌아옴)
-			local x, z = w.H.plotSpot(1)
-			w.H.teleport(w.player, x, 3, z)
-			local placed = placeNew(w, "bear", "normal", {})
-			w.H.teleport(w.player, 0, 3, 0)
-			w.SakuraService.addCrystals(w.player, 1)
-			w.H.advance(3)
-			w.H.client(w.player, "SakuraApply", placed.uid)
-			T.eq(w.data.sakuraCrystals, 1)
-			T.eq(#placed.mutations, 1)
-			local part = w.H.map.folders.Incubating.children[1]
-			T.eq(part:GetAttribute("Mutations"), placed.mutations[1], "놓인 알 겉모습도 바뀜")
-			-- 해금 안 했으면 거부
-			w.data.sakuraUnlocked = false
-			w.H.advance(3)
-			w.H.client(w.player, "SakuraApply", pet.uid)
-			T.eq(w.data.sakuraCrystals, 1)
+			w.H.client(w.player, "SakuraOffer", rose.uid)
+			T.eq(#w.data.pets, 1, "바친 성체만 사라짐")
+			T.eq(w.data.pets[1].uid, daisy.uid)
+			T.eq(w.data.sakuraCrystals, w.Config.SAKURA_OFFER_CRYSTALS.secret)
+			T.eq(w.player.attrs.SakuraCrystals, 20)
+			local result = w.H.sent(w.player, "SakuraResult")[1][1]
+			T.eq(result.kind, "offered")
+			T.eq(result.consumed, rose.uid)
+			T.eq(result.gained, 20)
+			T.eq(result.crystals, 20)
+			T.eq(w.player.attrs.SakuraUnlocked, nil, "6판: 해금 없음")
 			w.H.uninstall()
 		end
 	)
 
-	T.test("벚꽃 구역 알을 배달하면 크리스탈 +1 (다른 구역은 안 줌), 상한 999,999", function()
+	T.test(
+		"크리스탈 10개로 특별 씨앗 뽑기 → 씨앗 가방 (벚꽃 씨앗 / 정령 벚꽃 씨앗), 모자라면·가방이 차면 거부",
+		function()
+			local w = sakuraWorld()
+			w.H.client(w.player, "SakuraDraw")
+			T.truthy(w.H.hasNotify(w.player, "error", "크리스탈이 10개 필요"))
+			T.eq(#w.data.eggs, 0)
+			w.SakuraService.addCrystals(w.player, 25)
+			w.H.clearSent()
+			w.H.client(w.player, "SakuraDraw")
+			T.eq(w.data.sakuraCrystals, 15)
+			T.eq(#w.data.eggs, 1)
+			local egg = w.data.eggs[1]
+			T.truthy(egg.petId == "blossom_fairy" or egg.petId == "spirit_blossom", egg.petId)
+			T.eq(egg.biomeId, "cherry_blossom")
+			T.eq(egg.required, w.Pets.get(egg.petId).growSeconds)
+			local granted = w.H.sent(w.player, "EggGranted")[1][1]
+			T.eq(granted.source, "sakura")
+			local result = w.H.sent(w.player, "SakuraResult")[1][1]
+			T.eq(result.kind, "draw")
+			T.eq(result.petId, egg.petId)
+			T.eq(result.egg.uid, egg.uid)
+			T.truthy(w.H.hasNotify(w.player, "success", "씨앗"))
+			-- 멀면 거부
+			w.H.landmarks.nearName = nil
+			w.H.advance(3)
+			w.H.client(w.player, "SakuraDraw")
+			T.eq(w.data.sakuraCrystals, 15)
+			-- 가방이 가득 차면 거부 (크리스탈 그대로)
+			w.H.landmarks.nearName = "SakuraIncubator"
+			fillBag(w, w.Config.EGG_INVENTORY_MAX - #w.data.eggs)
+			w.H.advance(3)
+			w.H.client(w.player, "SakuraDraw")
+			T.eq(w.data.sakuraCrystals, 15, "가방이 차면 크리스탈 안 씀")
+			T.truthy(w.H.hasNotify(w.player, "error", "씨앗 가방이 가득"))
+			T.eq(w.H.remotes.SakuraApply, nil, "6판: 블룸 Remote 없음")
+			w.H.uninstall()
+		end
+	)
+
+	T.test("뽑기 확률: 1,000번에 정령 벚꽃 씨앗은 드묾 (2.5%)", function()
 		local w = sakuraWorld()
-		w.BaseService.delivered:fire(w.player, { biomeId = "forest", petId = "chicken" })
+		local spirit = 0
+		for _ = 1, 1000 do
+			w.data.sakuraCrystals = 10
+			table.clear(w.data.eggs)
+			if w.SakuraService.draw(w.player) == "spirit_blossom" then
+				spirit += 1
+			end
+		end
+		T.truthy(spirit < 70, "정령 벚꽃 " .. spirit .. "번")
+		w.H.uninstall()
+	end)
+
+	T.test("벚꽃 구역 씨앗을 배달하면 크리스탈 +1 (다른 구역은 안 줌), 상한 999,999", function()
+		local w = sakuraWorld()
+		w.BaseService.delivered:fire(w.player, { biomeId = "forest", petId = "sprout_daisy" })
 		T.eq(w.data.sakuraCrystals, 0)
-		w.BaseService.delivered:fire(w.player, { biomeId = "cherry_blossom", petId = "crane" })
+		w.BaseService.delivered:fire(w.player, { biomeId = "cherry_blossom", petId = "koi_lotus" })
 		T.eq(w.data.sakuraCrystals, 1)
 		w.SakuraService.addCrystals(w.player, 5e9)
 		T.eq(w.data.sakuraCrystals, 999999)

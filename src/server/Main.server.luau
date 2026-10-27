@@ -3,9 +3,11 @@
 	서버 진입점 (ServerScriptService.Server.Main — Script, RunContext = Server)
 	팀 표준: 진입점은 이것 하나. 나머지는 전부 ModuleScript + start().
 	시작 순서가 중요합니다 (위에서 아래로). CycleService.run() 은 모두가 구독한 뒤 맨 마지막.
-	특수 장소 서비스(사쿠라·제단)는 MapBuilder 다음이어야 함 (맵에 파트가 없으면 임시 파트를 만듦).
+	특수 장소 서비스(사쿠라 나무)는 MapBuilder 다음이어야 함 (맵에 파트가 없으면 임시 파트를 만듦).
 	5판: 퀘스트(QuestService)·무료 보상(RewardService.start) 없앰. TutorialService 는 BaseService·PetService 뒤
-	     (그 신호에 연결), LeaderboardService(10초마다 랭킹판) 추가. RewardService 는 start() 가 없음 (PlayerLifecycle 이 씀).
+	     (그 신호에 연결), LeaderboardService(10초마다 랭킹판) 추가.
+	6판 "씨앗을 훔치세요": FruitService(열매 맺기·따기·팔기·먹이기) 추가 — TutorialService 가 그 신호에 연결하므로 그보다 먼저.
+	     없앤 것: IncomeService(자동 수입), RewardService(오프라인 수입), FusionService(퓨전 머신), AltarService(제단·비밀 통로)
 ]]
 
 local Server = script.Parent
@@ -23,15 +25,13 @@ local EggService = require(Services.EggService)
 local GuardianService = require(Services.GuardianService)
 local PetService = require(Services.PetService)
 local IndexService = require(Services.IndexService)
+local FruitService = require(Services.FruitService)
 local BaseService = require(Services.BaseService)
 local TutorialService = require(Services.TutorialService)
-local IncomeService = require(Services.IncomeService)
 local UpgradeService = require(Services.UpgradeService)
 local TreadmillService = require(Services.TreadmillService)
 local ToolService = require(Services.ToolService)
-local FusionService = require(Services.FusionService)
 local SakuraService = require(Services.SakuraService)
-local AltarService = require(Services.AltarService)
 local LeaderboardService = require(Services.LeaderboardService)
 local DevCommands = require(Services.DevCommands)
 local PlayerLifecycle = require(Services.PlayerLifecycle)
@@ -82,14 +82,14 @@ end)
 boot("IndexService", function()
 	IndexService.start()
 end)
+boot("FruitService", function()
+	FruitService.start()
+end)
 boot("BaseService", function()
 	BaseService.start()
 end)
 boot("TutorialService", function()
 	TutorialService.start()
-end)
-boot("IncomeService", function()
-	IncomeService.start()
 end)
 boot("UpgradeService", function()
 	UpgradeService.start()
@@ -100,14 +100,8 @@ end)
 boot("ToolService", function()
 	ToolService.start()
 end)
-boot("FusionService", function()
-	FusionService.start()
-end)
 boot("SakuraService", function()
 	SakuraService.start()
-end)
-boot("AltarService", function()
-	AltarService.start()
 end)
 boot("LeaderboardService", function()
 	LeaderboardService.start()

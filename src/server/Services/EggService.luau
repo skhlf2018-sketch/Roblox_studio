@@ -1,6 +1,8 @@
 --!strict
 --[[
-	EggService — 둥지 알 생성, 줍기, 들고 다니기, 놓치기 (서버 권한)
+	EggService — 둥지 씨앗 생성, 줍기, 들고 다니기, 놓치기 (서버 권한)
+	6판 "씨앗을 훔치세요": 알 → 씨앗 (모듈·변수·Remote·Attribute 이름은 5판 그대로: egg = 씨앗, petId = 식물 id).
+	  둥지 씨앗 등급은 구역별 가중치 (Data/EggSpawn), 경비는 식물 괴물 (이름 Data/Biomes). 규칙은 아래 5판 그대로.
 
 	알 상태:
 	  "Nest"    둥지 위 (ProximityPrompt E 로 줍기)
@@ -48,7 +50,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Biomes = require(Shared.Data.Biomes)
-local Pets = require(Shared.Data.Pets)
+local Pets = require(Shared.Data.Plants)
 local Rarities = require(Shared.Data.Rarities)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
@@ -200,7 +202,7 @@ local function eggTitle(egg: EggSeed): string
 	if size and size.id ~= "normal" then
 		table.insert(parts, size.name)
 	end
-	table.insert(parts, (if pet then pet.name else egg.petId) .. " 알")
+	table.insert(parts, if pet then Pets.seedName(pet.id) else egg.petId)
 	return table.concat(parts, " ") .. "\n" .. (if rarity then rarity.name else egg.rarity)
 end
 
@@ -319,7 +321,7 @@ local function connectPrompt(prompt: ProximityPrompt, uid: string)
 	end)
 end
 
-local function spawnEgg(slot: NestSlot, pet: Pets.Pet, traits: EggRoll.EggTraits, special: boolean): Egg
+local function spawnEgg(slot: NestSlot, pet: Pets.Plant, traits: EggRoll.EggTraits, special: boolean): Egg
 	eggCounter += 1
 	local seed: EggSeed = {
 		uid = "e" .. tostring(eggCounter),
@@ -426,7 +428,10 @@ function EggService.resetAll(cycleNumber: number)
 		end
 	end
 
-	Net.fireAll(Remotes.ToClient.Announce, { kind = "reset", text = "ALL EGG RESET!" })
+	Net.fireAll(
+		Remotes.ToClient.Announce,
+		{ kind = "reset", text = "ALL SEED RESET! 모든 씨앗이 새로 놓였어요!" }
+	)
 
 	for _, biome in Biomes.list do
 		local slots = nests[biome.id]
@@ -450,10 +455,10 @@ function EggService.resetAll(cycleNumber: number)
 						Net.fireAll(Remotes.ToClient.Announce, {
 							kind = "rareEgg",
 							text = string.format(
-								"%s 구역에 %s %s 알 등장!",
+								"%s 구역에 %s %s 등장!",
 								biome.name,
 								if rarity then rarity.name else pet.rarity,
-								pet.name
+								Pets.seedName(pet.id)
 							),
 							biomeId = biome.id,
 							petId = pet.id,
@@ -509,10 +514,10 @@ function EggService.spawnSpecialEgg(biomeId: string, petId: string, options: Spe
 		Net.fireAll(Remotes.ToClient.Announce, {
 			kind = "rareEgg",
 			text = string.format(
-				"%s 구역에 %s %s 알 등장!",
+				"%s 구역에 %s %s 등장!",
 				if biome then biome.name else biomeId,
 				if rarity then rarity.name else pet.rarity,
-				pet.name
+				Pets.seedName(pet.id)
 			),
 			biomeId = biomeId,
 			petId = pet.id,
@@ -566,11 +571,11 @@ function EggService.tryPickup(player: Player, uid: string)
 		return
 	end
 	if not Cycle.canStealEggs(CycleService.getPhase()) then
-		Net.notify(player, "error", "밤에는 알을 훔칠 수 없어요!")
+		Net.notify(player, "error", "밤에는 씨앗을 훔칠 수 없어요!")
 		return
 	end
 	if session.carryingUid then
-		Net.notify(player, "error", "이미 알을 들고 있어요!")
+		Net.notify(player, "error", "이미 씨앗을 들고 있어요!")
 		return
 	end
 	local now = os.clock()
@@ -843,7 +848,7 @@ function EggService.dropEgg(player: Player): boolean
 		return false
 	end
 	EggService.dropCarried(player, "drop")
-	Net.notify(player, "info", "알을 내려놓았어요.")
+	Net.notify(player, "info", "씨앗을 내려놓았어요.")
 	return true
 end
 

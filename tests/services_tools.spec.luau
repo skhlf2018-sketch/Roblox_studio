@@ -325,7 +325,7 @@ return function(T, Loader)
 			w.H.teleport(w.B, 3.01, 3, 0)
 			w.H.advance(1)
 			T.eq(#w.H.sent(w.B, "Caught"), 0, "3.01 은 밖")
-			w.H.carry(w.B, { petId = "chicken", biomeId = "forest" })
+			w.H.carry(w.B, { petId = "sprout_daisy", biomeId = "forest" })
 			w.H.teleport(w.B, 3, 3, 0)
 			w.H.advance(0.3)
 			local caught = w.H.sent(w.B, "Caught")
@@ -445,24 +445,24 @@ return function(T, Loader)
 		function()
 			local w = world()
 			local start = w.da.tools.bearTrap
-			w.IndexService.discover(w.A, "chicken") -- 일반
-			w.IndexService.discover(w.A, "bird") -- 고급
+			w.IndexService.discover(w.A, "sprout_daisy") -- 일반
+			w.IndexService.discover(w.A, "mossy_fern") -- 고급
 			T.eq(w.da.tools.bearTrap, start)
-			w.IndexService.discover(w.A, "raccoon") -- 희귀
+			w.IndexService.discover(w.A, "owl_oak") -- 희귀
 			T.eq(w.da.tools.bearTrap, start + 1)
-			w.IndexService.discover(w.A, "raccoon") -- 두 번째는 아무것도 없음
+			w.IndexService.discover(w.A, "owl_oak") -- 두 번째는 아무것도 없음
 			T.eq(w.da.tools.bearTrap, start + 1)
-			-- 숲 나머지: 개(일반), 굴 올빼미(희귀), 곰·여우(에픽), 파타핌(전설) → +4, 마지막에 구역 완성 +5
-			for _, id in { "dog", "burrowing_owl", "bear", "fox", "brr_brr_patapim" } do
+			-- 숲 나머지 (6판): 일반 2·고급 2·희귀 1(반딧불 백합) → +1, 마지막에 구역 완성 +5
+			for _, id in { "puppy_grass", "acorn_sprout", "bell_mushroom", "honey_tulip", "firefly_lily" } do
 				w.IndexService.discover(w.A, id)
 			end
-			T.eq(w.da.tools.bearTrap, start + 1 + 4 + 5)
+			T.eq(w.da.tools.bearTrap, start + 1 + 1 + 5)
 			w.H.advance(0.1)
 			T.eq(w.A.backpack:FindFirstChild("BearTrap"):GetAttribute("Count"), w.da.tools.bearTrap)
 			T.truthy(w.H.hasNotify(w.A, "success", "곰덫 +"))
 			-- 최대치에서 멈춤
 			w.da.tools.bearTrap = w.Config.BEAR_TRAP_MAX_OWNED
-			w.IndexService.discover(w.A, "turtle")
+			w.IndexService.discover(w.A, "moon_lotus")
 			T.eq(w.da.tools.bearTrap, w.Config.BEAR_TRAP_MAX_OWNED)
 			w.H.uninstall()
 		end

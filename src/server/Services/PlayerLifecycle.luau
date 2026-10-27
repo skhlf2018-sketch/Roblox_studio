@@ -4,13 +4,14 @@
 
 	접속:
 	  1) 세션 만들기 → 2) 베이스 배정(바로, 가득 차면 0 = 누가 나갈 때 배정) → 3) 데이터 불러오기(기다림)
-	  4) 준비: 펫 수입 계산 → 속도 → 우리에 놓인 알(오프라인 성장) → 오프라인 수입 → 업그레이드 → 도구
+	  4) 준비: 정원 칸 Attribute → 속도 → 열매(오프라인 열매, 6판) → 정원 씨앗(오프라인 성장 → 성체) → 업그레이드 → 도구
 	          → 사쿠라 Attribute → 튜토리얼 단계 맞춤(5판) → Snapshot 전송 → 랭킹판 한 번(5판)
+	          (6판: 오프라인 수입 RewardService 없앰 — 자동 수입이 없음)
 	     준비 단계는 하나씩 pcall 로 감쌈 (하나가 터져도 나머지·DataLoaded·Snapshot 은 진행)
 	나감:
-	  들고 있던 알 놓기 → 곰덫·제단 제물 정리 → 베이스 비우기 → 저장 + 세션 락 해제 → 세션 삭제
+	  들고 있던 씨앗 놓기 → 곰덫 정리 → 베이스 비우기 → 저장 + 세션 락 해제 → 세션 삭제
 	  (저장이 끝내 실패하면 DataService 가 나중에 다시 시도)
-	  불러오는 중에 나가면 data 는 저장하지 않고 락만 풂 (오프라인 수입 보존)
+	  불러오는 중에 나가면 data 는 저장하지 않고 락만 풂 (오프라인 시간 보존)
 	RequestSnapshot Remote: 클라가 준비되면 요청 (접속 직후 Snapshot 을 놓친 경우 대비)
 ]]
 
@@ -34,9 +35,8 @@ local PetService = require(Services.PetService)
 local UpgradeService = require(Services.UpgradeService)
 local TreadmillService = require(Services.TreadmillService)
 local ToolService = require(Services.ToolService)
-local RewardService = require(Services.RewardService)
+local FruitService = require(Services.FruitService)
 local SakuraService = require(Services.SakuraService)
-local AltarService = require(Services.AltarService)
 local TutorialService = require(Services.TutorialService)
 local LeaderboardService = require(Services.LeaderboardService)
 local AntiCheatService = require(Services.AntiCheatService)
@@ -84,7 +84,7 @@ local function onPlayerAdded(player: Player)
 
 	local data, saveEnabled, newerVersion = DataService.load(player)
 	if player.Parent == nil then
-		-- 불러오는 사이에 나감: data 는 건드리지 않고 락만 풂 (lastSaveTime 을 새로 찍지 않아 오프라인 수입 보존)
+		-- 불러오는 사이에 나감: data 는 건드리지 않고 락만 풂 (lastSaveTime 을 새로 찍지 않아 오프라인 시간 보존)
 		DataService.abandonLoad(session, data, saveEnabled)
 		Sessions.remove(player)
 		return
@@ -96,8 +96,8 @@ local function onPlayerAdded(player: Player)
 	safely("PetService", PetService.onPlayerReady, player)
 	safely("leaderstats", Wallet.setupLeaderstats, player)
 	safely("SpeedService", SpeedService.refresh, player)
+	safely("FruitService", FruitService.onPlayerReady, player) -- BaseService 보다 먼저 (이미 성체였던 식물만 오프라인 열매)
 	safely("BaseService", BaseService.onPlayerReady, player)
-	safely("RewardService", RewardService.onPlayerReady, player)
 	safely("UpgradeService", UpgradeService.onPlayerReady, player)
 	safely("ToolService", ToolService.onPlayerReady, player)
 	safely("SakuraService", SakuraService.onPlayerReady, player)
@@ -129,7 +129,6 @@ local function onPlayerRemoving(player: Player)
 	end
 	safely("EggService", EggService.onPlayerLeaving, player)
 	safely("ToolService", ToolService.onPlayerLeaving, player)
-	safely("AltarService", AltarService.onPlayerLeaving, player)
 	safely("BaseService", BaseService.onPlayerLeaving, player)
 	if session.loaded then
 		if not DataService.save(player, true) then

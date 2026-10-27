@@ -3,29 +3,63 @@
 	Config — 게임 전체 상수 (순수 데이터, 로블록스 API 없음 → Lune 테스트에서도 require 가능)
 
 	[추정] 표시는 설계문서에 숫자가 없어서 수석이 정한 값입니다. 밸런스 조정은 여기 숫자만 바꾸면 됩니다.
+
+	6판 "씨앗을 훔치세요" 용어 (코드 이름은 5판 그대로 둔 곳이 많음):
+	  알(egg) → 씨앗 · 우리(pen) → 정원 · 부화(hatch) → 성체 되기 · 펫(pet) → 성체 식물 · 돈(money) → 코인
+	  EGG_* = 씨앗, PEN = 정원, PET_PET_* = 물 주기, 저장 칸 pets = 정원의 성체 식물, incubators = 자라는 씨앗
+	6판에서 없앤 것: GROWTH_MULTIPLIER(펫 수입 ×3 — 열매 값은 Data/Plants 숫자 그대로), 펫 보관함(PET_INVENTORY_MAX)·
+	  자동 수입(INCOME_*)·오프라인 수입·펫 판매(PET_SELL_SECONDS)·퓨전(FUSION_*)·제단/비밀 통로(ALTAR_*, SHRINE_*)·
+	  사쿠라 해금(SAKURA_UNLOCK_PET)·블룸(SAKURA_APPLY_COST)·우리에 놓는 알 상한(PLACED_EGG_MAX → 정원 칸 수 = 정원 업그레이드)
 ]]
 
 local Config = {
-	------------------------------------------------------------------
-	-- 성장 배율 (설계문서 14-1): 펫 수입 ×G, 러닝머신 걸음당 속도 ×G (2판 수정: 부화 시간은 ÷G 안 함 — 원작 그대로, 밤 30배만)
-	------------------------------------------------------------------
-	GROWTH_MULTIPLIER = 3,
-
 	------------------------------------------------------------------
 	-- 서버 / 베이스
 	------------------------------------------------------------------
 	MAX_PLAYERS = 7,
 	PLOT_COUNT = 7,
-	-- 알 가방 / 우리에 놓기 (2판 수정: 허브에 들고 들어오면 알은 가방으로, 플레이어가 우리 안 원하는 자리에 놓음)
-	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 알 수 (가득 차면 배달·선물 알을 못 받음)
-	PLACED_EGG_MAX = 8, -- [추정] 우리에 한 번에 놓아 둘 수 있는 알 수 (1판 부화 슬롯 8칸과 같은 밸런스)
-	EGG_PLACE_SPACING = 4, -- 놓는 알 ↔ 다른 놓인 알·펫 최소 간격(스터드). 큰 알끼리는 두 알 지름 평균까지 늘어남
-	EGG_PLACE_FENCE_MARGIN = 2, -- 알 가운데가 우리 울타리에서 이만큼 안쪽이어야 함
-	EGG_PLACE_RADIUS = 14, -- 내 베이스 밖에 서 있으면 놓을 자리에서 이 거리 안이어야 PlaceEgg 가능
-	ALLOW_EGG_PICKUP = true, -- PickUpPlacedEgg(놓은 알을 다시 가방으로, 진행도 유지) 허용 — 원작에 있는지 확인 전 [추정]
-	-- 펫 보관함 상한 (DataStore 4MB·네트워크 보호). 넘치면 장착 안 된 펫 중 수입이 가장 낮은 펫을 자동 판매
-	PET_INVENTORY_MAX = 500,
-	PET_AUTO_SELL_SECONDS = 60, -- 자동 판매 가격 = 그 펫 초당 수입 × 이 초
+	-- 씨앗 가방 / 정원에 심기 (5판 알 가방·우리에 놓기 그대로: 허브에 들고 들어오면 씨앗은 가방으로, 정원 안 원하는 자리에 심음)
+	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 씨앗 수 (가득 차면 배달·선물 씨앗을 못 받음)
+	-- 정원 칸 수 = 정원 업그레이드(Upgrades.Pen) 칸 수 (7 → 18). 자라는 씨앗 + 성체 식물 합이 이 수까지 (Economy.penSlots)
+	EGG_PLACE_SPACING = 4, -- 심는 씨앗 ↔ 다른 씨앗·성체 식물 최소 간격(스터드). 큰 씨앗끼리는 두 씨앗 지름 평균까지 늘어남
+	EGG_PLACE_FENCE_MARGIN = 2, -- 씨앗 가운데가 정원 울타리에서 이만큼 안쪽이어야 함
+	EGG_PLACE_RADIUS = 14, -- 내 베이스 밖에 서 있으면 심을 자리에서 이 거리 안이어야 PlaceEgg 가능
+	ALLOW_EGG_PICKUP = true, -- PickUpPlacedEgg(심은 씨앗을 다시 가방으로, 자란 만큼 유지) 허용
+
+	------------------------------------------------------------------
+	-- 6판 정원: 성장 단계 · 열매 · 건너뛰기 · 성체 팔기 · 물 주기 (shared/GardenRules, shared/FruitRules)
+	------------------------------------------------------------------
+	-- 성장 단계: 자란 비율(progress / required)이 from 이상이면 그 단계. 100% = 성체 (그 자리에서 성체 식물이 됨)
+	GROWTH_STAGES = {
+		{ id = "sprout", name = "새싹", from = 0 },
+		{ id = "stem", name = "줄기", from = 0.25 },
+		{ id = "bud", name = "봉오리", from = 0.60 },
+		{ id = "adult", name = "성체", from = 1 },
+	} :: { { id: string, name: string, from: number } },
+	PASSIVE_INCOME_PER_SECOND = 0, -- 6판(사장님 결정 1): 자동 수입 없음 — 코인은 열매를 따서 팔아야 들어옴
+	FRUIT_MAX_PER_PLANT = 5, -- 안 따면 식물마다 열매가 이만큼까지만 쌓임 (설계 7장 결정 1)
+	FRUITS_ON_ADULT = 1, -- [수석] 성체가 되는 순간 달려 있는 열매 (튜토리얼 5단계 "열매 따서 팔기" 를 바로 할 수 있게)
+	FRUIT_BAG_MAX = 300, -- [추정] 열매 가방에 넣어 둘 수 있는 열매 수 (가득 차면 판매 가판대에서 팔기)
+	PLANT_SELL_FRUIT_MULTIPLIER = 20, -- 성체 뽑아서 팔기 값 = 그 식물 열매 1개 값 × 20 (FruitRules.fruitValue)
+	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·먹이기·성체 뽑기·물 주기: 내 정원(울타리 사각형)에서 이 거리 안
+	-- 건너뛰기 (SkipGrowth): 가격 = ceil(건너뛸 남은 시간(분)) × SKIP_COINS_PER_MINUTE × 등급 배수. "half" 는 남은 시간의 절반만
+	SKIP_COINS_PER_MINUTE = 10,
+	SKIP_RARITY_MULTIPLIER = {
+		common = 1,
+		uncommon = 2,
+		rare = 4,
+		epic = 8,
+		legendary = 15,
+		mythic = 30,
+		cosmic = 60,
+		secret = 100,
+		eternity = 180,
+		divine = 300,
+		super_ultradivine = 500,
+	} :: { [string]: number },
+	-- 물 주기 (5판 쓰다듬기 PetPet 자리): 자라는 씨앗은 성장 +10초, 성체는 다음 열매까지 +10초. 식물마다 60초에 한 번
+	WATER_GROWTH_SECONDS = 10,
+	WATER_COOLDOWN = 60,
 
 	------------------------------------------------------------------
 	-- 낮/밤 주기 (설계문서 2장)
@@ -33,9 +67,9 @@ local Config = {
 	DAY_SECONDS = 285, -- 4분 45초
 	NIGHT_SECONDS = 10,
 	INTERMISSION_SECONDS = 3,
-	NIGHT_GROWTH_MULTIPLIER = 30, -- 밤에는 알이 30배 빨리 자람
+	NIGHT_GROWTH_MULTIPLIER = 30, -- 밤에는 씨앗이 30배 빨리 자람 (6판 사장님 결정 3: 그대로). 열매 맺는 빠르기는 밤에도 그대로
 	GAMEPASS_GROWTH_MULTIPLIER = 2, -- 게임패스 "성장 속도 2배" (1차 버전에서는 플래그만)
-	GAMEPASS_MONEY_MULTIPLIER = 2, -- 게임패스 "돈 2배" (1차 버전에서는 플래그만)
+	GAMEPASS_MONEY_MULTIPLIER = 2, -- 게임패스 "코인 2배" (플래그만 — 6판: 열매 판매 값에 곱함)
 	DAY_CLOCK_TIME = 14,
 	NIGHT_CLOCK_TIME = 0,
 
@@ -114,36 +148,32 @@ local Config = {
 	------------------------------------------------------------------
 	SAFE_ZONE_RADIUS = 48, -- [1판 — 서버 로직은 안 씀. 선임 MapBuilder 교체가 끝나면 지움]
 	BASE_TICK_SECONDS = 0.2,
-	SELL_RADIUS = 14, -- 판매 가게(SellStall) 에서 이 거리 안이어야 SellPet
-	PET_SELL_SECONDS = 60, -- [추정] 펫 판매 가격 = 그 펫 초당 수입 × 이 초 (설계 2판 C)
-	-- 들고 있는 알 무게 표시(kg) = Sizes.carryKg (보통 50 / 큼 120 / 거대 400 / 초거대 1200 [추정])
+	SELL_RADIUS = 14, -- 판매 가판대(SellStall) 에서 이 거리 안이어야 SellFruits (성체 팔기 SellPlant 는 여기 또는 내 정원 근처)
+	-- 들고 있는 씨앗 무게 표시(kg) = Sizes.carryKg (보통 50 / 큼 120 / 거대 400 / 초거대 1200 [추정])
 
 	------------------------------------------------------------------
-	-- 수입 / 러닝머신
+	-- 러닝머신 / 오프라인 (6판: 자동 수입·오프라인 수입 없음)
 	------------------------------------------------------------------
-	INCOME_TICK_SECONDS = 1,
-	INCOME_POPUP_INTERVAL = 3, -- 펫마다 이 초에 한 번 IncomeTick(돈 팝업, 이 초만큼의 금액) — 돈은 1초마다 그대로 들어옴
 	TREADMILL_TICK_SECONDS = 1,
 	TREADMILL_STEPS_PER_SECOND = 1, -- 설계문서 9-2 "한 걸음 = 1초" [추정]
 	TREADMILL_PAD_MARGIN = 1, -- 러닝머신 벨트(MapLayout.TREADMILL_PAD) 가장자리에서 이만큼 바깥까지 "위에 있음"
 	TREADMILL_PIN_TOLERANCE = 1.5, -- 러닝머신 위에서 가운데서 이보다 밀리면 서버가 가운데로 되돌림
 	TREADMILL_MAX_HEIGHT = 8, -- 캐릭터 몸통(HumanoidRootPart)이 바닥에서 이보다 높으면 러닝머신 위가 아님 → 점프하면 서버도 내려 줌 (벨트 윗면은 바닥 + 2 이하로)
-	-- 러닝머신 배율: 걸음당 속도 × 이 값 (설계문서 14-1 은 G = 3). 밸런스 조정용으로 G 와 따로 둠.
-	-- tests/sim_progress.luau 로 확인 (2단계 수석: 결과는 docs/REMOTES.md 가 아니라 보고서에)
-	TREADMILL_MULTIPLIER = 3,
-	OFFLINE_INCOME_CAP_SECONDS = 24 * 60 * 60, -- 오프라인 수입 상한 24시간
-	OFFLINE_INCOME_RATE = 1, -- 오프라인 수입 비율 (1 = 100%)
-	OFFLINE_POPUP_MIN_SECONDS = 60, -- 이보다 짧게 나갔다 오면 팝업 안 띄움
+	-- 러닝머신 배율: 걸음당 속도 × 이 값. 5판은 성장 3배(G = 3)에서 온 3, 6판(사장님 추가 지시 "끝까지 올리면 1초 1M")은 4:
+	--   20레벨 걸음당 250,000 × 4 = 정확히 1,000,000/초 (1레벨 2 × 4 = 8/초). tests/sim_progress.luau 로 확인
+	TREADMILL_MULTIPLIER = 4,
+	-- 오프라인 동안: 심은 씨앗은 실제 시간만큼 자라고(밤 가속 없음) 성체는 열매를 맺음(식물마다 최대 5개). 상한 24시간
+	OFFLINE_GROWTH_CAP_SECONDS = 24 * 60 * 60,
 
 	-- (5판: 무료 보상(선물) FREE_REWARD_SPEED·FREE_REWARD_GROUP_ID 없앰 — 사장님 지시)
 
 	------------------------------------------------------------------
-	-- 5판: 랭킹판 (LeaderboardService) · 펫 쓰다듬기 (PetService PetPet)
+	-- 5판: 랭킹판 (LeaderboardService) · 6판: 물 주기 (PetService PetPet, 5판 쓰다듬기 자리)
 	------------------------------------------------------------------
 	LEADERBOARD_INTERVAL = 10, -- 이 초마다 LeaderboardUpdate (서버 전체)
-	LEADERBOARD_SIZE = 10, -- 돈·속도 각각 상위 몇 명
-	PET_PET_RADIUS = 20, -- 내 우리(울타리 사각형)에서 이 거리 안이어야 쓰다듬기
-	PET_PET_COOLDOWN = 1, -- 쓰다듬기 쿨다운(초, 사람마다)
+	LEADERBOARD_SIZE = 10, -- 코인·속도 각각 상위 몇 명
+	PET_PET_RADIUS = 20, -- 물 주기: 내 정원(울타리 사각형)에서 이 거리 안 (= GARDEN_ACTION_RADIUS)
+	PET_PET_COOLDOWN = 1, -- 물 주기 요청 사이 최소 간격(초, 사람마다 — 연타 막기). 식물마다 쿨다운은 WATER_COOLDOWN
 
 	------------------------------------------------------------------
 	-- 개발 명령 (DevCommands) 허용 목록
@@ -167,33 +197,41 @@ local Config = {
 	-- 근접 무기(방망이·구역 무기)는 쿨다운을 같이 씀 (무기를 바꿔 들며 쿨다운 피하기 방지)
 	-- 무기별 사거리·넉백·쿨다운은 shared/Data/Weapons.luau
 
-	------------------------------------------------------------------
-	-- 퓨전 머신 (설계문서 9-4, FusionService / shared/FusionRules)
-	------------------------------------------------------------------
-	FUSION_RADIUS = 12, -- 내 베이스 퓨전 머신 파트 표면에서 이 거리 안이어야 함
-	FUSION_BONUS_MUTATION_CHANCE = 0.10, -- 결과에 새 자연 돌연변이가 붙을 확률
-	FUSION_BONUS_MUTATION_WEIGHTS = { silver = 5, golden = 2, rainbow = 0.5 } :: { [string]: number },
+	-- (6판: 퓨전 머신 FUSION_* 없앰 — 사장님 결정 4)
 
 	------------------------------------------------------------------
-	-- 벚꽃: 사쿠라 인큐베이터 (설계문서 4장, SakuraService)
+	-- 벚꽃: 사쿠라 나무 — 씨앗 버전 (6판 사장님 결정 4, SakuraService / shared/SakuraRules)
+	--   성체 식물을 바치면 크리스탈 (등급이 높을수록 많이) → 크리스탈로 특별 씨앗 뽑기 (가방으로)
 	------------------------------------------------------------------
-	SAKURA_UNLOCK_PET = "crane", -- 학 1마리를 바치면 해금
-	SAKURA_RADIUS = 14, -- 인큐베이터 파트 표면에서 이 거리 안
-	SAKURA_APPLY_COST = 1, -- [추정] 블룸 1번에 크리스탈 몇 개
-	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 알을 배달할 때마다 (2판 수정: 허브에 들고 들어올 때)
+	SAKURA_RADIUS = 14, -- 사쿠라 나무 파트 표면에서 이 거리 안
+	SAKURA_DRAW_COST = 10, -- [수석] 특별 씨앗 뽑기 1번에 크리스탈 몇 개
+	-- [수석] 성체 1그루를 바치면 받는 크리스탈 (등급별)
+	SAKURA_OFFER_CRYSTALS = {
+		common = 1,
+		uncommon = 1,
+		rare = 2,
+		epic = 3,
+		legendary = 5,
+		mythic = 8,
+		cosmic = 12,
+		secret = 20,
+		eternity = 30,
+		divine = 50,
+		super_ultradivine = 100,
+	} :: { [string]: number },
+	-- 뽑기 결과: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (5판 블룸 97.5% / 스피릿 블룸 2.5% 확률 그대로)
+	SAKURA_SEEDS = {
+		{ plantId = "blossom_fairy", chance = 0.975 },
+		{ plantId = "spirit_blossom", chance = 0.025 },
+	} :: { { plantId: string, chance: number } },
+	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 씨앗을 배달할 때마다 (들고 허브에 들어올 때)
 	SAKURA_CRYSTAL_DROPS_PER_RESET = 3, -- [추정] 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 수
 	SAKURA_CRYSTAL_PICKUP_DISTANCE = 12,
 	SAKURA_CRYSTAL_MAX = 999999,
 
-	------------------------------------------------------------------
-	-- 천사&악마: 제단 / 비밀 통로 합성 (설계문서 4장, AltarService)
-	------------------------------------------------------------------
-	ALTAR_RADIUS = 14,
-	ALTAR_RINGLORD_CHANCE = 0.20, -- 링로드 20% / 링 가드 80%
-	SHRINE_RADIUS = 14,
-	-- (선물 알 대기 줄 EGG_QUEUE_MAX 는 2판 수정에서 없앰: 선물 알도 가방으로, 상한 EGG_INVENTORY_MAX)
-
-	-- (5판: 마법의 숲 퀘스트 QUEST_SECRET_EGG_CHANCE 없앰 — 옛 퀘스트 알 2종은 Data/EggSpawn.EXTRA_SPECIALS)
+	-- (6판: 천사&악마 제단·비밀 통로 ALTAR_*·SHRINE_RADIUS 없앰 — 사장님 결정 4)
+	-- (선물 알 대기 줄 EGG_QUEUE_MAX 는 2판 수정에서 없앰: 선물 씨앗도 가방으로, 상한 EGG_INVENTORY_MAX)
+	-- (5판: 마법의 숲 퀘스트 QUEST_SECRET_EGG_CHANCE 없앰 — 공지 씨앗은 Data/EggSpawn.EXTRA_SPECIALS)
 
 	------------------------------------------------------------------
 	-- 치트 방지 2단계: 서버 위치 검증 (AntiCheatService / Logic/MoveCheck)
@@ -218,7 +256,10 @@ local Config = {
 	------------------------------------------------------------------
 	DATASTORE_NAME = "StealAnEgg_PlayerData",
 	DATASTORE_KEY_PREFIX = "player_",
-	SCHEMA_VERSION = 5, -- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰 · 5 (5판): + tutorialStep, 퀘스트·무료 보상 칸 없앰
+	-- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰 · 5 (5판): + tutorialStep, 퀘스트·무료 보상 칸 없앰
+	-- 6 (6판 씨앗을 훔치세요): 새 게임 — 옛 데이터는 속도·트레일·러닝머신 레벨만 남기고 초기화. + fruits(열매 가방),
+	--   pets = 정원 성체 식물(x, z, fruits, fruitProgress), equipped·sakuraUnlocked·shrineUsed 칸 없앰 (Logic/DataSchema)
+	SCHEMA_VERSION = 6,
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

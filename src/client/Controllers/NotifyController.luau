@@ -141,7 +141,7 @@ local function escape(text: string): string
 	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
 end
 
--- "Jungle 에 시크릿 킹 스네이크 에그 등장!" (구역 초록, 희귀도 색 + 알 이름 금색)
+-- "Jungle 에 비밀 룬 장미 씨앗 등장!" (구역 초록, 등급 색 + 식물 이름 금색)
 function NotifyController.rareEggText(payload: any): string?
 	local biome = Biomes.get(tostring(payload.biomeId))
 	local pet = Pets.get(tostring(payload.petId))
@@ -151,7 +151,7 @@ function NotifyController.rareEggText(payload: any): string?
 	local rarity = Rarities.get(tostring(payload.rarity or pet.rarity))
 	local rarityName = if rarity then rarity.name else ""
 	return string.format(
-		'<font color="%s">%s</font>에 <font color="%s">%s</font> <font color="#FFD23C">%s</font> 에그 등장!',
+		'<font color="%s">%s</font>에 <font color="%s">%s</font> <font color="#FFD23C">%s</font> 씨앗 등장!',
 		hex(Color3.fromRGB(90, 235, 90)),
 		escape(biome.nameEn),
 		hex(Theme.rarityColor(tostring(payload.rarity or pet.rarity))),
@@ -261,27 +261,24 @@ function NotifyController.start()
 		NotifyController.banner(text or escape(tostring(payload.text)), color)
 	end)
 	Net.on(E.EggDelivered, function()
-		NotifyController.toast("에그를 훔쳤어요! 가방에 들어갔어요", "success")
+		NotifyController.toast("씨앗을 훔쳤어요! 씨앗 가방에 들어갔어요", "success")
 	end)
 	Net.on(E.IndexRewarded, function(payload: any)
 		if typeof(payload) ~= "table" then
 			return
 		end
 		local text = string.format(
-			"인덱스 보상! 속도 +%s, %s",
+			"도감 보상! 속도 +%s, %s 코인",
 			Format.number(tonumber(payload.speed) or 0),
-			Format.money(tonumber(payload.money) or 0)
+			Format.number(tonumber(payload.money) or 0)
 		)
 		NotifyController.toast(text, "money")
 		if payload.completeBonus then
 			NotifyController.banner("인덱스 전체 완성!! 엄청난 보너스!", C.purple)
 		end
 	end)
-	Net.on(E.OfflineIncome, function(payload: any)
-		if typeof(payload) == "table" then
-			offlinePopup(tonumber(payload.amount) or 0, tonumber(payload.perDay) or 0)
-		end
-	end)
+	-- (6판: 오프라인 수입 OfflineIncome 없앰 — 자동 수입이 없음. offlinePopup 은 선임이 정리)
+	local _ = offlinePopup
 
 	-- 2단계 알림 (수석 Remote, docs/REMOTES.md). Remote 가 아직 없으면 조용히 건너뜀.
 	local function onOptional(name: string?, fn: (any) -> ())
@@ -305,29 +302,19 @@ function NotifyController.start()
 		local pet = Pets.get(tostring(id))
 		return if pet then pet.name else tostring(id)
 	end
-	-- 선물 알 출처 (5판: 퀘스트·무료 보상 선물은 없어짐 — 제단·비밀 통로·개발 명령 /egg 만)
-	local SOURCES: { [string]: string } = { altar = "제단", shrine = "비밀 통로", dev = "개발 명령" }
+	-- 선물 씨앗 출처 (6판: 사쿠라 나무 뽑기 · 개발 명령 /seed)
+	local SOURCES: { [string]: string } = { sakura = "사쿠라 나무", dev = "개발 명령" }
 	local extra = E :: { [string]: string }
 	onOptional(extra.EggGranted, function(p)
 		-- 2판 수정: 선물 알도 알 가방으로 (대기 줄 없음, payload.queued 는 안 봄)
 		local egg = p.egg or p.record or {}
 		local from = SOURCES[tostring(p.source)] or "선물"
 		NotifyController.toast(
-			from .. " 선물 알: " .. petName(egg.petId) .. "! 가방에 들어갔어요",
+			from .. " 선물: " .. petName(egg.petId) .. " 씨앗! 가방에 들어갔어요",
 			"success"
 		)
 	end)
-	onOptional(extra.PetsSold, function(p)
-		local n = if typeof(p.pets) == "table" then #p.pets else 0
-		NotifyController.toast(
-			string.format(
-				"보관함이 가득 차서 펫 %d마리를 %s에 팔았어요",
-				n,
-				Format.money(tonumber(p.money) or 0)
-			),
-			"info"
-		)
-	end)
+	-- (6판: 보관함 자동 판매 PetsSold 없앰)
 	-- SakuraResult / AltarUpdate / ShrineResult 연출은 SakuraController / AltarController 가 함 (2차)
 end
 

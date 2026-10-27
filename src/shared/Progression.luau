@@ -2,19 +2,20 @@
 --[[
 	Progression — 도감 진행도·구역 무기 해금 판정 (순수 로직, 서버/클라 공용)
 
-	- 도감 진행도(biomeProgress): 구역의 펫 전부(퀘스트·합성·제단 포함) — 도감 화면 표시용
-	- 무기 해금(weaponProgress): 구역 펫 전부, 단 Weapons 의 excludeSources 출처는 뺌
-	    천사&악마: 합성 펫(에퀴녹스·에테론) 제외 18종이면 천사의 창 해금
+	6판: 도감 = 성체가 된 식물 (BaseService 가 성체가 되는 순간 IndexService.discover)
+	- 도감 진행도(biomeProgress): 구역의 식물 전부(공지 씨앗·사쿠라 씨앗 포함) — 도감 화면 표시용
+	- 무기 해금(weaponProgress): 구역 식물 전부, 단 Weapons 의 excludeSources 출처는 뺌
+	    벚꽃: 사쿠라 나무 씨앗 2종(source "sakura") 제외 8종이면 카타나 해금
 ]]
 
 local Data = script.Parent.Data
-local Pets = require(Data.Pets)
+local Pets = require(Data.Plants)
 local Biomes = require(Data.Biomes)
 local Index = require(Data.Index)
 local Weapons = require(Data.Weapons)
 local Rarities = require(Data.Rarities)
 
-type Pet = Pets.Pet
+type Pet = Pets.Plant
 
 local Progression = {}
 
@@ -116,7 +117,7 @@ function Progression.pendingRewards(
 	for _, pet in Pets.list do
 		if discovered[pet.id] and not claimed[pet.id] then
 			local biome = Biomes.get(pet.biome)
-			local reward = Index.reward(pet.rarity, pet.income, if biome then biome.recommendedSpeed else 0)
+			local reward = Index.reward(pet.rarity, pet.fruitValue, if biome then biome.recommendedSpeed else 0)
 			table.insert(ids, pet.id)
 			speed += reward.speed
 			money += reward.money

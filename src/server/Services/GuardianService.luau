@@ -1,6 +1,8 @@
 --!strict
 --[[
-	GuardianService — 구역마다 경비 NPC 1마리. 그 구역 알을 든 플레이어를 쫓아가 잡음 (서버 권한)
+	GuardianService — 구역마다 경비 NPC 1마리. 그 구역 씨앗을 든 플레이어를 쫓아가 잡음 (서버 권한)
+	6판 "씨앗을 훔치세요": 경비 = 구역 테마 **식물 괴물** (이름은 Data/Biomes.guardName — 덥석 파리지옥 · 연꽃 개구리풀 …,
+	  모양은 선임 PetVisualService/Visuals.guards). 로직·속도 숫자는 5판 그대로 (아래 "알" = 씨앗).
 
 	2판 (설계 2판 B — 원작 관찰):
 	  - 평소: 집(MapLayout.guardHome = 구역 중앙, 둥지들 사이)에서 잠잠 → State "Sleeping" (클라가 Z 표시)

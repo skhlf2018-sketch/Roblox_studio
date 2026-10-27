@@ -8,7 +8,7 @@
 	- range: 사거리(스터드, 서버가 대상 찾을 때)
 	- knockback: 넉백 힘 배율 (Config.KNOCKBACK_SPEED 에 곱함)
 	- cooldown: 쿨다운(초). 근접 무기는 쿨다운을 같이 씀 (바꿔 들기로 쿨다운 피하기 방지)
-	- excludeSources: 해금 판정에서 빼는 펫 출처 (천사&악마는 합성 펫 2종 제외 → 18종이면 완성)
+	- excludeSources: 해금 판정에서 빼는 식물 출처 (6판: 벚꽃은 사쿠라 나무 씨앗 2종 제외 → 둥지 식물 8종이면 완성)
 
 	뒤 구역 무기일수록 사거리·넉백이 크고, 쿨다운은 조금씩 짧아짐 (방망이 1.2초 → 낫 0.8초) [본부장 결정]
 ]]
@@ -40,7 +40,7 @@ local list: { Weapon } = {
 		range = Config.BAT_RANGE,
 		knockback = 1,
 		cooldown = Config.BAT_COOLDOWN_SECONDS,
-		tip = "야구 방망이: 다른 플레이어를 날려 알을 떨어뜨려요",
+		tip = "야구 방망이: 다른 플레이어를 날려 씨앗을 떨어뜨려요",
 	},
 	{
 		id = "water_bat",
@@ -65,6 +65,7 @@ local list: { Weapon } = {
 		knockback = 1.35,
 		cooldown = 1.1,
 		tip = "카타나: 벚꽃 구역 도감 완성 무기",
+		excludeSources = { sakura = true },
 	},
 	{
 		id = "axe",
@@ -89,7 +90,6 @@ local list: { Weapon } = {
 		knockback = 1.65,
 		cooldown = 0.95,
 		tip = "천사의 창: 천사&악마 도감 완성 무기",
-		excludeSources = { fusion = true },
 	},
 	{
 		id = "hammer",

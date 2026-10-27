@@ -1,23 +1,23 @@
 --!nocheck
 --[[
-	규칙 경계 테스트: "딱 그 값일 때" 어떻게 되는지.
-	  - 추천 속도와 정확히 같을 때 경비가 못 잡나, 알 무게(-10~-50%)가 반영되면 얼마부터 안전한가
-	  - 알 무게 감소 후 WalkSpeed, 밤 30배, 오프라인 24시간 상한(이상한 값 포함)
+	규칙 경계 테스트: "딱 그 값일 때" 어떻게 되는지. (6판 "씨앗을 훔치세요")
+	  - 추천 속도와 정확히 같을 때 경비가 못 잡나, 씨앗 무게(-10~-50%)가 반영되면 얼마부터 안전한가
+	  - 씨앗 무게 감소 후 WalkSpeed, 밤 30배, 오프라인 24시간 상한(이상한 값 포함)
 	  - 레이트 리밋: 모든 Remote 의 burst / 회복 속도
-	  - 퓨전이 거부되는 조건, 선택 확률, 제단·퀘스트·치트 경고의 순수 규칙 경계
-	서비스 연결(실제로 돈이 빠지는지 등)은 services_*.spec 에서 따로 봅니다.
+	  - 6판 정원: 성장 단계 경계(25% · 60% · 100%), 건너뛰기 가격 경계(분 올림), 열매 최대 5·가방 상한, 먹이기 확률 상한
+	  - 튜토리얼·치트 경고의 순수 규칙 경계 (6판: 퓨전·제단 경계는 기능과 함께 없앰)
+	서비스 연결(실제로 코인이 빠지는지 등)은 services_*.spec / garden.spec 에서 따로 봅니다.
 ]]
 
 return function(T, Loader)
 	local Biomes = Loader.require("ReplicatedStorage/Shared/Data/Biomes")
 	local Sizes = Loader.require("ReplicatedStorage/Shared/Data/Sizes")
-	local Pets = Loader.require("ReplicatedStorage/Shared/Data/Pets")
 	local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
 	local Remotes = Loader.require("ReplicatedStorage/Shared/Remotes")
 	local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
-	local FusionRules = Loader.require("ReplicatedStorage/Shared/FusionRules")
-	local AltarRules = Loader.require("ReplicatedStorage/Shared/AltarRules")
+	local GardenRules = Loader.require("ReplicatedStorage/Shared/GardenRules")
+	local FruitRules = Loader.require("ReplicatedStorage/Shared/FruitRules")
 	local TutorialRules = Loader.require("ReplicatedStorage/Shared/TutorialRules")
 	local EggRules = Loader.require("ReplicatedStorage/Shared/EggRules")
 	local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
@@ -28,7 +28,7 @@ return function(T, Loader)
 	local MARGIN = Config.GUARD_CHASE_MARGIN
 
 	------------------------------------------------------------------
-	T.suite("경계: 추천 속도와 경비 (알 무게 포함)")
+	T.suite("경계: 추천 속도와 경비 (씨앗 무게 포함)")
 
 	T.test("알 없이 속도가 추천 속도와 정확히 같으면 경비가 못 잡음 (모든 구역)", function()
 		for _, b in Biomes.list do
@@ -134,7 +134,7 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("경계: 알 무게 감소 후 속도")
+	T.suite("경계: 씨앗 무게 감소 후 속도")
 
 	T.test("알을 들면 WalkSpeed 가 크기 감소율만큼 줄고 하한 8 밑으로는 안 내려감", function()
 		for _, speed in { 0, 20, 900, 1e5, 1e9, 5e11 } do
@@ -175,29 +175,31 @@ return function(T, Loader)
 	------------------------------------------------------------------
 	T.suite("경계: 밤 30배, 오프라인 24시간")
 
-	T.test("낮 285초 + 밤 10초(×30) + 대기 3초 = 한 바퀴에 알이 자라는 양", function()
+	T.test("낮 285초 + 밤 10초(×30) + 대기 3초 = 한 바퀴에 씨앗이 자라는 양", function()
 		local perCycle = Config.DAY_SECONDS * Economy.growthRate(false, false)
 			+ Config.NIGHT_SECONDS * Economy.growthRate(true, false)
 			+ Config.INTERMISSION_SECONDS * Economy.growthRate(false, false)
 		T.eq(perCycle, 285 + 300 + 3)
 		T.eq(Cycle.totalLength(), 298)
-		-- 밤에만 자란 알은 한 바퀴 안에서 밤 한 번에 300초만큼
 		local p = Economy.advanceIncubation(0, 1e9, Config.NIGHT_SECONDS, 30)
 		T.eq(p, 300)
 	end)
 
-	T.test(
-		"부화 시간이 가장 긴 알(유령 왕 24시간, 2판 수정: ÷3 없음)은 몇 바퀴 만에 부화하나",
-		function()
-			local required = Economy.hatchSeconds("ghost_king")
-			T.eq(required, 24 * 3600)
-			-- 한 바퀴(낮 285 + 밤 10 + 대기 3 = 298초)에 자라는 양 = 285 + 10 × 30 + 3 = 588초
-			local cycles = required / (285 + 300 + 3)
-			T.truthy(cycles > 146 and cycles < 148, "약 147바퀴 = 약 12시간 (실제 " .. cycles .. ")")
+	T.test("성장 시간이 가장 긴 씨앗(하늘 기둥꽃 8일)은 몇 바퀴 만에 성체가 되나", function()
+		local longest, id = 0, nil
+		for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
+			if plant.growSeconds > longest then
+				longest, id = plant.growSeconds, plant.id
+			end
 		end
-	)
+		T.eq(id, "sky_pillar_flower")
+		T.eq(longest, 8 * 86400)
+		-- 한 바퀴(298초)에 자라는 양 = 588초 → 약 1176바퀴 = 약 4일 (밤 30배 덕분에 절반쯤)
+		local cycles = longest / (285 + 300 + 3)
+		T.truthy(cycles > 1170 and cycles < 1180, "실제 " .. cycles)
+	end)
 
-	T.test("부화 진행: 시간이 거꾸로(dt<0)여도 줄지 않고, 필요량에서 멈춤", function()
+	T.test("성장 진행: 시간이 거꾸로(dt<0)여도 줄지 않고, 필요량에서 멈춤", function()
 		local p, ready = Economy.advanceIncubation(10, 100, -5, 30)
 		T.eq(p, 10)
 		T.falsy(ready)
@@ -208,35 +210,18 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"오프라인 수입: 정확히 24시간은 전부, 24시간 1초 초과는 상한, 이상한 시각은 0",
+		"오프라인 성장: 정확히 24시간은 전부, 1초 넘으면 상한, 첫 접속(0)·거꾸로 가는 시계는 0",
 		function()
-			local cap = Config.OFFLINE_INCOME_CAP_SECONDS
+			local cap = Config.OFFLINE_GROWTH_CAP_SECONDS
 			T.eq(cap, 86400)
-			local amount, seconds = Economy.offlineIncome(10, 1000, 1000 + cap)
-			T.eq(seconds, cap)
-			T.eq(amount, 10 * cap)
-			amount, seconds = Economy.offlineIncome(10, 1000, 1000 + cap + 1)
-			T.eq(seconds, cap)
-			T.eq(amount, 10 * cap)
-			amount = Economy.offlineIncome(10, 1000, 1000)
-			T.eq(amount, 0)
-			amount = Economy.offlineIncome(0, 1000, 5000)
-			T.eq(amount, 0, "수입 0")
-			amount = Economy.offlineIncome(-5, 1000, 5000)
-			T.eq(amount, 0, "수입이 음수")
-			amount = Economy.offlineIncome(10, 5000, 1000)
-			T.eq(amount, 0, "시계가 거꾸로")
-			amount = Economy.offlineIncome(10, -100, 1000)
-			T.eq(amount, 0, "저장 시각이 음수")
+			T.eq(Economy.offlineGrowthSeconds(1000, 1000 + cap), cap)
+			T.eq(Economy.offlineGrowthSeconds(1000, 1000 + cap + 1), cap)
+			T.eq(Economy.offlineGrowthSeconds(1000, 1000 + 100), 100)
+			T.eq(Economy.offlineGrowthSeconds(0, 5000), 0)
+			T.eq(Economy.offlineGrowthSeconds(5000, 1000), 0)
+			T.eq(Economy.offlineGrowthSeconds(-100, 1000), 0, "저장 시각이 음수")
 		end
 	)
-
-	T.test("오프라인 성장: 상한 24시간, 첫 접속(0)은 안 자람", function()
-		T.eq(Economy.offlineGrowthSeconds(1000, 1000 + 100), 100)
-		T.eq(Economy.offlineGrowthSeconds(1000, 1000 + 10 * 86400), 86400)
-		T.eq(Economy.offlineGrowthSeconds(0, 5000), 0)
-		T.eq(Economy.offlineGrowthSeconds(5000, 1000), 0)
-	end)
 
 	------------------------------------------------------------------
 	T.suite("경계: 레이트 리밋 (모든 Remote)")
@@ -262,13 +247,13 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"모든 Remote 의 한도가 말이 됨: burst ≥ 1, 초당 회복 > 0, 부화·장착 같은 UI 버튼은 burst ≥ 2",
+		"모든 Remote 의 한도가 말이 됨: burst ≥ 1, 초당 회복 > 0, 열매 따기·팔기 같은 UI 버튼은 burst ≥ 2",
 		function()
 			for name, limit in Remotes.RateLimits do
 				T.truthy(limit.burst >= 1 and limit.perSecond > 0, name)
 				T.truthy(limit.burst <= 20, name .. " burst 가 너무 큼")
 			end
-			for _, name in { "HatchEgg", "EquipPet", "UnequipPet", "PurchaseUpgrade", "UseTool" } do
+			for _, name in { "PickFruit", "SellPlant", "SkipGrowth", "FeedFruit", "PurchaseUpgrade", "UseTool" } do
 				T.truthy(Remotes.RateLimits[name].burst >= 2, name)
 			end
 		end
@@ -289,119 +274,117 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("경계: 퓨전 거부·선택")
-
-	local function three(petId, size, mutations)
-		local list = {}
-		for i = 1, 3 do
-			list[i] = { uid = "p" .. i, petId = petId, size = size or "normal", mutations = mutations or {} }
-		end
-		return list
-	end
+	T.suite("경계: 6판 정원 (성장 단계·건너뛰기·열매·먹이기)")
 
 	T.test(
-		"초거대 3마리는 더 강해질 수 없는 펫(신성·위가 없는 희귀도)에서 거부, 위가 있으면 허용",
+		"성장 단계 경계: 24.99% 새싹 / 25% 줄기 / 59.99% 줄기 / 60% 봉오리 / 99.99% 봉오리 / 100% 성체",
 		function()
-			local refused, allowed = 0, 0
-			for _, pet in Pets.list do
-				local result, err = FusionRules.fuse(three(pet.id, "giant"), T.constant(0.5))
-				local candidates = FusionRules.candidates(pet.id)
-				if result then
-					allowed += 1
-					T.truthy(result.resultIncome >= result.inputIncome * (1 - 1e-9), pet.id)
-				else
-					T.eq(err, "weaker", pet.id)
-					refused += 1
-				end
-				if #candidates == 0 then
-					T.eq(result, nil, pet.id .. " 위가 없는 초거대는 항상 거부")
-				end
-			end
-			T.truthy(refused > 0 and allowed > 0)
+			T.eq(GardenRules.stage(0, 100), "sprout")
+			T.eq(GardenRules.stage(24.99, 100), "sprout")
+			T.eq(GardenRules.stage(25, 100), "stem")
+			T.eq(GardenRules.stage(59.99, 100), "stem")
+			T.eq(GardenRules.stage(60, 100), "bud")
+			T.eq(GardenRules.stage(99.99, 100), "bud")
+			T.eq(GardenRules.stage(100, 100), "adult")
+			T.eq(GardenRules.stage(500, 100), "adult", "넘쳐도 성체")
+			T.eq(GardenRules.stage(-5, 100), "sprout", "음수도 새싹")
+			T.eq(GardenRules.stage(0, 0), "adult", "필요 시간 0 이면 바로 성체")
+			T.eq(GardenRules.stageName("bud"), "봉오리")
+			T.eq(GardenRules.stageName("모름"), "모름")
 		end
 	)
 
-	T.test("정확히 3마리가 아니면 거부 (0, 1, 2, 4마리)", function()
-		for n = 0, 4 do
-			local list = {}
-			for i = 1, n do
-				list[i] = { uid = "p" .. i, petId = "chicken", size = "normal", mutations = {} }
-			end
-			if n ~= 3 then
-				local result, err = FusionRules.fuse(list, T.constant(0.5))
-				T.eq(result, nil, n .. "마리")
-				T.eq(err, "count")
-			end
+	T.test(
+		"건너뛰기 가격: 분은 올림 (60초 = 1분, 60.01초 = 2분), 0초 이하·NaN 은 0, 모르는 등급은 배수 1",
+		function()
+			T.eq(GardenRules.skipCostForSeconds("common", 60), 10)
+			T.eq(GardenRules.skipCostForSeconds("common", 60.01), 20)
+			T.eq(GardenRules.skipCostForSeconds("common", 0.001), 10, "1초 미만도 1분")
+			T.eq(GardenRules.skipCostForSeconds("common", 0), 0)
+			T.eq(GardenRules.skipCostForSeconds("common", -5), 0)
+			T.eq(GardenRules.skipCostForSeconds("common", 0 / 0), 0)
+			T.eq(GardenRules.skipCostForSeconds("mythic", 120), 2 * 10 * 30)
+			T.eq(GardenRules.skipCostForSeconds("모름", 60), 10)
+			T.eq(GardenRules.skipSeconds(30, 100, "half"), 35)
+			T.eq(GardenRules.skipSeconds(30, 100, "all"), 70)
+			T.eq(GardenRules.skipSeconds(130, 100, "all"), 0)
 		end
+	)
+
+	T.test("정원 칸 경계: 자라는 씨앗 + 성체 = 칸 수 - 1 이면 하나 더, 칸 수면 가득", function()
+		T.truthy(GardenRules.hasRoom(3, 3, 1), "6/7")
+		T.falsy(GardenRules.hasRoom(4, 3, 1), "7/7")
+		T.falsy(GardenRules.hasRoom(0, 7, 1))
+		T.truthy(GardenRules.hasRoom(0, 17, 11), "11레벨 18칸")
+		T.falsy(GardenRules.hasRoom(10, 8, 11))
 	end)
 
 	T.test(
-		"결과 후보가 2개면 약 50:50 으로 고름 (링 가드 3마리 → 영원 둥지 펫 2종)",
+		"열매 맺기 경계: 간격 딱 되면 +1, 최대 5에서 멈추고 시간도 안 쌓임, dt 가 커도 한 번에 5까지만",
 		function()
-			local counts = {}
-			local rand = T.rng(77)
-			for _ = 1, 20000 do
-				local result = FusionRules.fuse(three("ring_guard"), rand)
-				counts[result.petId] = (counts[result.petId] or 0) + 1
-			end
-			local ids = {}
-			for id in counts do
-				table.insert(ids, id)
-			end
-			T.eq(#ids, 2)
-			T.near(counts[ids[1]] / 20000, 0.5, 0.02)
+			local f, p = FruitRules.produce(0, 0, 29.99, 30)
+			T.eq(f, 0)
+			T.near(p, 29.99, 1e-9)
+			f, p = FruitRules.produce(0, 0, 30, 30)
+			T.eq(f, 1)
+			T.eq(p, 0)
+			f, p = FruitRules.produce(3, 10, 1e9, 30)
+			T.eq(f, 5)
+			T.eq(p, 0, "가득 차면 다음 열매 시간이 안 쌓임")
+			f, p = FruitRules.produce(5, 0, 100, 30)
+			T.eq(f, 5)
+			T.eq(p, 0)
+			f, p = FruitRules.produce(2, 5, -10, 30)
+			T.eq(f, 2, "거꾸로 가는 시간은 무시")
+			T.eq(p, 5)
+			f = FruitRules.produce(2, 5, 100, math.huge)
+			T.eq(f, 2, "모르는 식물(간격 inf)은 안 맺음")
+			f = FruitRules.produce(2, 5, 0 / 0, 30)
+			T.eq(f, 2, "NaN dt")
 		end
 	)
 
 	T.test(
-		"돌연변이: 셋 다 같을 때만 유지 (순서 달라도), 하나라도 다르면 전부 사라짐",
+		"열매 가방 경계: 자리만큼만 넣고, 1개 꺼내면 평균 값이 빠지고, 다 꺼내면 칸이 사라짐",
 		function()
-			local same = three("chicken", "normal", { "silver" })
-			T.eq(FusionRules.commonMutations(same)[1], "silver")
-			same[2].mutations = { "golden" }
-			T.eq(#FusionRules.commonMutations(same), 0)
-			same[2].mutations = { "silver" }
-			same[3].mutations = {}
-			T.eq(#FusionRules.commonMutations(same), 0)
+			local bag = {}
+			T.eq(FruitRules.addToBag(bag, "sprout_daisy", Config.FRUIT_BAG_MAX - 1, 10), Config.FRUIT_BAG_MAX - 1)
+			T.eq(FruitRules.addToBag(bag, "owl_oak", 5, 180), 1, "1자리만 남음")
+			T.eq(FruitRules.bagRoom(bag), 0)
+			T.eq(FruitRules.addToBag(bag, "owl_oak", 5, 180), 0)
+			T.eq(FruitRules.bagCount(bag), Config.FRUIT_BAG_MAX)
+			T.eq(FruitRules.takeOne(bag, "owl_oak"), 180)
+			T.eq(bag.owl_oak, nil, "다 꺼내면 칸이 사라짐")
+			T.eq(FruitRules.takeOne(bag, "owl_oak"), nil)
+			T.eq(FruitRules.addToBag({}, "x", -3, 10), 0)
+			T.eq(FruitRules.addToBag({}, "x", 2.7, 10), 2, "소수는 내림")
+		end
+	)
+
+	T.test(
+		"먹이기 확률 경계: 합은 0.9 를 넘지 않음, 더 붙을 것이 없으면 0, 무지개 가진 식물은 자연 돌연변이가 더 안 붙음",
+		function()
+			for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
+				local chance = FruitRules.feedChance(plant.id, {})
+				T.truthy(chance > 0 and chance <= 0.9 + 1e-12, plant.id .. " " .. chance)
+			end
+			T.eq(FruitRules.feedChance("sprout_daisy", { "rainbow", "frozen" }), 0)
+			T.eq(#FruitRules.feedOptions("없는식물", {}), 0)
+			for _, option in FruitRules.feedOptions("ghost_lily", { "rainbow" }) do
+				T.truthy(option.id ~= "golden" and option.id ~= "rainbow", option.id)
+			end
+			T.falsy(FruitRules.canGain({ "golden" }, "silver"), "황금 → 실버는 내려감")
+			T.truthy(FruitRules.canGain({ "silver" }, "golden"))
+			T.falsy(FruitRules.canGain({ "burning" }, "frozen"), "원소는 하나만")
+			T.falsy(FruitRules.canGain({}, "모름"))
 		end
 	)
 
 	------------------------------------------------------------------
-	T.suite("경계: 제단·퀘스트·치트 경고 (순수 규칙)")
+	T.suite("경계: 튜토리얼·치트 경고 (순수 규칙)")
 
 	T.test(
-		"제단: 같은 사람이 두 번 불가 (같은 쪽에도, 반대쪽에도), 다른 사람은 가능",
-		function()
-			local state = AltarRules.new(1)
-			local offer = function(userId, petId, side)
-				return { userId = userId, petId = petId, side = side, petUid = "p" .. userId }
-			end
-			T.truthy(AltarRules.add(state, offer(1, "light_dove", "light"), 1))
-			T.falsy(AltarRules.add(state, offer(1, "winged_lamb", "light"), 1))
-			T.falsy(AltarRules.add(state, offer(1, "toro", "dark"), 1))
-			T.truthy(AltarRules.add(state, offer(2, "winged_lamb", "light"), 1))
-			-- 같은 쪽에 두 사람이 줄 서도 짝은 반대쪽이 있어야 맺어짐
-			local a, b = AltarRules.tryPair(state, function()
-				return true
-			end)
-			T.eq(a, nil)
-			T.eq(b, nil)
-			T.eq(AltarRules.pendingCount(state, "light"), 2)
-		end
-	)
-
-	T.test("제단: 줄 맨 앞 두 사람이 같은 사람이면 짝을 안 맺음", function()
-		local state = AltarRules.new(1)
-		table.insert(state.queues.light, { userId = 5, petUid = "p1", petId = "light_dove", side = "light" })
-		table.insert(state.queues.dark, { userId = 5, petUid = "p2", petId = "imp", side = "dark" })
-		local a = AltarRules.tryPair(state, function()
-			return true
-		end)
-		T.eq(a, nil)
-	end)
-
-	T.test(
-		"5판 튜토리얼: 저장된 단계 값 경계 (0·7·2.9·NaN·글자 → 1~6 정수, 없으면 fallback)",
+		"튜토리얼: 저장된 단계 값 경계 (0·7·2.9·NaN·글자 → 1~6 정수, 없으면 fallback)",
 		function()
 			T.eq(TutorialRules.clean(0, 6), 1)
 			T.eq(TutorialRules.clean(-3, 6), 1)
@@ -414,20 +397,17 @@ return function(T, Loader)
 		end
 	)
 
-	T.test(
-		"5판 튜토리얼: 장착 0마리면 5단계가 안 끝남, 끝난 뒤에는 어떤 일도 단계를 안 바꿈",
-		function()
-			local ctx = { carrying = false, bagEggs = 0, placedEggs = 0, pets = 1, equipped = 0 }
-			T.eq(TutorialRules.advance(5, "equip", ctx), 5)
-			ctx.equipped = 1
-			T.eq(TutorialRules.advance(5, "equip", ctx), 6)
-			for _, event in { "steal", "lost", "deliver", "place", "unplace", "hatch", "equip" } do
-				T.eq(TutorialRules.advance(6, event, ctx), 6, event)
-				T.eq(TutorialRules.advance(99, event, ctx), 99, event)
-			end
-			T.eq(TutorialRules.advance(3, "해킹" :: any, ctx), 3, "모르는 일은 무시")
+	T.test("튜토리얼: 5단계는 팔아야 끝남, 끝난 뒤에는 어떤 일도 단계를 안 바꿈", function()
+		local ctx = { carrying = false, bagEggs = 0, placedEggs = 0, plants = 1, fruits = 0 }
+		T.eq(TutorialRules.advance(5, "grown", ctx), 5)
+		T.eq(TutorialRules.advance(5, "sell", ctx), 6)
+		for _, event in { "steal", "lost", "deliver", "place", "unplace", "grown", "sell" } do
+			T.eq(TutorialRules.advance(6, event, ctx), 6, event)
+			T.eq(TutorialRules.advance(99, event, ctx), 99, event)
 		end
-	)
+		T.eq(TutorialRules.advance(3, "해킹" :: any, ctx), 3, "모르는 일은 무시")
+		T.eq(TutorialRules.advance(5, "equip" :: any, ctx), 5, "5판 장착 일은 무시")
+	end)
 
 	T.test(
 		"치트 경고: 정확히 5번째에 Kick, 120초에 하나씩 줄고 줄어든 뒤에는 처음부터",

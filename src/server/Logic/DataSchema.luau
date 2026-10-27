@@ -2,23 +2,19 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 5. 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
-	(모르는 펫 id, 잘못된 숫자, 중복 uid, 칸 수 초과 장착 등은 고치거나 버림)
+	스키마 버전 6 (6판 "씨앗을 훔치세요"). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	(모르는 식물 id, 잘못된 숫자, 중복 uid, 정원 칸 수 초과 등은 고치거나 버림)
+	6판 용어: pets = 정원의 성체 식물, incubators = 정원에 심어 자라는 씨앗, eggs = 씨앗 가방, fruits = 열매 가방, money = 코인
 
 	버전 기록:
-	  1 (1단계) 돈·속도·펫·장착·업그레이드·도감·도구·부화 슬롯·통계
-	  2 (2단계) + weapons(해금 무기), sakuraCrystals, sakuraUnlocked, shrineUsed, quests, questsRewarded, eggQueue
-	     1 → 2: weapons 를 도감 발견 기록으로 채움 (나머지는 기본값)
-	  3 (2판 마무리) + equippedTrail (장착한 트레일, "none" = 해제). 배율은 장착한 트레일만 적용
-	     2 → 3: 가진 트레일 중 가장 높은 배율을 장착 (전에는 그게 자동 적용이었음 → 속도 그대로)
-	  4 (2판 수정) + eggs (알 가방, 최대 EGG_INVENTORY_MAX). 놓인 알(incubators)은 슬롯 번호 대신 베이스 기준 x, z
-	     3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 MapLayout.eggGridLocal(n) (1~8 = 옛 슬롯 자리 그대로)
-	     옛 선물 알 대기 줄(eggQueue)은 reconcile 이 가방 뒤에 새 uid 로 붙임 (저장 데이터에 남지 않음)
-	  5 (5판) + tutorialStep (튜토리얼 단계 1~5, 6 = 끝). 퀘스트(quests, questsRewarded)·무료 보상(freeRewardClaimed) 칸 없앰
-	     4 → 5: 이미 놀던 사람(펫·놓인 알·가방 알이 있거나 알을 훔친/배달한/부화한 적 있음)은 튜토리얼 끝(6),
-	            아무것도 안 한 사람은 1단계부터 (TutorialRules.migratedStep). 옛 칸 3개는 지움 (보상으로 받은 속도·알은 그대로)
-	  놓인 알 보정: 위치가 없거나 우리 밖·다른 알과 겹치면 빈 격자 자리로, PLACED_EGG_MAX 를 넘거나 자리가 없으면 가방으로
-	  (알은 버리지 않음 — 가방까지 가득 찰 때만 버림)
+	  1~5 (계란 훔치기): 돈·속도·펫·장착·업그레이드·도감·도구·알·트레일(3)·알 가방(4)·튜토리얼(5)
+	  6 (6판 씨앗을 훔치세요, 새 게임): + fruits (열매 가방). pets 한 칸 = 성체 식물 { uid, petId, size, mutations,
+	     x, z(심은 자리), fruits(달린 열매), fruitProgress }. equipped(장착)·sakuraUnlocked·shrineUsed 칸 없앰.
+	     5 이하 → 6: **초기화** (사장님 지시: 새 사람으로 시작). 남기는 것 = 속도(speed)·트레일(trails, equippedTrail)·
+	       러닝머신 레벨(treadmillLevel) 만. 펫·알·돈·도감·정원(우리) 레벨·곰덫·무기·크리스탈·통계는 버리고 튜토리얼 1단계부터.
+	       (옛 펫 id 는 6판 식물에 없어서 어차피 못 씀. 3 이전 데이터는 장착 트레일이 없으니 가진 것 중 최고를 장착)
+	  보정: 정원(자라는 씨앗 + 성체)이 정원 칸 수를 넘으면 자라는 씨앗은 가방으로, 그래도 넘치는 성체는 코인으로 바꿈
+	        (팔기 값 = GardenRules.sellPrice). 자리가 깨진 씨앗·성체는 빈 격자 자리로.
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
 	  (DataSchema.isNewerVersion)
 	경고 카운트(치트 방지)는 저장하지 않음.
@@ -27,16 +23,15 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local MapLayout = require(Shared.Data.MapLayout)
-local Pets = require(Shared.Data.Pets)
+local Plants = require(Shared.Data.Plants)
 local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
 local Upgrades = require(Shared.Data.Upgrades)
 local Weapons = require(Shared.Data.Weapons)
 local Economy = require(Shared.Economy)
 local EggPlacement = require(Shared.EggPlacement)
+local GardenRules = require(Shared.GardenRules)
 local Progression = require(Shared.Progression)
-local AltarRules = require(Shared.AltarRules)
 local TutorialRules = require(Shared.TutorialRules)
 local Types = require(Shared.Types)
 
@@ -49,6 +44,9 @@ local DataSchema = {}
 
 DataSchema.VERSION = Config.SCHEMA_VERSION
 
+-- 6판 초기화 때 남기는 옛 칸 (속도·트레일·러닝머신)
+DataSchema.KEPT_ON_RESET = { "speed", "trails", "equippedTrail", "treadmillLevel" }
+
 function DataSchema.default(_now: number): PlayerData
 	-- _now 는 나중 스키마(가입 시각 등)용으로 받아 둠
 	return {
@@ -56,7 +54,6 @@ function DataSchema.default(_now: number): PlayerData
 		money = Config.STARTING_MONEY,
 		speed = Config.STARTING_SPEED,
 		pets = {},
-		equipped = {},
 		penLevel = 1,
 		treadmillLevel = 0,
 		trails = {},
@@ -70,11 +67,10 @@ function DataSchema.default(_now: number): PlayerData
 		stats = { eggsStolen = 0, eggsHatched = 0 },
 		weapons = {},
 		sakuraCrystals = 0,
-		sakuraUnlocked = false,
-		shrineUsed = {},
 		equippedTrail = Upgrades.NO_TRAIL,
 		eggs = {},
-		tutorialStep = 1, -- 5판: 처음 온 사람은 튜토리얼 1단계부터
+		tutorialStep = 1, -- 처음 온 사람은 튜토리얼 1단계부터
+		fruits = {},
 	}
 end
 
@@ -156,12 +152,12 @@ function DataSchema.isNewerVersion(raw: unknown): boolean
 	return typeof(raw) == "table" and DataSchema.versionOf(raw) > Config.SCHEMA_VERSION
 end
 
--- 아무 값 → 도감 발견 표 (알려진 펫만)
+-- 아무 값 → 도감 발견 표 (알려진 식물만)
 local function cleanDiscovered(value: unknown): { [string]: boolean }
 	local result: { [string]: boolean } = {}
 	if typeof(value) == "table" then
 		for petId, flag in value :: { [unknown]: unknown } do
-			if typeof(petId) == "string" and flag == true and Pets.get(petId :: string) then
+			if typeof(petId) == "string" and flag == true and Plants.get(petId :: string) then
 				result[petId :: string] = true
 			end
 		end
@@ -169,8 +165,8 @@ local function cleanDiscovered(value: unknown): { [string]: boolean }
 	return result
 end
 
--- 알 항목(가방·놓인 알 공용) → 올바른 BagEgg 모양, 안 되면 nil. uid 는 seenUid 에 기록 (중복이면 nil)
--- required 는 지금 성장 배율로 다시 계산, progress 는 0 ~ required
+-- 씨앗 항목(가방·심은 씨앗 공용) → 올바른 BagEgg 모양, 안 되면 nil. uid 는 seenUid 에 기록 (중복이면 nil)
+-- required 는 지금 데이터(Plants.growSeconds)로 다시 계산, progress 는 0 ~ required
 local function cleanEgg(entry: unknown, seenUid: { [string]: boolean }): BagEgg?
 	if typeof(entry) ~= "table" then
 		return nil
@@ -180,18 +176,18 @@ local function cleanEgg(entry: unknown, seenUid: { [string]: boolean }): BagEgg?
 	if not isUid(uid) or seenUid[uid :: string] or typeof(petId) ~= "string" then
 		return nil
 	end
-	local pet = Pets.get(petId :: string)
-	if not pet then
+	local plant = Plants.get(petId :: string)
+	if not plant then
 		return nil
 	end
 	seenUid[uid :: string] = true
-	local required = Economy.hatchSeconds(pet.id)
+	local required = Economy.growSeconds(plant.id)
 	return {
 		uid = uid :: string,
-		petId = pet.id,
+		petId = plant.id,
 		size = cleanSize(e.size),
 		mutations = DataSchema.cleanMutations(e.mutations),
-		biomeId = pet.biome,
+		biomeId = plant.biome,
 		special = e.special == true,
 		progress = math.min(required, finiteNonNegative(e.progress, 0)),
 		required = required,
@@ -209,8 +205,18 @@ local function finiteOrNil(value: unknown): number?
 	return n
 end
 
+-- 정원 자리 (저장된 x, z 가 쓸 수 있으면 그것, 아니면 빈 격자 자리, 없으면 nil)
+type XZ = { x: number, z: number }
+
+local function gardenSpot(e: { [string]: unknown }, size: string, taken: { EggPlacement.Spot }): XZ?
+	local lx, lz = finiteOrNil(e.x), finiteOrNil(e.z)
+	if lx and lz and EggPlacement.check(lx, lz, size, taken) then
+		return { x = lx, z = lz }
+	end
+	return EggPlacement.firstFreeGrid(size, taken)
+end
 ------------------------------------------------------------------
--- reconcile: 아무 값이나 받아 올바른 PlayerData 로
+-- reconcile: 아무 값이나 받아 올바른 PlayerData 로 (버전 6 모양)
 ------------------------------------------------------------------
 
 function DataSchema.reconcile(raw: unknown, now: number): PlayerData
@@ -228,83 +234,49 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	data.indexCompleteClaimed = src.indexCompleteClaimed == true
 
 	local maxUid = 0
-
-	-- 펫
 	local seenUid: { [string]: boolean } = {}
+	local capacity = GardenRules.capacity(data.penLevel)
+	local taken: { EggPlacement.Spot } = {} -- 정원에서 이미 차지한 자리 (성체 + 자라는 씨앗)
+
+	-- 정원의 성체 식물 (6판). 칸 수를 넘거나 자리가 없으면 코인으로 바꿈
+	local soldCoins = 0
 	if typeof(src.pets) == "table" then
 		for _, entry in src.pets :: { unknown } do
 			if typeof(entry) == "table" then
 				local e = entry :: { [string]: unknown }
 				local uid, petId = e.uid, e.petId
-				if
-					isUid(uid)
-					and not seenUid[uid :: string]
-					and typeof(petId) == "string"
-					and Pets.get(petId :: string)
-				then
+				local plant = if typeof(petId) == "string" then Plants.get(petId :: string) else nil
+				if isUid(uid) and not seenUid[uid :: string] and plant then
 					seenUid[uid :: string] = true
 					maxUid = math.max(maxUid, uidNumber(uid :: string))
-					local record: PetRecord = {
-						uid = uid :: string,
-						petId = petId :: string,
-						size = cleanSize(e.size),
-						mutations = DataSchema.cleanMutations(e.mutations),
-					}
-					table.insert(data.pets, record)
+					local size = cleanSize(e.size)
+					local mutations = DataSchema.cleanMutations(e.mutations)
+					local spot = if #data.pets < capacity then gardenSpot(e, size, taken) else nil
+					if spot then
+						local record: PetRecord = {
+							uid = uid :: string,
+							petId = plant.id,
+							size = size,
+							mutations = mutations,
+							x = spot.x,
+							z = spot.z,
+							fruits = integerIn(e.fruits, 0, Config.FRUIT_MAX_PER_PLANT, 0),
+							fruitProgress = math.min(
+								finiteNonNegative(e.fruitProgress, 0),
+								Economy.fruitInterval(plant.id)
+							),
+						}
+						table.insert(data.pets, record)
+						table.insert(taken, { x = spot.x, z = spot.z, size = size })
+					else
+						soldCoins += GardenRules.sellPrice({ petId = plant.id, size = size, mutations = mutations })
+					end
 				end
 			end
 		end
 	end
-
-	-- 장착: 있는 펫만, 중복 없이, 칸 수까지
-	local slots = Economy.penSlots(data.penLevel)
-	if typeof(src.equipped) == "table" then
-		local used: { [string]: boolean } = {}
-		for _, uid in src.equipped :: { unknown } do
-			if #data.equipped >= slots then
-				break
-			end
-			if typeof(uid) == "string" and seenUid[uid :: string] and not used[uid :: string] then
-				used[uid :: string] = true
-				table.insert(data.equipped, uid :: string)
-			end
-		end
-	end
-
-	-- 보관함 상한 (PET_INVENTORY_MAX): 넘치면 장착 안 된 펫 중 수입이 낮은 펫부터 팔고 돈으로 바꿈
-	-- (PetService 의 자동 판매와 같은 규칙: 돈 = 초당 수입 × PET_AUTO_SELL_SECONDS)
-	local excess = #data.pets - Config.PET_INVENTORY_MAX
-	if excess > 0 then
-		local equippedSet: { [string]: boolean } = {}
-		for _, uid in data.equipped do
-			equippedSet[uid] = true
-		end
-		local candidates: { { uid: string, income: number } } = {}
-		for _, record in data.pets do
-			if not equippedSet[record.uid] then
-				table.insert(candidates, { uid = record.uid, income = Economy.recordIncome(record) })
-			end
-		end
-		table.sort(candidates, function(a, b): boolean
-			if a.income == b.income then
-				return a.uid < b.uid
-			end
-			return a.income < b.income
-		end)
-		local sell: { [string]: boolean } = {}
-		local earned = 0
-		for i = 1, math.min(excess, #candidates) do
-			sell[candidates[i].uid] = true
-			earned += candidates[i].income * Config.PET_AUTO_SELL_SECONDS
-		end
-		local kept: { PetRecord } = {}
-		for _, record in data.pets do
-			if not sell[record.uid] then
-				table.insert(kept, record)
-			end
-		end
-		data.pets = kept
-		data.money = math.min(Config.MONEY_MAX, data.money + earned)
+	if soldCoins > 0 then
+		data.money = math.min(Config.MONEY_MAX, data.money + soldCoins)
 	end
 
 	-- 트레일
@@ -317,7 +289,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 			end
 		end
 	end
-	-- 장착 트레일 (버전 3): 가진 것만, 아니면 해제
+	-- 장착 트레일: 가진 것만, 아니면 해제
 	if typeof(src.equippedTrail) == "string" and table.find(data.trails, src.equippedTrail :: string) then
 		data.equippedTrail = src.equippedTrail :: string
 	end
@@ -338,24 +310,16 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		data.tools.bearTrap = integerIn(tools.bearTrap, 0, Config.BEAR_TRAP_MAX_OWNED, data.tools.bearTrap)
 	end
 
-	-- 우리에 놓인 알 (2판 수정: 베이스 기준 x, z). 자리가 깨졌으면 빈 격자 자리로, 넘치면 가방으로
-	local placedSpots: { EggPlacement.Spot } = {}
+	-- 정원에 심어 자라는 씨앗. 자리가 깨졌으면 빈 격자 자리로, 칸 수를 넘거나 자리가 없으면 가방으로
 	local toBag: { BagEgg } = {}
 	if typeof(src.incubators) == "table" then
 		for _, entry in src.incubators :: { unknown } do
 			local egg = cleanEgg(entry, seenUid)
 			if egg then
 				maxUid = math.max(maxUid, uidNumber(egg.uid))
-				local e = entry :: { [string]: unknown }
-				local lx, lz = finiteOrNil(e.x), finiteOrNil(e.z)
-				local spot: MapLayout.XZ? = nil
-				if #data.incubators < Config.PLACED_EGG_MAX then
-					if lx and lz and EggPlacement.check(lx, lz, egg.size, placedSpots) then
-						spot = { x = lx, z = lz }
-					else
-						spot = EggPlacement.firstFreeGrid(egg.size, placedSpots)
-					end
-				end
+				local spot = if #data.pets + #data.incubators < capacity
+					then gardenSpot(entry :: { [string]: unknown }, egg.size, taken)
+					else nil
 				if spot then
 					local record: IncubatorRecord = {
 						uid = egg.uid,
@@ -370,7 +334,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 						required = egg.required,
 					}
 					table.insert(data.incubators, record)
-					table.insert(placedSpots, { x = spot.x, z = spot.z, size = egg.size })
+					table.insert(taken, { x = spot.x, z = spot.z, size = egg.size })
 				else
 					table.insert(toBag, egg)
 				end
@@ -378,7 +342,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		end
 	end
 
-	-- 알 가방 (2판 수정): 저장된 가방 → (자리가 없어 넘친 놓인 알) 순서, EGG_INVENTORY_MAX 까지
+	-- 씨앗 가방: 저장된 가방 → (자리가 없어 넘친 씨앗) 순서, EGG_INVENTORY_MAX 까지
 	if typeof(src.eggs) == "table" then
 		for _, entry in src.eggs :: { unknown } do
 			if #data.eggs >= Config.EGG_INVENTORY_MAX then
@@ -397,6 +361,23 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		end
 	end
 
+	-- 열매 가방 (6판): 알려진 식물 id 만, 개수는 정수, 합은 FRUIT_BAG_MAX 까지
+	if typeof(src.fruits) == "table" then
+		local total = 0
+		for petId, stack in src.fruits :: { [unknown]: unknown } do
+			if typeof(petId) == "string" and Plants.get(petId :: string) and typeof(stack) == "table" then
+				local s = stack :: { [string]: unknown }
+				local count = integerIn(s.count, 0, Config.FRUIT_BAG_MAX, 0)
+				count = math.min(count, Config.FRUIT_BAG_MAX - total)
+				if count > 0 then
+					local value = math.min(Config.MONEY_MAX, finiteNonNegative(s.value, 0))
+					data.fruits[petId :: string] = { count = count, value = value }
+					total += count
+				end
+			end
+		end
+	end
+
 	-- 통계
 	if typeof(src.stats) == "table" then
 		for key, value in src.stats :: { [unknown]: unknown } do
@@ -405,10 +386,6 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 			end
 		end
 	end
-
-	------------------------------------------------------------------
-	-- 버전 2 필드
-	------------------------------------------------------------------
 
 	-- 무기: 저장된 것(알려진 구역 무기만) ∪ 지금 도감 기록으로 해금되는 것 (규칙이 바뀌어도 잃지 않음)
 	local weaponSet: { [string]: boolean } = {}
@@ -432,51 +409,13 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	end
 
 	data.sakuraCrystals = integerIn(src.sakuraCrystals, 0, Config.SAKURA_CRYSTAL_MAX, 0)
-	data.sakuraUnlocked = src.sakuraUnlocked == true
 
-	if typeof(src.shrineUsed) == "table" then
-		local used = src.shrineUsed :: { [unknown]: unknown }
-		for _, recipe in AltarRules.RECIPES do
-			if used[recipe.result] == true then
-				data.shrineUsed[recipe.result] = true
-			end
-		end
-	end
-
-	------------------------------------------------------------------
-	-- 버전 5 필드
-	------------------------------------------------------------------
-
-	-- 튜토리얼 단계 (1 ~ DONE 정수). 저장 데이터에 칸이 없으면 끝난 것으로 (이미 놀던 사람에게 다시 안 뜨게)
+	-- 튜토리얼 단계 (1 ~ DONE 정수). 칸이 없으면 끝난 것으로 (이상한 저장 데이터에 튜토리얼이 다시 뜨지 않게.
+	-- 6판 초기화로 온 사람은 migrate 가 1 을 넣어 둠)
 	data.tutorialStep = TutorialRules.clean(src.tutorialStep, TutorialRules.DONE)
 
 	-- uid 카운터는 기존 uid 보다 항상 크게
 	data.nextUid = math.max(integerIn(src.nextUid, 1, 2 ^ 52, 1), maxUid + 1)
-
-	-- 옛 선물 알 대기 줄 (버전 2·3 의 eggQueue) → 가방 뒤에 새 uid 로 (2판 수정에서 대기 줄 없앰)
-	if typeof(src.eggQueue) == "table" then
-		for _, entry in src.eggQueue :: { unknown } do
-			if #data.eggs >= Config.EGG_INVENTORY_MAX then
-				break
-			end
-			if typeof(entry) == "table" then
-				local e = entry :: { [string]: unknown }
-				local pet = if typeof(e.petId) == "string" then Pets.get(e.petId :: string) else nil
-				if pet then
-					table.insert(data.eggs, {
-						uid = DataSchema.newUid(data, "i"),
-						petId = pet.id,
-						size = cleanSize(e.size),
-						mutations = DataSchema.cleanMutations(e.mutations),
-						biomeId = pet.biome,
-						special = false,
-						progress = 0,
-						required = Economy.hatchSeconds(pet.id),
-					})
-				end
-			end
-		end
-	end
 
 	data.version = Config.SCHEMA_VERSION
 	return data
@@ -489,53 +428,33 @@ function DataSchema.migrate(raw: unknown): unknown
 	end
 	local src = raw :: { [string]: unknown }
 	local version = DataSchema.versionOf(src)
-	if version < 2 then
-		-- 1 → 2: 해금 무기를 도감 발견 기록으로 채움 (2단계 규칙: 천사&악마는 합성 펫 제외 18종)
-		src.weapons = Progression.unlockedWeapons(cleanDiscovered(src.indexDiscovered))
-		src.sakuraCrystals = 0
-		src.sakuraUnlocked = false
-		src.shrineUsed = {}
-		src.eggQueue = {}
-		version = 2
-	end
-	if version < 3 then
-		-- 2 → 3: 전에는 가진 것 중 최고 배율이 자동 적용 → 그 트레일을 장착한 상태로 (속도가 안 바뀜)
-		local owned: { string } = {}
-		if typeof(src.trails) == "table" then
-			for _, id in src.trails :: { unknown } do
-				if typeof(id) == "string" then
-					table.insert(owned, id :: string)
-				end
-			end
-		end
-		src.equippedTrail = Economy.bestTrailId(owned)
-		version = 3
-	end
-	if version < 4 then
-		-- 3 → 4: 부화 슬롯 n번 알 → 우리 안 격자 자리 n (1~8 = 옛 슬롯 자리 그대로). 이상한 슬롯은 reconcile 이 빈 자리로
-		-- (옛 eggQueue 는 reconcile 이 가방으로 옮김 — 새 uid 가 필요해서)
-		if typeof(src.incubators) == "table" then
-			for _, entry in src.incubators :: { unknown } do
-				if typeof(entry) == "table" then
-					local e = entry :: { [string]: unknown }
-					local spot = if typeof(e.slot) == "number" then MapLayout.eggGridLocal(e.slot :: number) else nil
-					if spot and e.x == nil and e.z == nil then
-						e.x = spot.x
-						e.z = spot.z
+	if version < 6 then
+		-- 5 이하 → 6 (6판 새 게임): 속도·트레일·러닝머신 레벨만 남기고 초기화. 튜토리얼은 1단계부터
+		local equippedTrail = src.equippedTrail
+		if version < 3 then
+			-- 3 이전: 장착 트레일 칸이 없었고 가진 것 중 최고 배율이 자동 적용 → 그 트레일을 장착 (속도가 안 바뀜)
+			local owned: { string } = {}
+			if typeof(src.trails) == "table" then
+				for _, id in src.trails :: { unknown } do
+					if typeof(id) == "string" then
+						table.insert(owned, id :: string)
 					end
-					e.slot = nil
 				end
 			end
+			equippedTrail = Economy.bestTrailId(owned)
 		end
-		version = 4
-	end
-	if version < 5 then
-		-- 4 → 5 (5판): 튜토리얼 단계 추가 (놀던 사람은 끝, 아무것도 안 한 사람은 1단계), 퀘스트·무료 보상 칸 지움
-		src.tutorialStep = TutorialRules.migratedStep(src)
-		src.quests = nil
-		src.questsRewarded = nil
-		src.freeRewardClaimed = nil
-		version = 5
+		local kept: { [string]: unknown } = {}
+		for _, key in DataSchema.KEPT_ON_RESET do
+			kept[key] = src[key]
+		end
+		kept.equippedTrail = equippedTrail
+		table.clear(src)
+		for key, value in kept do
+			src[key] = value
+		end
+		src.tutorialStep = 1
+		src.resetFromVersion = version -- 기록용 (reconcile 이 버리므로 저장 데이터에 남지 않음)
+		version = 6
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

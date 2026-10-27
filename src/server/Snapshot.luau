@@ -1,13 +1,15 @@
 --!strict
 --[[
-	Snapshot — 클라이언트에 보내는 플레이어 상태 묶음
+	Snapshot — 클라이언트에 보내는 플레이어 상태 묶음 (6판 "씨앗을 훔치세요")
 
 	Snapshot.send(player)              → Remote "Snapshot" (전체)
 	Snapshot.section(player, "pets")   → Remote "DataUpdate" ("pets", payload)  (일부만)
-	Snapshot.equipment(player)         → DataUpdate("pets", { equipped, penSlots, incomePerSecond }) — 장착만 바뀜 (pets 목록 생략)
 
+	6판 섹션: "pets"(정원의 성체 식물) · "incubators"(정원에 심어 자라는 씨앗) · "eggs"(씨앗 가방) · "fruits"(열매 가방) ·
+	  "index" · "upgrades" · "tools" · "special"(사쿠라 크리스탈) · "tutorial"
+	  (없앤 것: 장착만 보내던 Snapshot.equipment, payload 의 equipped·incomePerSecond·sakuraUnlocked·shrineUsed)
 	섹션 종류와 payload 모양은 docs/REMOTES.md 참고.
-	돈·속도처럼 자주 바뀌는 값은 Player Attribute 로 복제 (Tags.PlayerAttributes).
+	코인·속도처럼 자주 바뀌는 값은 Player Attribute 로 복제 (Tags.PlayerAttributes).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -23,24 +25,21 @@ local Sessions = require(script.Parent.Sessions)
 
 local Snapshot = {}
 
--- "eggs" (2판 수정) = 알 가방 / "incubators" = 우리에 놓인 알. 알을 놓거나 다시 주우면 둘 다 보냄
--- 5판: "tutorial" 추가 · "flags"(무료 보상)·"quests"(퀘스트) 없앰
-export type Section = "pets" | "incubators" | "eggs" | "index" | "upgrades" | "tools" | "special" | "tutorial"
+export type Section = "pets" | "incubators" | "eggs" | "fruits" | "index" | "upgrades" | "tools" | "special" | "tutorial"
 
 function Snapshot.build(player: Player): Types.Snapshot?
 	local session, data = Sessions.getLoaded(player)
 	if not session or not data then
 		return nil
 	end
+	local slots = Economy.penSlots(data.penLevel)
 	return {
 		money = data.money,
 		speed = data.speed,
 		effectiveSpeed = session.effectiveSpeed,
-		incomePerSecond = session.incomePerSecond,
 		pets = data.pets,
-		equipped = data.equipped,
 		penLevel = data.penLevel,
-		penSlots = Economy.penSlots(data.penLevel),
+		penSlots = slots,
 		treadmillLevel = data.treadmillLevel,
 		trails = data.trails,
 		equippedTrail = data.equippedTrail,
@@ -53,13 +52,12 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		incubators = data.incubators,
 		eggs = data.eggs,
 		eggInventoryMax = Config.EGG_INVENTORY_MAX,
-		placedEggMax = Config.PLACED_EGG_MAX,
+		placedEggMax = slots,
+		fruits = data.fruits,
+		fruitBagMax = Config.FRUIT_BAG_MAX,
 		plotIndex = session.plotIndex,
 		saveEnabled = session.saveEnabled,
 		sakuraCrystals = data.sakuraCrystals,
-		sakuraUnlocked = data.sakuraUnlocked,
-		shrineUsed = data.shrineUsed,
-		petInventoryMax = Config.PET_INVENTORY_MAX,
 		tutorial = TutorialRules.view(data.tutorialStep),
 	}
 end
@@ -72,22 +70,22 @@ function Snapshot.send(player: Player)
 end
 
 function Snapshot.section(player: Player, section: Section)
-	local session, data = Sessions.getLoaded(player)
-	if not session or not data then
+	local _, data = Sessions.getLoaded(player)
+	if not data then
 		return
 	end
 	local payload: { [string]: any }
 	if section == "pets" then
 		payload = {
 			pets = data.pets,
-			equipped = data.equipped,
 			penSlots = Economy.penSlots(data.penLevel),
-			incomePerSecond = session.incomePerSecond,
 		}
 	elseif section == "incubators" then
 		payload = { incubators = data.incubators }
 	elseif section == "eggs" then
 		payload = { eggs = data.eggs }
+	elseif section == "fruits" then
+		payload = { fruits = data.fruits }
 	elseif section == "index" then
 		payload = {
 			indexDiscovered = data.indexDiscovered,
@@ -96,9 +94,11 @@ function Snapshot.section(player: Player, section: Section)
 			unlockedWeapons = data.weapons,
 		}
 	elseif section == "upgrades" then
+		local slots = Economy.penSlots(data.penLevel)
 		payload = {
 			penLevel = data.penLevel,
-			penSlots = Economy.penSlots(data.penLevel),
+			penSlots = slots,
+			placedEggMax = slots,
 			treadmillLevel = data.treadmillLevel,
 			trails = data.trails,
 			equippedTrail = data.equippedTrail,
@@ -107,28 +107,11 @@ function Snapshot.section(player: Player, section: Section)
 	elseif section == "tools" then
 		payload = { tools = data.tools }
 	elseif section == "special" then
-		payload = {
-			sakuraCrystals = data.sakuraCrystals,
-			sakuraUnlocked = data.sakuraUnlocked,
-			shrineUsed = data.shrineUsed,
-		}
+		payload = { sakuraCrystals = data.sakuraCrystals }
 	else -- "tutorial"
 		payload = { tutorial = TutorialRules.view(data.tutorialStep) }
 	end
 	Net.fire(player, Remotes.ToClient.DataUpdate, section, payload)
-end
-
--- 장착만 바뀌었을 때: pets 목록(최대 500마리)은 다시 보내지 않음. State 가 합쳐서 나머지는 그대로 둠.
-function Snapshot.equipment(player: Player)
-	local session, data = Sessions.getLoaded(player)
-	if not session or not data then
-		return
-	end
-	Net.fire(player, Remotes.ToClient.DataUpdate, "pets", {
-		equipped = data.equipped,
-		penSlots = Economy.penSlots(data.penLevel),
-		incomePerSecond = session.incomePerSecond,
-	})
 end
 
 return Snapshot

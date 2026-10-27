@@ -202,51 +202,59 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("/skip: 낮/밤 단계를 넘김 요청, /grow: 우리에 놓인 알을 다 자란 상태로", function()
-		local w = devWorld()
-		chat(w, "/skip")
-		T.eq(w.H.cycle.skipped, 1)
-		w.PetService.recalc(w.player)
-		local B = w.H.server("Services/BaseService")
-		B.grantEgg(w.player, "ghost_king", "normal", {}, "altar")
-		for i, petId in { "ghost_king", "yeti" } do
-			local spot = w.H.MapLayout.eggGridLocal(i)
-			table.insert(w.data.incubators, {
-				uid = "i10" .. i,
-				petId = petId,
-				size = "normal",
-				mutations = {},
-				biomeId = "",
-				special = false,
-				x = spot.x,
-				z = spot.z,
-				progress = 0,
-				required = 100,
-			})
+	T.test(
+		"/skip: 낮/밤 단계를 넘김 요청, /grow: 정원에 심은 씨앗을 전부 바로 성체로 (가방 속 씨앗은 그대로)",
+		function()
+			local w = devWorld()
+			chat(w, "/skip")
+			T.eq(w.H.cycle.skipped, 1)
+			w.session.plotIndex = 1
+			w.PetService.recalc(w.player)
+			local B = w.H.server("Services/BaseService")
+			B.grantEgg(w.player, "moon_ghost_tree", "normal", {}, "dev")
+			for i, petId in { "moon_ghost_tree", "rune_rose" } do
+				local spot = w.H.MapLayout.eggGridLocal(i)
+				table.insert(w.data.incubators, {
+					uid = "i10" .. i,
+					petId = petId,
+					size = "normal",
+					mutations = {},
+					biomeId = "",
+					special = false,
+					x = spot.x,
+					z = spot.z,
+					progress = 0,
+					required = 100,
+				})
+			end
+			chat(w, "/grow")
+			T.eq(#w.data.incubators, 0, "전부 성체가 됨")
+			T.eq(#w.data.pets, 2)
+			T.eq(w.data.pets[1].uid, "i101", "같은 uid 로")
+			T.truthy(w.data.indexDiscovered.moon_ghost_tree)
+			T.eq(w.data.eggs[1].progress, 0, "가방 속 씨앗은 그대로 (정원에 심어야 자람)")
+			w.H.uninstall()
 		end
-		chat(w, "/grow")
-		T.eq(#w.data.incubators, 2)
-		for _, record in w.data.incubators do
-			T.eq(record.progress, record.required)
+	)
+
+	T.test(
+		"/seed moon_lotus: 그 식물의 씨앗을 가방에 넣음 (5판 /egg), 모르는 식물·빈 이름·옛 /egg 는 무시",
+		function()
+			local w = devWorld()
+			local before = #w.data.eggs
+			chat(w, "/seed moon_lotus")
+			T.eq(#w.data.eggs, before + 1)
+			T.eq(w.data.eggs[#w.data.eggs].petId, "moon_lotus")
+			T.truthy(w.H.hasNotify(w.player, "info", "[개발] /seed moon_lotus"))
+			chat(w, "/seed nope")
+			chat(w, "/seed")
+			chat(w, "/egg moon_lotus")
+			T.eq(#w.data.eggs, before + 1, "그대로")
+			w.H.uninstall()
 		end
-		T.eq(w.data.eggs[1].progress, 0, "가방 속 알은 그대로 (우리에 놓아야 자람)")
-		w.H.uninstall()
-	end)
+	)
 
-	T.test("/egg axolotl: 그 펫의 알을 가방에 넣음, 모르는 펫·빈 이름은 무시", function()
-		local w = devWorld()
-		local before = #w.data.eggs
-		chat(w, "/egg axolotl")
-		T.eq(#w.data.eggs, before + 1)
-		T.eq(w.data.eggs[#w.data.eggs].petId, "axolotl")
-		T.truthy(w.H.hasNotify(w.player, "info", "[개발] /egg axolotl"))
-		chat(w, "/egg nope")
-		chat(w, "/egg")
-		T.eq(#w.data.eggs, before + 1, "모르는 펫은 그대로")
-		w.H.uninstall()
-	end)
-
-	T.test("/trap 5: 곰덫 +5 (처음 3개), /crystal 5: 사쿠라 크리스탈", function()
+	T.test("/trap 5: 곰덫 +5 (처음 3개), /crystal 5: 사쿠라 크리스탈, /coins = /money", function()
 		local w = devWorld()
 		T.eq(w.data.tools.bearTrap, w.Config.STARTING_BEAR_TRAPS)
 		chat(w, "/trap 5")
@@ -256,30 +264,67 @@ return function(T, Loader)
 		chat(w, "/crystal 5")
 		T.eq(w.data.sakuraCrystals, 5)
 		T.eq(w.player.attrs.SakuraCrystals, 5)
+		chat(w, "/coins 250")
+		T.eq(w.data.money, 250)
 		w.H.uninstall()
 	end)
 
 	T.test(
-		"/pet 이름 개수: 펫 바로 받기 (도감에도 기록), 최대 20마리, 없는 이름은 무시",
+		"/plant 식물id 개수: 정원 빈자리에 성체 바로 (도감에도 기록, 열매 1개), 정원 칸까지만, 없는 이름은 무시 (5판 /pet)",
 		function()
 			local w = devWorld()
-			chat(w, "/pet crane 3")
+			w.session.plotIndex = 1
+			chat(w, "/plant star_mushroom 3")
 			T.eq(#w.data.pets, 3)
-			T.eq(w.data.pets[1].petId, "crane")
-			T.truthy(w.data.indexDiscovered.crane)
-			chat(w, "/pet chicken")
-			T.eq(#w.data.pets, 4, "개수를 안 쓰면 1마리")
-			chat(w, "/pet dog 99")
-			T.eq(#w.data.pets, 24, "한 번에 최대 20마리")
-			chat(w, "/pet 없는펫 3")
-			chat(w, "/pet")
-			T.eq(#w.data.pets, 24)
+			T.eq(w.data.pets[1].petId, "star_mushroom")
+			T.eq(w.data.pets[1].fruits, w.Config.FRUITS_ON_ADULT)
+			T.truthy(w.data.indexDiscovered.star_mushroom)
+			chat(w, "/plant sprout_daisy")
+			T.eq(#w.data.pets, 4, "개수를 안 쓰면 1그루")
+			chat(w, "/plant puppy_grass 99")
+			T.eq(#w.data.pets, 7, "1레벨 정원 7칸까지만")
+			chat(w, "/plant puppy_grass")
+			T.truthy(w.H.hasNotify(w.player, "error", "[개발] 정원에 빈자리가 없어요"))
+			chat(w, "/plant 없는식물 3")
+			chat(w, "/plant")
+			chat(w, "/pet sprout_daisy 3")
+			T.eq(#w.data.pets, 7)
+			-- 자리가 서로 안 겹침
+			for i, a in w.data.pets do
+				for j, b in w.data.pets do
+					if i < j then
+						T.truthy(math.abs(a.x - b.x) + math.abs(a.z - b.z) > 0.01, "겹침 " .. a.uid .. " " .. b.uid)
+					end
+				end
+			end
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"/tutorial reset (5판): 튜토리얼을 1단계부터 다시 + TutorialUpdate, /quests 는 없어짐",
+		"/fruit 개수 [식물id]: 열매 가방에 열매 (안 쓰면 정원 첫 성체 → 없으면 아기 데이지), Attribute 갱신",
+		function()
+			local w = devWorld()
+			chat(w, "/fruit 5")
+			T.eq(w.data.fruits.sprout_daisy.count, 5)
+			T.eq(w.data.fruits.sprout_daisy.value, 5 * w.H.shared("Data/Plants").get("sprout_daisy").fruitValue)
+			T.eq(w.player.attrs.FruitCount, 5)
+			chat(w, "/fruit 2 rune_rose")
+			T.eq(w.data.fruits.rune_rose.count, 2)
+			T.eq(w.player.attrs.FruitCount, 7)
+			w.session.plotIndex = 1
+			chat(w, "/plant owl_oak")
+			chat(w, "/fruit 1")
+			T.eq(w.data.fruits.owl_oak.count, 1, "정원 첫 성체의 열매")
+			chat(w, "/fruit 0")
+			chat(w, "/fruit abc")
+			T.eq(w.player.attrs.FruitCount, 8)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"/tutorial reset: 튜토리얼을 1단계부터 다시 + TutorialUpdate (6판 글), /quests 는 없어짐",
 		function()
 			local w = devWorld()
 			T.eq(w.data.tutorialStep, 6, "하네스 기본 = 튜토리얼 끝낸 사람")
@@ -291,7 +336,7 @@ return function(T, Loader)
 			T.eq(#updates, 1)
 			T.eq(updates[1][1].step, 1)
 			T.eq(updates[1][1].total, 5)
-			T.eq(updates[1][1].text, "숲에서 알 훔치기")
+			T.eq(updates[1][1].text, "숲에서 씨앗 훔치기")
 			T.falsy(updates[1][1].done)
 			T.truthy(w.H.hasNotify(w.player, "info", "[개발] /tutorial reset"))
 			local before = #w.H.notifications(w.player)
@@ -358,9 +403,9 @@ return function(T, Loader)
 		local data, saveEnabled, newer = load(w, p)
 		T.truthy(saveEnabled)
 		T.falsy(newer)
-		T.eq(data.version, 5)
+		T.eq(data.version, 6)
 		T.eq(data.money, w.Config.STARTING_MONEY)
-		T.eq(data.tutorialStep, 1, "5판: 새 사람은 튜토리얼 1단계부터")
+		T.eq(data.tutorialStep, 1, "새 사람은 튜토리얼 1단계부터")
 		local stored = w.H.store.data["player_7"]
 		T.eq(stored._lock.jobId, "job-A")
 		w.H.uninstall()
@@ -373,7 +418,17 @@ return function(T, Loader)
 		local session = openSession(w, p, data)
 		data.money = 12345
 		data.speed = 777
-		table.insert(data.pets, { uid = "p1", petId = "dog", size = "big", mutations = { "golden" } })
+		table.insert(data.pets, {
+			uid = "p1",
+			petId = "puppy_grass",
+			size = "big",
+			mutations = { "golden" },
+			x = -20,
+			z = 0,
+			fruits = 2,
+			fruitProgress = 3,
+		})
+		data.fruits.owl_oak = { count = 4, value = 720 }
 		data.nextUid = 2
 		local saved = w.H.run(function()
 			return w.DataService.save(p, true)
@@ -389,8 +444,12 @@ return function(T, Loader)
 		local again = load(w, p2)
 		T.eq(again.money, 12345)
 		T.eq(again.speed, 777)
-		T.eq(again.pets[1].petId, "dog")
+		T.eq(again.pets[1].petId, "puppy_grass")
 		T.eq(again.pets[1].mutations[1], "golden")
+		T.eq(again.pets[1].fruits, 2, "달린 열매도 저장")
+		T.eq(again.pets[1].x, -20, "심은 자리도 저장")
+		T.eq(again.fruits.owl_oak.count, 4, "열매 가방도 저장")
+		T.eq(again.fruits.owl_oak.value, 720)
 		w.H.uninstall()
 	end)
 
@@ -444,7 +503,7 @@ return function(T, Loader)
 	T.test("락이 300초보다 오래됐으면 기다리지 않고 바로 가져옴", function()
 		local w = dataWorld()
 		w.H.store.data["player_9"] = {
-			data = { version = 2, money = 42 },
+			data = { version = 6, money = 42 },
 			_lock = { jobId = "job-OLD", time = w.H.time() - 301 },
 		}
 		local p = w.H.newPlayer(9, "Nine")
@@ -457,11 +516,11 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"더 새 버전(6) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
+		"더 새 버전(7) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
 		function()
 			local w = dataWorld()
 			w.H.store.data["player_11"] = {
-				data = { version = 6, money = 999, futureField = "중요" },
+				data = { version = 7, money = 999, futureField = "중요" },
 			}
 			local p = w.H.newPlayer(11, "Future")
 			local data, saveEnabled, newer = load(w, p)
@@ -472,14 +531,14 @@ return function(T, Loader)
 			local stored = w.H.store.data["player_11"]
 			T.eq(stored._lock, nil)
 			T.eq(stored.data.futureField, "중요")
-			T.eq(stored.data.version, 6)
+			T.eq(stored.data.version, 7)
 			-- 이 세션의 저장은 막혀 있음
 			local session = openSession(w, p, data)
 			session.saveEnabled = saveEnabled
 			T.falsy(w.H.run(function()
 				return w.DataService.save(p, true)
 			end))
-			T.eq(w.H.store.data["player_11"].data.version, 6, "저장 안 됨")
+			T.eq(w.H.store.data["player_11"].data.version, 7, "저장 안 됨")
 			w.H.uninstall()
 		end
 	)

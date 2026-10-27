@@ -62,9 +62,7 @@ boot("SettingsController")
 boot("HotbarController")
 boot("WorldFxController")
 -- 선임 2차: 2단계 특수 장소 화면 (펫 고르기 창 공용 UI/PetPicker) + 무기 손 모양
-boot("FusionController")
 boot("SakuraController")
-boot("AltarController")
 boot("WeaponController")
 -- 선임 5차 (2판): 러닝머신 입력·걸음 팝업, 트레일 상점 창
 boot("TreadmillController")

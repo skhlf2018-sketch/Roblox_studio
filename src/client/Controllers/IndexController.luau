@@ -320,9 +320,12 @@ function IndexController.start()
 		detailName.Text = if found then pet.name else "???"
 		detailRarity.Text = if rarity then rarity.name else pet.rarity
 		detailRarity.TextColor3 = Theme.rarityColor(pet.rarity)
-		detailIncome.Text = if found then Format.money(Economy.petIncome(pet.id, "normal", {})) .. "/s" else "???"
+		-- [6판 수석 임시] 열매 1개 값 (5판: 초당 수입). 표시 모양은 선임
+		detailIncome.Text = if found
+			then "열매 " .. Format.number(Economy.fruitValue(pet.id, "normal", {}))
+			else "???"
 		local biome = Biomes.get(selected)
-		local reward = Index.reward(pet.rarity, pet.income, if biome then biome.recommendedSpeed else 0)
+		local reward = Index.reward(pet.rarity, pet.fruitValue, if biome then biome.recommendedSpeed else 0)
 		rewardMoney.Text = Format.money(reward.money)
 		rewardSpeed.Text = "+" .. Format.number(reward.speed)
 		local canClaim = found and not claimed[pet.id]

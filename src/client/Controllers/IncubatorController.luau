@@ -158,7 +158,9 @@ end
 local function placedMax(): number
 	local snap = State.get()
 	local n = if snap then snap.placedEggMax else nil
-	return if typeof(n) == "number" then n else Config.PLACED_EGG_MAX
+	-- 6판: 정원 칸 수 (placedEggMax = penSlots, 5판 PLACED_EGG_MAX 는 없어짐)
+	local slots = if snap then snap.penSlots else nil
+	return if typeof(n) == "number" then n elseif typeof(slots) == "number" then slots else 7
 end
 
 local function bagMax(): number
@@ -218,8 +220,9 @@ local function decorate(inst: Instance)
 	if part:GetAttribute("OwnerUserId") ~= Players.LocalPlayer.UserId then
 		return -- 남의 알은 이름표(서버)만
 	end
-	local hatch = makePrompt(part, "HatchPrompt", "부화!", 0, function(uid)
-		Net.send(Remotes.ToServer.HatchEgg, uid)
+	-- [6판 수석 임시] 부화 버튼 없음: 다 자라면 서버가 그 자리에서 성체로 바꿈 (HatchEgg Remote 없앰). 선임이 정리
+	local hatch = makePrompt(part, "HatchPrompt", "성체!", 0, function(_uid)
+		NotifyController.toast("다 자라면 저절로 성체가 돼요! 열매를 따 보세요", "info")
 	end)
 	local pickUp = makePrompt(part, "PickUpPrompt", "집기", 0.4, function(uid)
 		Net.send(Remotes.ToServer.PickUpPlacedEgg, uid)
@@ -819,14 +822,13 @@ function IncubatorController.start()
 		pickUp.Name = "PickUp"
 		pickUp.Visible = Config.ALLOW_EGG_PICKUP
 		local play = Ui.button("▶", C.shopGreen, UDim2.fromOffset(playH, playH), function()
-			if row.ready then
-				Net.send(Remotes.ToServer.HatchEgg, uid)
-			else
-				NotifyController.toast(
-					"아직 자라는 중이에요! 다 자라면 ▶ 버튼이나 알 옆에서 E 로 부화해요",
-					"info"
-				)
-			end
+			-- [6판 수석 임시] 부화 버튼 없음 (다 자라면 저절로 성체). 코인 건너뛰기(SkipGrowth)는 선임이 확인 창과 함께 붙임
+			NotifyController.toast(
+				if row.ready
+					then "곧 성체가 돼요!"
+					else "아직 자라는 중이에요! 다 자라면 저절로 성체가 돼요 (밤에는 30배 빨리)",
+				"info"
+			)
 		end, { anchor = Vector2.new(1, 0.5), position = UDim2.new(1, -6, 0.5, 0), textSize = 24, parent = f })
 		play.Name = "Play"
 		row = { frame = f, timeLabel = timeLabel, bar = bar, play = play, pickUp = pickUp, ready = false }

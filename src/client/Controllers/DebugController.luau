@@ -25,13 +25,13 @@ function DebugController.start()
 	Net.on(E.Snapshot, function(snapshot: any)
 		print(
 			string.format(
-				"[Snapshot] 돈 %s, 속도 %s, 펫 %d마리(장착 %d/%d), 부화 중 %d개, 가방 %d개, 베이스 %d번",
-				Format.money(snapshot.money),
+				"[Snapshot] 코인 %s, 속도 %s, 정원 %d/%d (성체 %d · 자라는 씨앗 %d), 씨앗 가방 %d개, 베이스 %d번",
+				Format.number(snapshot.money),
 				Format.number(snapshot.effectiveSpeed),
-				#snapshot.pets,
-				#snapshot.equipped,
+				#(snapshot.pets or {}) + #(snapshot.incubators or {}),
 				snapshot.penSlots,
-				#snapshot.incubators,
+				#(snapshot.pets or {}),
+				#(snapshot.incubators or {}),
 				#(snapshot.eggs or {}),
 				snapshot.plotIndex
 			)
@@ -61,7 +61,7 @@ function DebugController.start()
 	Net.on(E.RunAlert, function(payload: any)
 		warn(
 			string.format(
-				"RUN!! %s 알을 들었어요! 경비 %s (경비 속도 %s / 내 속도 %s)",
+				"RUN!! %s 씨앗을 들었어요! 경비 %s (경비 속도 %s / 내 속도 %s)",
 				petName(payload.egg.petId),
 				tostring(payload.guardName),
 				Format.number(payload.guardSpeed),
@@ -75,7 +75,7 @@ function DebugController.start()
 	Net.on(E.Caught, function(payload: any)
 		warn(
 			string.format(
-				"[잡힘] %s 에게 (%s) — 알: %s",
+				"[잡힘] %s 에게 (%s) — 씨앗: %s",
 				tostring(payload.by),
 				payload.cause,
 				payload.eggOutcome
@@ -89,37 +89,29 @@ function DebugController.start()
 		end
 		print(
 			string.format(
-				"[배달] %s 알 → 알 가방 (부화 %s)",
+				"[배달] %s 씨앗 → 씨앗 가방 (성체까지 %s)",
 				petName(tostring(record.petId)),
 				Format.duration(tonumber(record.required) or 0)
 			)
 		)
 	end)
-	Net.on(E.HatchResult, function(payload: any)
+	-- 6판: 씨앗이 정원에서 성체가 됨 (5판 HatchResult 자리). 오프라인 수입(OfflineIncome)은 없어짐
+	Net.on(E.PlantGrown, function(payload: any)
 		print(
 			string.format(
-				"[부화] %s! 초당 %s%s",
-				petName(payload.pet.petId),
-				Format.money(payload.income),
+				"[성체] %s! 열매 1개 %s 코인%s",
+				petName(payload.plant.petId),
+				Format.number(payload.fruitValue),
 				if payload.isNew then " (도감 새로 발견!)" else ""
-			)
-		)
-	end)
-	Net.on(E.OfflineIncome, function(payload: any)
-		print(
-			string.format(
-				"[오프라인 수입] %s (하루 %s)",
-				Format.money(payload.amount),
-				Format.money(payload.perDay)
 			)
 		)
 	end)
 	Net.on(E.IndexRewarded, function(payload: any)
 		print(
 			string.format(
-				"[도감 보상] 속도 +%s, 돈 +%s",
+				"[도감 보상] 속도 +%s, 코인 +%s",
 				Format.number(payload.speed),
-				Format.money(payload.money)
+				Format.number(payload.money)
 			)
 		)
 	end)

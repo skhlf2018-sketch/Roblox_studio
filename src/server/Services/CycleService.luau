@@ -110,10 +110,10 @@ local function applyPhase(p: Phase): number
 	if p == "Night" then
 		Net.fireAll(Remotes.ToClient.Announce, {
 			kind = "night",
-			text = "밤이 됐어요! 안전 구역 밖으로 나갈 수 없어요. 알이 30배 빨리 자라요!",
+			text = "밤이 됐어요! 안전 구역 밖으로 나갈 수 없어요. 정원의 씨앗이 30배 빨리 자라요!",
 		})
 	elseif p == "Day" then
-		Net.fireAll(Remotes.ToClient.Announce, { kind = "day", text = "아침이에요! 알을 훔치러 가요!" })
+		Net.fireAll(Remotes.ToClient.Announce, { kind = "day", text = "아침이에요! 씨앗을 훔치러 가요!" })
 	end
 
 	CycleService.changed:fire(p, cycleNumber)

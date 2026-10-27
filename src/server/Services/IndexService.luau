@@ -1,22 +1,23 @@
 --!strict
 --[[
-	IndexService — 도감: 처음 부화한 펫 발견 기록 + 보상 수령 (Claim / Claim All)
+	IndexService — 도감: 처음 성체가 된 식물 발견 기록 + 보상 수령 (Claim / Claim All)
+	6판 "씨앗을 훔치세요": 성체 도감 (등급 11개). 씨앗이 정원에서 성체가 되는 순간 BaseService 가 discover.
 
-	보상 공식은 shared/Data/Index.luau (닭 +420/$100, 라쿤 +620/$4,500, 파타핌 +1,000/$180,000 과 일치)
-	구역 펫을 전부 발견하면 그 구역 무기 해금 (Progression.unlockedWeapons, 천사&악마는 합성 펫 제외 18종)
+	보상 공식은 shared/Data/Index.luau (속도 + 코인 = 열매 1개 값 × 10. 아기 데이지 +420 속도 / +100 코인)
+	구역 식물을 전부 발견하면 그 구역 무기 해금 (Progression.unlockedWeapons, 벚꽃은 사쿠라 씨앗 2종 제외)
 	  → data.weapons 에 저장 + IndexService.weaponsChanged:fire(player, 새 무기 id 목록) → ToolService 가 도구 지급
-	곰덫 보상 (설계문서 10장): 희귀(Rare) 이상 펫 첫 발견마다 +1, 구역 펫 전부 발견 때 +5 (Progression.trapsForDiscovery)
+	곰덫 보상 (5판 설계문서 10장): 희귀(Rare) 이상 식물 첫 발견마다 +1, 구역 식물 전부 발견 때 +5 (Progression.trapsForDiscovery)
 	  → 발견 즉시 data.tools.bearTrap 에 더함 + IndexService.toolsChanged:fire(player)
 	전체 완성 보너스는 한 번만 (indexCompleteClaimed).
 
-	Remote: ClaimIndexReward("all" | petId)
+	Remote: ClaimIndexReward("all" | 식물 id)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local Pets = require(Shared.Data.Pets)
+local Pets = require(Shared.Data.Plants)
 local Index = require(Shared.Data.Index)
 local Weapons = require(Shared.Data.Weapons)
 local Progression = require(Shared.Progression)
@@ -36,7 +37,7 @@ IndexService.weaponsChanged = Signal.new()
 -- 곰덫 개수가 늘어남 (player) → ToolService 가 도구·DataUpdate("tools") 갱신
 IndexService.toolsChanged = Signal.new()
 
--- 처음 본 펫이면 true
+-- 처음 본 식물이면 true
 function IndexService.discover(player: Player, petId: string): boolean
 	local _, data = Sessions.getLoaded(player)
 	if not data or not Pets.get(petId) then

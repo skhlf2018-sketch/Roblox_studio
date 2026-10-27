@@ -1,6 +1,7 @@
 --!strict
 --[[
-	EggPlacement — 우리 안에 알 놓기 규칙 (2판 수정, 순수 로직 → Lune 테스트 대상)
+	EggPlacement — 정원(5판 우리) 안에 씨앗 심기 규칙 (2판 수정, 순수 로직 → Lune 테스트 대상)
+	6판 "씨앗을 훔치세요": 알 → 씨앗, 우리 → 정원, 펫 → 성체 식물 (성체도 심은 자리 x, z 에 그대로 있음)
 
 	서버 PlaceEgg 검증(BaseService), 저장 데이터 보정(DataSchema), 클라 미리보기(선임: 놓을 자리가 초록/빨강)
 	셋이 같은 함수를 씁니다. 좌표는 전부 베이스 기준(로컬) — MapLayout.toLocal / toWorld.
@@ -8,8 +9,8 @@
 	놓을 수 있는 자리 (check):
 	  1) 우리 안: MapLayout.isInPenLocal(lx, lz, EGG_PLACE_FENCE_MARGIN) — 울타리에서 2 안쪽까지
 	  2) 다른 놓인 알과 간격 ≥ gap(두 알 크기) = max(EGG_PLACE_SPACING 4, 두 알 지름의 평균)
-	  3) 우리에 서 있는 펫과 간격 ≥ EGG_PLACE_SPACING 4
-	  (놓인 알 수 < PLACED_EGG_MAX 는 서버가 따로 확인 — reason "full")
+	  3) pets(따로 넘기는 자리)와 간격 ≥ EGG_PLACE_SPACING 4 (6판 서버는 성체 식물도 2) 의 placed 로 넘김)
+	  (정원 칸 수 = 자라는 씨앗 + 성체 < 정원 칸 수(GardenRules.hasRoom) 는 서버가 따로 확인 — reason "full")
 
 	firstFreeGrid: MapLayout.eggGridLocal 1번부터 놓을 수 있는 첫 자리 (저장 데이터 위치가 깨졌을 때·옛 슬롯 변환)
 ]]
@@ -80,16 +81,13 @@ end
 -- 거부 이유(Reason) → 안내 글 (Notify)
 function EggPlacement.message(reason: string?): string
 	if reason == "full" then
-		return string.format(
-			"우리에는 알을 %d개까지 놓을 수 있어요. 다 자란 알을 먼저 부화시키세요!",
-			Config.PLACED_EGG_MAX
-		)
+		return "정원이 가득 찼어요! 성체를 뽑아서 팔거나 정원을 업그레이드하세요."
 	elseif reason == "outside" then
-		return "알은 내 우리(울타리) 안에만 놓을 수 있어요!"
+		return "씨앗은 내 정원(울타리) 안에만 심을 수 있어요!"
 	elseif reason == "tooClose" then
-		return "다른 알이나 펫과 너무 가까워요. 조금 떨어진 곳에 놓아 주세요!"
+		return "다른 씨앗이나 식물과 너무 가까워요. 조금 떨어진 곳에 심어 주세요!"
 	end
-	return "여기에는 알을 놓을 수 없어요."
+	return "여기에는 씨앗을 심을 수 없어요."
 end
 
 return EggPlacement

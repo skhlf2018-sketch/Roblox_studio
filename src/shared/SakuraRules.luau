@@ -1,99 +1,50 @@
 --!strict
 --[[
-	SakuraRules — 사쿠라 인큐베이터 규칙 (설계문서 4장·8장, 순수 로직, Lune 테스트 대상)
+	SakuraRules — 사쿠라 나무 규칙 (6판 "씨앗을 훔치세요" 씨앗 버전, 사장님 결정 4, 순수 로직, Lune 테스트 대상)
 
-	- 해금: 학(Crane) 펫 1마리를 바침 (Config.SAKURA_UNLOCK_PET)
-	- 사쿠라 크리스탈 Config.SAKURA_APPLY_COST 개로 부화 중인 알 또는 보관 펫 하나에
-	    블룸(×1.5) 97.5% / 스피릿 블룸(×3) 2.5% (Mutations.sourceChance)
-	- 블룸은 자연 돌연변이(실버/골든/레인보우) 위에 중첩 가능, 블룸끼리는 불가 (같은 group "bloom")
+	- 바치기 (SakuraOffer): 정원의 성체 식물 1그루를 바치면 사쿠라 크리스탈 (등급이 높을수록 많이, Config.SAKURA_OFFER_CRYSTALS)
+	- 뽑기 (SakuraDraw): 크리스탈 Config.SAKURA_DRAW_COST 개로 특별 씨앗 1개 → 씨앗 가방으로
+	    벚꽃 씨앗(벚꽃 요정 나무) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무) 2.5% (Config.SAKURA_SEEDS — 5판 블룸 확률 그대로)
+	- 5판의 "학 바쳐서 해금"·"블룸 돌연변이 붙이기"는 없앰
 ]]
 
 local Data = script.Parent.Data
 local Config = require(Data.Config)
-local Mutations = require(Data.Mutations)
+local Plants = require(Data.Plants)
 local EggRoll = require(script.Parent.EggRoll)
-local Types = require(script.Parent.Types)
 
 type RandomFn = EggRoll.RandomFn
 
 local SakuraRules = {}
 
-SakuraRules.GROUP = "bloom"
-
--- 블룸 계열 돌연변이 (확률 순서대로)
-function SakuraRules.bloomMutations(): { Mutations.Mutation }
-	local result: { Mutations.Mutation } = {}
-	for _, mutation in Mutations.list do
-		if mutation.group == SakuraRules.GROUP then
-			table.insert(result, mutation)
-		end
+-- 성체 1그루를 바치면 받는 크리스탈 (모르는 식물이면 0)
+function SakuraRules.crystalsFor(petId: string): number
+	local plant = Plants.get(petId)
+	if not plant then
+		return 0
 	end
-	return result
-end
-
-function SakuraRules.hasBloom(mutations: { string }): boolean
-	for _, id in mutations do
-		local mutation = Mutations.get(id)
-		if mutation and mutation.group == SakuraRules.GROUP then
-			return true
-		end
-	end
-	return false
-end
-
--- (가능?, 안 되는 이유 문구)
-function SakuraRules.canApply(mutations: { string }): (boolean, string?)
-	if SakuraRules.hasBloom(mutations) then
-		return false, "이미 블룸이 붙어 있어요! (블룸끼리는 겹칠 수 없어요)"
-	end
-	return true, nil
+	return Config.SAKURA_OFFER_CRYSTALS[plant.rarity] or 1
 end
 
 function SakuraRules.canAfford(crystals: number): boolean
-	return crystals >= Config.SAKURA_APPLY_COST
+	return crystals >= Config.SAKURA_DRAW_COST
 end
 
--- 블룸 97.5% / 스피릿 블룸 2.5%
+-- 뽑기 한 번 → 식물 id (벚꽃 요정 나무 97.5% / 정령 벚꽃 나무 2.5%)
 function SakuraRules.roll(rand: RandomFn): string
-	local blooms = SakuraRules.bloomMutations()
-	local pick = EggRoll.weightedPick(blooms, function(m: Mutations.Mutation): number
-		return m.sourceChance or 0
+	local pick = EggRoll.weightedPick(Config.SAKURA_SEEDS, function(entry: { plantId: string, chance: number }): number
+		return entry.chance
 	end, rand)
-	return if pick then pick.id else "bloom"
+	return if pick then pick.plantId else Config.SAKURA_SEEDS[1].plantId
 end
 
--- 새 돌연변이 목록 (원본은 안 바꿈). 이미 블룸이 있으면 그대로 돌려줌.
-function SakuraRules.apply(mutations: { string }, bloomId: string): { string }
-	local result = table.clone(mutations)
-	if not SakuraRules.hasBloom(result) then
-		table.insert(result, bloomId)
+-- 뽑기로 나올 수 있는 식물 id 목록 (확률 순서)
+function SakuraRules.seedIds(): { string }
+	local ids: { string } = {}
+	for _, entry in Config.SAKURA_SEEDS do
+		table.insert(ids, entry.plantId)
 	end
-	return result
-end
-
--- 해금 제물로 바칠 학 고르기: uid 를 주면 그 펫(학이어야 함), 없으면 수입이 가장 낮은 학
-function SakuraRules.pickOffering(
-	records: { Types.PetRecord },
-	incomeOf: (number) -> number,
-	requestedUid: string?
-): number?
-	local bestIndex: number? = nil
-	local bestIncome = math.huge
-	for i, record in records do
-		if record.petId == Config.SAKURA_UNLOCK_PET then
-			if requestedUid then
-				if record.uid == requestedUid then
-					return i
-				end
-			else
-				local income = incomeOf(i)
-				if income < bestIncome then
-					bestIndex, bestIncome = i, income
-				end
-			end
-		end
-	end
-	return bestIndex
+	return ids
 end
 
 return SakuraRules

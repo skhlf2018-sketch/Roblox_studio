@@ -4,8 +4,8 @@
 	(tests/run.luau 에는 안 들어감. 로블록스 없이 @lune/roblox 진짜 인스턴스로 만들어 보며
 	 속성 이름·타입 오타, nil 인덱싱 같은 실행 오류를 잡습니다. 모양이 예쁜지는 스튜디오에서 봐야 함)
 
-	검사: MapBuilder.start() (맵 15구역·베이스 7개·2단계 특수 장소 모델), PetVisualService.build(펫 전부),
-	      우리 진열, 경비 겉모습, EggVisualService (알 껍데기)
+	검사: MapBuilder.start() (맵 15구역·베이스 7개·특수 장소 = 6판 사쿠라 나무만), PetVisualService.build(식물 134종 — 아직 5판 동물 모양),
+	      6판 정원 펫 진열 없음, 경비 겉모습, EggVisualService (씨앗 껍데기 — 아직 알 모양)
 	      + 특수 장소 태그 파트 개수/Attribute/구역 안에 있는지 (서버 Landmarks 가 임시 파트를 안 만들게)
 	      + 4판: 파트 수 상한 (구역 ≤ 400, 맵 ≤ 7,000, 러닝머신 7개가 모두 가장 큰 모양이어도), 입구 아치·큰 바닥 판,
 	        둥지 태그 파트 높이 그대로, 경비 전용 소품(키 그대로), 등급 10개 알 모양(매끈한 타원 + 띠·점, ≤ 8 파트, 희귀 이상 반짝이)
@@ -431,6 +431,25 @@ local function body()
 		worst <= 7000,
 		string.format("러닝머신 7개 모두 가장 큰 모양(%d)이어도 맵 ≤ 7,000: %d", maxLook, worst)
 	)
+	-- 6판 (사장님: 러닝머신 최대 1초 1M): 20레벨까지. 11~20레벨 모양은 아직 10번 모양 그대로 (선임이 10개 더)
+	local Upgrades = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Upgrades"))
+	check(#Upgrades.Treadmill == 20, "러닝머신 20레벨: " .. #Upgrades.Treadmill)
+	local levelsSeen = {}
+	for _, level in { 10, #Upgrades.Treadmill } do
+		kidLevels.TreadmillLevel = level
+		MapBuilder.setPlotOwner(2, kid)
+		local look = MapBuilder.getPlot(2).treadmill.Parent:FindFirstChild("TreadmillLook")
+		check(look and look:GetAttribute("Level") == level, "러닝머신 " .. level .. "레벨 모양 모델")
+		for _, d in MapBuilder.getPlot(2).sign.Parent:GetDescendants() do
+			if d:IsA("TextLabel") and d.Name == "Level" then
+				table.insert(levelsSeen, d.Text)
+			end
+		end
+	end
+	check(
+		table.find(levelsSeen, "레벨 10 > 레벨 11") ~= nil,
+		"10레벨 표지판 '레벨 10 > 레벨 11' (최대 아님)"
+	)
 	local sign = MapBuilder.getPlot(2).sign
 	local title = sign and sign:FindFirstChild("Title", true)
 	check(title and title.Text == "Kid의 베이스", "주인 이름 간판: " .. tostring(title and title.Text))
@@ -456,41 +475,12 @@ local function body()
 		local p = part.CFrame.Position
 		return zone ~= nil and math.abs(p.X - zone.centerX) <= zone.halfX and math.abs(p.Z - zone.centerZ) <= zone.halfZ
 	end
-	local fusion = tagged.FusionMachine or {}
-	check(#fusion == 7, "FusionMachine 태그 7개 (베이스마다): " .. #fusion)
-	local plotSeen = {}
-	for _, part in fusion do
-		plotSeen[part:GetAttribute("PlotIndex")] = true
-		local model = part.Parent
-		check(
-			model:IsA("Model") and model:FindFirstChild("Core") and model:FindFirstChild("Tube3"),
-			"퓨전 머신 " .. tostring(part:GetAttribute("PlotIndex")) .. " 모델에 Core·Tube1~3"
-		)
-	end
-	check(plotSeen[1] and plotSeen[7], "퓨전 머신 PlotIndex 1~7")
+	-- 6판 (사장님 결정): 퓨전 머신·제단·비밀 통로 없앰 → 사쿠라 나무 하나만
+	check(#(tagged.FusionMachine or {}) == 0, "6판: FusionMachine 태그 없음")
+	check(#(tagged.Altar or {}) == 0, "6판: Altar 태그 없음")
+	check(#(tagged.Shrine or {}) == 0, "6판: Shrine 태그 없음")
 	local sakura = tagged.SakuraIncubator or {}
 	check(#sakura == 1 and inZone(sakura[1], "cherry_blossom"), "SakuraIncubator 1개, 벚꽃 구역 안")
-	local altars = tagged.Altar or {}
-	local sides = {}
-	for _, part in altars do
-		sides[part:GetAttribute("Side")] = part
-		check(
-			part:GetAttribute("PendingCount") == 0,
-			"제단 PendingCount = 0 (" .. tostring(part:GetAttribute("Side")) .. ")"
-		)
-		check(inZone(part, "angels_demons"), "제단이 천사&악마 구역 안")
-	end
-	check(#altars == 2 and sides.light ~= nil and sides.dark ~= nil, "Altar 2개 (Side light / dark)")
-	if sides.light and sides.dark then
-		local zone = MapBuilder.getZone("angels_demons")
-		check(sides.light.CFrame.Position.X < zone.centerX, "천국 제단은 천국(왼쪽 -X) 쪽")
-		check(sides.dark.CFrame.Position.X > zone.centerX, "지옥 제단은 지옥(오른쪽 +X) 쪽")
-	end
-	local shrine = tagged.Shrine or {}
-	check(#shrine == 1 and inZone(shrine[1], "angels_demons"), "Shrine 1개, 천사&악마 구역 안")
-	if shrine[1] then
-		check(shrine[1].Parent:FindFirstChild("Waterfall") ~= nil, "비밀 통로 옆 폭포")
-	end
 	-- 5판: 마법의 숲 퀘스트 문(QuestGate)은 퀘스트와 함께 없앰 → 마법의 숲은 항상 열림
 	check(#(tagged.QuestGate or {}) == 0, "5판: QuestGate 태그 파트 없음 (마법의 숲 항상 열림)")
 	-- 5판 주임 검수: 눈에 보이는 문·잠금도 없어야 함 — 구역 경계(마법의 숲 입구 포함)를 가로막는 단단한 파트가 없음
@@ -545,18 +535,18 @@ local function body()
 	end
 	-- 서버 Landmarks 가 이 파트들을 찾으면 임시 파트를 안 만듦
 	local Landmarks = requireNode(Loader.get("ServerScriptService/Server/Util/Landmarks"))
-	check(#Landmarks.find("Altar", "Side", "light") == 1, "Landmarks.find(Altar, Side=light) = 1")
-	check(Landmarks.plotPart("FusionMachine", 3) ~= nil, "Landmarks.plotPart(FusionMachine, 3)")
-	local before = #(tagged.Shrine or {})
+	check(#Landmarks.find("SakuraIncubator") == 1, "Landmarks.find(SakuraIncubator) = 1")
+	check(Landmarks.plotPart("Treadmill", 3) ~= nil, "Landmarks.plotPart(Treadmill, 3)")
+	local before = #(tagged.SakuraIncubator or {})
 	Landmarks.ensure({
-		tag = "Shrine",
-		name = "SecretShrine",
+		tag = "SakuraIncubator",
+		name = "SakuraIncubator",
 		label = "x",
 		position = roblox.Vector3.new(0, 0, 0),
 		size = roblox.Vector3.new(1, 1, 1),
 		color = roblox.Color3.new(1, 1, 1),
 	})
-	check(#(tagged.Shrine or {}) == before, "Landmarks.ensure 가 임시 Shrine 을 안 만듦")
+	check(#(tagged.SakuraIncubator or {}) == before, "Landmarks.ensure 가 임시 사쿠라 나무를 안 만듦")
 
 	print("[펫]")
 end
@@ -617,815 +607,62 @@ local function petsBody()
 	check(avg >= 30 and avg <= 80, "펫 평균 파트 수 30~80: " .. string.format("%.1f", avg))
 	check(minParts >= 20 and maxParts <= 110, "펫 파트 수 범위 (최소 20, 최대 110)")
 
-	-- 우리 진열: 가짜 베이스(PlotIndex 99) + 우리 파트(앞 = +X 쪽으로 돌림)
-	local Sessions = requireNode(Loader.get("ServerScriptService/Server/Sessions"))
-	local fakePlayer = { UserId = 77, Name = "Tester", DisplayName = "Tester" }
-	Players.GetPlayerByUserId = function(_, id)
-		return if id == 77 then fakePlayer else nil
-	end
-	local session = Sessions.create(fakePlayer)
-	local petsList, equipped = {}, {}
-	for i = 1, 20 do
-		local pet = Pets.list[(i * 7) % #Pets.list + 1]
-		table.insert(petsList, {
-			uid = "p" .. i,
-			petId = pet.id,
-			size = if i % 3 == 0 then "giant" else "normal",
-			mutations = if i % 4 == 0 then { "golden" } else {},
-		})
-		table.insert(equipped, "p" .. i)
-	end
-	session.data = { pets = petsList, equipped = equipped }
-	session.loaded = true
-	local base = Instance.new("Folder")
-	base.Name = "FakePlot"
-	base.Parent = Workspace
-	local floor = Instance.new("Part")
-	floor.Size = roblox.Vector3.new(60, 1, 60)
-	floor.CFrame = roblox.CFrame.new(500, 0, 500)
-	floor:SetAttribute("PlotIndex", 99)
-	floor:SetAttribute("OwnerUserId", 77)
-	floor.Parent = base
-	CollectionService:AddTag(floor, "Plot")
-	local pen = Instance.new("Part")
-	pen.Size = roblox.Vector3.new(36, 0.2, 24)
-	-- LookVector = +X (우리 앞이 +X 쪽)
-	pen.CFrame = roblox.CFrame.lookAt(roblox.Vector3.new(500, 0.6, 500), roblox.Vector3.new(501, 0.6, 500))
-	pen:SetAttribute("PlotIndex", 99)
-	pen.Parent = base
-	CollectionService:AddTag(pen, "PenArea")
-	PVS.refreshPens()
-	local penPets = {}
-	for _, m in base:GetChildren() do
-		if m:IsA("Model") and m:GetAttribute("PetUid") then
-			table.insert(penPets, m)
-		end
-	end
-	check(#penPets == 18, "우리 진열 18마리 (최대): " .. #penPets)
-	local inside, facing, inBack, labels = 0, 0, 0, 0
-	for _, m in penPets do
-		local cf = m.PrimaryPart.CFrame
-		local lp = pen.CFrame:PointToObjectSpace(cf.Position)
-		if math.abs(lp.X) <= pen.Size.X / 2 and math.abs(lp.Z) <= pen.Size.Z / 2 then
-			inside += 1
-		end
-		-- 펫 앞(-Z) = 우리 LookVector
-		if cf.LookVector:Dot(pen.CFrame.LookVector) > 0.99 then
-			facing += 1
-		end
-		-- 우리 뒤쪽 2/3 (앞 = 로컬 -Z)
-		if lp.Z >= -pen.Size.Z / 6 - 0.01 then
-			inBack += 1
-		end
-		local tag = m.PrimaryPart:FindFirstChild("PetTag")
-		if tag and tag:FindFirstChild("Rarity") and tag:FindFirstChild("PetName") then
-			local income = tag:FindFirstChild("Income")
-			if income and string.sub(income.Text, 1, 1) == "$" and string.sub(income.Text, -2) == "/s" then
-				labels += 1
-			end
-		end
-	end
-	check(inside == #penPets, "우리 펫이 전부 우리 직사각형 안: " .. inside)
-	check(facing == #penPets, "우리 펫이 전부 우리 앞(LookVector)을 봄: " .. facing)
-	check(inBack == #penPets, "우리 펫이 전부 우리 뒤쪽 2/3: " .. inBack)
-	check(labels == #penPets, "이름표 3줄 (희귀도/이름/$수입/s): " .. labels)
-	if penPets[1] then
-		local tag = penPets[1].PrimaryPart:FindFirstChild("PetTag")
-		print("  label:", tag.Rarity.Text, "/", tag.PetName.Text, "/", tag.Income.Text)
-	end
-	local penTotal = 0
-	for _, m in penPets do
-		penTotal += count(m)
-	end
-	print("  pen parts (18 pets):", penTotal)
-
-	-- 5판: 쓰다듬기 프롬프트 + 우리 안 돌아다니기
-	print("[5판: 우리 펫 쓰다듬기 프롬프트]")
-	local promptOk, ownerOk = 0, 0
-	for _, m in penPets do
-		local attach = m.PrimaryPart:FindFirstChild("PromptAttach")
-		local prompt = attach and attach:FindFirstChild("PetPrompt")
-		if
-			prompt
-			and prompt:IsA("ProximityPrompt")
-			and prompt.ActionText == "쓰다듬기"
-			and math.abs(prompt.HoldDuration - 0.3) < 1e-6
-			and prompt.KeyboardKeyCode == roblox.Enum.KeyCode.F
-			and attach.Position.Y > 0
-		then
-			promptOk += 1
-		end
-		if m:GetAttribute("OwnerUserId") == 77 and typeof(m:GetAttribute("Footprint")) == "number" then
-			ownerOk += 1
-		end
-	end
-	check(promptOk == #penPets, "펫마다 '쓰다듬기' 프롬프트 (0.3초, F, 몸 가운데): " .. promptOk)
-	check(ownerOk == #penPets, "펫마다 Attr OwnerUserId(주인)·Footprint: " .. ownerOk)
-
-	print("[5판: 우리 펫 돌아다니기]")
-	-- 진짜 크기 우리(맵 1번 베이스, 60 × 46)에 최대 18마리
-	local pen1, floor1
-	for _, inst in CollectionService:GetTagged("PenArea") do
-		if inst:GetAttribute("PlotIndex") == 1 then
-			pen1 = inst
-		end
-	end
-	for _, inst in CollectionService:GetTagged("Plot") do
-		if inst:GetAttribute("PlotIndex") == 1 then
-			floor1 = inst
-		end
-	end
-	floor1:SetAttribute("OwnerUserId", 77)
-	PVS.refreshPens()
-	local wanderPets = {}
-	for _, m in pen1.Parent:GetChildren() do
-		if m:IsA("Model") and m:GetAttribute("PetUid") then
-			table.insert(wanderPets, m)
-		end
-	end
-	check(#wanderPets == 18, "1번 베이스 우리(60×46)에 펫 18마리: " .. #wanderPets)
-	local function flatDist(a, b)
-		local dx, dz = a.X - b.X, a.Z - b.Z
-		return math.sqrt(dx * dx + dz * dz)
-	end
-	local top = pen1.CFrame.Position.Y + pen1.Size.Y / 2
-	-- 놓인 알 하나 (펫 격자 바로 앞, 우리 가운데쯤 — 펫이 지나다니는 곳)
-	local eggPart = Instance.new("Part")
-	eggPart.Name = "Incubating_x"
-	eggPart.Size = roblox.Vector3.new(2, 2.5, 2)
-	eggPart.CFrame = pen1.CFrame * roblox.CFrame.new(0, 1.3, -pen1.Size.Z / 6 - 3)
-	eggPart.Parent = pen1.Parent
-	CollectionService:AddTag(eggPart, "IncubatingEgg")
-	local eggPos = eggPart.CFrame.Position
-	local starts, radii, looks = {}, {}, {}
-	for i, m in wanderPets do
-		starts[i] = m:GetPivot().Position
-		looks[i] = m:GetPivot().LookVector
-		local w = PVS.walkerOf(m)
-		radii[i] = w and w.r or 1
-	end
-	check(PVS.walkerOf(wanderPets[1]) ~= nil, "우리 펫 18마리 모두 걷기 등록")
-	local minPair = {}
-	for i = 1, #wanderPets do
-		for j = i + 1, #wanderPets do
-			minPair[i .. ":" .. j] = math.min(flatDist(starts[i], starts[j]), radii[i] + radii[j]) - 0.05
-		end
-	end
-	-- (선임 B-1) 펫 파트는 모두 Root 에 WeldConstraint 로 붙어 있고 Root 만 Anchored → 걸을 때 Root.CFrame 하나만 씀
+	-- 6판 "씨앗을 훔치세요": 5판 우리 펫 진열(18마리)·쓰다듬기 프롬프트·돌아다니기·126마리 부하 검사는 없앰.
+	--   정원의 성체 식물은 서버 BaseService 가 심은 자리에 GardenPlant 파트로 보여 주고, PetVisualService.penRecords 는 빈 표.
+	--   식물 모양·열매·물 주기 프롬프트는 선임이 새로 (docs/REMOTES.md 8장) → 그때 이 자리에 식물 기준 검사를 다시.
+	print("[6판: 정원 펫 진열 없음]")
 	do
-		local weldedPets = 0
-		for _, m in wanderPets do
-			local root = m.PrimaryPart
-			local ok = root ~= nil and root.Anchored
-			for _, d in m:GetDescendants() do
-				if ok and d:IsA("BasePart") and d ~= root then
-					local weld = d:FindFirstChildOfClass("WeldConstraint")
-					if d.Anchored or not weld or weld.Part0 ~= root or weld.Part1 ~= d then
-						ok = false
-					end
-				end
-			end
-			if ok then
-				weldedPets += 1
-			end
-		end
-		check(
-			weldedPets == #wanderPets,
-			"펫마다 Root 만 Anchored, 나머지 파트는 모두 Root 에 용접: " .. weldedPets
-		)
-	end
-	-- (선임 B-1) 우리 100 스터드 안에 누가 있어야 걸음: 주인이 우리 앞 40 스터드(폴짝 거리 10 밖)에 서 있음
-	local watcherChar = Instance.new("Model")
-	local watcherRoot = Instance.new("Part")
-	watcherRoot.Name = "HumanoidRootPart"
-	watcherRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 40)
-	watcherRoot.Parent = watcherChar
-	fakePlayer.Character = watcherChar
-	Players.GetPlayers = function()
-		return { fakePlayer }
-	end
-	local t0 = os.clock()
-	local dt = 1 / 30
-	local outside, nearEgg, overlap, bobbed, walking = 0, 0, 0, false, 0
-	local minEgg = math.huge
-	for frame = 1, 30 * 25 do
-		PVS.stepPens(dt, t0 + frame * dt)
-		for i, m in wanderPets do
-			local p = m:GetPivot().Position
-			local lp = pen1.CFrame:PointToObjectSpace(p)
-			if math.abs(lp.X) > pen1.Size.X / 2 + 0.01 or math.abs(lp.Z) > pen1.Size.Z / 2 + 0.01 then
-				outside += 1
-			end
-			local de = flatDist(p, eggPos)
-			minEgg = math.min(minEgg, de)
-			if de < 4 - 0.01 then
-				nearEgg += 1
-			end
-			if p.Y > top + 0.05 then
-				bobbed = true
-			end
-			if frame % 15 == 0 then
-				for j = i + 1, #wanderPets do
-					if flatDist(p, wanderPets[j]:GetPivot().Position) < minPair[i .. ":" .. j] then
-						overlap += 1
-					end
-				end
-			end
-		end
-		if frame == 30 * 6 then
-			for _, m in wanderPets do
-				local w = PVS.walkerOf(m)
-				if w and w.state == "walk" then
-					walking += 1
-				end
-			end
-		end
-	end
-	local moved, turned = 0, 0
-	for i, m in wanderPets do
-		if flatDist(m:GetPivot().Position, starts[i]) > 2 then
-			moved += 1
-		end
-		if m:GetPivot().LookVector:Dot(looks[i]) < 0.95 then
-			turned += 1
-		end
-	end
-	check(
-		moved >= #wanderPets - 2,
-		"25초 동안 펫이 돌아다님 (2 스터드 넘게 움직임): " .. moved .. "/" .. #wanderPets
-	)
-	check(turned >= #wanderPets / 2, "걸으면서 방향을 돌림: " .. turned)
-	check(bobbed, "걷는 동안 통통 (바닥 위로 살짝)")
-	print("  6초째 걷는 펫: " .. walking .. "마리")
-	check(
-		walking >= 1 and walking < #wanderPets,
-		"걷기·쉬기가 섞여 있음 (6초째 걷는 펫 " .. walking .. ")"
-	)
-	check(outside == 0, "울타리(우리 사각형) 밖으로 안 나감")
-	check(nearEgg == 0, string.format("놓인 알과 4 스터드 넘게 떨어짐 (가장 가까이 %.2f)", minEgg))
-	check(overlap == 0, "다른 펫과 겹치지 않음")
-	-- 주인이 우리 10 스터드 안에 오면 → 주인을 보고 한 번 폴짝
-	local ownerChar = Instance.new("Model")
-	local ownerRoot = Instance.new("Part")
-	ownerRoot.Name = "HumanoidRootPart"
-	ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 6)
-	ownerRoot.Parent = ownerChar
-	fakePlayer.Character = ownerChar
-	local t1 = t0 + 30 * 25 * dt
-	local hopped, facing = 0, 0
-	local hopSeen = {}
-	for frame = 1, 30 do
-		PVS.stepPens(dt, t1 + frame * dt)
-		for i, m in wanderPets do
-			local w = PVS.walkerOf(m)
-			if w and m:GetPivot().Position.Y > top + 0.8 then
-				hopSeen[i] = true
-			end
-		end
-	end
-	for i, m in wanderPets do
-		if hopSeen[i] then
-			hopped += 1
-		end
-		local cf = m:GetPivot()
-		local to = ownerRoot.CFrame.Position - cf.Position
-		local flatTo = roblox.Vector3.new(to.X, 0, to.Z).Unit
-		if cf.LookVector:Dot(flatTo) > 0.9 then
-			facing += 1
-		end
-	end
-	check(hopped == #wanderPets, "주인이 오면 모두 한 번 폴짝: " .. hopped)
-	check(facing >= #wanderPets - 1, "주인 쪽을 봄: " .. facing)
-	-- 주인이 계속 있어도 다시 폴짝하지 않음 (한 번만), 쉬다가 다시 걸음
-	local again = 0
-	for frame = 1, 30 * 6 do
-		PVS.stepPens(dt, t1 + 1 + frame * dt)
-		if frame > 30 then
-			for _, m in wanderPets do
-				if m:GetPivot().Position.Y > top + 0.8 then
-					again += 1
-				end
-			end
-		end
-	end
-	check(again == 0, "주인이 그대로 있으면 다시 안 폴짝")
-
-	-- (선임 B-1 ③) 아무도 근처에 없거나 주인이 접속해 있지 않으면 그 우리 펫은 멈춤 (Root 쓰기 0)
-	do
-		local tFreeze = t1 + 100
-		local function snapshot()
-			local list = {}
-			for i, m in wanderPets do
-				list[i] = m:GetPivot()
-			end
-			return list
-		end
-		local function run(seconds, from)
-			for frame = 1, math.floor(seconds * 30) do
-				PVS.stepPens(dt, from + frame * dt)
-			end
-		end
-		local function same(a, b)
-			local n = 0
-			for i in a do
-				if
-					(a[i].Position - b[i].Position).Magnitude < 1e-6
-					and a[i].LookVector:Dot(b[i].LookVector) > 0.999
-				then
-					n += 1
-				end
-			end
-			return n
-		end
-		local function movedCount(a, b)
-			return #wanderPets - same(a, b)
-		end
-		-- ① 주인이 우리에서 150 스터드 (100 밖), 다른 사람도 없음
-		ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 150)
-		run(0.5, tFreeze) -- 다음 감지(0.25초)까지 (그 사이 몇 걸음은 됨)
-		local before = snapshot()
-		local w0 = PVS.moveStats.rootWrites
-		run(4, tFreeze + 0.5)
-		check(
-			same(before, snapshot()) == #wanderPets,
-			"우리 100 스터드 안에 아무도 없으면 펫이 멈춤: "
-				.. same(before, snapshot())
-				.. "/"
-				.. #wanderPets
-		)
-		check(PVS.moveStats.rootWrites == w0, "멈춘 동안 Root.CFrame 쓰기 0: " .. (PVS.moveStats.rootWrites - w0))
-		-- ② 주인 말고 다른 사람이 우리 옆에 오면 다시 걸음 (주인은 접속 중)
-		local visitor = { UserId = 88, Name = "Visitor", DisplayName = "Visitor" }
-		local visitorChar = Instance.new("Model")
-		local visitorRoot = Instance.new("Part")
-		visitorRoot.Name = "HumanoidRootPart"
-		visitorRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, pen1.Size.Z / 2 + 30)
-		visitorRoot.Parent = visitorChar
-		visitor.Character = visitorChar
-		Players.GetPlayers = function()
-			return { fakePlayer, visitor }
-		end
-		local a = snapshot()
-		run(6, tFreeze + 5)
-		check(
-			movedCount(a, snapshot()) >= #wanderPets / 2,
-			"다른 사람이 30 스터드 안에 오면 다시 걸음: " .. movedCount(a, snapshot())
-		)
-		-- ③ 주인이 나감 (접속 안 함) → 손님이 옆에 있어도 멈춤
-		local realGet = Players.GetPlayerByUserId
+		local Sessions = requireNode(Loader.get("ServerScriptService/Server/Sessions"))
+		local fakePlayer = { UserId = 77, Name = "Tester", DisplayName = "Tester" }
 		Players.GetPlayerByUserId = function(_, id)
-			if id == 77 then
-				return nil
-			end
-			return realGet(_, id)
+			return if id == 77 then fakePlayer else nil
 		end
-		Players.GetPlayers = function()
-			return { visitor }
+		local session = Sessions.create(fakePlayer)
+		local petsList = {}
+		for i = 1, 18 do
+			local pet = Pets.list[(i * 7) % #Pets.list + 1]
+			table.insert(petsList, {
+				uid = "p" .. i,
+				petId = pet.id,
+				size = "normal",
+				mutations = {},
+				x = -20,
+				z = i,
+				fruits = 0,
+				fruitProgress = 0,
+			})
 		end
-		run(0.5, tFreeze + 11)
-		local b = snapshot()
-		local w1 = PVS.moveStats.rootWrites
-		run(4, tFreeze + 11.5)
-		check(same(b, snapshot()) == #wanderPets, "주인이 접속해 있지 않으면 손님이 있어도 멈춤")
-		check(PVS.moveStats.rootWrites == w1, "주인 없는 우리는 Root.CFrame 쓰기 0")
-		Players.GetPlayerByUserId = realGet
-		Players.GetPlayers = function()
-			return { fakePlayer }
-		end
-		ownerRoot.CFrame = pen1.CFrame * roblox.CFrame.new(0, 3, -pen1.Size.Z / 2 - 40)
-		local c = snapshot()
-		run(6, tFreeze + 16)
-		check(
-			movedCount(c, snapshot()) >= #wanderPets / 2,
-			"주인이 돌아오면 다시 걸음: " .. movedCount(c, snapshot())
-		)
-	end
-
-	-- (선임 B-7) 장착이 조금 바뀌면 바뀐 펫만 다시 만듦: 나머지는 같은 모델·걷던 자리 그대로 (순간이동 없음)
-	do
-		local function penModels()
-			local list = {}
-			for _, m in pen1.Parent:GetChildren() do
-				if m:IsA("Model") and m:GetAttribute("PetUid") then
-					table.insert(list, m)
-				end
-			end
-			return list
-		end
-		local function findSame(list, m)
-			for _, x in list do
-				if x == m then
-					return true
-				end
-			end
-			return false
-		end
-		local byUid, pivots = {}, {}
-		for _, m in wanderPets do
-			byUid[m:GetAttribute("PetUid")] = m
-			pivots[m:GetAttribute("PetUid")] = m:GetPivot()
-		end
-		local function keptCount(list, skip)
-			local kept, stayed = 0, 0
-			for uid, m in byUid do
-				if not skip[uid] and m.Parent ~= nil and findSame(list, m) then
-					kept += 1
-					if (m:GetPivot().Position - pivots[uid].Position).Magnitude < 1e-6 then
-						stayed += 1
-					end
-				end
-			end
-			return kept, stayed
-		end
-		-- ① p1 장착 해제 (장착 20개 중 앞 18개가 우리에 → p2~p19): p1 만 사라지고 p19 만 새로 생김
-		local eq = session.data.equipped
-		table.remove(eq, table.find(eq, "p1"))
+		session.data = { pets = petsList }
+		session.loaded = true
+		local base = Instance.new("Folder")
+		base.Name = "FakePlot"
+		base.Parent = Workspace
+		local floor = Instance.new("Part")
+		floor.Size = roblox.Vector3.new(60, 1, 60)
+		floor.CFrame = roblox.CFrame.new(500, 0, 500)
+		floor:SetAttribute("PlotIndex", 99)
+		floor:SetAttribute("OwnerUserId", 77)
+		floor.Parent = base
+		CollectionService:AddTag(floor, "Plot")
+		local pen = Instance.new("Part")
+		pen.Size = roblox.Vector3.new(36, 0.2, 24)
+		pen.CFrame = roblox.CFrame.lookAt(roblox.Vector3.new(500, 0.6, 500), roblox.Vector3.new(501, 0.6, 500))
+		pen:SetAttribute("PlotIndex", 99)
+		pen.Parent = base
+		CollectionService:AddTag(pen, "PenArea")
 		PVS.refreshPens()
-		local now1 = penModels()
-		local kept, stayed = keptCount(now1, { p1 = true })
-		check(#now1 == 18, "장착 해제 뒤에도 우리에 18마리: " .. #now1)
-		check(byUid.p1.Parent == nil, "해제한 펫(p1) 모델만 없어짐")
-		check(kept == 17, "나머지 17마리는 같은 모델 그대로 (다시 안 만듦): " .. kept)
-		check(stayed == 17, "그대로인 펫은 걷던 자리 그대로 (격자로 순간이동 안 함): " .. stayed)
-		local newOne
-		for _, m in now1 do
-			if m:GetAttribute("PetUid") == "p19" then
-				newOne = m
+		local penPets = 0
+		for _, m in base:GetChildren() do
+			if m:IsA("Model") and m:GetAttribute("PetUid") then
+				penPets += 1
 			end
 		end
-		check(
-			newOne ~= nil and PVS.walkerOf(newOne) ~= nil,
-			"새로 들어온 펫(p19)만 만들어지고 걷기 등록"
-		)
-		if newOne then
-			local np = newOne:GetPivot().Position
-			local lp = pen1.CFrame:PointToObjectSpace(np)
-			check(
-				math.abs(lp.X) <= pen1.Size.X / 2 and math.abs(lp.Z) <= pen1.Size.Z / 2,
-				"새 펫은 우리 안 빈 칸에 생김"
-			)
+		check(penPets == 0, "6판: 정원에 펫 모델을 안 만듦 (성체 18그루가 있어도): " .. penPets)
+		base.Parent = nil
+		Sessions.remove(fakePlayer)
+		Players.GetPlayerByUserId = function()
+			return nil
 		end
-		-- ② 펫 하나(p5)의 모양(돌연변이)이 바뀌면 그 펫만 다시 만듦
-		for _, r in session.data.pets do
-			if r.uid == "p5" then
-				r.mutations = { "golden" }
-			end
-		end
-		PVS.refreshPens()
-		local now2 = penModels()
-		local kept2 = keptCount(now2, { p1 = true, p5 = true })
-		check(#now2 == 18 and byUid.p5.Parent == nil, "모양이 바뀐 펫(p5)은 다시 만듦")
-		check(kept2 == 16, "모양이 안 바뀐 나머지 16마리는 그대로: " .. kept2)
-		-- ③ 아무것도 안 바뀌면 아무것도 안 만듦
-		local same3 = penModels()
-		PVS.refreshPens()
-		local untouched = 0
-		for _, m in penModels() do
-			if findSame(same3, m) then
-				untouched += 1
-			end
-		end
-		check(untouched == 18, "장착이 그대로면 18마리 모두 그대로: " .. untouched)
-		-- 원래대로 (p1 다시 맨 앞, p5 돌연변이 없음)
-		table.insert(eq, 1, "p1")
-		for _, r in session.data.pets do
-			if r.uid == "p5" then
-				r.mutations = {}
-			end
-		end
-		PVS.refreshPens()
-	end
-	fakePlayer.Character = nil
-
-	-- 5판 주임 검수: 베이스 7개 × 18마리 = 126마리(서버 최대) 부하 · 나간 사람 정리 · 메모리 새는지
-	print("[5판 주임 검수: 펫 126마리 · 나간 사람 정리 · 메모리]")
-	do
-		local plotFloors, plotPens, owners = {}, {}, {}
-		for _, inst in CollectionService:GetTagged("Plot") do
-			local idx = inst:GetAttribute("PlotIndex")
-			if typeof(idx) == "number" and idx >= 1 and idx <= 7 then
-				plotFloors[idx] = inst
-			end
-		end
-		for _, inst in CollectionService:GetTagged("PenArea") do
-			local idx = inst:GetAttribute("PlotIndex")
-			if typeof(idx) == "number" and idx >= 1 and idx <= 7 then
-				plotPens[idx] = inst
-			end
-		end
-		local function makeOwner(i, round)
-			local list, eq = {}, {}
-			for k = 1, 18 do
-				local pet = Pets.list[(k * 5 + i * 11 + round) % #Pets.list + 1]
-				table.insert(list, { uid = "q" .. round .. "_" .. k, petId = pet.id, size = "normal", mutations = {} })
-				table.insert(eq, "q" .. round .. "_" .. k)
-			end
-			local player = owners[i] and owners[i].player
-				or { UserId = 200 + i, Name = "Owner" .. i, DisplayName = "Owner" .. i }
-			local s = Sessions.get(player) or Sessions.create(player)
-			s.data = { pets = list, equipped = eq }
-			s.loaded = true
-			owners[i] = { player = player, session = s }
-		end
-		for i = 1, 7 do
-			makeOwner(i, 0)
-			-- (선임 B-1) 주인마다 자기 우리 앞 30 스터드에 서 있음 → 7개 우리 모두 "보는 사람 있음"(걷는 중)
-			local char = Instance.new("Model")
-			local hrp = Instance.new("Part")
-			hrp.Name = "HumanoidRootPart"
-			hrp.CFrame = plotPens[i].CFrame * roblox.CFrame.new(0, 3, -plotPens[i].Size.Z / 2 - 30)
-			hrp.Parent = char
-			owners[i].player.Character = char
-		end
-		Players.GetPlayers = function()
-			local list = {}
-			for i = 1, 7 do
-				if owners[i] then
-					table.insert(list, owners[i].player)
-				end
-			end
-			return list
-		end
-		Players.GetPlayerByUserId = function(_, id)
-			if id == 77 then
-				return fakePlayer
-			end
-			local i = id - 200
-			return if owners[i] then owners[i].player else nil
-		end
-		for i = 1, 7 do
-			plotFloors[i]:SetAttribute("OwnerUserId", 200 + i)
-		end
-		PVS.refreshPens()
-		-- (Lune 에서는 Destroy 된 인스턴스의 Attribute 를 읽으면 오류라서 Parent 부터 확인. 지금까지 본 모델은 seen 에 기억)
-		local seen = {}
-		local function livePets()
-			local list = {}
-			for _, m in CollectionService:GetTagged("PenPet") do
-				if m.Parent ~= nil then
-					local owner = m:GetAttribute("OwnerUserId")
-					if typeof(owner) == "number" and owner >= 201 and owner <= 207 then
-						table.insert(list, m)
-						seen[m] = true
-					end
-				end
-			end
-			return list
-		end
-		local live = livePets()
-		check(#live == 126, "7개 우리 × 18마리 = 126마리 (서버 최대): " .. #live)
-		local registered = 0
-		for _, m in live do
-			if PVS.walkerOf(m) then
-				registered += 1
-			end
-		end
-		check(registered == 126, "126마리 모두 걷기 등록: " .. registered)
-		local partsPerPet = 0
-		for _, m in live do
-			partsPerPet += count(m)
-		end
-		partsPerPet = partsPerPet / #live
-
-		-- 15초 (60fps): 프레임당 PivotTo 호출·옮긴 파트 수, 걸리는 시간
-		local dt = 1 / 60
-		local t0 = os.clock() + 1000
-		for f = 1, 120 do
-			PVS.stepPens(dt, t0 + f * dt)
-		end
-		-- (Lune 은 collectgarbage("count") 만 됨: 강제 정리 대신 60프레임마다 재서 앞 절반·뒤 절반의 최대값을 비교)
-		local memFirst, memSecond, memStart = 0, 0, collectgarbage("count")
-		pivotCalls, pivotParts = 0, 0
-		local writes0, ticks0 = PVS.moveStats.rootWrites, PVS.moveStats.ticks
-		local startPos = {}
-		for i, m in live do
-			startPos[i] = m:GetPivot().Position
-		end
-		local frames = 900
-		local worst = 0
-		local cpuStart = os.clock()
-		for f = 1, frames do
-			local a = os.clock()
-			PVS.stepPens(dt, t0 + 2 + f * dt)
-			worst = math.max(worst, os.clock() - a)
-			if f % 60 == 0 then
-				local m = collectgarbage("count")
-				if f <= frames / 2 then
-					memFirst = math.max(memFirst, m)
-				else
-					memSecond = math.max(memSecond, m)
-				end
-			end
-		end
-		local cpu = os.clock() - cpuStart
-		local writes = PVS.moveStats.rootWrites - writes0
-		local ticks = PVS.moveStats.ticks - ticks0
-		local writesPerSec = writes / frames * 60
-		-- 고치기 전(5판 주임 검수 14-4): 60Hz 로 걷는 펫마다 PivotTo → 파트 CFrame 쓰기 초당 약 169,900 (이 PC 173,419)
-		local BEFORE_PER_SEC = 169900
-		-- 같은 걸음을 예전 방식(매 프레임 PivotTo = 파트 전부)으로 했다면: 틱당 걷는 펫 수 × 60프레임 × 파트/펫
-		local oldStylePerSec = (if ticks > 0 then writes / ticks else 0) * 60 * partsPerPet
-		local movedPets = 0
-		for i, m in live do
-			if (m:GetPivot().Position - startPos[i]).Magnitude > 2 then
-				movedPets += 1
-			end
-		end
-		print(
-			string.format(
-				"  [정보] 126마리 15초(900프레임, 60fps): 이동 갱신 %d번(20Hz), Root.CFrame 쓰기 프레임당 평균 %.1f (초당 %.0f), PivotTo %d번 (옮긴 파트 %d), 파트/펫 %.1f",
-				ticks,
-				writes / frames,
-				writesPerSec,
-				pivotCalls,
-				pivotParts,
-				partsPerPet
-			)
-		)
-		print(
-			string.format(
-				"  [정보] 파트 CFrame 쓰기 초당: 고치기 전 약 %d → 지금 %.0f (1/%.0f). 같은 걸음을 예전 방식으로 했다면 %.0f. 15초 동안 2 스터드 넘게 걸은 펫 %d/%d",
-				BEFORE_PER_SEC,
-				writesPerSec,
-				BEFORE_PER_SEC / math.max(1, writesPerSec),
-				oldStylePerSec,
-				movedPets,
-				#live
-			)
-		)
-		print(
-			string.format(
-				"  [정보] Lune 에서 stepPens 1프레임 평균 %.2f ms / 최악 %.2f ms (Lune 흉내라 ms 는 참고만)",
-				cpu / frames * 1000,
-				worst * 1000
-			)
-		)
-		check(pivotCalls == 0, "걷는 동안 PivotTo 0번 (Root.CFrame 만 씀): " .. pivotCalls)
-		check(math.abs(ticks - 300) <= 1, "60fps 900프레임 → 이동 갱신 300번 (20Hz): " .. ticks)
-		check(writes <= ticks * 126, "갱신 한 번에 Root 쓰기는 펫 수 이하")
-		check(
-			writesPerSec <= BEFORE_PER_SEC / 10,
-			string.format(
-				"초당 파트 CFrame 쓰기가 고치기 전의 1/10 이하: %.0f ≤ %d",
-				writesPerSec,
-				BEFORE_PER_SEC / 10
-			)
-		)
-		check(
-			writesPerSec <= oldStylePerSec / 10,
-			string.format(
-				"같은 걸음을 예전 방식으로 한 것의 1/10 이하: %.0f ≤ %.0f",
-				writesPerSec,
-				oldStylePerSec / 10
-			)
-		)
-		check(movedPets >= 100, "20Hz 로 바꿔도 펫들이 돌아다님: " .. movedPets .. "/126")
-		print(
-			string.format(
-				"  [정보] 메모리(KB): 시작 %.0f, 앞 7.5초 최대 %.0f, 뒤 7.5초 최대 %.0f",
-				memStart,
-				memFirst,
-				memSecond
-			)
-		)
-		check(
-			memSecond - memFirst < 1024,
-			string.format(
-				"900프레임 걷기 동안 메모리가 계속 늘지 않음 (뒤 절반 최대 - 앞 절반 최대 = %.0f KB)",
-				memSecond - memFirst
-			)
-		)
-
-		-- (선임 B-1 ③) 주인 3명이 맵 밖 멀리 가면, 100 스터드 안에 아무도 없는 우리의 펫만 멈추고 쓰기도 그만큼 줄어듦
-		do
-			for _, i in { 1, 2, 3 } do
-				local hrp = owners[i].player.Character:FindFirstChild("HumanoidRootPart")
-				hrp.CFrame = roblox.CFrame.new(0, 3, 5000 + i * 500)
-			end
-			for f = 1, 30 do
-				PVS.stepPens(dt, t0 + 20 + f * dt)
-			end
-			-- 어느 우리에 100 스터드 안에 아무도 없나 (이웃 베이스 주인이 100 안이면 그 우리는 계속 걸음 — 규칙대로)
-			local function penDist(pen, pos)
-				local lp = pen.CFrame:PointToObjectSpace(pos)
-				local dx = math.max(math.abs(lp.X) - pen.Size.X / 2, 0)
-				local dz = math.max(math.abs(lp.Z) - pen.Size.Z / 2, 0)
-				return math.sqrt(dx * dx + dz * dz)
-			end
-			local empty = {}
-			local emptyPens = 0
-			for i = 1, 7 do
-				local nearest = math.huge
-				for j = 1, 7 do
-					local hrp = owners[j].player.Character:FindFirstChild("HumanoidRootPart")
-					nearest = math.min(nearest, penDist(plotPens[i], hrp.CFrame.Position))
-				end
-				empty[200 + i] = nearest > 100
-				if empty[200 + i] then
-					emptyPens += 1
-				end
-			end
-			local far = {}
-			local snap = {}
-			for k, m in live do
-				far[k] = empty[m:GetAttribute("OwnerUserId")] == true
-				snap[k] = m:GetPivot().Position
-			end
-			local w0 = PVS.moveStats.rootWrites
-			for f = 1, 600 do
-				PVS.stepPens(dt, t0 + 21 + f * dt)
-			end
-			local frozen, farCount, nearMoved = 0, 0, 0
-			for k, m in live do
-				local d = (m:GetPivot().Position - snap[k]).Magnitude
-				if far[k] then
-					farCount += 1
-					if d < 1e-6 then
-						frozen += 1
-					end
-				elseif d > 1e-6 then
-					nearMoved += 1
-				end
-			end
-			print(
-				string.format(
-					"  [정보] 주인 3명이 맵 밖으로 가니 100 스터드 안에 아무도 없는 우리 %d개 → Root 쓰기 초당 %.0f (7개 모두 볼 때 %.0f)",
-					emptyPens,
-					(PVS.moveStats.rootWrites - w0) / 600 * 60,
-					writesPerSec
-				)
-			)
-			check(
-				emptyPens >= 1 and farCount == emptyPens * 18 and frozen == farCount,
-				string.format("아무도 없는 우리 %d개(%d마리)는 멈춤: %d", emptyPens, farCount, frozen)
-			)
-			check(
-				nearMoved >= (126 - farCount) * 0.75,
-				string.format("사람이 있는 우리 펫은 계속 걸음: %d/%d", nearMoved, 126 - farCount)
-			)
-			for _, i in { 1, 2, 3 } do
-				local hrp = owners[i].player.Character:FindFirstChild("HumanoidRootPart")
-				hrp.CFrame = plotPens[i].CFrame * roblox.CFrame.new(0, 3, -plotPens[i].Size.Z / 2 - 30)
-			end
-		end
-
-		-- 장착을 바꿔 우리를 8번 다시 만들어도 걷기 등록이 새지 않음
-		for round = 1, 8 do
-			for i = 1, 7 do
-				makeOwner(i, round)
-			end
-			PVS.refreshPens()
-			livePets() -- 새 모델을 seen 에 기억
-			PVS.stepPens(dt, t0 + 5000 + round)
-		end
-		local liveNow = livePets()
-		local ghosts, registeredNow, destroyedSeen = 0, 0, 0
-		for m in seen do
-			if m.Parent == nil then
-				destroyedSeen += 1
-				if PVS.walkerOf(m) then
-					ghosts += 1
-				end
-			elseif PVS.walkerOf(m) then
-				registeredNow += 1
-			end
-		end
-		check(
-			destroyedSeen >= 126 * 8,
-			"다시 만들면서 없어진 모델이 많음 (검사가 의미 있음): " .. destroyedSeen
-		)
-		check(
-			#liveNow == 126 and registeredNow == 126,
-			"8번 다시 만든 뒤에도 126마리 · 걷기 등록 126: " .. #liveNow .. "/" .. registeredNow
-		)
-		check(ghosts == 0, "없어진 펫 모델이 걷기 목록에 남지 않음 (유령 " .. ghosts .. ")")
-
-		-- 베이스 3개 주인이 나감 (OwnerUserId = 0): 그 펫들이 사라지고 걷기 등록도 없어짐
-		for _, i in { 2, 4, 6 } do
-			plotFloors[i]:SetAttribute("OwnerUserId", 0)
-			owners[i].session.loaded = false
-		end
-		PVS.refreshPens()
-		PVS.stepPens(dt, t0 + 6000)
-		local afterLeave = livePets()
-		check(#afterLeave == 72, "3명이 나가면 4 × 18 = 72마리만 남음: " .. #afterLeave)
-		local leftGhosts = 0
-		for m in seen do
-			if m.Parent == nil and PVS.walkerOf(m) then
-				leftGhosts += 1
-			end
-		end
-		check(leftGhosts == 0, "나간 사람 펫의 걷기 등록이 남지 않음: " .. leftGhosts)
-		-- 새 사람이 빈 베이스를 받으면 그 우리에 다시 펫이 생김
-		makeOwner(2, 50)
-		plotFloors[2]:SetAttribute("OwnerUserId", 202)
-		PVS.refreshPens()
-		check(#livePets() == 90, "새 주인이 오면 다시 18마리: " .. #livePets())
-		-- 정리: 다음 검사(경비)에 영향이 없게 되돌림
-		for i = 1, 7 do
-			plotFloors[i]:SetAttribute("OwnerUserId", 0)
-		end
-		PVS.refreshPens()
 	end
 
 	-- 경비 겉모습 (Lune 에는 Attribute 변경 신호가 없어서 State 를 바꾼 뒤 refreshGuard 를 직접 부름)
@@ -1702,7 +939,10 @@ local function petsBody()
 		table.insert(line, r.id .. " " .. n)
 	end
 	print("  등급별 알 파트: " .. table.concat(line, ", "))
-	check(looksOk == #Rarities.list, "등급 10개 알: 매끈한 타원 + 무늬, 3~8 파트: " .. looksOk)
+	check(
+		looksOk == #Rarities.list,
+		"등급 11개 씨앗(알 모양): 매끈한 타원 + 무늬, 3~8 파트: " .. looksOk
+	)
 	check(glintOk == #Rarities.list, "희귀(rare) 이상만 등급 반짝이(RarityGlint): " .. glintOk)
 end
 

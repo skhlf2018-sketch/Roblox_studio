@@ -93,10 +93,7 @@ function PetPicker.myPets(): { Item }
 	if not snap then
 		return list
 	end
-	local equipped: { [string]: boolean } = {}
-	for _, uid in (snap.equipped or {}) :: { string } do
-		equipped[uid] = true
-	end
+	-- 6판: 정원의 성체 식물 (장착 개념 없음 → equipped 는 항상 false)
 	for _, record in (snap.pets or {}) :: { Types.PetRecord } do
 		table.insert(list, {
 			uid = record.uid,
@@ -104,7 +101,7 @@ function PetPicker.myPets(): { Item }
 			size = record.size,
 			mutations = record.mutations or {},
 			kind = "pet",
-			equipped = equipped[record.uid] == true,
+			equipped = false,
 		})
 	end
 	return list
@@ -241,8 +238,9 @@ local function rarityOrder(item: Item): number
 	return if pet then Rarities.order(pet.rarity) else 0
 end
 
+-- 6판: 열매로 환산한 초당 코인 (5판 펫 초당 수입 자리)
 local function incomeOf(item: Item): number
-	return Economy.petIncome(item.petId, item.size, item.mutations)
+	return Economy.recordIncome(item)
 end
 
 local function destroy(s: Session, immediate: boolean?)

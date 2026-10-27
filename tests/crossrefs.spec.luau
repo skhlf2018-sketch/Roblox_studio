@@ -157,8 +157,12 @@ return function(T, Loader)
 			for name in docServer do
 				T.truthy(codeServer[name], "코드(Remotes.ToServer)에 없음: " .. name)
 			end
-			T.eq(#sorted(codeClient), 24) -- 2판 +3: ZoneEntered, IncomeTick, TreadmillStep · 5판 -1 QuestUpdate +3 TutorialUpdate, LeaderboardUpdate, PetPetted
-			T.eq(#sorted(codeServer), 20) -- 2판 +3: DropEgg, SellPet, TreadmillLeave · 2판 마무리 +1: EquipTrail · 2판 수정 +2: PlaceEgg, PickUpPlacedEgg · 5판 -1 ClaimFreeReward +1 PetPet
+			-- 6판: 서버→클라 -7 (HatchResult, OfflineIncome, FusionResult, AltarUpdate, ShrineResult, PetsSold, IncomeTick)
+			--      +4 (PlantGrown, FruitPicked, FruitsSold, FeedResult) → 21
+			--      클라→서버 -9 (HatchEgg, EquipPet, UnequipPet, EquipBest, FuseRequest, AltarOffer, ShrineFuse, SakuraApply, SellPet)
+			--      +6 (PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw) → 17
+			T.eq(#sorted(codeClient), 21)
+			T.eq(#sorted(codeServer), 17)
 		end
 	)
 
@@ -226,7 +230,15 @@ return function(T, Loader)
 	--   PlaceEgg: 알 창에서 알 고르기 → 우리 바닥 클릭/터치로 자리 고르기 (2판 수정)
 	--   PickUpPlacedEgg: 우리에 놓인 알의 "다시 줍기" 프롬프트·버튼 (2판 수정, Config.ALLOW_EGG_PICKUP)
 	--   PetPet (5판): 내 우리 펫 쓰다듬기 — 선임이 펫 ProximityPrompt/클릭을 붙이면 지우기 (서버·REMOTES.md 는 완료)
-	local AWAITING_CLIENT: { [string]: boolean } = {} -- 5판: PetPet 은 PetFxController 가 보냄
+	--   [6판 임시] 수석이 서버를 먼저 만들고 선임이 버튼을 붙일 Remote (docs/REMOTES.md 8장 "선임 할 일"):
+	--   FeedFruit: 열매 가방에서 열매 골라 성체에게 먹이기 / SellFruits: 판매 가판대 "열매 팔기" 프롬프트
+	--   SkipGrowth: 자라는 씨앗의 "건너뛰기 (전부/절반)" 버튼
+	--   (PickFruit·SellPlant·SakuraOffer·SakuraDraw·PetPet 은 클라가 이미 보냄)
+	local AWAITING_CLIENT: { [string]: boolean } = {
+		FeedFruit = true,
+		SellFruits = true,
+		SkipGrowth = true,
+	}
 
 	T.test(
 		"클라→서버 Remote 전부 클라가 보내는 코드(UI)가 있음 (주석 제외, Net.send/trySend 호출만 인정)",
@@ -248,7 +260,7 @@ return function(T, Loader)
 			for name, where in
 				{
 					DropEgg = "ChaseController",
-					SellPet = "PetsController",
+					SellPlant = "PetsController", -- 6판: 5판 SellPet 자리 (성체 뽑아서 팔기)
 					TreadmillLeave = "TreadmillController",
 				}
 			do
@@ -307,15 +319,13 @@ return function(T, Loader)
 				"ChaseEnded",
 				"Caught",
 				"EggDelivered",
-				"HatchResult",
-				"OfflineIncome",
 				"IndexRewarded",
-				"FusionResult",
 				"EggGranted",
 				"SakuraResult",
-				"AltarUpdate",
-				"ShrineResult",
-				"PetsSold",
+				-- 6판
+				"PlantGrown",
+				"FruitsSold",
+				"TutorialUpdate",
 			}
 		do
 			T.truthy(listened[name], name .. " 를 받는 클라 코드가 없음")
@@ -461,7 +471,7 @@ return function(T, Loader)
 				T.truthy(value >= 0, key .. " 음수")
 			end
 		end
-		T.truthy(Config.GROWTH_MULTIPLIER >= 1)
+		T.eq(Config.GROWTH_MULTIPLIER, nil, "6판: 성장 배율 없음 (식물 표가 기준)")
 		T.truthy(Config.SPEED_WALK_MAX > Config.SPEED_LOG_BASE)
 		T.truthy(Config.GUARD_CHASE_MIN_RATIO < 1 and Config.GUARD_CHASE_MAX_RATIO > 1)
 		T.truthy(
@@ -469,8 +479,16 @@ return function(T, Loader)
 			"마진이 1 이상이면 같은 속도에서 잡힘"
 		)
 		T.truthy(Config.MOVE_CHECK_KICK_WARNINGS >= 2)
-		T.truthy(Config.PET_INVENTORY_MAX >= 18, "최대 우리 칸(18)보다 작으면 안 됨")
-		T.truthy(Config.PLACED_EGG_MAX >= 1 and Config.EGG_INVENTORY_MAX >= Config.PLACED_EGG_MAX)
+		-- 6판: 보관함·놓는 알 상한 대신 정원 칸(Upgrades.Pen) · 씨앗 가방 · 열매 가방
+		T.eq(Config.PET_INVENTORY_MAX, nil)
+		T.eq(Config.PLACED_EGG_MAX, nil)
+		T.truthy(Config.EGG_INVENTORY_MAX >= 18, "씨앗 가방은 최대 정원 칸(18) 이상")
+		T.truthy(
+			Config.FRUIT_BAG_MAX >= Config.FRUIT_MAX_PER_PLANT * 18,
+			"열매 가방은 꽉 찬 정원 한 번 딸 만큼"
+		)
+		T.truthy(Config.FRUITS_ON_ADULT <= Config.FRUIT_MAX_PER_PLANT)
+		T.truthy(Config.PASSIVE_INCOME_PER_SECOND == 0, "6판 사장님 결정: 자동 수입 없음")
 		T.truthy(
 			Config.GUARD_MAX_WALKSPEED >= Config.SPEED_WALK_MAX,
 			"4판: 경비 상한은 플레이어 상한 이상"
@@ -648,7 +666,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"돌연변이마다 알 껍데기 모양, 희귀도 효과 이름, 특별 알 3종, 베이스 색 7개",
+		"돌연변이마다 씨앗 껍데기 모양, 등급 효과 이름, 특별 씨앗 4종(6판 eternity·super_ultradivine), 베이스 색 7개",
 		function()
 			for _, mutation in Mutations.list do
 				local look = Visuals.mutationLooks[mutation.id]
@@ -664,7 +682,7 @@ return function(T, Loader)
 			for id in Visuals.rarityEffects do
 				T.truthy(rarityIds[id], "희귀도 효과의 모르는 희귀도 " .. id)
 			end
-			for _, id in { "secret", "eternal", "divine" } do
+			for _, id in { "secret", "eternity", "divine", "super_ultradivine" } do
 				T.truthy(Visuals.specialEggs[id], id)
 			end
 			T.truthy(#Visuals.plotColors >= Config.PLOT_COUNT)
@@ -725,7 +743,7 @@ return function(T, Loader)
 			end
 			T.truthy(indexOf("Net") < indexOf("MapBuilder"), "Net 이 가장 먼저")
 			T.truthy(indexOf("MapBuilder") < indexOf("EggService"), "맵이 알보다 먼저")
-			for _, special in { "SakuraService", "AltarService" } do
+			for _, special in { "SakuraService", "FruitService", "BaseService" } do -- 6판: 제단 삭제, 정원·열매는 정원 파트가 생긴 뒤
 				T.truthy(indexOf("MapBuilder") < indexOf(special), special .. " 는 MapBuilder 다음")
 			end
 			T.truthy(

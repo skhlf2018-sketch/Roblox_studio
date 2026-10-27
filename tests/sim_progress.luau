@@ -32,6 +32,14 @@ local process = require("@lune/process")
 local Loader = require("./Loader")
 
 local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
+-- 6판 "씨앗을 훔치세요": 이 시뮬레이션은 5판 모델(펫 자동 수입·장착·우리 8칸)이라 아직 못 돎.
+--   열매 경제(따서 팔기·건너뛰기·러닝머신 20레벨)로 다시 써야 함 → 수석 다음 할 일 (docs/SEED_GAME_DESIGN.md 9장 18번 참고)
+if Config.PLACED_EGG_MAX == nil then
+	print(
+		"sim_progress: 6판(열매 경제)용으로 아직 안 바꿈 — 5판 자동 수입 모델이라 실행하지 않아요."
+	)
+	process.exit(0)
+end
 local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 local Upgrades = Loader.require("ReplicatedStorage/Shared/Data/Upgrades")
 local Biomes = Loader.require("ReplicatedStorage/Shared/Data/Biomes")

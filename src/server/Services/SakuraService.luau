@@ -1,16 +1,18 @@
 --!strict
 --[[
-	SakuraService — 벚꽃 구역 사쿠라 인큐베이터 + 사쿠라 크리스탈 (설계문서 4장). 규칙은 shared/SakuraRules.luau
+	SakuraService — 벚꽃 구역 사쿠라 나무 + 사쿠라 크리스탈 (6판 "씨앗을 훔치세요" 씨앗 버전, 사장님 결정 4).
+	규칙은 shared/SakuraRules.luau. 모듈·태그 이름은 5판 그대로 (SakuraIncubator 태그 = 사쿠라 나무)
 
-	- 인큐베이터: Tag "SakuraIncubator" 파트 (맵에 없으면 벚꽃 구역 안에 임시 파트를 만듦)
-	- Remote SakuraOffer(petUid?): 인큐베이터 근처에서 학(Crane) 1마리를 바쳐 해금 (저장: sakuraUnlocked)
-	    uid 를 안 주면 가진 학 중 수입이 가장 낮은 학을 바침. 장착 중이면 자동 해제.
-	- Remote SakuraApply(targetUid): 인큐베이터 근처에서 크리스탈 SAKURA_APPLY_COST 개를 써서
-	    알(uid "i.." — 우리에 놓인 알 또는 2판 수정의 가방 속 알) 또는 보관 펫(uid "p..")에 블룸 97.5% / 스피릿 블룸 2.5%.
-	    블룸은 자연 돌연변이 위에 겹칠 수 있고, 블룸끼리는 안 됨.
-	- 크리스탈 얻기 (저장: sakuraCrystals):
-	    벚꽃 구역 알을 배달할 때마다(2판 수정: 들고 허브에 들어올 때) SAKURA_CRYSTALS_PER_DELIVERY 개
+	- 나무: Tag "SakuraIncubator" 파트 (맵에 없으면 벚꽃 구역 안 MapLayout.specials.sakuraIncubator 자리에 임시 파트)
+	- Remote SakuraOffer(plantUid): 나무 SAKURA_RADIUS(14) 안에서 내 정원의 성체 식물 1그루를 바침 → 크리스탈
+	    (등급별 Config.SAKURA_OFFER_CRYSTALS: 일반 1 … 슈퍼 울트라디바인 100). 정원 자리가 빔.
+	    → SakuraResult { kind = "offered", consumed = plantUid, petId, gained, crystals } + Notify
+	- Remote SakuraDraw(): 나무 근처에서 크리스탈 SAKURA_DRAW_COST(10) 개로 특별 씨앗 뽑기 → 씨앗 가방으로
+	    벚꽃 씨앗(벚꽃 요정 나무) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무) 2.5%. 크기·자연 돌연변이는 둥지 씨앗처럼 굴림.
+	    가방이 가득 차면 거부 (크리스탈 그대로). → EggGranted(source "sakura") + SakuraResult { kind = "draw", petId, egg, crystals }
+	- 크리스탈 얻기 (저장: sakuraCrystals): 성체 바치기 · 벚꽃 구역 씨앗을 배달할 때마다 SAKURA_CRYSTALS_PER_DELIVERY 개 ·
 	    초기화(대기 단계) 때마다 벚꽃 둥지 근처에 SAKURA_CRYSTAL_DROPS_PER_RESET 개가 떨어짐 → 먼저 줍는 사람 것 (E 키)
+	(5판의 학 바쳐서 해금·블룸 돌연변이 붙이기(SakuraApply)는 없앰)
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -18,9 +20,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local Pets = require(Shared.Data.Pets)
-local Mutations = require(Shared.Data.Mutations)
-local Economy = require(Shared.Economy)
+local Plants = require(Shared.Data.Plants)
 local EggRoll = require(Shared.EggRoll)
 local SakuraRules = require(Shared.SakuraRules)
 local Remotes = require(Shared.Remotes)
@@ -54,7 +54,6 @@ end
 
 local function syncCrystals(player: Player, data: Types.PlayerData)
 	player:SetAttribute(Attr.SakuraCrystals, data.sakuraCrystals)
-	player:SetAttribute(Attr.SakuraUnlocked, data.sakuraUnlocked)
 	Snapshot.section(player, "special")
 end
 
@@ -67,124 +66,106 @@ function SakuraService.addCrystals(player: Player, amount: number)
 	syncCrystals(player, data)
 end
 
-local function nearIncubator(player: Player): boolean
+local function nearTree(player: Player): boolean
 	return Landmarks.nearest(player, incubators, Config.SAKURA_RADIUS) ~= nil
 end
 
 ------------------------------------------------------------------
--- 해금 (학 바치기)
+-- 성체 바치기 → 크리스탈
 ------------------------------------------------------------------
 
-function SakuraService.offer(player: Player, requestedUid: string?)
+-- 받은 크리스탈 수 (못 바치면 nil)
+function SakuraService.offer(player: Player, plantUid: string): number?
 	local _, data = Sessions.getLoaded(player)
 	if not data then
-		return
+		return nil
 	end
-	if data.sakuraUnlocked then
-		Net.notify(player, "info", "사쿠라 인큐베이터는 이미 열려 있어요.")
-		return
+	if not nearTree(player) then
+		Net.notify(player, "error", "벚꽃 구역의 사쿠라 나무 가까이에서 바칠 수 있어요!")
+		return nil
 	end
-	if not nearIncubator(player) then
-		Net.notify(player, "error", "벚꽃 구역의 사쿠라 인큐베이터 가까이에서 바칠 수 있어요!")
-		return
-	end
-	local pets = data.pets
-	local index = SakuraRules.pickOffering(pets, function(i: number): number
-		return Economy.recordIncome(pets[i])
-	end, requestedUid)
-	if not index then
-		local crane = Pets.get(Config.SAKURA_UNLOCK_PET)
+	local plant = PetService.findPlant(player, plantUid)
+	if not plant then
 		Net.notify(
 			player,
 			"error",
-			(if crane then crane.name else "학") .. " 펫이 있어야 사쿠라 인큐베이터를 열 수 있어요!"
+			"바칠 성체 식물을 골라 주세요! (정원에 자란 식물만 바칠 수 있어요)"
 		)
-		return
+		return nil
 	end
-	local uid = pets[index].uid
-	if not PetService.removePets(player, { uid }) then
-		return
+	local gained = SakuraRules.crystalsFor(plant.petId)
+	if not PetService.removePlants(player, { plantUid }) then
+		return nil
 	end
-	data.sakuraUnlocked = true
+	data.sakuraCrystals = math.min(Config.SAKURA_CRYSTAL_MAX, data.sakuraCrystals + gained)
 	syncCrystals(player, data)
-	Net.fire(
-		player,
-		Remotes.ToClient.SakuraResult,
-		{ kind = "unlocked", consumed = uid, crystals = data.sakuraCrystals }
-	)
-	Net.notify(
-		player,
-		"success",
-		"사쿠라 인큐베이터가 열렸어요! 크리스탈로 알과 펫을 꽃피워 보세요."
-	)
-end
-
-------------------------------------------------------------------
--- 블룸 부여
-------------------------------------------------------------------
-
-function SakuraService.apply(player: Player, targetUid: string)
-	local _, data = Sessions.getLoaded(player)
-	if not data then
-		return
-	end
-	if not data.sakuraUnlocked then
-		Net.notify(player, "error", "먼저 학 펫을 바쳐 사쿠라 인큐베이터를 여세요!")
-		return
-	end
-	if not nearIncubator(player) then
-		Net.notify(player, "error", "사쿠라 인큐베이터 가까이에서만 쓸 수 있어요!")
-		return
-	end
-	if not SakuraRules.canAfford(data.sakuraCrystals) then
-		Net.notify(
-			player,
-			"error",
-			string.format("사쿠라 크리스탈이 %d개 필요해요!", Config.SAKURA_APPLY_COST)
-		)
-		return
-	end
-	local egg = BaseService.findIncubator(player, targetUid)
-	local bagEgg = if egg then nil else BaseService.findBagEgg(player, targetUid)
-	local pet = if egg or bagEgg then nil else PetService.findPet(player, targetUid)
-	local current = if egg then egg.mutations elseif bagEgg then bagEgg.mutations elseif pet then pet.mutations else nil
-	if not current then
-		return
-	end
-	local ok, reason = SakuraRules.canApply(current)
-	if not ok then
-		Net.notify(player, "error", reason or "블룸을 붙일 수 없어요.")
-		return
-	end
-	local bloomId = SakuraRules.roll(rand)
-	data.sakuraCrystals -= Config.SAKURA_APPLY_COST
-	if egg then
-		egg.mutations = SakuraRules.apply(egg.mutations, bloomId)
-		BaseService.refreshIncubator(player, egg.uid)
-	elseif bagEgg then
-		bagEgg.mutations = SakuraRules.apply(bagEgg.mutations, bloomId)
-		BaseService.refreshBag(player)
-	elseif pet then
-		pet.mutations = SakuraRules.apply(pet.mutations, bloomId)
-		PetService.changed(player)
-	end
-	syncCrystals(player, data)
-	local mutation = Mutations.get(bloomId)
+	local def = Plants.get(plant.petId)
 	Net.fire(player, Remotes.ToClient.SakuraResult, {
-		kind = "bloom",
-		targetUid = targetUid,
-		target = if egg or bagEgg then "egg" else "pet",
-		mutation = bloomId,
+		kind = "offered",
+		consumed = plantUid,
+		petId = plant.petId,
+		gained = gained,
 		crystals = data.sakuraCrystals,
 	})
 	Net.notify(
 		player,
 		"success",
-		(if mutation then mutation.name else bloomId)
-			.. " 돌연변이가 피었어요! (×"
-			.. (if mutation then tostring(mutation.multiplier) else "?")
-			.. ")"
+		string.format(
+			"%s 을(를) 바쳐서 사쿠라 크리스탈 %d개를 받았어요! (지금 %d개)",
+			if def then def.name else plant.petId,
+			gained,
+			data.sakuraCrystals
+		)
 	)
+	return gained
+end
+
+------------------------------------------------------------------
+-- 특별 씨앗 뽑기
+------------------------------------------------------------------
+
+-- 뽑은 식물 id (못 뽑으면 nil)
+function SakuraService.draw(player: Player): string?
+	local _, data = Sessions.getLoaded(player)
+	if not data then
+		return nil
+	end
+	if not nearTree(player) then
+		Net.notify(player, "error", "사쿠라 나무 가까이에서만 뽑을 수 있어요!")
+		return nil
+	end
+	if not SakuraRules.canAfford(data.sakuraCrystals) then
+		Net.notify(
+			player,
+			"error",
+			string.format(
+				"사쿠라 크리스탈이 %d개 필요해요! (지금 %d개)",
+				Config.SAKURA_DRAW_COST,
+				data.sakuraCrystals
+			)
+		)
+		return nil
+	end
+	if not BaseService.canReceiveEgg(player) then
+		Net.notify(player, "error", "씨앗 가방이 가득 찼어요! 씨앗을 먼저 정원에 심어 주세요.")
+		return nil
+	end
+	local petId = SakuraRules.roll(rand)
+	local traits = EggRoll.rollTraits(rand)
+	if not BaseService.grantEgg(player, petId, traits.size, traits.mutations, "sakura") then
+		return nil
+	end
+	data.sakuraCrystals -= Config.SAKURA_DRAW_COST
+	syncCrystals(player, data)
+	local egg = data.eggs[#data.eggs]
+	Net.fire(player, Remotes.ToClient.SakuraResult, {
+		kind = "draw",
+		petId = petId,
+		egg = egg,
+		crystals = data.sakuraCrystals,
+	})
+	Net.notify(player, "success", Plants.seedName(petId) .. " 이(가) 나왔어요! 씨앗 가방을 확인하세요.")
+	return petId
 end
 
 ------------------------------------------------------------------
@@ -267,7 +248,7 @@ local function ensureIncubator()
 	incubators = Landmarks.ensure({
 		tag = Tags.SakuraIncubator,
 		name = "SakuraIncubator",
-		label = "사쿠라 인큐베이터\n(학을 바쳐 열기)",
+		label = "사쿠라 나무\n(성체 바치기 · 씨앗 뽑기)",
 		position = Vector3.new(spot.x, MapLayout.FLOOR_Y + 3, spot.z),
 		size = Vector3.new(8, 6, 8),
 		color = Color3.fromRGB(255, 170, 210),
@@ -280,7 +261,6 @@ function SakuraService.onPlayerReady(player: Player)
 	local _, data = Sessions.getLoaded(player)
 	if data then
 		player:SetAttribute(Attr.SakuraCrystals, data.sakuraCrystals)
-		player:SetAttribute(Attr.SakuraUnlocked, data.sakuraUnlocked)
 	end
 end
 
@@ -288,16 +268,13 @@ function SakuraService.start()
 	ensureIncubator()
 
 	Net.on(Remotes.ToServer.SakuraOffer, function(player: Player, uid: unknown)
-		if uid ~= nil and Validate.uid(uid) == nil then
-			return
+		local plantUid = Validate.uid(uid)
+		if plantUid then
+			SakuraService.offer(player, plantUid)
 		end
-		SakuraService.offer(player, Validate.uid(uid))
 	end)
-	Net.on(Remotes.ToServer.SakuraApply, function(player: Player, uid: unknown)
-		local targetUid = Validate.uid(uid)
-		if targetUid then
-			SakuraService.apply(player, targetUid)
-		end
+	Net.on(Remotes.ToServer.SakuraDraw, function(player: Player)
+		SakuraService.draw(player)
 	end)
 
 	BaseService.delivered:connect(function(player: Player, record: Types.BagEgg)

@@ -69,7 +69,7 @@ boot("WeaponController")
 boot("TreadmillController")
 boot("TrailController")
 boot("SpeedFxController") -- 4판: 빠를수록 시야를 넓혀 속도 체감
--- 선임 5판·6판: 정원 프롬프트(열매 따기·물 주기)·물방울, 식물 아우라·살랑살랑, 랭킹판, 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
+-- 선임 5판·6판: 정원 프롬프트(열매 따기), 식물 아우라·살랑살랑, 랭킹판, 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
 boot("PetFxController")
 boot("PlantFxController")
 boot("LeaderboardController")

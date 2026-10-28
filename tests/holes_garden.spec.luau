@@ -2,7 +2,7 @@
 --[[
 	6판 주임 검수 (구멍 찾기): 새 Remote 11개를 아무 값이나 던져 보는 무작위 시험 (씨앗 고정이라 매번 같음)
 	- 두 사람(나 A · 남 B)이 한 서버에. A 가 온갖 값(남의 uid, NaN, "all", 거대 숫자, 표, 아주 긴 글…)을 온갖 자리에서
-	  PickFruit · SellFruits · FeedFruit · SkipGrowth · SellPlant · PetPet · SakuraOffer · SakuraDraw · PlaceEgg ·
+	  PickFruit · SellFruits · FeedFruit · SkipGrowth · SellPlant · SakuraOffer · SakuraDraw · PlaceEgg ·
 	  PickUpPlacedEgg · ClaimIndexReward 로 보내고, 낮/밤·시간이 흐름.
 	- 매번 확인: 코인 유한·0 이상·상한 이하 / 열매 가방 ≤ 300 · 칸마다 개수 정수 · 값 유한 / 식물 열매 0~5 정수 /
 	  정원 칸 수 안 넘음 / uid 겹침 없음 / 크리스탈 정수 / 서버 warn 없음 / 돈은 팔기·도감으로만 늘고, 건너뛰기는 정확히 가격만큼만 빠짐 /
@@ -310,8 +310,6 @@ return function(T, Loader)
 				"SkipGrowth",
 				"SkipGrowth",
 				"SellPlant",
-				"PetPet",
-				"PetPet",
 				"SakuraOffer",
 				"SakuraDraw",
 				"PlaceEgg",
@@ -384,7 +382,7 @@ return function(T, Loader)
 							expectSell = w.GardenRules.sellPrice(r)
 						end
 					end
-				elseif name == "PetPet" or name == "SakuraOffer" or name == "PickUpPlacedEgg" then
+				elseif name == "SakuraOffer" or name == "PickUpPlacedEgg" then
 					a1 = arg("uid")
 				elseif name == "PlaceEgg" then
 					a1 = arg("uid")
@@ -398,10 +396,7 @@ return function(T, Loader)
 				H.client(w.A, name, a1, a2, a3)
 				-- 거리 문: 숲 한가운데에서는 정원·판매 가판대 일을 할 수 없고, 사쿠라 나무에서 멀면 바치기·뽑기를 할 수 없음
 				local farFromGarden = at == spots[3]
-				if
-					farFromGarden
-					and (name == "SellFruits" or name == "PickFruit" or name == "FeedFruit" or name == "PetPet")
-				then
+				if farFromGarden and (name == "SellFruits" or name == "PickFruit" or name == "FeedFruit") then
 					T.eq(sigOf(w), sigBefore, name .. " #" .. step .. ": 멀리서 됨")
 				end
 				if farFromGarden and name == "SellPlant" and H.landmarks.nearName == nil then

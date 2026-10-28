@@ -10,7 +10,6 @@
 	    (일반 1 … 슈퍼 울트라디바인 500, Config.SKIP_RARITY_MULTIPLIER). "all" = 남은 시간 전부, "half" = 절반
 	    남은 시간 = required - progress ("성장 시간" — 밤에 30배 빨리 줄어드는 그 숫자, 씨앗 위 타이머와 같음)
 	- 성체 뽑아서 팔기 (SellPlant): 값 = 그 식물 열매 1개 값 × Config.PLANT_SELL_FRUIT_MULTIPLIER(20)
-	- 물 주기: 자라는 씨앗 progress + WATER_GROWTH_SECONDS (넘치지 않게 required 까지)
 ]]
 
 local Data = script.Parent.Data

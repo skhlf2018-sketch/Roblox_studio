@@ -568,21 +568,13 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("열매·정원·건너뛰기·물 주기·자동 수입·튜토리얼 숫자", function()
+	T.test("열매·정원·건너뛰기·자동 수입·튜토리얼 숫자", function()
 		T.eq(parseNumber(configRows["밤 성장 배율"]), Config.NIGHT_GROWTH_MULTIPLIER)
 		T.eq(parseNumber(configRows["열매 최대 (식물마다)"]), Config.FRUIT_MAX_PER_PLANT)
 		T.eq(parseNumber(configRows["성체가 될 때 달린 열매"]), Config.FRUITS_ON_ADULT)
 		T.eq(parseNumber(configRows["열매 가방 최대"]), Config.FRUIT_BAG_MAX)
 		T.eq(configRows["성체 뽑아서 팔기"], "열매 1개 값 × " .. Config.PLANT_SELL_FRUIT_MULTIPLIER)
 		T.truthy(startsWith(configRows["건너뛰기"], "남은 1분당 " .. Config.SKIP_COINS_PER_MINUTE .. " 코인"))
-		T.eq(
-			configRows["물 주기"],
-			"성체만 다음 열매 +"
-				.. Config.WATER_GROWTH_SECONDS
-				.. "초, 식물마다 "
-				.. Config.WATER_COOLDOWN
-				.. "초 (씨앗은 없음)"
-		)
 		T.eq(parseNumber(configRows["자동 수입"]), Config.PASSIVE_INCOME_PER_SECOND)
 		T.eq(Config.PASSIVE_INCOME_PER_SECOND, 0)
 		local fromSlots, toSlots = string.match(configRows["정원 칸"], "^(%d+) → (%d+)")

@@ -10,7 +10,7 @@
 	          (6판: 퓨전 머신·제단·비밀 통로 없앰 · 5판: 퀘스트·선물 창 없앰)
 	        6판 "씨앗을 훔치세요": 식물 id (sprout_daisy·puppy_grass·owl_oak…) 로 Snapshot 을 만듦.
 	          정원 식물 창(열매 따기·먹이기·팔기 확인 창) · 열매 가방 창 · 판매 가판대 "열매 팔기" · 건너뛰기 창(전부/절반)
-	          · 정원 프롬프트(열매 따기·물 주기, GardenPlant 만 — 씨앗 물 주기 없음) · 물방울 · 아우라 켜기/끄기(PlantFxController)
+	          · 정원 프롬프트(열매 따기, GardenPlant 만) · 아우라 켜기/끄기(PlantFxController)
 	        → 무기 손 모양 붙이기·휘두르기, 폰 화면에서 버튼 크기(46px 이상) 계산 확인
 	task.wait 는 바로 멈추고(무한 루프 방지), task.delay 는 바로 실행합니다.
 ]]
@@ -2092,9 +2092,8 @@ local function body()
 	check(boardGui.Back.Column_speed.Line10.Text ~= "", "허브 판 10줄")
 
 	do
-		print("[6판 정원 프롬프트 · 물 주기 · 아우라 (PetFxController · PlantFxController)]")
+		print("[6판 정원 프롬프트 · 아우라 (PetFxController · PlantFxController)]")
 		local myPick = myPlant:FindFirstChild("PickFruitPrompt", true)
-		local myWater = myPlant:FindFirstChild("WaterPrompt", true)
 		check(
 			myPick
 				and myPick.Enabled
@@ -2103,8 +2102,8 @@ local function body()
 			"내 성체 '열매 따기 (2)'(E) 프롬프트: " .. tostring(myPick and myPick.ActionText)
 		)
 		check(
-			myWater and myWater.Enabled and myWater.KeyboardKeyCode == roblox.Enum.KeyCode.F,
-			"내 성체 '물 주기'(F) 프롬프트"
+			myPlant:FindFirstChild("WaterPrompt", true) == nil,
+			"물 주기 프롬프트 없음 (사장님 2026-10-28)"
 		)
 		local attach = myPlant:FindFirstChild("GardenPromptAttach")
 		check(
@@ -2116,7 +2115,6 @@ local function body()
 			trigger(myPick) and lastSent("PickFruit").args[1] == "p1",
 			"'열매 따기' 프롬프트 → PickFruit(p1)"
 		)
-		check(trigger(myWater) and lastSent("PetPet").args[1] == "p1", "'물 주기' 프롬프트 → PetPet(p1)")
 		-- 열매가 다 따지면 '열매 따기' 꺼짐 (Attr Fruits 바뀜 → 연결 하나로 갱신)
 		myPlant:SetAttribute("Fruits", 0)
 		sigOf(myPlant, "Attr_Fruits"):Fire()
@@ -2129,25 +2127,6 @@ local function body()
 			sigOf(myPlant, "Attr_Fruits").Count() == 1,
 			"Fruits 연결 1개 (" .. sigOf(myPlant, "Attr_Fruits").Count() .. ")"
 		)
-		holdDelays = true
-		fire("PetPetted", 77, "p1")
-		local drops = myPlant:FindFirstChild("WaterDrops")
-		check(drops and drops:FindFirstChild("Drop1").Text == "💧", "내 성체 위 물방울 '💧'")
-		check(
-			otherPlant:FindFirstChild("WaterDrops") == nil,
-			"같은 uid 의 남의 성체에는 안 뜸 (주인으로 거름)"
-		)
-		check(
-			not myWater.Enabled and string.find(myWater.ActionText, "초)", 1, true) ~= nil,
-			"물 준 뒤 쿨다운: " .. tostring(myWater.ActionText)
-		)
-		fire("PetPetted", 12345, "p1")
-		check(
-			otherPlant:FindFirstChild("WaterDrops") ~= nil,
-			"남이 자기 식물에 물을 주면 그 식물 위에 물방울"
-		)
-		holdDelays = false
-		check(not Pf.petted(77, "nope"), "없는 식물이면 연출 없음")
 		check(
 			Pf.findPlant(77, "p1") == myPlant and Pf.findPlant(12345, "p1") == otherPlant,
 			"주인 + uid 로 식물 찾기"
@@ -2215,16 +2194,6 @@ local function body()
 					n = 1,
 				},
 				{ { money = { { name = longName, value = 1e300, userId = 1 } }, speed = {} }, n = 1 },
-			},
-			PetPetted = {
-				{ n = 0 },
-				{ nil, nil, n = 2 },
-				{ "x", 5, n = 2 },
-				{ 5, nil, n = 2 },
-				{ 0 / 0, "p1", n = 2 },
-				{ 77, "", n = 2 },
-				{ 77, string.rep("p", 1000), n = 2 },
-				{ {}, {}, n = 2 },
 			},
 			-- 6판 열매·성체 이벤트
 			FruitPicked = {

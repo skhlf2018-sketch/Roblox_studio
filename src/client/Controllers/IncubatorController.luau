@@ -25,7 +25,7 @@
 	        / openSkip(uid) (핫바·튜토리얼·정원 프롬프트·테스트도 씀)
 
 	월드: 내 자라는 씨앗(태그 IncubatingEgg)에 프롬프트 — "집기"(E, PickUpPlacedEgg · Config.ALLOW_EGG_PICKUP)
-	  · "건너뛰기"(R, 건너뛰기 창). "물 주기"(F) 는 PetFxController. 머리 위 이름표는 서버(BaseService) 것.
+	  · "건너뛰기"(R, 건너뛰기 창). 머리 위 이름표는 서버(BaseService) 것.
 	진행값: 씨앗 파트 Attribute Progress/Required(서버가 1초마다 갱신) 우선, 없으면 Snapshot incubators.
 ]]
 

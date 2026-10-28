@@ -9,7 +9,7 @@
 	치트 방지 원칙: 코인/속도/식물을 직접 바꾸는 Remote 는 없습니다.
 	클라는 "요청"만 보내고, 서버가 전부 검증합니다.
 
-	6판 "씨앗을 훔치세요" (이름은 5판 그대로 둔 것이 많음: Egg = 씨앗, Pet = 성체 식물, PetPet = 물 주기):
+	6판 "씨앗을 훔치세요" (이름은 5판 그대로 둔 것이 많음: Egg = 씨앗, Pet = 성체 식물):
 	  없앤 것 — 서버→클라: HatchResult(→ PlantGrown), OfflineIncome, FusionResult, AltarUpdate, ShrineResult, PetsSold, IncomeTick
 	            클라→서버: HatchEgg(성체는 저절로), EquipPet, UnequipPet, EquipBest(장착 없음), FuseRequest, AltarOffer,
 	                       ShrineFuse, SakuraApply(→ SakuraDraw), SellPet(→ SellPlant)
@@ -40,7 +40,6 @@ local Remotes = {
 		-- 5판
 		TutorialUpdate = "TutorialUpdate", -- TutorialView { step, total, text, hint, done, reward? } 튜토리얼 단계가 바뀔 때 (나에게만)
 		LeaderboardUpdate = "LeaderboardUpdate", -- { money = { {name, value, userId} }, speed = {...} } 10초마다 서버 전체 (상위 10명)
-		PetPetted = "PetPetted", -- (ownerUserId, uid) 6판: 누가 자기 정원 식물에 물을 줌 → 물방울·소리 (서버 전체)
 		-- 6판
 		PlantGrown = "PlantGrown", -- { plant: PetRecord, isNew, fruitValue, fruitInterval } 심은 씨앗이 그 자리에서 성체가 됨
 		FruitPicked = "FruitPicked", -- { plantUid, petId, count, value } 열매를 따서 가방에 넣음 (식물마다 1번, "all" 이면 여러 번)
@@ -62,7 +61,6 @@ local Remotes = {
 		PlaceEgg = "PlaceEgg", -- (eggUid, x, z) 가방의 씨앗을 내 정원 안 그 자리(월드 x, z)에 심음 → 자라기 시작
 		PickUpPlacedEgg = "PickUpPlacedEgg", -- (eggUid) 정원에 심은(아직 자라는) 씨앗을 다시 가방으로 (자란 만큼 유지)
 		-- 5판
-		PetPet = "PetPet", -- (uid) 6판 물 주기: 내 정원의 자라는 씨앗(성장 +10초) 또는 성체(다음 열매 +10초), 식물마다 60초
 		-- 6판
 		PickFruit = "PickFruit", -- (plantUid | "all") 내 정원 성체의 열매를 전부 따서 열매 가방으로
 		SellFruits = "SellFruits", -- () 판매 가판대 근처에서 열매 가방을 전부 팔기 → 코인
@@ -84,7 +82,6 @@ local Remotes = {
 		EquipTrail = { burst = 5, perSecond = 2 },
 		PlaceEgg = { burst = 5, perSecond = 3 },
 		PickUpPlacedEgg = { burst = 5, perSecond = 3 },
-		PetPet = { burst = 3, perSecond = 2 },
 		PickFruit = { burst = 10, perSecond = 5 },
 		SellFruits = { burst = 3, perSecond = 1 },
 		FeedFruit = { burst = 5, perSecond = 2 },

@@ -158,11 +158,11 @@ return function(T, Loader)
 				T.truthy(codeServer[name], "코드(Remotes.ToServer)에 없음: " .. name)
 			end
 			-- 6판: 서버→클라 -7 (HatchResult, OfflineIncome, FusionResult, AltarUpdate, ShrineResult, PetsSold, IncomeTick)
-			--      +4 (PlantGrown, FruitPicked, FruitsSold, FeedResult) → 21
+			--      +4 (PlantGrown, FruitPicked, FruitsSold, FeedResult) → 21, 물 주기 삭제 -1 (PetPetted) → 20
 			--      클라→서버 -9 (HatchEgg, EquipPet, UnequipPet, EquipBest, FuseRequest, AltarOffer, ShrineFuse, SakuraApply, SellPet)
-			--      +6 (PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw) → 17
-			T.eq(#sorted(codeClient), 21)
-			T.eq(#sorted(codeServer), 17)
+			--      +6 (PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw) → 17, 물 주기 삭제 -1 (PetPet) → 16
+			T.eq(#sorted(codeClient), 20)
+			T.eq(#sorted(codeServer), 16)
 		end
 	)
 

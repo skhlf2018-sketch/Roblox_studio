@@ -1,7 +1,7 @@
 --!nocheck
 --[[
 	6판 "씨앗을 훔치세요" 정원·열매 테스트: FruitService (열매 맺기 · PickFruit · SellFruits · FeedFruit · 오프라인 열매)
-	+ 정원 파트(GardenPlant Attribute) · 물 주기로 열매가 빨라짐.
+	+ 정원 파트(GardenPlant Attribute).
 	진짜 서비스 코드(FruitService, PetService, BaseService, Wallet, Snapshot) + 진짜 shared 규칙을 ServerHarness 위에서 (가상 시간).
 	순수 규칙 경계(FruitRules.produce·가방·먹이기 확률)는 tests/rules_boundary.spec, 팔기 가격은 services_core.
 ]]
@@ -27,7 +27,7 @@ return function(T, Loader)
 		w.session, w.data = H.login(w.player)
 		w.session.plotIndex = 1
 		w.FruitService.start() -- PickFruit·SellFruits·FeedFruit 처리기 + 1초 열매 틱
-		w.PetService.start() -- SellPlant·PetPet(물 주기) 처리기
+		w.PetService.start() -- SellPlant 처리기
 		return w
 	end
 
@@ -456,7 +456,7 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("6판 정원: 오프라인 열매 · 물 주기")
+	T.suite("6판 정원: 오프라인 열매")
 
 	T.test(
 		"접속 때 오프라인 시간만큼 열매 (45초 → 1개 + 15초 쌓임, 1시간 → 최대 5), 처음 접속(0)은 없음",
@@ -483,32 +483,6 @@ return function(T, Loader)
 		end
 	)
 
-	T.test(
-		"물 주기(PetPet)는 성체의 다음 열매를 10초 당김, 같은 식물은 60초 뒤에 또, 열매 5개면 효과 없음",
-		function()
-			local w = world()
-			local plant = addPlant(w, "sprout_daisy")
-			standInGarden(w)
-			w.H.advance(10)
-			w.H.client(w.player, "PetPet", plant.uid)
-			T.near(plant.fruitProgress, 20, 0.6, "10초 + 물 10초")
-			w.H.advance(10.5)
-			T.eq(plant.fruits, 1, "30초 간격인데 20초 만에")
-			local before = plant.fruitProgress
-			w.H.client(w.player, "PetPet", plant.uid)
-			T.near(plant.fruitProgress, before, 1e-9, "60초 안에는 또 안 됨")
-			T.truthy(w.H.hasNotify(w.player, "info", "뒤에 또 물을 줄 수 있어요"))
-			plant.fruits = w.Config.FRUIT_MAX_PER_PLANT
-			plant.fruitProgress = 0
-			w.H.advance(61)
-			w.H.client(w.player, "PetPet", plant.uid)
-			T.eq(plant.fruitProgress, 0, "가득 차면 시간이 안 쌓임")
-			T.eq(#w.H.remotes.PetPetted.firedAll, 2, "물을 준 두 번만 서버 전체에 PetPetted")
-			w.H.uninstall()
-		end
-	)
-
-	------------------------------------------------------------------
 	T.suite("6판 정원: Remote 계약")
 
 	T.test("PickFruit·SellFruits·FeedFruit 는 레이트 리밋이 있고 Net.on 처리기가 하나씩", function()

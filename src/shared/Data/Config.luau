@@ -6,7 +6,7 @@
 
 	6판 "씨앗을 훔치세요" 용어 (코드 이름은 5판 그대로 둔 곳이 많음):
 	  알(egg) → 씨앗 · 우리(pen) → 정원 · 부화(hatch) → 성체 되기 · 펫(pet) → 성체 식물 · 돈(money) → 코인
-	  EGG_* = 씨앗, PEN = 정원, PET_PET_* = 물 주기, 저장 칸 pets = 정원의 성체 식물, incubators = 자라는 씨앗
+	  EGG_* = 씨앗, PEN = 정원, 저장 칸 pets = 정원의 성체 식물, incubators = 자라는 씨앗
 	6판에서 없앤 것: GROWTH_MULTIPLIER(펫 수입 ×3 — 열매 값은 Data/Plants 숫자 그대로), 펫 보관함(PET_INVENTORY_MAX)·
 	  자동 수입(INCOME_*)·오프라인 수입·펫 판매(PET_SELL_SECONDS)·퓨전(FUSION_*)·제단/비밀 통로(ALTAR_*, SHRINE_*)·
 	  사쿠라 해금(SAKURA_UNLOCK_PET)·블룸(SAKURA_APPLY_COST)·우리에 놓는 알 상한(PLACED_EGG_MAX → 정원 칸 수 = 정원 업그레이드)
@@ -27,7 +27,7 @@ local Config = {
 	ALLOW_EGG_PICKUP = true, -- PickUpPlacedEgg(심은 씨앗을 다시 가방으로, 자란 만큼 유지) 허용
 
 	------------------------------------------------------------------
-	-- 6판 정원: 성장 단계 · 열매 · 건너뛰기 · 성체 팔기 · 물 주기 (shared/GardenRules, shared/FruitRules)
+	-- 6판 정원: 성장 단계 · 열매 · 건너뛰기 · 성체 팔기 (shared/GardenRules, shared/FruitRules)
 	------------------------------------------------------------------
 	-- 성장 단계: 자란 비율(progress / required)이 from 이상이면 그 단계. 100% = 성체 (그 자리에서 성체 식물이 됨)
 	GROWTH_STAGES = {
@@ -43,7 +43,7 @@ local Config = {
 	FRUITS_ON_ADULT = 1, -- [수석] 성체가 되는 순간 달려 있는 열매 (튜토리얼 5단계 "열매 따서 팔기" 를 바로 할 수 있게)
 	FRUIT_BAG_MAX = 300, -- [추정] 열매 가방에 넣어 둘 수 있는 열매 수 (가득 차면 판매 가판대에서 팔기)
 	PLANT_SELL_FRUIT_MULTIPLIER = 20, -- 성체 뽑아서 팔기 값 = 그 식물 열매 1개 값 × 20 (FruitRules.fruitValue)
-	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·먹이기·성체 뽑기·물 주기: 내 정원(울타리 사각형)에서 이 거리 안
+	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·먹이기·성체 뽑기: 내 정원(울타리 사각형)에서 이 거리 안
 	-- 건너뛰기 (SkipGrowth): 가격 = ceil(건너뛸 남은 시간(분)) × SKIP_COINS_PER_MINUTE × 등급 배수. "half" 는 남은 시간의 절반만
 	SKIP_COINS_PER_MINUTE = 10,
 	SKIP_RARITY_MULTIPLIER = {
@@ -59,9 +59,6 @@ local Config = {
 		divine = 300,
 		super_ultradivine = 500,
 	} :: { [string]: number },
-	-- 물 주기 (5판 쓰다듬기 PetPet 자리): 성체만 — 다음 열매까지 +10초. 식물마다 60초에 한 번 (사장님 2026-10-28: 자라는 씨앗 물 주기는 없앰)
-	WATER_GROWTH_SECONDS = 10,
-	WATER_COOLDOWN = 60,
 
 	------------------------------------------------------------------
 	-- 낮/밤 주기 (설계문서 2장)
@@ -170,12 +167,10 @@ local Config = {
 	-- (5판: 무료 보상(선물) FREE_REWARD_SPEED·FREE_REWARD_GROUP_ID 없앰 — 사장님 지시)
 
 	------------------------------------------------------------------
-	-- 5판: 랭킹판 (LeaderboardService) · 6판: 물 주기 (PetService PetPet, 5판 쓰다듬기 자리)
+	-- 5판: 랭킹판 (LeaderboardService)
 	------------------------------------------------------------------
 	LEADERBOARD_INTERVAL = 10, -- 이 초마다 LeaderboardUpdate (서버 전체)
 	LEADERBOARD_SIZE = 10, -- 코인·속도 각각 상위 몇 명
-	PET_PET_RADIUS = 20, -- 물 주기: 내 정원(울타리 사각형)에서 이 거리 안 (= GARDEN_ACTION_RADIUS)
-	PET_PET_COOLDOWN = 1, -- 물 주기 요청 사이 최소 간격(초, 사람마다 — 연타 막기). 식물마다 쿨다운은 WATER_COOLDOWN
 
 	------------------------------------------------------------------
 	-- 개발 명령 (DevCommands) 허용 목록

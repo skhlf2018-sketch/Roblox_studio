@@ -2,7 +2,7 @@
 --[[
 	PetService — 6판 "씨앗을 훔치세요": 정원의 성체 식물 (5판 펫 보관함·장착 자리. 파일·함수 이름은 5판 그대로 둠)
 
-	6판 용어: 펫 = 성체 식물 · 우리 = 정원 · 쓰다듬기(PetPet) = 물 주기 · 돈 = 코인
+	6판 용어: 펫 = 성체 식물 · 우리 = 정원 · 돈 = 코인 (물 주기는 사장님 2026-10-28 지시로 없앰)
 	  - data.pets = 정원에 서 있는 성체 식물 목록 (PetRecord: uid, petId(식물 id), size, mutations, x, z, fruits, fruitProgress)
 	    씨앗이 다 자라면 BaseService 가 그 자리·uid 그대로 addPlant. 자라는 씨앗(data.incubators) + 성체 ≤ 정원 칸 수
 	  - "장착/보관함" 개념은 없앰 (5판 EquipPet·UnequipPet·EquipBest·보관함 500 상한·자동 판매·SellPet 삭제)
@@ -13,10 +13,6 @@
 	  SellPlant(plantUid) — 성체를 뽑아서 팔기. 검증: uid 형식 · 내 정원의 성체 · 내 정원(울타리 사각형) 에서
 	    GARDEN_ACTION_RADIUS(20) 안 또는 판매 가판대 SELL_RADIUS(14) 안. 값 = 열매 1개 값 × 20 (GardenRules.sellPrice)
 	    (코인 2배 게임패스면 × 2). 정원 자리가 빔 → Notify + DataUpdate("pets")
-	  PetPet(uid) — 물 주기 (5판 쓰다듬기 자리). uid = 내 정원의 성체(다음 열매까지 +WATER_GROWTH_SECONDS 10초).
-	    자라는 씨앗은 안 됨 (사장님 2026-10-28, 조용히 거절). 검증: uid 형식 · 내 정원의 것 · 내 정원 PET_PET_RADIUS(20) 안 · 사람마다 PET_PET_COOLDOWN(1초)
-	    · 식물마다 WATER_COOLDOWN(60초, 아직이면 Notify info). 통과하면 PetPetted(ownerUserId, uid) 를 서버 전체에
-	    (물방울·소리 연출은 클라).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -222,53 +218,6 @@ function PetService.sell(player: Player, uid: string): number?
 	return PetService.sellPlant(player, uid)
 end
 
--- PetPet = 물 주기: 성체 다음 열매 +10초 → PetPetted 서버 전체. 성공하면 true
--- (사장님 2026-10-28: 자라는 씨앗 물 주기는 없앰 — 씨앗 uid 는 조용히 거절)
-function PetService.petPet(player: Player, uid: string): boolean
-	local session, data = Sessions.getLoaded(player)
-	if not session or not data then
-		return false
-	end
-	local plant = PetService.findPlant(player, uid)
-	if not plant then
-		return false -- 내 정원의 성체가 아님 (자라는 씨앗 포함)
-	end
-	if not PetService.isNearOwnPen(player, Config.PET_PET_RADIUS) then
-		return false
-	end
-	local now = os.clock()
-	if not Sessions.useCooldown(session, "petPet", Config.PET_PET_COOLDOWN, now) then
-		return false
-	end
-	local key = "water:" .. uid
-	local last = session.cooldowns[key]
-	if last and now - last < Config.WATER_COOLDOWN then
-		Net.notify(
-			player,
-			"info",
-			string.format(
-				"이 식물은 %d초 뒤에 또 물을 줄 수 있어요.",
-				math.ceil(Config.WATER_COOLDOWN - (now - last))
-			)
-		)
-		return false
-	end
-	session.cooldowns[key] = now
-	local interval = Economy.fruitInterval(plant.petId)
-	if plant.fruits < Config.FRUIT_MAX_PER_PLANT and interval ~= math.huge then
-		plant.fruitProgress = math.min(interval, plant.fruitProgress + Config.WATER_GROWTH_SECONDS)
-	end
-	Snapshot.section(player, "pets")
-	data.stats.watered = (data.stats.watered or 0) + 1
-	Net.fireAll(Remotes.ToClient.PetPetted, player.UserId, uid)
-	return true
-end
-
--- [6판 이름] = petPet
-function PetService.water(player: Player, uid: string): boolean
-	return PetService.petPet(player, uid)
-end
-
 function PetService.onPlayerReady(player: Player)
 	PetService.recalc(player)
 end
@@ -278,12 +227,6 @@ function PetService.start()
 		local plantUid = Validate.uid(uid)
 		if plantUid then
 			PetService.sellPlant(player, plantUid)
-		end
-	end)
-	Net.on(Remotes.ToServer.PetPet, function(player: Player, uid: unknown)
-		local id = Validate.uid(uid)
-		if id then
-			PetService.petPet(player, id)
 		end
 	end)
 end

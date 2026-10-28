@@ -1,7 +1,7 @@
 --!strict
 --[[
 	Sessions — 접속 중인 플레이어마다 서버 런타임 상태 (저장 안 되는 것) + 저장 데이터 참조
-	(6판: 자동 수입이 없어져 incomePerSecond 칸 없앰. 물 주기 식물별 쿨다운은 cooldowns["water:" .. uid])
+	(6판: 자동 수입이 없어져 incomePerSecond 칸 없앰. 
 
 	data 는 DataService 가 불러온 뒤에만 채워집니다 (loaded = true).
 	다른 서비스는 Sessions.getLoaded(player) 로 (session, data) 를 한 번에 받으세요.

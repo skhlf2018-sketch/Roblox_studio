@@ -33,7 +33,7 @@
 | `Controllers/IncubatorController.luau` | 씨앗 창(오른쪽 빨간 씨앗 버튼): "자라는 중" 탭(단계 이름 `GardenRules.stageName`·막대·남은 시간·가방 버튼·⏩ 건너뛰기) + "가방" 탭(심기) · **씨앗 심기 모드** · **건너뛰기 창**(`SkipDialog`) · 자라는 씨앗 프롬프트 "집기"(E)·"건너뛰기"(R) |
 | `Controllers/PetsController.luau` | **정원 식물 창**(오른쪽 주황 버튼): "정원 n/칸 · 성체 n", 열매 모두 따기, 카드마다 열매·값·다음 열매·따기·먹이기·팔기(확인 창) · 판매 가판대 "식물 팔기"(F) |
 | `Controllers/FruitBagController.luau` | **새 파일.** 열매 가방 창 · 먹이기(열매 ↔ 성체 고르기 + 확률 미리보기) · 판매 가판대 "열매 팔기"(E) · "+N 코인" 연출 |
-| `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E)·"물 주기"(F) · 물방울 연출(`PetPetted`) · 먹이기 결과 반짝/냠냠(`FeedResult`) |
+| `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E) (물 주기는 2026-10-28 삭제) · 먹이기 결과 반짝/냠냠(`FeedResult`) |
 | `Controllers/PlantFxController.luau` | **새 파일.** 아우라 100 스터드 안만 켜기 · 가까운(60) 식물 살랑살랑 |
 | `Controllers/HatchController.luau` | **성체 카드** "성체가 됐어요!" (`PlantGrown`) |
 | `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 10" |
@@ -158,7 +158,7 @@
 | **정원 식물 창** | PetsController | `snap.pets`: "정원 n/칸 · 성체 n", **열매 모두 따기**(`PickFruit("all")`), 열매 가방 버튼, 카드: 열매 n/5 · 1개 값(`FruitRules.fruitValue`) · 다음 열매 n초(1초마다) · 따기(`PickFruit(uid)`) · 먹이기 · **팔기 N 코인**(`GardenRules.sellPrice`, 확인 창 → `SellPlant`) |
 | **열매 가방 창** | FruitBagController | `snap.fruits`: "열매 12/300 · 다 팔면 N 코인", 칸마다 열매 색 · 이름 · ×개수 · 값 · **먹이기** → 성체 고르기(카드에 `feedOptions`·`feedChance`, 더 붙을 게 없으면 회색) → `FeedFruit(plantUid, fruitId)` |
 | 판매 가판대 | FruitBagController / PetsController | E "열매 팔기 · 열매 12개 · 3.4K 코인"(Attr `FruitCount`·`FruitBagValue`, 0개면 안내만) → `SellFruits()` → `FruitsSold` "+3.4K 코인" / F "식물 팔기" → 정원 식물 창 |
-| 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐) · "물 주기"(F) / 내 씨앗: "집기"(E) · "건너뛰기"(R) (물 주기 없음, 사장님 2026-10-28). 높이 = `VisualHeight`. 물 준 뒤 60초는 "물 주기 (45초)" |
+| 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐) / 내 씨앗: "집기"(E) · "건너뛰기"(R). 높이 = `VisualHeight`. (물 주기는 2026-10-28 삭제) |
 | 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
 | "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
 | 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`) / "씨앗 뽑기 · 크리스탈 10"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
@@ -192,7 +192,6 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 | **`FruitPick`** (6판) | 뽁! (0.15초에 한 번) | `FruitPicked` |
 | **`FruitSell`** (6판) | 짤랑짤랑 | `FruitsSold` |
 | **`Feed` / `FeedMutate`** (6판) | 냠냠 / 반짝 | `FeedResult` (mutation 없음 / 있음) |
-| **`Water`** (6판) | 졸졸 + 물방울 | `PetPetted` (물 주기) |
 | `SakuraOffer` · `Bloom` / `SpiritBloom` | 철컥+반짝 · 꽃잎 반짝 / 합창 | `SakuraResult` offered · draw (정령 벚꽃 = 비밀 이상) |
 | `Coin` · `Purchase` · `Error` · `Notify` · `Reward` | 짤랑(작게) · 차링 · 뿡 · 띵 · 반짝 상승 | 코인 늘 때 · 성공 · 실패 · 안내 · 도감 보상 |
 | `NightBell` / `DayStart` / `Reset` / `RareEgg` | 종 / 차임 / 휘리릭 / 팡파레 | 밤 · 낮 · ALL SEED RESET · 특별 씨앗 공지 |

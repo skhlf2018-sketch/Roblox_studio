@@ -9,7 +9,6 @@
 	서버 이벤트 연결은 여기 start() 에서 (줍기/RUN/잡힘/배달/코인/밤/희귀 씨앗 공지 …).
 	6판: 성체 됨(PlantGrown → Grown · 전설 이상 GrownRare) · 열매 따기(FruitPicked → FruitPick) ·
 	  열매 팔기(FruitsSold → FruitSell) · 먹이기(FeedResult → 돌연변이면 FeedMutate, 아니면 Feed).
-	  물 주기(Water)는 PetFxController 가 PetPetted 연출과 함께 냄.
 ]]
 
 local Players = game:GetService("Players")

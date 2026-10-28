@@ -30,7 +30,7 @@ local TrailController = {}
 
 local C = Theme.Colors
 local NAME = "Trail"
-local SIZE = Vector2.new(860, 470)
+local SIZE = Vector2.new(860, 560) -- 2026-10-28: 470 이면 카드(330 + 버튼) 아래 "사기" 버튼이 창 밖으로 잘려 못 삼 (사장님 "안 사진다")
 local GRADES = {
 	"일반",
 	"일반",

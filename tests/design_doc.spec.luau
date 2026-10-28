@@ -662,7 +662,7 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("9-3 트레일: 11개 이름·배율·가격이 같음", function()
+	T.test("9-3 트레일: 16개 이름·배율·가격이 같음", function()
 		local rows = {}
 		for _, line in subsection(sections["9"], "9-3") do
 			local cells = splitCells(line)
@@ -670,7 +670,7 @@ return function(T, Loader)
 				table.insert(rows, cells)
 			end
 		end
-		T.eq(#rows, 11)
+		T.eq(#rows, 16)
 		for i, cells in rows do
 			local trail = Upgrades.Trails[i]
 			T.truthy(startsWith(cells[1], trail.name), trail.id .. " 이름")

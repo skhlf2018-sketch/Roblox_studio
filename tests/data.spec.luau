@@ -281,7 +281,7 @@ return function(T, Loader)
 			T.truthy(Upgrades.Treadmill[i].perStep > Upgrades.Treadmill[i - 1].perStep, "걸음당 속도 증가 " .. i)
 			T.eq(Upgrades.Treadmill[i].level, i)
 		end
-		T.eq(#Upgrades.Trails, 11)
+		T.eq(#Upgrades.Trails, 16)
 		T.eq(Upgrades.getTrail("moonbloom").multiplier, 20)
 		for i = 2, #Upgrades.Pen do
 			T.truthy(Upgrades.Pen[i].cost > Upgrades.Pen[i - 1].cost, "pen cost 증가 " .. i)

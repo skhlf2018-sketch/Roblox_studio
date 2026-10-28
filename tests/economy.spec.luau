@@ -4,6 +4,7 @@
 return function(T, Loader)
 	local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 	local Plants = Loader.require("ReplicatedStorage/Shared/Data/Plants")
+	local Upgrades = Loader.require("ReplicatedStorage/Shared/Data/Upgrades")
 	local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
 
 	T.suite("Economy (6판)")
@@ -128,6 +129,13 @@ return function(T, Loader)
 	T.test("트레일: 장착한 것의 배율만 (none·모름 = 1), 최고 트레일 id", function()
 		T.eq(Economy.trailMultiplier("blue"), 2.5)
 		T.eq(Economy.trailMultiplier("moonbloom"), 20)
+		T.eq(Economy.trailMultiplier("super_ultradivine"), 100, "사장님 2026-10-28: 트레일 16개")
+		T.eq(#Upgrades.Trails, 16)
+		T.eq(
+			Economy.treadmillGainPerSecond(20, Economy.trailMultiplier("moonbloom")),
+			20e6,
+			"러닝머신 이득 × 트레일 배율"
+		)
 		T.eq(Economy.trailMultiplier("none"), 1)
 		T.eq(Economy.trailMultiplier("모름"), 1)
 		T.eq(Economy.trailMultiplier(nil), 1)

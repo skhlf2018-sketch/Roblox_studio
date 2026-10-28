@@ -146,7 +146,10 @@ local function stepTick(): ...any
 	for player, session in Sessions.all() do
 		local data = session.data
 		if session.onTreadmill and session.loaded and data and data.treadmillLevel >= 1 then
-			local gain = Economy.treadmillGainPerSecond(data.treadmillLevel) * Config.TREADMILL_TICK_SECONDS
+			local gain = Economy.treadmillGainPerSecond(
+				data.treadmillLevel,
+				Economy.trailMultiplier(data.equippedTrail)
+			) * Config.TREADMILL_TICK_SECONDS -- 사장님 2026-10-28: 러닝머신 이득도 장착한 트레일 배율만큼
 			if gain > 0 then
 				Wallet.addSpeed(player, gain)
 				Net.fire(player, Remotes.ToClient.TreadmillStep, { amount = gain })

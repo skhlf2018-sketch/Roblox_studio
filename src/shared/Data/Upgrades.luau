@@ -30,6 +30,7 @@ local B = 1e9
 local T = 1e12
 local Qa = 1e15
 local Qi = 1e18
+local Sx = 1e21
 
 local Pen: { PenLevel } = {
 	{ level = 1, cost = 0, slots = 7 },
@@ -160,6 +161,52 @@ local Trails: { Trail } = {
 		multiplier = 20,
 		cost = 5 * Qa,
 		color = { 200, 210, 255 },
+	},
+	-- 사장님 2026-10-28: 트레일 5개 추가 (12~16)
+	{
+		id = "rainbow",
+		order = 12,
+		name = "무지개",
+		nameEn = "Rainbow",
+		multiplier = 28,
+		cost = 100 * Qa,
+		color = { 255, 120, 200 },
+	},
+	{
+		id = "lava",
+		order = 13,
+		name = "용암",
+		nameEn = "Lava",
+		multiplier = 40,
+		cost = 2 * Qi,
+		color = { 255, 90, 30 },
+	},
+	{
+		id = "starlight",
+		order = 14,
+		name = "별빛",
+		nameEn = "Starlight",
+		multiplier = 55,
+		cost = 40 * Qi,
+		color = { 255, 250, 170 },
+	},
+	{
+		id = "cosmic",
+		order = 15,
+		name = "우주",
+		nameEn = "Cosmic",
+		multiplier = 75,
+		cost = 800 * Qi,
+		color = { 90, 40, 160 },
+	},
+	{
+		id = "super_ultradivine",
+		order = 16,
+		name = "슈퍼 울트라디바인",
+		nameEn = "Super Ultradivine",
+		multiplier = 100,
+		cost = 15 * Sx,
+		color = { 255, 255, 255 },
 	},
 }
 

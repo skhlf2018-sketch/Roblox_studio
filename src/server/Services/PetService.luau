@@ -13,10 +13,10 @@
 	  SellPlant(plantUid) — 성체를 뽑아서 팔기. 검증: uid 형식 · 내 정원의 성체 · 내 정원(울타리 사각형) 에서
 	    GARDEN_ACTION_RADIUS(20) 안 또는 판매 가판대 SELL_RADIUS(14) 안. 값 = 열매 1개 값 × 20 (GardenRules.sellPrice)
 	    (코인 2배 게임패스면 × 2). 정원 자리가 빔 → Notify + DataUpdate("pets")
-	  PetPet(uid) — 물 주기 (5판 쓰다듬기 자리). uid = 내 정원의 자라는 씨앗(성장 +WATER_GROWTH_SECONDS 10초) 또는
-	    성체(다음 열매까지 +10초). 검증: uid 형식 · 내 정원의 것 · 내 정원 PET_PET_RADIUS(20) 안 · 사람마다 PET_PET_COOLDOWN(1초)
+	  PetPet(uid) — 물 주기 (5판 쓰다듬기 자리). uid = 내 정원의 성체(다음 열매까지 +WATER_GROWTH_SECONDS 10초).
+	    자라는 씨앗은 안 됨 (사장님 2026-10-28, 조용히 거절). 검증: uid 형식 · 내 정원의 것 · 내 정원 PET_PET_RADIUS(20) 안 · 사람마다 PET_PET_COOLDOWN(1초)
 	    · 식물마다 WATER_COOLDOWN(60초, 아직이면 Notify info). 통과하면 PetPetted(ownerUserId, uid) 를 서버 전체에
-	    (물방울·소리 연출은 클라). 다 자란 씨앗은 BaseService 다음 1초 틱에 성체가 됨.
+	    (물방울·소리 연출은 클라).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -222,22 +222,16 @@ function PetService.sell(player: Player, uid: string): number?
 	return PetService.sellPlant(player, uid)
 end
 
--- PetPet = 물 주기: 자라는 씨앗 성장 +10초 / 성체 다음 열매 +10초 → PetPetted 서버 전체. 성공하면 true
+-- PetPet = 물 주기: 성체 다음 열매 +10초 → PetPetted 서버 전체. 성공하면 true
+-- (사장님 2026-10-28: 자라는 씨앗 물 주기는 없앰 — 씨앗 uid 는 조용히 거절)
 function PetService.petPet(player: Player, uid: string): boolean
 	local session, data = Sessions.getLoaded(player)
 	if not session or not data then
 		return false
 	end
-	local seed: Types.IncubatorRecord? = nil
-	for _, record in data.incubators do
-		if record.uid == uid then
-			seed = record
-			break
-		end
-	end
-	local plant = if seed then nil else PetService.findPlant(player, uid)
-	if not seed and not plant then
-		return false -- 내 정원의 것이 아님
+	local plant = PetService.findPlant(player, uid)
+	if not plant then
+		return false -- 내 정원의 성체가 아님 (자라는 씨앗 포함)
 	end
 	if not PetService.isNearOwnPen(player, Config.PET_PET_RADIUS) then
 		return false
@@ -260,16 +254,11 @@ function PetService.petPet(player: Player, uid: string): boolean
 		return false
 	end
 	session.cooldowns[key] = now
-	if seed then
-		seed.progress = GardenRules.watered(seed.progress, seed.required)
-		Snapshot.section(player, "incubators")
-	elseif plant then
-		local interval = Economy.fruitInterval(plant.petId)
-		if plant.fruits < Config.FRUIT_MAX_PER_PLANT and interval ~= math.huge then
-			plant.fruitProgress = math.min(interval, plant.fruitProgress + Config.WATER_GROWTH_SECONDS)
-		end
-		Snapshot.section(player, "pets")
+	local interval = Economy.fruitInterval(plant.petId)
+	if plant.fruits < Config.FRUIT_MAX_PER_PLANT and interval ~= math.huge then
+		plant.fruitProgress = math.min(interval, plant.fruitProgress + Config.WATER_GROWTH_SECONDS)
 	end
+	Snapshot.section(player, "pets")
 	data.stats.watered = (data.stats.watered or 0) + 1
 	Net.fireAll(Remotes.ToClient.PetPetted, player.UserId, uid)
 	return true

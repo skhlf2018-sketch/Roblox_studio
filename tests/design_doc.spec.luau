@@ -577,7 +577,11 @@ return function(T, Loader)
 		T.truthy(startsWith(configRows["건너뛰기"], "남은 1분당 " .. Config.SKIP_COINS_PER_MINUTE .. " 코인"))
 		T.eq(
 			configRows["물 주기"],
-			"+" .. Config.WATER_GROWTH_SECONDS .. "초, 식물마다 " .. Config.WATER_COOLDOWN .. "초"
+			"성체만 다음 열매 +"
+				.. Config.WATER_GROWTH_SECONDS
+				.. "초, 식물마다 "
+				.. Config.WATER_COOLDOWN
+				.. "초 (씨앗은 없음)"
 		)
 		T.eq(parseNumber(configRows["자동 수입"]), Config.PASSIVE_INCOME_PER_SECOND)
 		T.eq(Config.PASSIVE_INCOME_PER_SECOND, 0)

@@ -9,7 +9,14 @@ return function(T, Loader)
 	T.suite("Economy (6판)")
 
 	T.test("열매 1개 값 = 식물 열매 값 × 크기 × 돌연변이 (5판 ×3 없음)", function()
-		local daisy = Plants.get("sprout_daisy").fruitValue -- 10
+		local daisy = Plants.get("sprout_daisy").fruitValue * 2 -- 10 × 초반 2배(일반, 사장님 2026-10-28)
+		T.eq(Config.EARLY_COIN_MULTIPLIER.common, 2)
+		T.eq(Config.EARLY_COIN_MULTIPLIER.uncommon, 2)
+		T.eq(Economy.earlyCoinMultiplier("rare"), 1, "희귀부터는 그대로")
+		T.eq(
+			Economy.fruitValue("firefly_lily", "normal", {}),
+			Plants.get("firefly_lily").fruitValue * Economy.earlyCoinMultiplier(Plants.get("firefly_lily").rarity)
+		)
 		T.eq(Economy.fruitValue("sprout_daisy", "normal", {}), daisy)
 		T.eq(Economy.fruitValue("sprout_daisy", "big", { "golden" }), daisy * 1.5 * 2)
 		T.eq(Economy.fruitValue("sprout_daisy", "giant", { "rainbow", "burning" }), daisy * 6 * 2.5 * 1.5)
@@ -20,17 +27,21 @@ return function(T, Loader)
 		T.eq(Economy.offlineIncome, nil)
 	end)
 
-	T.test("열매 간격 · 초당 코인 환산(표시용) = 열매 값 ÷ 간격", function()
-		local p = Plants.get("firefly_lily")
-		T.eq(Economy.fruitInterval("firefly_lily"), p.fruitIntervalSeconds)
-		T.eq(Economy.fruitInterval("없음"), math.huge)
-		T.near(
-			Economy.recordIncome({ petId = "firefly_lily", size = "normal", mutations = {} }),
-			p.fruitValue / p.fruitIntervalSeconds,
-			1e-12
-		)
-		T.eq(Economy.recordIncome({ petId = "없음", size = "normal", mutations = {} }), 0)
-	end)
+	T.test(
+		"열매 간격 = 표 간격 ÷ FRUIT_SPEED_MULTIPLIER(1.8) · 초당 코인 환산(표시용) = 열매 값 ÷ 간격",
+		function()
+			local p = Plants.get("firefly_lily")
+			T.eq(Config.FRUIT_SPEED_MULTIPLIER, 1.8, "사장님 2026-10-28: 열매 1.8배 빨리")
+			T.eq(Economy.fruitInterval("firefly_lily"), p.fruitIntervalSeconds / 1.8)
+			T.eq(Economy.fruitInterval("없음"), math.huge)
+			T.near(
+				Economy.recordIncome({ petId = "firefly_lily", size = "normal", mutations = {} }),
+				Economy.fruitValue("firefly_lily", "normal", {}) / Economy.fruitInterval("firefly_lily"),
+				1e-12
+			)
+			T.eq(Economy.recordIncome({ petId = "없음", size = "normal", mutations = {} }), 0)
+		end
+	)
 
 	T.test("돌연변이 중첩 곱 (황금 2 × 불 1.5 = 3, 무지개 2.5 × 번개 2 = 5)", function()
 		T.near(Economy.mutationMultiplier({ "golden", "burning" }), 3, 1e-9)

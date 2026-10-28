@@ -10,7 +10,7 @@
 	          (6판: 퓨전 머신·제단·비밀 통로 없앰 · 5판: 퀘스트·선물 창 없앰)
 	        6판 "씨앗을 훔치세요": 식물 id (sprout_daisy·puppy_grass·owl_oak…) 로 Snapshot 을 만듦.
 	          정원 식물 창(열매 따기·먹이기·팔기 확인 창) · 열매 가방 창 · 판매 가판대 "열매 팔기" · 건너뛰기 창(전부/절반)
-	          · 정원 프롬프트(열매 따기·물 주기, GardenPlant/IncubatingEgg) · 물방울 · 아우라 켜기/끄기(PlantFxController)
+	          · 정원 프롬프트(열매 따기·물 주기, GardenPlant 만 — 씨앗 물 주기 없음) · 물방울 · 아우라 켜기/끄기(PlantFxController)
 	        → 무기 손 모양 붙이기·휘두르기, 폰 화면에서 버튼 크기(46px 이상) 계산 확인
 	task.wait 는 바로 멈추고(무한 루프 방지), task.delay 는 바로 실행합니다.
 ]]
@@ -872,8 +872,8 @@ local function body()
 		check(p3Next and p3Next.Text == "열매 가득! 따 주세요", "열매 5개면 '열매 가득!'")
 		local p1Value = p1Card and p1Card:FindFirstChild("FruitValue")
 		check(
-			p1Value and string.find(p1Value.Text, "열매 1개 10 코인", 1, true) ~= nil,
-			"카드에 열매 1개 값: " .. tostring(p1Value and p1Value.Text)
+			p1Value and string.find(p1Value.Text, "열매 1개 20 코인", 1, true) ~= nil,
+			"카드에 열매 1개 값 (일반 10 × 초반 2배): " .. tostring(p1Value and p1Value.Text)
 		)
 		check(click(p1Card and p1Card:FindFirstChild("PickFruit")), "카드 '열매 따기' 누름")
 		local pf = lastSent("PickFruit")
@@ -894,9 +894,9 @@ local function body()
 		local confirmBody = dialogRoot("ConfirmDialog"):FindFirstChild("Body", true)
 		check(
 			confirmBody
-				and string.find(confirmBody.Text, "200 코인", 1, true)
+				and string.find(confirmBody.Text, "400 코인", 1, true)
 				and string.find(confirmBody.Text, "열매 2개", 1, true),
-			"확인 창 글 (값 200 코인 · 달린 열매 2개): "
+			"확인 창 글 (값 400 코인 = 20 × 20 · 달린 열매 2개): "
 				.. (string.gsub(tostring(confirmBody and confirmBody.Text), "\n", " / "))
 		)
 		check(click(dialogRoot("ConfirmDialog"):FindFirstChild("ConfirmNo", true)), "취소 누름")
@@ -1224,7 +1224,7 @@ local function body()
 	sigOf(player, "Attr_FruitCount"):Fire()
 	check(fruitBadge.Text == "12/300", "Attr FruitCount 12 → 배지 '12/300'")
 	Windows.close()
-	-- 내 자라는 씨앗: 이름표는 서버 것, 클라는 "집기"(E) · "건너뛰기"(R) · "물 주기"(F, PetFxController)
+	-- 내 자라는 씨앗: 이름표는 서버 것, 클라는 "집기"(E) · "건너뛰기"(R) (물 주기는 성체만)
 	check(growingEgg:FindFirstChild("GrowTag") == nil, "클라 이름표 없음 (서버 이름표만)")
 	check(growingEgg:FindFirstChild("HatchPrompt") == nil, "6판: '부화' 프롬프트 없음")
 	local readySkip = growingEgg:FindFirstChild("SkipPrompt")
@@ -1250,12 +1250,10 @@ local function body()
 	click(dialogRoot("SkipDialog"):FindFirstChild("DialogCancel", true))
 	check(dialogRoot("SkipDialog") == nil, "취소 → 창 닫힘")
 	check(trigger(pickPrompt) and lastSent("PickUpPlacedEgg").args[1] == "i1", "'집기' → PickUpPlacedEgg(i1)")
-	local youngWater = youngEgg:FindFirstChild("WaterPrompt", true)
 	check(
-		youngWater and youngWater.Enabled and youngWater.KeyboardKeyCode == roblox.Enum.KeyCode.F,
-		"자라는 씨앗: '물 주기'(F) 프롬프트"
+		youngEgg:FindFirstChild("WaterPrompt", true) == nil and youngEgg:FindFirstChild("GardenPromptAttach") == nil,
+		"자라는 씨앗: '물 주기' 프롬프트 없음 (사장님 2026-10-28)"
 	)
-	check(trigger(youngWater) and lastSent("PetPet").args[1] == "i1", "씨앗 물 주기 → PetPet(i1)")
 	check(
 		othersEgg:FindFirstChild("SkipPrompt") == nil
 			and othersEgg:FindFirstChild("PickUpPrompt") == nil
@@ -2148,8 +2146,6 @@ local function body()
 			otherPlant:FindFirstChild("WaterDrops") ~= nil,
 			"남이 자기 식물에 물을 주면 그 식물 위에 물방울"
 		)
-		fire("PetPetted", 77, "i1")
-		check(youngEgg:FindFirstChild("WaterDrops") ~= nil, "자라는 씨앗에 물 주기도 물방울")
 		holdDelays = false
 		check(not Pf.petted(77, "nope"), "없는 식물이면 연출 없음")
 		check(

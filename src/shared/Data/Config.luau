@@ -37,6 +37,8 @@ local Config = {
 		{ id = "adult", name = "성체", from = 1 },
 	} :: { { id: string, name: string, from: number } },
 	PASSIVE_INCOME_PER_SECOND = 0, -- 6판(사장님 결정 1): 자동 수입 없음 — 코인은 열매를 따서 팔아야 들어옴
+	EARLY_COIN_MULTIPLIER = { common = 2, uncommon = 2 } :: { [string]: number }, -- 사장님(2026-10-28): 초반 코인 수급 2배 — 초반 구역 등급(일반·고급) 열매 값 ×2 (성체 팔기 값도 따라 ×2)
+	FRUIT_SPEED_MULTIPLIER = 1.8, -- 사장님(2026-10-28): 열매가 1.8배 더 빨리 맺힘 (Economy.fruitInterval = 표 간격 ÷ 1.8)
 	FRUIT_MAX_PER_PLANT = 5, -- 안 따면 식물마다 열매가 이만큼까지만 쌓임 (설계 7장 결정 1)
 	FRUITS_ON_ADULT = 1, -- [수석] 성체가 되는 순간 달려 있는 열매 (튜토리얼 5단계 "열매 따서 팔기" 를 바로 할 수 있게)
 	FRUIT_BAG_MAX = 300, -- [추정] 열매 가방에 넣어 둘 수 있는 열매 수 (가득 차면 판매 가판대에서 팔기)
@@ -57,7 +59,7 @@ local Config = {
 		divine = 300,
 		super_ultradivine = 500,
 	} :: { [string]: number },
-	-- 물 주기 (5판 쓰다듬기 PetPet 자리): 자라는 씨앗은 성장 +10초, 성체는 다음 열매까지 +10초. 식물마다 60초에 한 번
+	-- 물 주기 (5판 쓰다듬기 PetPet 자리): 성체만 — 다음 열매까지 +10초. 식물마다 60초에 한 번 (사장님 2026-10-28: 자라는 씨앗 물 주기는 없앰)
 	WATER_GROWTH_SECONDS = 10,
 	WATER_COOLDOWN = 60,
 

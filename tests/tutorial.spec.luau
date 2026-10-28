@@ -246,7 +246,7 @@ return function(T, Loader)
 			goToStall(w)
 			w.H.client(w.player, "SellFruits")
 			T.eq(w.data.tutorialStep, 6)
-			T.eq(w.data.money, moneyBefore + 8 + 500, "강아지풀 열매 8 + 보상 500")
+			T.eq(w.data.money, moneyBefore + 8 * 2 + 500, "강아지풀 열매 8 × 초반 2배 + 보상 500")
 			local done, count = lastUpdate(w)
 			T.truthy(done.done)
 			T.eq(done.reward, 500)
@@ -260,7 +260,7 @@ return function(T, Loader)
 			w.BaseService.deliver(w.player)
 			local _, after = lastUpdate(w)
 			T.eq(after, count, "끝난 뒤 TutorialUpdate 없음")
-			T.eq(w.data.money, moneyBefore + 8 + 500 + 8)
+			T.eq(w.data.money, moneyBefore + 8 * 2 + 500 + 8, "열매 8 × 초반 2배 + 보상 500 + 배달 8")
 			local sawSection = false
 			for _, args in w.H.sent(w.player, "DataUpdate") do
 				if args[1] == "tutorial" then

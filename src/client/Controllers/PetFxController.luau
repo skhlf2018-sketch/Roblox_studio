@@ -6,7 +6,7 @@
 	- 내 정원 파트(Attr OwnerUserId == 나)에만 클라 ProximityPrompt (Attachment "GardenPromptAttach", 높이 = Attr VisualHeight 의 60%):
 	    성체 식물(GardenPlant): "PickFruitPrompt" 열매 따기 (E, 열매 0개면 꺼짐) → PickFruit(PlantUid)
 	                            "WaterPrompt" 물 주기 (F, 0.3초) → PetPet(PlantUid)
-	    자라는 씨앗(IncubatingEgg): "WaterPrompt" 물 주기 (F) → PetPet(EggUid)  ("집기" E · "건너뛰기" R 는 IncubatorController)
+	    자라는 씨앗(IncubatingEgg): 프롬프트 없음 — 물 주기는 성체만 (사장님 2026-10-28). "집기" E · "건너뛰기" R 는 IncubatorController
 	  남의 정원 파트에는 프롬프트를 안 만듦 (서버가 어차피 거절).
 	  파트가 없어지면(태그 빠짐·Destroying) 연결·프롬프트 정리 (5판 B-3 처럼 연결이 쌓이지 않게 파트마다 한 번만).
 	- 물 주기 쿨다운: 식물마다 Config.WATER_COOLDOWN(60초). 서버가 PetPetted 를 보내면 그때부터 프롬프트 "물 주기 (45초)" 로 꺼 둠.
@@ -164,6 +164,9 @@ function PetFxController.hookPart(inst: Instance): boolean
 		return false
 	end
 	local isPlant = typeof(part:GetAttribute("PlantUid")) == "string"
+	if not isPlant then
+		return false -- 자라는 씨앗(IncubatingEgg)에는 프롬프트 없음 (사장님 2026-10-28: 씨앗 물 주기 없앰 — "집기"·"건너뛰기" 는 IncubatorController)
+	end
 	local attach = Instance.new("Attachment")
 	attach.Name = "GardenPromptAttach"
 	attach.Parent = part

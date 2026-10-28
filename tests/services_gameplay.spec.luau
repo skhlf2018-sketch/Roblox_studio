@@ -626,8 +626,12 @@ return function(T, Loader)
 			local result = w.H.sent(w.player, "PlantGrown")[1][1]
 			T.eq(result.plant.uid, record.uid)
 			T.truthy(result.isNew)
-			T.eq(result.fruitValue, w.Pets.get("puppy_grass").fruitValue * 6 * 2)
-			T.eq(result.fruitInterval, w.Pets.get("puppy_grass").fruitIntervalSeconds)
+			T.eq(
+				result.fruitValue,
+				w.Pets.get("puppy_grass").fruitValue * 2 * 6 * 2,
+				"초반 2배(일반) × 거대 6 × 황금 2"
+			)
+			T.eq(result.fruitInterval, w.Pets.get("puppy_grass").fruitIntervalSeconds / 1.8, "열매 1.8배 빨리")
 			T.truthy(w.H.hasNotify(w.player, "success", "성체가 됐어요"))
 			T.eq(#grown, 1)
 			T.eq(seedPart(w, record.uid), nil, "씨앗 파트는 사라짐")

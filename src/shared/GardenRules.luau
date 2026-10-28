@@ -102,9 +102,4 @@ function GardenRules.sellPrice(record: { petId: string, size: string, mutations:
 	return Economy.recordFruitValue(record) * Config.PLANT_SELL_FRUIT_MULTIPLIER
 end
 
--- 물 주기 뒤 진행도 (required 를 넘지 않음)
-function GardenRules.watered(progress: number, required: number): number
-	return math.min(required, progress + Config.WATER_GROWTH_SECONDS)
-end
-
 return GardenRules

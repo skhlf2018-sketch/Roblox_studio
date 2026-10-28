@@ -136,9 +136,10 @@ local function plantText(record: PetRecord): string
 	return string.format("%s\n열매 %d/%d", plantName(record.petId), record.fruits, Config.FRUIT_MAX_PER_PLANT)
 end
 
--- 바닥 높이 (아래로 레이캐스트: 정원 바닥 윗면)
+-- 바닥 높이 (아래로 레이캐스트: 정원 바닥 윗면). 정원 바닥은 평평하므로 바닥보다 2 넘게 높은 것(울타리·장식·캐릭터)에 맞으면 무시
+local GARDEN_FLOOR_MAX = MapLayout.FLOOR_Y + 2
 local function floorAt(spot: MapLayout.XZ): number
-	return MapBuilder.groundY(Vector3.new(spot.x, MapLayout.FLOOR_Y + 1, spot.z), {})
+	return math.min(GARDEN_FLOOR_MAX, MapBuilder.groundY(Vector3.new(spot.x, MapLayout.FLOOR_Y + 1, spot.z), {}))
 end
 
 local function rarityColor(petId: string): Color3

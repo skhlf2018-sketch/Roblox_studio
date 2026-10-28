@@ -403,29 +403,32 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("뽑아서 판 성체는 바로 무시, 정원에 자라는 씨앗은 됨 (성장 +10초)", function()
-		local w = petWorld()
-		w.PetService.removePlants(w.player, { "p2" })
-		w.H.client(w.player, "PetPet", "p2")
-		T.eq(#petted(w), 0, "없어진 성체")
-		table.insert(w.data.incubators, {
-			uid = "i9",
-			petId = "owl_oak",
-			size = "normal",
-			mutations = {},
-			biomeId = "forest",
-			special = false,
-			x = -30,
-			z = -20,
-			progress = 0,
-			required = 240,
-		})
-		w.H.advance(1.1)
-		w.H.client(w.player, "PetPet", "i9")
-		T.eq(#petted(w), 1, "자라는 씨앗")
-		T.eq(w.data.incubators[1].progress, 10)
-		w.H.uninstall()
-	end)
+	T.test(
+		"뽑아서 판 성체는 바로 무시, 정원의 자라는 씨앗도 안 됨 (사장님 2026-10-28: 씨앗 물 주기 없음)",
+		function()
+			local w = petWorld()
+			w.PetService.removePlants(w.player, { "p2" })
+			w.H.client(w.player, "PetPet", "p2")
+			T.eq(#petted(w), 0, "없어진 성체")
+			table.insert(w.data.incubators, {
+				uid = "i9",
+				petId = "owl_oak",
+				size = "normal",
+				mutations = {},
+				biomeId = "forest",
+				special = false,
+				x = -30,
+				z = -20,
+				progress = 0,
+				required = 240,
+			})
+			w.H.advance(1.1)
+			w.H.client(w.player, "PetPet", "i9")
+			T.eq(#petted(w), 0, "자라는 씨앗은 물 주기 없음")
+			T.eq(w.data.incubators[1].progress, 0, "성장 그대로")
+			w.H.uninstall()
+		end
+	)
 
 	T.test(
 		"거리: 우리 가장자리에서 19.9 는 되고 20.1 은 안 됨 — 앞·뒤·옆·대각선 모두 (대각선은 축별이 아니라 진짜 거리)",

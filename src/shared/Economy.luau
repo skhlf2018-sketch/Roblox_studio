@@ -65,17 +65,25 @@ function Economy.fruitValue(petId: string, sizeId: string, mutations: { string }
 	if not plant then
 		return 0
 	end
-	return plant.fruitValue * Economy.sizeMultiplier(sizeId) * Economy.mutationMultiplier(mutations)
+	return plant.fruitValue
+		* Economy.earlyCoinMultiplier(plant.rarity)
+		* Economy.sizeMultiplier(sizeId)
+		* Economy.mutationMultiplier(mutations)
+end
+
+-- 초반 코인 2배 (사장님 2026-10-28): 초반 구역 등급(일반·고급)의 열매 값 × Config.EARLY_COIN_MULTIPLIER[등급] (없으면 1)
+function Economy.earlyCoinMultiplier(rarityId: string): number
+	return Config.EARLY_COIN_MULTIPLIER[rarityId] or 1
 end
 
 function Economy.recordFruitValue(record: { petId: string, size: string, mutations: { string } }): number
 	return Economy.fruitValue(record.petId, record.size, record.mutations)
 end
 
--- 열매 맺는 간격(초). 모르는 식물이면 math.huge (열매 안 맺음)
+-- 열매 맺는 간격(초) = 표(Data/Plants) 간격 ÷ FRUIT_SPEED_MULTIPLIER(1.8, 사장님 지시). 모르는 식물이면 math.huge (열매 안 맺음)
 function Economy.fruitInterval(petId: string): number
 	local plant = Plants.get(petId)
-	return if plant then math.max(1, plant.fruitIntervalSeconds) else math.huge
+	return if plant then math.max(1, plant.fruitIntervalSeconds / Config.FRUIT_SPEED_MULTIPLIER) else math.huge
 end
 
 -- 열매로 환산한 초당 코인 (표시용, 6판은 자동으로 들어오지 않음)

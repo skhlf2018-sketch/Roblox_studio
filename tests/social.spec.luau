@@ -103,6 +103,7 @@ return function(T, Loader)
 
 	local function waterWorld()
 		local w = world()
+		w.Config.FRUIT_SPEED_MULTIPLIER = 1 -- 물 주기 시험은 표 간격(아기 데이지 30초) 그대로
 		w.PetService.start()
 		w.player, w.session, w.data = join(w, 1001, "Owner")
 		w.session.plotIndex = 1
@@ -141,42 +142,52 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"자라는 씨앗에 물: 성장 +10초, 성체에 물: 다음 열매까지 +10초 → PetPetted(내 UserId, uid) 를 모두에게",
+		"자라는 씨앗에 물: 안 됨(사장님 2026-10-28, 조용히) · 성체에 물: 다음 열매까지 +10초 → PetPetted(내 UserId, uid) 를 모두에게",
 		function()
 			local w = waterWorld()
 			w.H.client(w.player, "PetPet", "i2")
-			T.eq(w.data.incubators[1].progress, w.Config.WATER_GROWTH_SECONDS)
+			T.eq(w.data.incubators[1].progress, 0, "씨앗은 물 주기 없음")
+			T.eq(#watered(w), 0)
+			T.eq(w.data.stats.watered, nil)
+			w.H.client(w.player, "PetPet", "p1")
+			T.eq(w.data.pets[1].fruitProgress, 10)
 			local list = watered(w)
 			T.eq(#list, 1)
 			T.eq(list[1][1], 1001)
-			T.eq(list[1][2], "i2")
+			T.eq(list[1][2], "p1")
 			T.eq(list[1].n, 2, "인자 2개 (ownerUserId, uid)")
-			w.H.advance(1.1)
-			w.H.client(w.player, "PetPet", "p1")
-			T.eq(w.data.pets[1].fruitProgress, 10)
-			T.eq(#watered(w), 2)
-			T.eq(w.data.stats.watered, 2)
+			T.eq(w.data.stats.watered, 1)
 			w.H.uninstall()
 		end
 	)
 
 	T.test("식물마다 60초 쿨다운 (아직이면 안내), 사람마다 1초 연타 막기", function()
 		local w = waterWorld()
-		w.H.client(w.player, "PetPet", "i2")
+		w.PetService.addPlant(w.player, {
+			uid = "p2",
+			petId = "sprout_daisy",
+			size = "normal",
+			mutations = {},
+			x = -10,
+			z = 0,
+			fruits = 0,
+			fruitProgress = 0,
+		})
+		w.H.client(w.player, "PetPet", "p2")
 		w.H.client(w.player, "PetPet", "p1") -- 1초 연타 막기
 		T.eq(#watered(w), 1)
 		w.H.advance(1.1)
 		w.H.client(w.player, "PetPet", "p1") -- 다른 식물은 됨
 		T.eq(#watered(w), 2)
 		w.H.advance(1.1)
-		w.H.client(w.player, "PetPet", "i2") -- 같은 식물 60초 안
+		w.H.client(w.player, "PetPet", "p2") -- 같은 식물 60초 안
 		T.eq(#watered(w), 2)
-		T.eq(w.data.incubators[1].progress, 10, "그대로")
+		T.eq(w.data.pets[2].fruitProgress, 10, "그대로")
 		T.truthy(w.H.hasNotify(w.player, "info", "또 물을 줄 수 있어요"))
 		w.H.advance(60)
-		w.H.client(w.player, "PetPet", "i2")
+		w.H.client(w.player, "PetPet", "p2")
 		T.eq(#watered(w), 3)
-		T.eq(w.data.incubators[1].progress, 20)
+		T.eq(w.data.pets[2].fruitProgress, 20)
 		w.H.uninstall()
 	end)
 

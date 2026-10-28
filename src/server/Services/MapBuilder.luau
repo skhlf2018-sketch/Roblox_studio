@@ -5294,6 +5294,12 @@ function MapBuilder.groundY(position: Vector3, ignore: { Instance }): number
 			table.insert(exclude, f)
 		end
 	end
+	-- 사람 캐릭터는 바닥이 아님 (사장님 2026-10-28 "공중부양하는 나무": 씨앗 자리에 서 있으면 머리 위 높이로 심겨 식물이 떠 있었음)
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(exclude, player.Character)
+		end
+	end
 	params.FilterDescendantsInstances = exclude
 	params.IgnoreWater = true
 	local result = Workspace:Raycast(position + Vector3.new(0, 5, 0), Vector3.new(0, -100, 0), params)

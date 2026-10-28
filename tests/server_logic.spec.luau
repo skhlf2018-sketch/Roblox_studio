@@ -153,8 +153,8 @@ return function(T, Loader)
 			T.eq(a.fruits, Config.FRUIT_MAX_PER_PLANT, "열매는 최대 5")
 			T.eq(
 				a.fruitProgress,
-				Plants.get("sprout_daisy").fruitIntervalSeconds,
-				"다음 열매 시간은 간격까지"
+				Plants.get("sprout_daisy").fruitIntervalSeconds / Config.FRUIT_SPEED_MULTIPLIER,
+				"다음 열매 시간은 간격까지 (열매 1.8배 빨리)"
 			)
 			T.eq(a.x, grid1.x)
 			T.eq(b.size, "normal")

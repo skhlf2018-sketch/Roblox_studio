@@ -318,7 +318,7 @@ end
 MapLayout.hubSpots = {
 	mainSpawn = { x = 0, z = -140 } :: XZ, -- 베이스가 없는 8번째 사람 / 기본 스폰
 	sellStall = { x = 60, z = -232 } :: XZ, -- "판매" 가게 (6판: 열매 팔기 SellFruits·성체 팔기 SellPlant, 14 스터드 안)
-	trailShop = { x = 60, z = -268 } :: XZ, -- 트레일 상점 (빨강·흰 줄무늬 천막)
+	trailShop = { x = 34, z = -16 } :: XZ, -- 트레일 상점 (빨강·흰 줄무늬 천막). 2026-10-28 사장님: 씨앗 가져오는 입구(z=0) 바로 옆, 길 가운데를 보게
 	eventPortal = { x = 92, z = -250 } :: XZ, -- 이벤트 포털 (장식)
 	safeLine = { x = 0, z = 0 } :: XZ, -- "안전 구역" 글씨·점선 (z = 0)
 }

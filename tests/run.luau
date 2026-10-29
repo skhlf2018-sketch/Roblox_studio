@@ -44,6 +44,8 @@ local specs = {
 	{ "garden.spec", require("./garden.spec") },
 	-- 6판 주임 검수
 	{ "holes_garden.spec", require("./holes_garden.spec") },
+	-- 7판 주임 검수 (등급 16개 · 구역 18개 · 성장 3배 · 스키마 7)
+	{ "holes_v7.spec", require("./holes_v7.spec") },
 }
 
 local filters: { string } = {}

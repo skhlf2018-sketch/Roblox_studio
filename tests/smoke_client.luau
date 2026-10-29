@@ -1046,8 +1046,8 @@ local function body()
 	local skipAll = skipDialog and skipDialog:FindFirstChild("SkipAll", true)
 	local skipHalf = skipDialog and skipDialog:FindFirstChild("SkipHalf", true)
 	check(
-		skipAll and skipAll.Text == "전부 · 10 코인" and skipHalf and skipHalf.Text == "절반 · 10 코인",
-		"가격 (남은 2초 → 1분 올림 × 10 코인 × 일반 1): "
+		skipAll and skipAll.Text == "전부 · 74 코인" and skipHalf and skipHalf.Text == "절반 · 42 코인",
+		"가격 (남은 2초 → 1분 올림 × 10 코인 × 일반 1 + 비율 × 열매 값 20 × 10 = 74 / 절반 42): "
 			.. tostring(skipAll and skipAll.Text)
 			.. " / "
 			.. tostring(skipHalf and skipHalf.Text)

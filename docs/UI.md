@@ -44,7 +44,7 @@
 ### 데이터 (shared)
 | 파일 | 내용 |
 |---|---|
-| `src/shared/Data/Visuals.luau` | **식물 생김새** `plantThemes`(15구역) · `PLANT_FORMS`(16 기본 모양) · `plantLook(id)`(구역 테마 + 이름 낱말 + id 해시 → 모양·색·꽃잎/잎 수·열매 모양) · `petColor(id, 1/2/3)`(꽃잎/잎/열매 색, 클라 UI 가 씀), **아우라** `auras`(11종), 경비 `guards`(식물 괴물 id·scale·height) + `monsters`, `rarityEffects` 11개, `mutationLooks`(+ 원소 frozen/burning/shocked `effect`), 씨앗 줄무늬 `eggLooks`, 구역 15개 테마, `plotColors`, 태그 `Tags`(+ `AuraFx`) |
+| `src/shared/Data/Visuals.luau` | **식물 생김새** `plantThemes`(18구역) · `PLANT_FORMS`(16 기본 모양) · `plantLook(id)`(구역 테마 + 이름 낱말 + id 해시 → 모양·색·꽃잎/잎 수·열매 모양) · `petColor(id, 1/2/3)`(꽃잎/잎/열매 색, 클라 UI 가 씀), **아우라** `auras`(11종), 경비 `guards`(식물 괴물 id·scale·height) + `monsters`, `rarityEffects` 11개, `mutationLooks`(+ 원소 frozen/burning/shocked `effect`), 씨앗 줄무늬 `eggLooks`, 구역 18개 테마, `plotColors`, 태그 `Tags`(+ `AuraFx`) |
 | `src/shared/Data/Sounds.luau` | 소리 이름 → id + 설명 (5장) |
 | `src/shared/Format.luau` | `Format.money` = "N 코인" (6판) |
 
@@ -52,7 +52,7 @@
 | 파일 | 내용 |
 |---|---|
 | `src/server/Services/MapBuilder.luau` | 맵 전체 (2장). 6판: **사쿠라 나무**(줄기·가지 5·분홍 꽃 덩어리 9·빛 꽃·등불·꽃잎, 태그 파트 지름 7 그대로), **러닝머신 모양 20단계**(`TREAD_STYLES`, 장식 2개 `extra2`), 표지판 글 코인·"+N/초"·정원, 허브 판 "씨앗을 훔치세요". 서버가 부르는 공개 함수(start·getFolder·getNests·groundY·setNightWalls·setPlotOwner·plotCount·getPlot) 이름 그대로 |
-| `src/server/Services/PlantVisualService.luau` | **새 파일 (6판).** 자라는 씨앗(`IncubatingEgg`) 단계 모양, 정원 성체(`GardenPlant`) 식물 모델 + 열매, 등급 아우라, 둥지 옆 장식 식물(5판 부모 동물 자리), `ReplicatedStorage.PetModels` 도서관(식물 134종, UI 뷰포트용). 공개: `build(plantId, opts)` · `buildStage(plantId, stage, opts)` · `visualStage` · `setFruits(model, n)` · `addAura(host, rarityId, scale, opts)` |
+| `src/server/Services/PlantVisualService.luau` | **새 파일 (6판).** 자라는 씨앗(`IncubatingEgg`) 단계 모양, 정원 성체(`GardenPlant`) 식물 모델 + 열매, 등급 아우라, 둥지 옆 장식 식물(5판 부모 동물 자리), `ReplicatedStorage.PetModels` 도서관(식물 158종, UI 뷰포트용). 공개: `build(plantId, opts)` · `buildStage(plantId, stage, opts)` · `visualStage` · `setFruits(model, n)` · `addAura(host, rarityId, scale, opts)` |
 | `src/server/Services/PetVisualService.luau` | 6판: **경비 = 식물 괴물 16종**만 (`buildMonster`, `build` 는 별칭). 5판 동물 체형·우리 펫 걷기·부모 동물·도서관은 지움. GuardPose·SleepZ·GuardGlow·자는/추격 얼굴 그대로 |
 | `src/server/Services/EggVisualService.luau` | 둥지·들고 있는·떨어진 **씨앗**(`Egg` 태그): 아몬드 모양 껍데기 + 뾰족한 끝 + 세로 줄무늬 + 별·보석 점(≤ 8 파트), 등급 아우라(`addAura`), 특별 씨앗 빛기둥 + 이름표, 들고 있을 때 "♂ 4,740Kg" |
 | `src/server/Util/Gui.luau` | 월드 글자 도우미 — 그대로 |
@@ -68,7 +68,7 @@
 | `Controllers/HatchController.luau` | **성체 카드** "성체가 됐어요!" (`PlantGrown`) |
 | `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 10" |
 | `Controllers/HudController.luau` | HUD (3장) + 오른쪽 **초록 열매 버튼·배지 "12/300"** |
-| `Controllers/IndexController.luau` | "식물 도감" (등급 11개, 열매 1개 값, 신성 이상 무지개 띠) |
+| `Controllers/IndexController.luau` | "식물 도감" (등급 16개, 열매 1개 값, 신성 이상 무지개 띠) |
 | `Controllers/ShopController.luau` | 상점: 정원 업그레이드("정원 칸 7 → 8") · 러닝머신(20단계 이름, "1초에 속도 +N") · 트레일 |
 | `Controllers/TutorialController.luau` | 6판 5단계 가리키기 (4-3장) |
 | `Controllers/SoundController.luau` | 소리 (5장) — 결과 이벤트에서 스스로 냄 |
@@ -150,7 +150,7 @@
 - 특별 씨앗(비밀 이상 `Special`): 빛기둥 `SpecialBeam` + "비밀 씨앗!" 이름표. 들고 있을 때 "♂ 4,740Kg".
 
 ### 경비 = 식물 괴물 (PetVisualService)
-- `Biomes.guardName` 15구역 + 천사&악마 밤 쪽 = 16종: 덥석 파리지옥 · 연꽃 개구리풀 · 가시 선인장 대장 · 덩굴 호랑이꽃 · 서리 가시나무 · 용암 머리꽃 · 심해 해초 괴물 · 공룡 고사리 · 우주 버섯 거인 · 벚꽃 여우나무 · 돌 거인 나무 · 천사 백합 / 악마 장미 · 정령 버섯 · 사탕수수 거인 · 호박 머리 덩굴 (15~31 파트).
+- `Biomes.guardName` 18구역 + 천사&악마 밤 쪽 = 16종: 덥석 파리지옥 · 연꽃 개구리풀 · 가시 선인장 대장 · 덩굴 호랑이꽃 · 서리 가시나무 · 용암 머리꽃 · 심해 해초 괴물 · 공룡 고사리 · 우주 버섯 거인 · 벚꽃 여우나무 · 돌 거인 나무 · 천사 백합 / 악마 장미 · 정령 버섯 · 사탕수수 거인 · 호박 머리 덩굴 (15~31 파트).
 - **키(`Height`)·scale 은 `Visuals.guards` 그대로** (GuardianService 잡힘 거리). 잘 때(Sleeping/Idle/Return) 감은 눈 + Z, 쫓을 때(Chase)만 눈 뜸 + 화난 눈썹.
 
 ### 사쿠라 나무 (MapBuilder)

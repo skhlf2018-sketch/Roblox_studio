@@ -792,6 +792,13 @@ local function body()
 		trailCard and trailCard:FindFirstChild("SpeedBadge") and trailCard.SpeedBadge.Text == "x2 스피드",
 		"트레일 카드 'x2 스피드' 배지"
 	)
+	local gradeEn = false
+	for _, d in (trailCard and trailCard:GetDescendants() or {}) do
+		if d:IsA("TextLabel") and d.Text == "Common" then
+			gradeEn = true
+		end
+	end
+	check(gradeEn, "7판: 트레일 카드 등급 글자 영어 (Common)")
 	check(click(trailCard and trailCard:FindFirstChild("BuyTrail")), "트레일 사기 누름")
 	local tr = lastSent("PurchaseUpgrade")
 	check(tr and tr.args[1] == "Trail" and tr.args[2] == "green", "PurchaseUpgrade(Trail, green) 보냄")
@@ -1364,6 +1371,67 @@ local function body()
 	check(
 		text and string.find(text, "Enchanted Forest", 1, true) and string.find(text, "씨앗 등장!", 1, true),
 		"희귀 씨앗 공지 글자: " .. tostring(text)
+	)
+
+	print("[7판: 화면 등급 이름 = 영어 (Rarities.displayName)]")
+	local Theme7 = uiModule("Theme")
+	check(Theme7.rarityName("secret") == "Secret", "Theme.rarityName(secret) = Secret")
+	check(
+		Theme7.rarityName("hacker_glitch") == "H?a.(cke_r!#",
+		"16번 해커 글리치 글자 그대로: " .. Theme7.rarityName("hacker_glitch")
+	)
+	check(text ~= nil and string.find(text, "Secret", 1, true) ~= nil, "희귀 씨앗 공지 등급 영어 (Secret)")
+	local glitchText = Notify.rareEggText({ biomeId = "bug_dimension", petId = "static_world_tree" })
+	check(
+		glitchText ~= nil and string.find(glitchText, "H?a.(cke_r!#", 1, true) ~= nil,
+		"해커 글리치 공지 글자: " .. tostring(glitchText)
+	)
+	local chatText = ctrl("AnnounceController").textFor({
+		kind = "rareEgg",
+		text = "버그 차원 구역에 해커 글리치 지지직 세계수 씨앗 등장!",
+		biomeId = "bug_dimension",
+		petId = "static_world_tree",
+		rarity = "hacker_glitch",
+	})
+	check(
+		chatText == "버그 차원 구역에 H?a.(cke_r!# 지지직 세계수 씨앗 등장!",
+		"채팅 공지 등급 영어: " .. chatText
+	)
+	local RaritiesData = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Rarities"))
+	local RAINBOW7 = { divine = true, super = true, ultradivine = true, hacker_glitch = true }
+	local rainbowOk = 0
+	for _, r in RaritiesData.list do
+		if (Theme7.RainbowRarities[r.id] == true) == (RAINBOW7[r.id] == true) then
+			rainbowOk += 1
+		end
+	end
+	check(rainbowOk == #RaritiesData.list, "무지개 띠 = 신성·슈퍼·울트라디바인·해커 글리치")
+	check(
+		Theme7.bandFor("hacker_glitch") == Theme7.GLITCH and Theme7.bandFor("divine") == Theme7.RAINBOW,
+		"해커 글리치 = 깨진 띠"
+	)
+	local rarityTag = playerGui:FindFirstChild("RarityTag", true)
+	local englishNames = {}
+	for _, r in RaritiesData.list do
+		englishNames[r.displayName] = true
+	end
+	check(
+		rarityTag ~= nil and englishNames[rarityTag.Text] == true,
+		"도감 카드 아래 등급 영어: " .. tostring(rarityTag and rarityTag.Text)
+	)
+	local koreanLeft = {}
+	for _, d in playerGui:GetDescendants() do
+		if d:IsA("TextLabel") or d:IsA("TextButton") then
+			for _, r in RaritiesData.list do
+				if r.name ~= r.displayName and d.Text == r.name then
+					table.insert(koreanLeft, d:GetFullName())
+				end
+			end
+		end
+	end
+	check(
+		#koreanLeft == 0,
+		"화면에 한국어 등급 이름만 있는 글자 없음: " .. table.concat(koreanLeft, ", ")
 	)
 
 	print("[6판: 퓨전 머신·제단·비밀 통로 없음]")

@@ -206,7 +206,7 @@ local function buildCard(payload: any, track: (Frame) -> ())
 		BackgroundColor3 = rcolor,
 		TextColor3 = Theme.rarityText(rarityId),
 		TextSize = 22,
-		Text = if rarity then rarity.name else rarityId,
+		Text = if rarity then rarity.displayName else rarityId,
 		Parent = card,
 	})
 	Ui.corner(1).Parent = rarityTag

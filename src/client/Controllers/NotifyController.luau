@@ -149,7 +149,7 @@ function NotifyController.rareEggText(payload: any): string?
 		return nil
 	end
 	local rarity = Rarities.get(tostring(payload.rarity or pet.rarity))
-	local rarityName = if rarity then rarity.name else ""
+	local rarityName = if rarity then rarity.displayName else ""
 	return string.format(
 		'<font color="%s">%s</font>에 <font color="%s">%s</font> <font color="#FFD23C">%s</font> 씨앗 등장!',
 		hex(Color3.fromRGB(90, 235, 90)),

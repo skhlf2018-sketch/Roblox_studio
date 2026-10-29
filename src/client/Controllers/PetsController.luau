@@ -281,7 +281,7 @@ function PetsController.start()
 			Ui.label(
 				string.format(
 					"%s열매 1개 %s",
-					if rarity then rarity.name .. " · " else "",
+					if rarity then rarity.displayName .. " · " else "",
 					Format.money(FruitRules.fruitValue(record))
 				),
 				UDim2.new(1, -8, 0, 20),

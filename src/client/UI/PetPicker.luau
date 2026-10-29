@@ -380,7 +380,7 @@ local function makeCard(s: Session, item: Item, order: number, parent: Instance)
 	local infoFn = s.opts.info
 	local infoText = if infoFn then infoFn(item) else nil
 	Ui.label(
-		infoText or ((if rarity then rarity.name .. " · " else "") .. "열매 " .. Format.money(valueOf(item))),
+		infoText or ((if rarity then rarity.displayName .. " · " else "") .. "열매 " .. Format.money(valueOf(item))),
 		UDim2.new(1, -8, 0, 18),
 		15,
 		C.money,

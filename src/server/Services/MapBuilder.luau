@@ -103,7 +103,7 @@ local MapBuilder = {}
 MapBuilder.PART_BUDGET = {
 	zone = 400, -- 구역 하나 (Zones/<id> 아래 BasePart 전부: 바닥·담장·아치·둥지·특수 장소·장식)
 	-- Workspace.Map 전체 (허브 + 구역 18 + 베이스 7, 러닝머신 모양 포함).
-	-- [7판 수석 임시] 구역 15 → 18 이라 7,000 → 8,000 (6판 맵 약 6,300 + 새 구역 3개 약 900). 새 구역을 꾸밀 때 선임이 다시 정함
+	-- 7판: 구역 15 → 18 이라 7,000 → 8,000. 선임이 새 구역 3개를 꾸민 뒤 맵 약 7,240 (새 구역 각 약 300) — 8,000 그대로
 	map = 8000,
 }
 -- 장식은 구역이 이 수에 닿으면 더 안 놓음 (분위기 파티클 상자 1 + 여유를 남김)
@@ -1083,10 +1083,11 @@ local SMOKE_TEX = "rbxasset://textures/particles/smoke_main.dds"
 
 local function ambientEmitter(kind: string, center: Vector3, size: number, parent: Instance, biomeId: string)
 	local low = kind == "bubbles" or kind == "mist" or kind == "fireflies" or kind == "embers"
+	local tall = kind == "glitch" -- 7판 버그 차원: 바닥 2 ~ 22 높이 어디서나 깨진 조각이 깜빡
 	local box = makePart({
 		name = "Ambient",
-		size = Vector3.new(size, if low then 2 else 1, size),
-		cframe = CFrame.new(center.X, if low then FLOOR_TOP + 1.5 else 28, center.Z),
+		size = Vector3.new(size, if low then 2 elseif tall then 20 else 1, size),
+		cframe = CFrame.new(center.X, if low then FLOOR_TOP + 1.5 elseif tall then FLOOR_TOP + 12 else 28, center.Z),
 		parent = parent,
 		transparency = 1,
 		canCollide = false,
@@ -1163,6 +1164,40 @@ local function ambientEmitter(kind: string, center: Vector3, size: number, paren
 			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 230, 90)),
 		})
 		e.Size = NumberSequence.new(0.4)
+	elseif kind == "code" then
+		-- 7판 해커 연구소: 하늘에서 초록 코드 줄이 주르륵 (세로로 늘인 빛 조각)
+		e.Color = ColorSequence.new(Color3.fromRGB(60, 255, 110))
+		e.LightEmission = 1
+		e.Size = NumberSequence.new(0.35)
+		e.Squash = NumberSequence.new(3)
+		e.Orientation = Enum.ParticleOrientation.VelocityParallel
+		e.Speed = NumberRange.new(6, 9)
+		e.SpreadAngle = Vector2.new(0, 0)
+		e.Acceleration = Vector3.new(0, -3, 0)
+		e.Lifetime = NumberRange.new(3, 4)
+		e.RotSpeed = NumberRange.new(0, 0)
+		e.Rotation = NumberRange.new(0, 0)
+		e.Rate = 45
+	elseif kind == "glitch" then
+		-- 7판 버그 차원: 공중에서 깜빡 나타났다 사라지는 분홍·초록 깨진 조각
+		e.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 200)),
+			ColorSequenceKeypoint.new(0.49, Color3.fromRGB(255, 0, 200)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 90)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 90)),
+		})
+		e.LightEmission = 1
+		e.Size = NumberSequence.new(0.9)
+		e.Squash = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, -1.5),
+			NumberSequenceKeypoint.new(0.5, 1.5),
+			NumberSequenceKeypoint.new(1, -1),
+		})
+		e.Speed = NumberRange.new(0, 0.3)
+		e.Acceleration = Vector3.zero
+		e.Lifetime = NumberRange.new(0.3, 0.8)
+		e.Transparency = NumberSequence.new(0.1)
+		e.Rate = 40
 	elseif kind == "mist" then
 		e.Texture = SMOKE_TEX
 		e.Color = ColorSequence.new(Color3.fromRGB(170, 130, 220))
@@ -1904,6 +1939,192 @@ DECOR.leafpile = function(parent, pos, rng, _theme)
 end
 
 ------------------------------------------------------------------
+-- 7판 새 구역 장식 (선임)
+--   해커 연구소: serverrack(서버 랙 + 깜빡이 줄) · codecolumn(공중에 떠 있는 초록 코드 줄) · cables(바닥 전선, 가운데 흩기)
+--   개발자의 방: desk(책상 + 모니터 + 키보드 + 커피) · giantmug(큰 커피잔) · toyblock(스터드 블록 쌓기) ·
+--     stickynote · pencil (가운데 흩기)
+--   버그 차원: upsidetree(거꾸로 나무) · missingtex(분홍·검정 체크 "텍스처 없음" 상자) · glitchpixel(바닥 깨진 픽셀, 흩기)
+------------------------------------------------------------------
+
+local STUDIO_COLORS = {
+	Color3.fromRGB(13, 105, 172), -- Bright blue
+	Color3.fromRGB(196, 40, 28), -- Bright red
+	Color3.fromRGB(245, 205, 48), -- Bright yellow
+	Color3.fromRGB(40, 127, 71), -- Dark green
+}
+local GLITCH_PINK = Color3.fromRGB(255, 0, 200)
+local GLITCH_GREEN = Color3.fromRGB(0, 255, 90)
+
+DECOR.serverrack = function(parent, pos, rng, theme)
+	local h = rng:NextNumber(11, 15)
+	-- 앞(-Z 쪽 깜빡이 줄)이 복도 가운데를 보게
+	local base = CFrame.lookAt(pos, Vector3.new(0, pos.Y, pos.Z))
+	local metal = Color3.fromRGB(28, 32, 36)
+	P(parent, "Block", Vector3.new(5, h, 3.2), base * CFrame.new(0, h / 2, 0), metal, M.Metal, true)
+	for k = 1, 3 do
+		P(
+			parent,
+			"Block",
+			Vector3.new(4, 0.3, 0.2),
+			base * CFrame.new(0, h * k / 4, -1.62),
+			rgb(if k == 2 then theme.accent2 else theme.accent),
+			M.Neon
+		)
+	end
+	P(parent, "Block", Vector3.new(5.4, 0.5, 3.6), base * CFrame.new(0, h + 0.25, 0), metal:Lerp(WHITE, 0.12), M.Metal)
+end
+
+DECOR.codecolumn = function(parent, pos, rng, theme)
+	local c = rgb(theme.accent)
+	local y = rng:NextNumber(8, 22)
+	for k = 0, 2 do
+		local len = rng:NextNumber(2, 5.5)
+		P(
+			parent,
+			"Block",
+			Vector3.new(0.5, len, 0.5),
+			at(pos, (k - 1) * 1.4, y + rng:NextNumber(0, 5), rng:NextNumber(-0.6, 0.6)),
+			c,
+			M.Neon,
+			false,
+			0.35
+		)
+	end
+end
+
+DECOR.cables = function(parent, pos, rng, theme)
+	local cf = yawAt(pos, rng)
+	flatAt(parent, "Block", 0.7, rng:NextNumber(5, 9), cf, L.Y_DETAIL, Color3.fromRGB(25, 25, 30), M.SmoothPlastic)
+	flatAt(
+		parent,
+		"Block",
+		0.3,
+		rng:NextNumber(4, 7),
+		cf * CFrame.new(0.8, 0, 0),
+		L.Y_DETAIL + 0.02,
+		rgb(theme.accent),
+		M.Neon
+	)
+end
+
+DECOR.desk = function(parent, pos, rng, theme)
+	local base = CFrame.lookAt(pos, Vector3.new(0, pos.Y, pos.Z)) * CFrame.Angles(0, rng:NextNumber(-0.3, 0.3), 0)
+	local wood = Color3.fromRGB(196, 150, 100)
+	P(parent, "Block", Vector3.new(9, 0.6, 4.5), base * CFrame.new(0, 4, 0), wood, M.WoodPlanks, true)
+	for _, sx in { -1, 1 } do
+		P(
+			parent,
+			"Block",
+			Vector3.new(0.6, 3.7, 4),
+			base * CFrame.new(sx * 4, 1.85, 0),
+			wood:Lerp(BLACK, 0.2),
+			M.Wood,
+			true
+		)
+	end
+	-- 모니터 (복도 쪽 = -Z 를 봄): 받침 + 검은 틀 + 파란 화면
+	P(parent, "Block", Vector3.new(0.5, 1.4, 0.5), base * CFrame.new(0, 5, 1.2), BLACK)
+	P(parent, "Block", Vector3.new(5.2, 3.2, 0.3), base * CFrame.new(0, 7, 1.2), BLACK)
+	local screen =
+		P(parent, "Block", Vector3.new(4.7, 2.7, 0.1), base * CFrame.new(0, 7, 1.02), rgb(theme.accent2), M.Neon)
+	screen.Name = "Screen"
+	P(parent, "Block", Vector3.new(3.2, 0.2, 1.1), base * CFrame.new(0, 4.4, -0.8), Color3.fromRGB(230, 230, 236))
+	P(parent, "VCyl", Vector3.new(0.8, 1, 0), base * CFrame.new(3.3, 4.8, -0.6), WHITE)
+end
+
+DECOR.giantmug = function(parent, pos, rng, theme)
+	local d = rng:NextNumber(3.6, 4.6)
+	local h = d * 1.15
+	local cf = yawAt(pos, rng)
+	local cup = rgb(theme.accent2)
+	P(parent, "VCyl", Vector3.new(d, h, 0), cf * CFrame.new(0, h / 2, 0), cup, M.SmoothPlastic, true)
+	P(parent, "VCyl", Vector3.new(d * 0.86, 0.1, 0), cf * CFrame.new(0, h - 0.2, 0), Color3.fromRGB(90, 52, 30))
+	P(parent, "Block", Vector3.new(0.6, h * 0.55, 1.6), cf * CFrame.new(d / 2 + 0.6, h * 0.55, 0), cup)
+end
+
+DECOR.toyblock = function(parent, pos, rng, _theme)
+	local base = yawAt(pos, rng)
+	local n = rng:NextInteger(2, 3)
+	local y = 0
+	for k = 1, n do
+		local w = rng:NextNumber(2.6, 4)
+		local h = rng:NextNumber(1.6, 2.4)
+		B(
+			parent,
+			Vector3.new(w, h, w * rng:NextNumber(0.6, 1)),
+			base
+				* CFrame.new(rng:NextNumber(-0.6, 0.6), y + h / 2, rng:NextNumber(-0.6, 0.6))
+				* CFrame.Angles(0, k * 0.4, 0),
+			pick(rng, STUDIO_COLORS),
+			k == 1
+		)
+		y += h
+	end
+end
+
+DECOR.stickynote = function(parent, pos, rng, _theme)
+	local colors = { Color3.fromRGB(255, 240, 120), Color3.fromRGB(255, 170, 200), Color3.fromRGB(150, 230, 255) }
+	flatAt(parent, "Block", 2.2, 2.2, yawAt(pos, rng), L.Y_DETAIL, pick(rng, colors), M.SmoothPlastic)
+end
+
+DECOR.pencil = function(parent, pos, rng, _theme)
+	local cf = yawAt(pos, rng) * CFrame.new(0, 0.35, 0)
+	P(parent, "Cyl", Vector3.new(5, 0.7, 0.7), cf, Color3.fromRGB(255, 200, 40))
+	P(parent, "Cyl", Vector3.new(0.8, 0.72, 0.72), cf * CFrame.new(-2.8, 0, 0), Color3.fromRGB(255, 150, 170))
+end
+
+DECOR.upsidetree = function(parent, pos, rng, theme)
+	local base = yawAt(pos, rng)
+	local leaf = rgb(theme.accent2)
+	local w = rng:NextNumber(6.5, 8.5)
+	local h = rng:NextNumber(7, 10)
+	-- 잎 덩어리가 바닥에 (거꾸로), 줄기가 위로, 뿌리가 하늘로
+	B(parent, Vector3.new(w, 2.6, w), base * CFrame.new(0, 1.3, 0), leaf, true)
+	B(parent, Vector3.new(w * 0.7, 2, w * 0.7), base * CFrame.new(0, 3.2, 0), leaf:Lerp(BLACK, 0.15))
+	B(parent, Vector3.new(1.8, h, 1.8), base * CFrame.new(0, 4.2 + h / 2, 0), Color3.fromRGB(70, 40, 80), true)
+	for k = 1, 3 do
+		local a = k * math.pi * 2 / 3
+		B(
+			parent,
+			Vector3.new(0.7, 3, 0.7),
+			base
+				* CFrame.new(0, 4.2 + h + 1, 0)
+				* CFrame.Angles(0, a, 0)
+				* CFrame.new(0, 0, -0.9)
+				* CFrame.Angles(-0.6, 0, 0),
+			Color3.fromRGB(70, 40, 80)
+		)
+	end
+end
+
+DECOR.missingtex = function(parent, pos, rng, _theme)
+	-- 로블록스 "텍스처 없음" 분홍·검정 체크 상자 (공중에 떠서 천천히 안 돌아감 — 서버 맵은 고정)
+	local s = rng:NextNumber(2, 2.8)
+	local cf = at(pos, 0, rng:NextNumber(4, 14), 0) * CFrame.Angles(rng:NextNumber(0, 1), rng:NextNumber(0, 3), 0.4)
+	for i = 0, 1 do
+		for j = 0, 1 do
+			P(
+				parent,
+				"Block",
+				Vector3.new(s, s, s * 2),
+				cf * CFrame.new((i - 0.5) * s, (j - 0.5) * s, 0),
+				if (i + j) % 2 == 0 then GLITCH_PINK else BLACK,
+				if (i + j) % 2 == 0 then M.Neon else M.SmoothPlastic
+			)
+		end
+	end
+end
+
+DECOR.glitchpixel = function(parent, pos, rng, _theme)
+	local colors = { GLITCH_PINK, GLITCH_GREEN, Color3.fromRGB(240, 240, 255) }
+	local s = rng:NextNumber(1.2, 2.6)
+	flatAt(parent, "Block", s, s, CFrame.new(pos), L.Y_DETAIL, pick(rng, colors), M.Neon)
+	if rng:NextNumber() < 0.5 then
+		flatAt(parent, "Block", s * 0.6, s * 0.6, CFrame.new(pos + Vector3.new(s, 0, s * 0.4)), L.Y_DETAIL, BLACK)
+	end
+end
+
+------------------------------------------------------------------
 -- 테마 색
 ------------------------------------------------------------------
 
@@ -2092,6 +2313,72 @@ local function floorPattern(parent: Instance, theme: BiomeTheme, fz0: number, fz
 		end
 		for j = 1, 5 do
 			patch(parent, "Block", L.HALF * 2, 0.4, 0, fz0 + j * len / 6, top, glow, M.Neon, 0, 0.6)
+		end
+	elseif kind == "circuit" then
+		-- 7판 해커 연구소: 회로 기판 (꺾인 초록 빛 줄 + 끝에 네모 패드). 같은 색·같은 높이라 겹쳐도 안 깜빡임
+		local glow = rgb(theme.accent)
+		for _ = 1, 9 do
+			local x, z = spot(16)
+			local a = rng:NextNumber(8, 22) * (if rng:NextNumber() < 0.5 then -1 else 1)
+			local b = rng:NextNumber(8, 22) * (if rng:NextNumber() < 0.5 then -1 else 1)
+			local ex = math.clamp(x + a, -L.HALF + 4, L.HALF - 4)
+			local ez = math.clamp(z + b, fz0 + 3, fz1 - 3)
+			patch(parent, "Block", math.abs(ex - x) + 0.6, 0.6, (x + ex) / 2, z, top, glow, M.Neon, 0, 0.25)
+			patch(parent, "Block", 0.6, math.abs(ez - z) + 0.6, ex, (z + ez) / 2, top, glow, M.Neon, 0, 0.25)
+			patch(parent, "Block", 2.4, 2.4, ex, ez, top, glow, M.Neon, 0, 0.25)
+		end
+	elseif kind == "baseplate" then
+		-- 7판 개발자의 방: 스튜디오 기본 바닥 (회색 스터드 + 진한 격자 줄 + 여기저기 놓인 색 블록 판)
+		local line = c:Lerp(BLACK, 0.18)
+		for i = -5, 5 do
+			patch(parent, "Block", 0.4, len, i * 20, (fz0 + fz1) / 2, top, line, M.SmoothPlastic)
+		end
+		local n = math.floor(len / 20)
+		for j = 1, n do
+			patch(parent, "Block", L.HALF * 2, 0.4, 0, fz0 + j * (len / (n + 1)), top, line, M.SmoothPlastic)
+		end
+		for k = 1, 4 do
+			local x, z = spot(12)
+			patch(
+				parent,
+				"Block",
+				rng:NextNumber(10, 18),
+				rng:NextNumber(10, 18),
+				x,
+				z,
+				top + 0.01 * k,
+				STUDIO_COLORS[(k - 1) % #STUDIO_COLORS + 1]
+			)
+		end
+	elseif kind == "pixels" then
+		-- 7판 버그 차원: 깨진 픽셀 바닥 (8 스터드 칸 중 겹치지 않게 골라 분홍·초록·흰 네온 / 검은 구멍)
+		local colors = { GLITCH_PINK, GLITCH_GREEN, Color3.fromRGB(235, 235, 255), BLACK }
+		local cell = 8
+		local nx = math.floor(L.HALF * 2 / cell)
+		local nz = math.floor(len / cell)
+		local used: { [number]: boolean } = {}
+		for k = 1, 34 do
+			local i, j = rng:NextInteger(0, nx - 1), rng:NextInteger(0, nz - 1)
+			local key = i * 1000 + j
+			local x = -L.HALF + (i + 0.5) * cell
+			if not used[key] and math.abs(x) >= avoidX then
+				used[key] = true
+				local color = colors[(k - 1) % #colors + 1]
+				local s = cell * rng:NextNumber(0.5, 1)
+				patch(
+					parent,
+					"Block",
+					s,
+					s,
+					x,
+					fz0 + (j + 0.5) * cell,
+					top,
+					color,
+					if color == BLACK then M.SmoothPlastic else M.Neon,
+					0,
+					if color == BLACK then 0 else 0.3
+				)
+			end
 		end
 	end
 end
@@ -2333,6 +2620,60 @@ local function wallDecor(parent: Instance, theme: BiomeTheme, z0: number, rng: R
 				if k % 2 == 0 then
 					light(lit, glowColor, 16, 1.2)
 				end
+			elseif kind == "screens" then
+				-- 7판 해커 연구소: 담장에 걸린 모니터 (검은 틀 + 초록 화면 + 코드 줄 2)
+				B(parent, Vector3.new(9, 7, 0.4), on(0, 26, 0.2), Color3.fromRGB(20, 22, 26), false, M.SmoothPlastic)
+				local screen = P(
+					parent,
+					"Block",
+					Vector3.new(8, 6, 0.2),
+					on(0, 26, 0.45),
+					accent:Lerp(BLACK, 0.55),
+					M.Neon,
+					false,
+					0.1
+				)
+				screen.Name = "WallLight"
+				for i = 1, 2 do
+					P(
+						parent,
+						"Block",
+						Vector3.new(rng:NextNumber(3, 6.5), 0.5, 0.1),
+						on(rng:NextNumber(-0.8, 0.8), 27.5 - i * 1.6, 0.6),
+						accent,
+						M.Neon
+					)
+				end
+				if k % 2 == 0 then
+					light(screen, accent, 14, 1)
+				end
+			elseif kind == "toyshelf" then
+				-- 7판 개발자의 방: 선반 + 스터드 블록 2개
+				B(parent, Vector3.new(10, 0.6, 2.4), on(0, 20, 1.2), Color3.fromRGB(196, 150, 100), false, M.WoodPlanks)
+				for i = -1, 1, 2 do
+					local s = rng:NextNumber(1.8, 2.6)
+					B(
+						parent,
+						Vector3.new(s, s, s),
+						on(i * 2.6, 20.3 + s / 2, 1.2) * CFrame.Angles(0, rng:NextNumber(-0.4, 0.4), 0),
+						STUDIO_COLORS[rng:NextInteger(1, #STUDIO_COLORS)]
+					)
+				end
+			elseif kind == "glitchwall" then
+				-- 7판 버그 차원: 담장이 찢어져 어긋난 조각 (분홍·초록 네온 덩어리가 튀어나옴)
+				for i = 1, 2 do
+					local lit = P(
+						parent,
+						"Block",
+						Vector3.new(rng:NextNumber(4, 9), rng:NextNumber(2, 6), rng:NextNumber(0.6, 2)),
+						on(rng:NextNumber(-5, 5), rng:NextNumber(10, 46), 0.4),
+						if i == 1 then GLITCH_PINK else GLITCH_GREEN,
+						M.Neon,
+						false,
+						0.15
+					)
+					lit.Name = "WallLight"
+				end
 			elseif kind == "candystripes" then
 				for i = -1, 1, 2 do
 					P(
@@ -2468,6 +2809,40 @@ local function archStyle(theme: BiomeTheme): ArchStyle
 			bmat = M.SmoothPlastic,
 			cap = "lollipop",
 			center = "candy",
+		}
+	elseif style == "terminal" then
+		-- 7판 해커 연구소: 검은 금속 기둥 + 초록 LED + 가운데 자물쇠
+		local metal = Color3.fromRGB(30, 34, 38)
+		return {
+			pillar = metal,
+			pmat = M.Metal,
+			base = BLACK,
+			beam = metal,
+			bmat = M.Metal,
+			cap = "led",
+			center = "lock",
+		}
+	elseif style == "toyblocks" then
+		-- 7판 개발자의 방: 파랑 기둥 · 빨강 받침 · 노랑 보 + 스터드 블록 머리 + 가운데 톱니(설정)
+		return {
+			pillar = STUDIO_COLORS[1],
+			pmat = M.Plastic,
+			base = STUDIO_COLORS[2],
+			beam = STUDIO_COLORS[3],
+			bmat = M.Plastic,
+			cap = "toyblock",
+			center = "gear",
+		}
+	elseif style == "glitch" then
+		-- 7판 버그 차원: 검보라 기둥 + 어긋난 픽셀 머리 + 가운데 빨간 경고 표시
+		return {
+			pillar = pil,
+			pmat = M.SmoothPlastic,
+			base = BLACK,
+			beam = rgb(theme.wall),
+			bmat = M.SmoothPlastic,
+			cap = "pixel",
+			center = "error",
 		}
 	elseif style == "gothic" then
 		return {
@@ -2625,6 +3000,67 @@ local function archOrnament(parent: Instance, kind: string, pos: Vector3, theme:
 		local c = Color3.fromRGB(255, 90, 160)
 		P(parent, "Ell", Vector3.new(6, 4, 4), cf * CFrame.new(0, 2.5, 0), c)
 		P(parent, "Block", Vector3.new(10, 1.6, 1.6), cf * CFrame.new(0, 2.5, 0), c:Lerp(WHITE, 0.5))
+	elseif kind == "led" then
+		local led = P(parent, "Block", Vector3.new(3, 3, 3) * s, cf * CFrame.new(0, 1.5 * s, 0), accent, M.Neon)
+		if big then
+			light(led, accent, 20, 1.2)
+		end
+	elseif kind == "lock" then
+		-- 자물쇠: 몸통 + 고리(기둥 2 + 위) + 열쇠 구멍
+		local body = Color3.fromRGB(60, 66, 72)
+		B(parent, Vector3.new(6, 5, 2), cf * CFrame.new(0, 2.5, 0), body, false, M.Metal)
+		for _, sx in { -1, 1 } do
+			P(parent, "Block", Vector3.new(0.8, 3.4, 0.8), cf * CFrame.new(sx * 1.9, 6.3, 0), accent, M.Neon)
+		end
+		P(parent, "Block", Vector3.new(4.6, 0.8, 0.8), cf * CFrame.new(0, 8, 0), accent, M.Neon)
+		P(parent, "Block", Vector3.new(0.8, 1.6, 0.3), cf * CFrame.new(0, 2.3, -1.1), accent2, M.Neon)
+	elseif kind == "toyblock" then
+		B(parent, Vector3.new(5, 2.4, 5) * s, cf * CFrame.new(0, 1.2 * s, 0), STUDIO_COLORS[2])
+		B(
+			parent,
+			Vector3.new(3, 2, 3) * s,
+			cf * CFrame.new(0.5, 3.4 * s, 0) * CFrame.Angles(0, 0.4, 0),
+			STUDIO_COLORS[4]
+		)
+	elseif kind == "gear" then
+		-- 톱니 (스튜디오 설정 아이콘): 원판 + 이 6개 + 가운데 구멍
+		local gray = Color3.fromRGB(163, 162, 165)
+		local c = cf * CFrame.new(0, 4.5, 0)
+		P(parent, "Cyl", Vector3.new(1, 6.5, 6.5), c * CFrame.Angles(0, math.pi / 2, 0), gray)
+		for k = 0, 5 do
+			P(
+				parent,
+				"Block",
+				Vector3.new(1.8, 1.8, 0.9),
+				c * CFrame.Angles(0, 0, k * math.pi / 3) * CFrame.new(0, 3.6, 0),
+				gray
+			)
+		end
+		P(parent, "Cyl", Vector3.new(1.1, 2.2, 2.2), c * CFrame.Angles(0, math.pi / 2, 0), STUDIO_COLORS[1])
+	elseif kind == "pixel" then
+		for k = 0, 2 do
+			P(
+				parent,
+				"Block",
+				Vector3.new(2.2, 2.2, 2.2) * s,
+				cf * CFrame.new((k - 1) * 1.4 * s, (1 + k * 1.6) * s, (k % 2) * 0.8),
+				if k == 1 then GLITCH_GREEN else GLITCH_PINK,
+				M.Neon
+			)
+		end
+	elseif kind == "error" then
+		-- 빨간 경고 마름모 + 흰 느낌표
+		local warn = P(
+			parent,
+			"Block",
+			Vector3.new(6.5, 6.5, 0.8),
+			cf * CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, math.pi / 4),
+			Color3.fromRGB(235, 40, 40),
+			M.Neon
+		)
+		P(parent, "Block", Vector3.new(0.9, 2.6, 1), cf * CFrame.new(0, 5.6, 0), WHITE, M.SmoothPlastic)
+		P(parent, "Block", Vector3.new(0.9, 0.9, 1), cf * CFrame.new(0, 3.6, 0), WHITE, M.SmoothPlastic)
+		light(warn, Color3.fromRGB(255, 60, 60), 20, 1.2)
 	elseif kind == "pumpkin" then
 		local pumpkin =
 			P(parent, "Ell", Vector3.new(7, 5.5, 6), cf * CFrame.new(0, 2.8, 0), Color3.fromRGB(255, 140, 30))
@@ -2703,6 +3139,7 @@ end
 -- 둥지 (MapLayout.nestsFor 자리) — 4판: 태그 파트(크기·높이 그대로 = 알 높이) + 바닥 그림자 + 짚 다발 링
 --   짚(기본) / 눈 덮인 짚(눈) / 모래·조개(심연의 바다) / 그을린 나뭇가지(화산) / 마른 가지(유령 성) /
 --   솜사탕(사탕 왕국) / 이끼(마법의 숲) / 꽃잎 섞인 짚(벚꽃) / 통나무·뼈 큰 둥지(선사시대) / 작은 둥근 그릇(코스믹)
+--   7판: 회로 블록 + 초록 빛 구슬(해커 연구소) / 스터드 블록(개발자의 방) / 분홍·검정 깨진 픽셀 블록(버그 차원)
 --   둥지 하나 = 10 파트 (그릇 4) → 구역마다 80
 ------------------------------------------------------------------
 
@@ -2716,6 +3153,10 @@ local NEST_STYLE: { [string]: string } = {
 	candy_kingdom = "candy",
 	enchanted_forest = "moss",
 	cherry_blossom = "petal",
+	-- 7판 (선임): 해커 연구소 = 검은 회로 + 초록 빛 구슬 · 개발자의 방 = 스터드 블록 · 버그 차원 = 깨진 픽셀 블록
+	hacker_lab = "circuit",
+	developer_room = "toy",
+	bug_dimension = "pixel",
 }
 
 -- 스타일 → 다발 색 A, 다발 색 B, 삐죽 나온 짚 색, 둥지 안쪽(태그 파트) 색, 다발 재질
@@ -2777,6 +3218,27 @@ local NEST_LOOKS: { [string]: NestLook } = {
 		stick = Color3.fromRGB(176, 118, 56),
 		inner = Color3.fromRGB(128, 84, 44),
 		mat = M.Grass,
+	},
+	circuit = {
+		a = Color3.fromRGB(34, 40, 38),
+		b = Color3.fromRGB(24, 30, 28),
+		stick = Color3.fromRGB(60, 255, 110),
+		inner = Color3.fromRGB(18, 22, 20),
+		mat = M.Metal,
+	},
+	toy = {
+		a = Color3.fromRGB(13, 105, 172),
+		b = Color3.fromRGB(245, 205, 48),
+		stick = Color3.fromRGB(196, 40, 28),
+		inner = Color3.fromRGB(163, 162, 165),
+		mat = M.Plastic,
+	},
+	pixel = {
+		a = Color3.fromRGB(255, 0, 200),
+		b = Color3.fromRGB(20, 12, 30),
+		stick = Color3.fromRGB(0, 255, 90),
+		inner = Color3.fromRGB(30, 16, 44),
+		mat = M.SmoothPlastic,
 	},
 }
 
@@ -2862,7 +3324,24 @@ local function buildNest(biomeId: string, index: number, pos: Vector3, parent: I
 		local a = (i + 0.5) / n * math.pi * 2
 		local cf = CFrame.new(pos.X + math.cos(a) * r, FLOOR_TOP + 1.4 + (i % 2) * 0.12, pos.Z + math.sin(a) * r)
 			* CFrame.Angles(0, -a, rng:NextNumber(-0.12, 0.12))
-		P(parent, "Ell", Vector3.new(1.9, 1.35, lenT), cf, if i % 2 == 0 then look.a else look.b, look.mat)
+		if style == "toy" or style == "pixel" or style == "circuit" then
+			-- 7판: 네모 블록 다발 (스터드 블록 / 깨진 픽셀 / 회로 기판)
+			local block = P(
+				parent,
+				"Block",
+				Vector3.new(1.7, 1.3, lenT * 0.85),
+				cf,
+				if i % 2 == 0 then look.a else look.b,
+				look.mat
+			)
+			if style == "toy" then
+				studify(block)
+			elseif style == "pixel" and i % 2 == 0 then
+				block.Material = M.Neon
+			end
+		else
+			P(parent, "Ell", Vector3.new(1.9, 1.35, lenT), cf, if i % 2 == 0 then look.a else look.b, look.mat)
+		end
 	end
 	-- 삐죽 나온 짚 2개 (조개 둥지는 분홍 조개, 화산은 불씨, 마법의 숲은 빛나는 새싹)
 	--   링 바깥쪽에 둘레 방향(접선)으로만 놓음 → 가운데 알 자리(반지름 ≈ 3.2)를 절대 가로지르지 않음
@@ -2873,7 +3352,7 @@ local function buildNest(biomeId: string, index: number, pos: Vector3, parent: I
 			* CFrame.Angles(0, -a + rng:NextNumber(-0.25, 0.25), 0)
 		if style == "shell" then
 			P(parent, "Ell", Vector3.new(1.6, 0.6, 1.3), cf, look.stick)
-		elseif style == "charred" or style == "moss" then
+		elseif style == "charred" or style == "moss" or style == "circuit" or style == "pixel" then
 			P(parent, "Ball", Vector3.new(0.7, 0, 0), cf, look.stick, M.Neon)
 		else
 			B(

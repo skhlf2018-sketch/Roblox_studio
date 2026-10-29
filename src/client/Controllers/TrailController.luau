@@ -31,23 +31,24 @@ local TrailController = {}
 local C = Theme.Colors
 local NAME = "Trail"
 local SIZE = Vector2.new(860, 560) -- 2026-10-28: 470 이면 카드(330 + 버튼) 아래 "사기" 버튼이 창 밖으로 잘려 못 삼 (사장님 "안 사진다")
+-- 7판: 카드 등급 글자도 영어 (사장님 "화면 표시 이름은 영어"). 1~10 = 등급 이름(Theme.rarityName), 11~16 = 트레일 특별 등급
 local GRADES = {
-	"일반",
-	"일반",
-	"희귀",
-	"희귀",
-	"전설",
-	"신화",
-	"코스믹",
-	"비밀",
-	"영원",
-	"신성",
-	"문블룸",
-	"무지개",
-	"용암",
-	"별빛",
-	"우주",
-	"슈퍼 울트라디바인",
+	Theme.rarityName("common"),
+	Theme.rarityName("common"),
+	Theme.rarityName("rare"),
+	Theme.rarityName("rare"),
+	Theme.rarityName("legendary"),
+	Theme.rarityName("mythic"),
+	Theme.rarityName("cosmic"),
+	Theme.rarityName("secret"),
+	Theme.rarityName("eternity"),
+	Theme.rarityName("divine"),
+	"Moonbloom",
+	"Rainbow",
+	"Lava",
+	"Starlight",
+	"Galaxy",
+	"Super Ultradivine",
 }
 
 -- 블록 캐릭터 그림 (트레일 색 옷 + 뒤로 흐르는 꼬리)

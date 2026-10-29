@@ -1,4 +1,4 @@
-# 화면·소리·생김새 (UI.md) — 6판 "씨앗을 훔치세요"
+# 화면·소리·생김새 (UI.md) — 7판 "씨앗을 훔치세요" (등급 16개 · 구역 18개)
 
 작성: 선임 (2026-10-18 처음 · 2판 원작 스타일 · 5판 2026-10-22 · **7차 전면 갱신 = 6판 "씨앗을 훔치세요", 2026-10-27**).
 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다. 이전 기록(알·펫·퓨전·제단·우리 펫 걷기)은 git 이력에.
@@ -6,6 +6,36 @@
 원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨. 배치 숫자는 전부 수석의 `src/shared/Data/MapLayout.luau`, Remote 는 `docs/REMOTES.md`, 규칙은 `docs/SEED_GAME_DESIGN.md`.
 
 **6판 용어** (화면 글): 알 → **씨앗** · 우리 → **정원** · 부화 → **성체가 됨** · 펫 → **(성체) 식물** · 돈 `$` → **코인** (`Format.money(n)` = "1.5K 코인") · 쓰다듬기 → **물 주기** · 경비 → **식물 괴물**. Remote·모듈·태그·변수 이름은 5판 그대로인 것이 많음 (`PetPet`, `IncubatingEgg`, `PetsController`, `PetModels` …).
+
+## 0. 7판 (선임 2026-10-29) — 등급 16개 · 구역 18개 · 식물 158종 · 성장 3배
+
+- **등급 글자 = 영어**: 화면의 등급은 전부 `Rarities.displayName` (`Theme.rarityName(id)` 가 이것을 돌려줌) — Common … Divine · Super · Hacker · Original · Developer · Ultradivine · **"H?a.(cke_r!#"**(16번 해커 글리치, 글자 그대로). 쓰는 곳: 도감(상세 + 카드 아래 `RarityTag`) · 성체 카드 · 자라는 씨앗/가방 카드 · 정원 식물 창 · 열매 가방 · 고르기 창(PetPicker) · 희귀 씨앗 배너(`NotifyController.rareEggText`) · 채팅 공지(`AnnounceController.textFor` — 서버 글의 한국어 등급을 payload `rarity` 로 다시 씀) · 둥지 씨앗 이름표·프롬프트(`EggService.eggTitle`) · 둥지 옆 장식 식물 이름표 · 특별 씨앗 글자("Secret 씨앗!" … "H?a.(cke_r!# 씨앗!") · 트레일 카드 등급(Common … Divine, 11~16은 Moonbloom · Rainbow · Lava · Starlight · Galaxy · Super Ultradivine).
+- **무지개 띠** `Theme.RainbowRarities` = 신성 · 슈퍼 · 울트라디바인 · 해커 글리치. 해커 글리치는 무지개 대신 **깨진 띠** `Theme.GLITCH` (`Theme.bandFor(id)`).
+- **깨진 색 깜빡임**: 파트에 `EggShell` 태그 + Attr **`Glitch`** → `WorldFxController` 가 무지개 순환과 같은 루프(0.08초)에서 분홍·초록·흰·검정·하늘 중 하나로 뚝뚝 바꿈 (Instance 안 만듦). 해커 글리치 씨앗 줄무늬 4개 · glitch_static 고리 픽셀 6개 · glitch 모양 식물 꽃잎 · 글리치 장미 괴물 픽셀 6개. 실버·황금·무지개 돌연변이 식물은 꽃잎 Glitch 를 지움(돌연변이 색이 보이게).
+- **새 아우라 5개** (`Visuals.auras`, 파티클·빛은 지금처럼 희귀 이상 + 꺼진 채 + 100 스터드 안만 켬, 고리는 정원 식물 모델에만):
+
+| 등급 | 아우라 | 파티클 | 고정 파트 (`AuraRing`) | 빛기둥 |
+|---|---|---|---|---|
+| Hacker | code_rain | `code` 초록 줄이 튀었다 주르륵 (Squash 세로) | 세로 코드 줄 6 | – |
+| Original | first_light | `motes` 금빛 먼지가 천천히 떠오름 | 뒤에 세운 햇살 원판 + 빛살 6 | – |
+| Developer | build_grid | `grid` 제자리 파란 점 깜빡 | 빛 격자 상자 (기둥 4 + 윗변 4) | – |
+| Ultradivine | ultra_halo | rainbow | 흰 후광 6 + 무지개 후광 6 (두 겹) | 무지개 |
+| H?a.(cke_r!# | glitch_static | `glitch` 아주 짧게 튀는 분홍·초록 찌그러진 조각 | 떠 있는 깨진 픽셀 6 (Glitch) | 분홍·초록 끊긴 띠 |
+
+- **씨앗 껍데기** (`Visuals.eggLooks`, ≤ 8 파트 그대로): 해커 검정 + 초록 회로 줄 · 오리지널 상아 + 구리 줄 + 금 끝 · 개발자 흰 + 파란 줄 + 흰 보석 · 울트라디바인 흰 + 무지개 줄 + 금 별 · 해커 글리치 검보라 + Glitch 줄. 특별 씨앗 빛기둥 `specialEggs[..].beam` = "rainbow"(신성·슈퍼·울트라디바인) / "glitch"(해커 글리치). 성체 크기 `RARITY_SCALE` 16칸 (11번 위로 2.04 ~ 2.2).
+- **식물 모양 19종** (`PLANT_FORMS` + 7판 `circuit` 네모 줄기·회로 줄·칩 / `blocky` 스터드 블록 쌓기 / `glitch` 거꾸로 + 떠 있는 깨진 픽셀). 이름 낱말: mainframe·wifi·circuit → circuit, block_·keyboard·studio·monitor → blocky, upside_down·static·broken_pixel → glitch, 나머지는 구역 테마 forms(해커 연구소 circuit/vine · 개발자의 방 blocky/cup · 버그 차원 glitch/rose).
+- **새 구역 3개** (`Visuals.biomes` + MapBuilder, 구역 하나 약 300 파트 · 맵 약 7,240 / 상한 8,000 그대로):
+
+| 구역 | 바닥 무늬 | 아치 (머리 · 가운데) | 담장 | 장식 (담장 쪽 · 가운데 흩기) | 둥지 | 분위기 |
+|---|---|---|---|---|---|---|
+| 16 해커 연구소 💻 | `circuit` 초록 회로 줄 + 패드 (검정 바닥, 검은 길) | `terminal` (LED · 자물쇠) | `screens` 모니터 | serverrack · codecolumn(떠다니는 코드) · satellite / cables · glowmoss | `circuit` 검은 블록 + 초록 빛 구슬 | `code` 초록 코드 비 |
+| 17 개발자의 방 🛠️ | `baseplate` 스튜디오 회색 기본 바닥 + 격자 + 색 블록 판 | `toyblocks` (블록 · 톱니) | `toyshelf` 선반 + 블록 | desk(모니터·키보드·커피) · toyblock · giantmug / stickynote · pencil | `toy` 파랑·노랑 스터드 블록 | `dust` |
+| 18 버그 차원 👾 | `pixels` 깨진 픽셀 (8칸 격자, 안 겹침) | `glitch` (어긋난 픽셀 · 빨간 경고) | `glitchwall` 찢어진 분홍·초록 조각 | upsidetree(거꾸로 나무) · missingtex(분홍·검정 체크 상자) · darkspike / glitchpixel · stars | `pixel` 분홍·검정 블록 | `glitch` 2~22 높이 깜빡 조각 |
+
+- **새 경비 3마리** (`Visuals.monsters`, scale·height 는 수석 값): 바이러스 덩굴 `virus_vine` (몸 `vines` + 머리 `virus` 돌기 공 + `tendrils` + `codebits`) · 디버그 선인장 `debug_cactus` (선인장 몸 + `glasses` 네모 안경 + `magnifier` 돋보기 + 파란 꽃) · 글리치 장미 괴물 `glitch_rose_monster` (분홍 장미 + `ghostlayer` 어긋난 겹 머리 + `pixelshards`). 자는 얼굴 ↔ 추격 눈썹 그대로.
+- **배경음**: `Bgm_hacker_lab` · `Bgm_developer_room` · `Bgm_bug_dimension` — 새 무료 id 를 못 골라서 있는 음악을 빠르기(`Sounds[..].speed` → PlaybackSpeed)만 바꿔 씀: 코스믹 ×1.15 · 베이스 ×0.85 · 유령 성 ×0.72.
+- **도감**: 구역 탭 18개 세로 스크롤, 카드 격자 스크롤(AutomaticCanvasSize), "잠금 해제 n/158"(전체 수는 데이터에서), 카드 아래 영어 등급.
+- **성장 3배**: 화면은 서버 `Required`(이미 ÷3)만 씀 — 표 시간(`Plants.growSeconds`)을 직접 보여 주는 곳 없음.
 
 ---
 
@@ -69,7 +99,7 @@
 - **특수 장소**: 6판은 **사쿠라 나무**(`SakuraIncubator`, 벚꽃 구역) 하나뿐. 제단·비밀 통로·퓨전 머신 자리는 비어 있음.
 - **베이스(7개)**: 정원(뒤 46, `PenArea`) + 앞마당. 앞마당에 스폰·**러닝머신**(`Treadmill`, 12×8)·**판매 가판대**(`SellStall` + `PlotIndex`, 간판 "열매 판매")·업그레이드 표지판 2개("정원 업그레이드 / 레벨 n > n+1 / [N 코인]", "러닝머신 업그레이드 … +N/초", `UpgradeSign` Attr `Kind`/`PlotIndex`)·주인 간판.
 - **러닝머신 모양 20단계** (`TREAD_STYLES`): 1 기본 · 2 사이파이 · 3 불꽃 · 4 셀럽 · 5 황금 · 6 얼음 · 7 럭키블록 · 8 해커 · 9 악마 · 10 천사 · **11 정글 · 12 바다 · 13 사탕 · 14 벚꽃 · 15 용암 · 16 수정 · 17 유령 · 18 은하 · 19 무지개 · 20 황제** (상점 `TREADMILL_NAMES` 와 같은 순서). 레벨 0(잠김) = 기본 모양 반투명.
-- **파트 수**: 맵 약 6,300 (상한 7,000, `smoke_visuals` 가 검사).
+- **파트 수**: 맵 약 7,240 (7판 18구역, 상한 8,000, `smoke_visuals` 가 검사).
 
 ### 2-1. 클라 이름 규칙 (연출이 찾는 이름 — 모델을 바꿀 때 유지)
 | 이름 | 쓰는 곳 |
@@ -98,7 +128,7 @@
 - **열매**: `Fruit1~5` 를 미리 만들고 Attr `Fruits` 개수만큼만 보임 (바뀌면 Transparency 만 — 다시 안 만듦).
 - **흔들기**: 모델 Attr `Sway` → 클라 PlantFxController 가 60 스터드 안만 Root 를 ±3° Tween (Reverse·무한, 멀어지면 Cancel + 원래 자리). 5판 펫 걷기 코드는 지움.
 
-### 아우라 (`Rarities.aura` 11종, `Visuals.auras`)
+### 아우라 (`Rarities.aura` 16종, `Visuals.auras` — 7판 5개는 0장)
 | 등급 | 아우라 | 모양 |
 |---|---|---|
 | 일반 | none | 없음 |
@@ -111,7 +141,8 @@
 | 비밀 | black_mist | 검은 안개 + 보라 눈 |
 | 영원 | white_clock | 흰 시계 링 |
 | 신성 | rainbow_beam | 무지개 광선 |
-| 슈퍼 울트라디바인 | sky_pillar | 무지개 + 번개 + **하늘 빛기둥 Beam (늘 켜짐, 맵 어디서나)** |
+| 슈퍼 (7판, 6판 슈퍼 울트라디바인 것) | sky_pillar | 무지개 + 번개 + **하늘 빛기둥 Beam (늘 켜짐, 맵 어디서나)** |
+| 해커 · 오리지널 · 개발자 · 울트라디바인 · 해커 글리치 | code_rain · first_light · build_grid · ultra_halo · glitch_static | 0장 표 (7판) |
 - **가볍게**: 파티클·빛은 **희귀(rare) 이상만**, 서버는 꺼진 채로 만들고(`AuraFx` 태그) 클라가 내 캐릭터 **100 스터드 안**만 켬 (0.5초마다 검사, 켜짐이 바뀔 때만 자식을 훑음). Rate 작게.
 
 ### 씨앗 (EggVisualService — `Egg` 태그: 둥지·들고 있는·떨어진)
@@ -162,7 +193,7 @@
 | 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
 | "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
 | 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`) / "씨앗 뽑기 · 크리스탈 10"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
-| 도감 | IndexController | "식물 도감", 구역 탭 15, 등급 11개 색(신성·슈퍼 울트라디바인 무지개 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
+| 도감 | IndexController | "식물 도감", 구역 탭 18(7판), 등급 16개 색·영어 이름(신성·슈퍼·울트라디바인 무지개 띠, 해커 글리치 깨진 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
 | 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") · 트레일 |
 | 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` "+1M" 분홍 팝업 |
 | 랭킹판 | LeaderboardController | 코인 / 속도 탭 + 허브 3D 판 |
@@ -222,7 +253,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
-lune run tests/smoke_visuals.luau   # 서버: 맵(15구역·파트 상한 7,000·사쿠라 나무·러닝머신 20 모양), 식물 134종 모델(파트 수·모양 다 다름), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴)
+lune run tests/smoke_visuals.luau   # 서버: 맵(18구역·파트 상한 8,000·사쿠라 나무·러닝머신 20 모양), 식물 158종 모델(모양 19종·파트 수·모양 다 다름, 7판 아우라 5개 고리·빛기둥·Glitch), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴)
 lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·FeedFruit·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·FeedResult·PetPetted·SakuraResult), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침
 ```
 `@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 / STUDIO_CHECKLIST 로 스튜디오에서.

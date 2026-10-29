@@ -9,15 +9,15 @@
 	     씨앗(땅에 반쯤 묻힘, 처음 10%) → 새싹(떡잎 2장) → 줄기(잎 4장) → 봉오리(등급 색)
 	     Attr Stage("sprout"/"stem"/"bud") + Progress/Required 로 고르고, 모양이 바뀔 때만 다시 만듦.
 	2) 성체 식물 (태그 GardenPlant): 모델 "PlantVisual" — 절차적 식물 (Visuals.plantLook: 구역 테마 + 이름 낱말 + id 해시)
-	     모양 16종(PLANT_FORMS) · 등급별 크기·받침 고리 색 · 크기 등급(Size) · 돌연변이 색(Visuals.mutationLooks)
+	     모양 19종(PLANT_FORMS, 7판 circuit·blocky·glitch 추가) · 등급별 크기·받침 고리 색 · 크기 등급(Size) · 돌연변이 색(Visuals.mutationLooks)
 	     열매 파트 Fruit1~FruitMax 를 미리 만들고 Attr Fruits 개수만큼만 보임 (바뀌면 Transparency 만 바꿈).
 	3) 둥지 옆 장식 식물 (태그 ParentAnimalSpot 자리 → 모델 태그 ParentAnimal): 그 구역 식물 작게 + 이름표.
-	4) ReplicatedStorage.PetModels: 식물 134종 모델 (크기 1, 아우라 없음, 열매 3개) → 클라 UI 뷰포트 (PetViewport)
+	4) ReplicatedStorage.PetModels: 식물 158종 (7판) 모델 (크기 1, 아우라 없음, 열매 3개) → 클라 UI 뷰포트 (PetViewport)
 
 	모델 구조: PrimaryPart "Root"(Anchored, 바닥 가운데) + 나머지 파트는 Root 에 WeldConstraint (Anchored = false).
 	  CanCollide/CanTouch/CanQuery = false. 모델 Attr Sway = true (클라가 가까운 식물만 Root 를 살짝 흔듦),
 	  Height = 꼭대기 높이(스터드). 정원 파트에는 Attr VisualHeight (파트 바닥 기준 모델 꼭대기 높이) — 클라 팝업·프롬프트용.
-	아우라 (addAura, Visuals.auras = Rarities.aura 16종, 7판):
+	아우라 (addAura, Visuals.auras = Rarities.aura 16종, 7판 — code_rain · first_light · build_grid · ultra_halo · glitch_static 새로):
 	  파티클·빛은 희귀(rare) 이상만 (원소 돌연변이 파티클은 등급 상관없이). 서버는 Enabled = false 로 만들고
 	  그 파트에 태그 Visuals.Tags.AuraFx → 클라가 100 스터드 안 것만 켬. 고리(ring)는 고정 네온 파트,
 	  beam 아우라(sky_pillar 슈퍼 · 7판 ultra_halo · glitch_static) 하늘 빛기둥(Beam "SkyPillar")은 항상 켜짐 (AuraFx 대상 아님).
@@ -47,7 +47,8 @@ local NEON = Enum.Material.Neon
 local SMOOTH = Enum.Material.SmoothPlastic
 local FRUIT_MAX = 5
 
-local RARITY_SCALE = { 1, 1.08, 1.16, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 2 }
+-- 등급 순서(1~16, 7판) → 크기. 11번 위로는 정원 칸을 넘지 않게 조금씩만 커짐
+local RARITY_SCALE = { 1, 1.08, 1.16, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 2, 2.04, 2.08, 2.12, 2.16, 2.2 }
 local SIZE_SCALE: { [string]: number } = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 }
 local NATURAL: { [string]: boolean } = { silver = true, golden = true, rainbow = true }
 
@@ -59,6 +60,23 @@ local RAINBOW = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.8, Color3.fromRGB(90, 160, 255)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 110, 255)),
 })
+-- 7판 해커 글리치 (glitch_static): 분홍·초록이 뚝 끊기는 빛기둥·파티클 색
+local GLITCH = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(0.3, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(0.31, Color3.fromRGB(0, 255, 90)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 90)),
+	ColorSequenceKeypoint.new(0.61, Color3.fromRGB(240, 240, 255)),
+	ColorSequenceKeypoint.new(0.7, Color3.fromRGB(240, 240, 255)),
+	ColorSequenceKeypoint.new(0.71, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 90)),
+})
+local GLITCH_PIXELS = {
+	Color3.fromRGB(255, 0, 200),
+	Color3.fromRGB(0, 255, 90),
+	Color3.fromRGB(240, 240, 255),
+	Color3.fromRGB(20, 12, 30),
+}
 
 local function rgb(c: Visuals.Color): Color3
 	return Color3.fromRGB(c[1], c[2], c[3])
@@ -260,6 +278,51 @@ local function emitter(
 		e.LightEmission = 0.4
 		e.Acceleration = Vector3.new(0, -1.2 * scale, 0)
 		e.Lifetime = NumberRange.new(1.5, 2.2)
+	elseif kind == "code" then
+		-- 7판 해커 code_rain: 위로 살짝 튀었다가 길쭉한 초록 줄로 주르륵 떨어짐 (Squash = 세로로 늘임)
+		e.EmissionDirection = Enum.NormalId.Top
+		e.SpreadAngle = Vector2.new(40, 40)
+		e.Speed = NumberRange.new(1.5 * scale, 2.5 * scale)
+		e.Acceleration = Vector3.new(0, -7 * scale, 0)
+		e.Lifetime = NumberRange.new(0.8, 1.1)
+		e.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2 * scale),
+			NumberSequenceKeypoint.new(1, 0.08 * scale),
+		})
+		e.Squash = NumberSequence.new(2.5)
+		e.Orientation = Enum.ParticleOrientation.VelocityParallel
+	elseif kind == "motes" then
+		-- 7판 오리지널 first_light: 태초의 금빛 먼지가 천천히 떠오름
+		e.Lifetime = NumberRange.new(2.5, 3.5)
+		e.Speed = NumberRange.new(0.1, 0.3)
+		e.Acceleration = Vector3.new(0, 0.5 * scale, 0)
+		e.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.3, 0.28 * scale),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	elseif kind == "grid" then
+		-- 7판 개발자 build_grid: 제자리에서 반짝 켜졌다 꺼지는 파란 점 (움직이지 않음)
+		e.Speed = NumberRange.new(0, 0)
+		e.Lifetime = NumberRange.new(0.5, 0.9)
+		e.Rotation = NumberRange.new(45, 45)
+		e.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.3 * scale),
+			NumberSequenceKeypoint.new(0.8, 0.3 * scale),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		e.SpreadAngle = Vector2.new(0, 0)
+	elseif kind == "glitch" then
+		-- 7판 해커 글리치 glitch_static: 아주 짧게 튀는 깨진 조각 (색이 분홍·초록으로 뚝 끊김, 모양도 찌그러짐)
+		e.Color = GLITCH
+		e.Lifetime = NumberRange.new(0.08, 0.22)
+		e.Speed = NumberRange.new(3 * scale, 6 * scale)
+		e.Size = NumberSequence.new(0.35 * scale)
+		e.Squash = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, -1.5),
+			NumberSequenceKeypoint.new(0.5, 2),
+			NumberSequenceKeypoint.new(1, -1),
+		})
 	end
 	e.Parent = host
 	return e
@@ -311,7 +374,7 @@ function PlantVisualService.addAura(host: BasePart, rarityId: string, scale: num
 			beam.LightEmission = 1
 			beam.LightInfluence = 0
 			beam.Segments = 1
-			beam.Color = RAINBOW
+			beam.Color = if look.beamStyle == "glitch" then GLITCH else RAINBOW
 			beam.Transparency =
 				NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 1) })
 			beam.Enabled = true
@@ -355,6 +418,118 @@ local function auraParts(b: Builder, rarityId: string, height: number, mutations
 			"ClockHand"
 		)
 		piece(b, "Block", Vector3.new(0.38, 0.06, 0.06), CFrame.new(0.17, height * 0.6, 0.55), color, NEON, "ClockHand")
+	elseif kind == "code" then
+		-- 7판 해커: 식물 둘레에 세로로 흐르는 초록 코드 줄 6개 (길이·높이가 조금씩 다름, 반투명)
+		for i = 1, 6 do
+			local a = rad(i * 60 + 15)
+			local len = height * (0.3 + (i % 3) * 0.12)
+			local y = height * (0.25 + ((i * 7) % 5) * 0.08) + len / 2
+			local bar = piece(
+				b,
+				"Block",
+				Vector3.new(0.07, len, 0.07),
+				CFrame.new(math.sin(a) * 1.0, y, math.cos(a) * 1.0),
+				color,
+				NEON,
+				"AuraRing"
+			)
+			bar.Transparency = 0.35
+		end
+	elseif kind == "sun" then
+		-- 7판 오리지널: 뒤에 세운 햇살 원판 + 빛살 6개 (태초의 금빛 햇살)
+		local c = CFrame.new(0, height * 0.62, 0.6)
+		local disc = piece(
+			b,
+			"Cyl",
+			Vector3.new(1.3, 0.05, 1.3),
+			c * CFrame.Angles(math.pi / 2, 0, 0),
+			color:Lerp(WHITE, 0.3),
+			NEON,
+			"AuraRing"
+		)
+		disc.Transparency = 0.45
+		for i = 1, 6 do
+			local ray = piece(
+				b,
+				"Block",
+				Vector3.new(0.08, 0.7, 0.04),
+				c * CFrame.Angles(0, 0, rad(i * 60)) * CFrame.new(0, 0.95, 0),
+				color,
+				NEON,
+				"AuraRing"
+			)
+			ray.Transparency = 0.2
+		end
+	elseif kind == "grid" then
+		-- 7판 개발자: 파란 빛 격자 상자 (기둥 4 + 윗변 4, 반투명) — 스튜디오에서 고른 파트의 선택 상자처럼
+		local w, h = 0.95, height * 1.02
+		for _, sx in { -1, 1 } do
+			for _, sz in { -1, 1 } do
+				local post = piece(
+					b,
+					"Block",
+					Vector3.new(0.06, h, 0.06),
+					CFrame.new(sx * w, h / 2, sz * w),
+					color,
+					NEON,
+					"AuraRing"
+				)
+				post.Transparency = 0.3
+			end
+		end
+		for i = 0, 3 do
+			local edge = piece(
+				b,
+				"Block",
+				Vector3.new(w * 2, 0.06, 0.06),
+				CFrame.Angles(0, i * math.pi / 2, 0) * CFrame.new(0, h, w),
+				color,
+				NEON,
+				"AuraRing"
+			)
+			edge.Transparency = 0.3
+		end
+	elseif kind == "double" then
+		-- 7판 울트라디바인: 흰 후광 + 위에 무지개 후광 (두 겹)
+		ring(b, CFrame.new(0, height * 0.55, 0), 1.0, color, 6, "AuraRing")
+		local hues = {
+			{ 255, 90, 90 },
+			{ 255, 200, 70 },
+			{ 120, 235, 110 },
+			{ 80, 190, 255 },
+			{ 170, 110, 255 },
+			{ 255, 120, 220 },
+		}
+		for i = 1, 6 do
+			local a = (i - 0.5) / 6 * math.pi * 2
+			local r = 1.3
+			piece(
+				b,
+				"Block",
+				Vector3.new(2 * r * math.sin(math.pi / 6) * 1.08, 0.07, 0.07),
+				CFrame.new(0, height * 0.82, 0) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -r),
+				rgb(hues[i]),
+				NEON,
+				"AuraRing"
+			)
+		end
+	elseif kind == "pixels" then
+		-- 7판 해커 글리치: 둘레에 떠 있는 깨진 픽셀 6개 (Attr Glitch + EggShell 태그 → 클라가 색을 뚝뚝 바꿈)
+		for i = 1, 6 do
+			local a = rad(i * 60 + (i % 2) * 25)
+			local r = 0.8 + (i % 3) * 0.25
+			local px = piece(
+				b,
+				"Block",
+				Vector3.one * (0.16 + (i % 2) * 0.08),
+				CFrame.new(math.sin(a) * r, height * (0.2 + ((i * 3) % 5) * 0.17), math.cos(a) * r),
+				GLITCH_PIXELS[(i - 1) % #GLITCH_PIXELS + 1],
+				NEON,
+				"AuraRing"
+			)
+			px:SetAttribute("Glitch", true)
+			CollectionService:AddTag(px, Visuals.Tags.EggShell)
+		end
 	end
 	if not fx then
 		return
@@ -367,7 +542,7 @@ local function auraParts(b: Builder, rarityId: string, height: number, mutations
 end
 
 ------------------------------------------------------------------
--- 식물 모양 16종 (크기 1: 키 약 3 × tall). 각 함수가 열매 자리(최대 5개)를 돌려줌
+-- 식물 모양 19종 (7판: 맨 아래 circuit·blocky·glitch) (크기 1: 키 약 3 × tall). 각 함수가 열매 자리(최대 5개)를 돌려줌
 ------------------------------------------------------------------
 
 type Paint = {
@@ -823,6 +998,119 @@ FORMS.candy = function(b, p)
 	return aroundSpots(H * 0.25, H * 0.5, 0.42, p.look.twist), y + 0.6
 end
 
+-- 7판 해커 연구소: 회로 식물 — 네모 줄기 + 빛나는 회로 줄 + 네모 칩 잎 + 꼭대기 칩(가운데 네온) + 핀(꽃잎)
+FORMS.circuit = function(b, p)
+	local H = p.H
+	piece(b, "Block", Vector3.new(0.22, H * 0.74, 0.22), CFrame.new(0, H * 0.37, 0), p.stem, SMOOTH, "Stem")
+	piece(b, "Block", Vector3.new(0.05, H * 0.6, 0.24), CFrame.new(0, H * 0.33, 0), p.center, NEON, "Trace")
+	for i = 1, p.look.leaves do
+		local a = rad(p.look.twist + i * 125)
+		local y = H * (0.2 + i * 0.13)
+		local chip = CFrame.Angles(0, a, 0) * CFrame.new(0, y, -0.42) * CFrame.Angles(rad(12), 0, 0)
+		piece(b, "Block", Vector3.new(0.5, 0.06, 0.5), chip, p.leaf, SMOOTH, "Leaf")
+		piece(b, "Block", Vector3.new(0.3, 0.07, 0.06), chip * CFrame.new(0, 0.01, 0.1), p.center, NEON, "Trace")
+	end
+	local y = H * 0.78
+	piece(b, "Block", Vector3.new(0.72, 0.2, 0.72), CFrame.new(0, y, 0), p.stem:Lerp(BLACK, 0.3), SMOOTH, "Chip")
+	piece(b, "Block", Vector3.new(0.34, 0.22, 0.34), CFrame.new(0, y + 0.01, 0), p.center, NEON, "Center")
+	local n = p.look.petals
+	for i = 1, n do
+		local a = i / n * math.pi * 2
+		petal(
+			b,
+			p,
+			"Block",
+			Vector3.new(0.09, 0.09, 0.28),
+			CFrame.new(0, y, 0) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -0.48)
+		)
+	end
+	return aroundSpots(H * 0.28, H * 0.58, 0.45, p.look.twist), y + 0.3
+end
+
+-- 7판 개발자의 방: 블록 식물 — 스터드 박힌 블록을 쌓은 줄기 + 네모 잎 + 꼭대기 큰 블록 + 둘레 작은 블록(꽃잎)
+FORMS.blocky = function(b, p)
+	local H = p.H
+	local function studs(part: BasePart)
+		part.TopSurface = Enum.SurfaceType.Studs
+		part.BottomSurface = Enum.SurfaceType.Inlet
+		part.Material = Enum.Material.Plastic
+	end
+	local seg = H * 0.24
+	for i = 0, 2 do
+		local c = if i % 2 == 0 then p.stem else p.stem:Lerp(WHITE, 0.15)
+		studs(piece(b, "Block", Vector3.new(0.42, seg, 0.42), CFrame.new(0, seg * (i + 0.5), 0), c, SMOOTH, "Stem"))
+	end
+	for i = 1, p.look.leaves do
+		local a = rad(p.look.twist + i * 140)
+		local y = H * (0.18 + i * 0.14)
+		studs(
+			piece(
+				b,
+				"Block",
+				Vector3.new(0.3, 0.16, 0.62),
+				CFrame.Angles(0, a, 0) * CFrame.new(0, y, -0.45),
+				p.leaf,
+				SMOOTH,
+				"Leaf"
+			)
+		)
+	end
+	local y = H * 0.72 + 0.3
+	studs(piece(b, "Block", Vector3.new(0.62, 0.62, 0.62), CFrame.new(0, y, 0), p.center, SMOOTH, "Center"))
+	local n = math.min(5, p.look.petals - 2)
+	for i = 1, n do
+		local a = i / n * math.pi * 2 + rad(p.look.twist)
+		local cube = petal(
+			b,
+			p,
+			"Block",
+			Vector3.one * 0.34,
+			CFrame.new(0, y - 0.05, 0) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -0.48)
+		)
+		studs(cube)
+	end
+	return aroundSpots(H * 0.22, H * 0.55, 0.42, p.look.twist), y + 0.42
+end
+
+-- 7판 버그 차원: 거꾸로 깨진 식물 — 잎 덩어리가 바닥에, 줄기가 위로, 뿌리가 하늘로 + 둘레에 떠 있는 깨진 픽셀(꽃잎).
+--   꽃잎 픽셀은 Attr Glitch + EggShell 태그 → 클라가 색을 뚝뚝 바꿈 (실버·황금·무지개 돌연변이면 build 가 Glitch 를 지움)
+FORMS.glitch = function(b, p)
+	local H = p.H
+	piece(b, "Ball", Vector3.one * 1.15, CFrame.new(0, H * 0.22, 0), p.leaf, SMOOTH, "Canopy")
+	piece(b, "Ball", Vector3.one * 0.75, CFrame.new(0.45, H * 0.16, 0.25), p.leaf:Lerp(BLACK, 0.15), SMOOTH, "Canopy")
+	piece(b, "Cyl", Vector3.new(0.26, H * 0.5, 0.26), CFrame.new(0, H * 0.55, 0), p.stem, SMOOTH, "Trunk")
+	for i = 1, 3 do
+		local a = rad(p.look.twist + i * 120)
+		piece(
+			b,
+			"Cyl",
+			Vector3.new(0.1, 0.6, 0.1),
+			CFrame.new(0, H * 0.82, 0) * CFrame.Angles(0, a, 0) * CFrame.Angles(rad(35), 0, 0) * CFrame.new(0, 0.28, 0),
+			p.stem,
+			SMOOTH,
+			"Root"
+		)
+	end
+	-- 줄기 한가운데가 옆으로 밀린 "깨진" 조각 (화면이 찢어진 것처럼)
+	piece(b, "Block", Vector3.new(0.34, 0.16, 0.34), CFrame.new(0.14, H * 0.6, 0), p.center, NEON, "Center")
+	local n = p.look.petals
+	for i = 1, n do
+		local a = rad(p.look.twist + i * (360 / n))
+		local r = 0.55 + (i % 3) * 0.18
+		local px = petal(
+			b,
+			p,
+			"Block",
+			Vector3.one * (0.16 + (i % 2) * 0.1),
+			CFrame.new(math.sin(a) * r, H * (0.3 + ((i * 5) % 7) * 0.08), math.cos(a) * r)
+		)
+		px.Material = NEON
+		px:SetAttribute("Glitch", true)
+		CollectionService:AddTag(px, Visuals.Tags.EggShell)
+	end
+	return aroundSpots(H * 0.12, H * 0.32, 0.7, p.look.twist), H * 0.82 + 0.55
+end
+
 ------------------------------------------------------------------
 -- 성체 식물 모델
 ------------------------------------------------------------------
@@ -885,12 +1173,14 @@ function PlantVisualService.build(plantId: string, opts: BuildOptions?): Model
 	local fruitMat = if look.glow then NEON else SMOOTH
 	local rainbow = false
 	local elemental = false
+	local natural = false
 	for _, id in mutations do
 		local m = Visuals.mutationLooks[id]
 		if m then
 			local mat = materialOf(m.material) or SMOOTH
 			if NATURAL[id] then
 				petalColor, petalMat = rgb(m.color), mat
+				natural = true
 				centerColor = rgb(m.color):Lerp(WHITE, 0.35)
 				rainbow = rainbow or m.cycle == true
 			else
@@ -927,6 +1217,11 @@ function PlantVisualService.build(plantId: string, opts: BuildOptions?): Model
 		if rainbow then
 			CollectionService:AddTag(f, Visuals.Tags.EggShell)
 			f:SetAttribute("Rainbow", true)
+		end
+	end
+	if natural then
+		for _, part in paint.petalParts do
+			part:SetAttribute("Glitch", nil) -- 돌연변이 색이 보이게 (깨진 픽셀 깜빡임 끔)
 		end
 	end
 	if rainbow then
@@ -1289,7 +1584,7 @@ local function nameTag(adornee: BasePart, height: number, plant: Plants.Plant)
 		label.Text = text
 		label.Parent = gui
 	end
-	line("Rarity", 0, if r then r.name else plant.rarity, rarityColor(plant.rarity))
+	line("Rarity", 0, if r then r.displayName else plant.rarity, rarityColor(plant.rarity))
 	line("PetName", 0.5, plant.name, WHITE)
 	gui.Parent = adornee
 end

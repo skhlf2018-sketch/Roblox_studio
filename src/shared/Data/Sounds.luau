@@ -14,6 +14,7 @@ export type SoundDef = {
 	looped: boolean?,
 	pitchVariation: number?,
 	music: boolean?, -- true 면 "음악" 설정을 따름 (아니면 "효과음")
+	speed: number?, -- 7판: 재생 빠르기 (PlaybackSpeed, 없으면 1) — 같은 음악 id 를 다른 느낌으로
 	description: string,
 }
 
@@ -30,8 +31,8 @@ local function sfx(id: number?, volume: number, description: string, pitchVariat
 	return { id = rbx(id), volume = volume, pitchVariation = pitchVariation, description = description }
 end
 
-local function music(id: number?, volume: number, description: string): SoundDef
-	return { id = rbx(id), volume = volume, looped = true, music = true, description = description }
+local function music(id: number?, volume: number, description: string, speed: number?): SoundDef
+	return { id = rbx(id), volume = volume, looped = true, music = true, description = description, speed = speed }
 end
 
 local Sounds: { [string]: SoundDef } = {
@@ -97,21 +98,25 @@ local Sounds: { [string]: SoundDef } = {
 	Bgm_enchanted_forest = music(9038465993, 0.3, "마법의 숲 (반짝이는 요정 음악)"),
 	Bgm_candy_kingdom = music(1835943156, 0.3, "사탕 왕국 (통통 튀는 귀여운 음악)"),
 	Bgm_haunted_castle = music(1836013838, 0.3, "유령 성 (으스스한 오르간 + 바람)"),
-	-- [7판 수석 임시] 새 구역 3개 배경음: 지금 있는 음악 id 를 빌려 씀 (선임이 어울리는 음악으로 바꿈)
+	-- 7판 새 구역 3개 배경음 (선임): 무료 소리 목록을 새로 고를 수 없어서 (스토어 검색 불가) 지금 있는 음악을
+	--   빠르기(speed)만 바꿔 다른 느낌으로 씀 — 어울리는 새 음악 id 를 찾으면 숫자만 바꾸면 됨
 	Bgm_hacker_lab = music(
 		71997529567005,
 		0.3,
-		"해커 연구소 (전자음 삐빅 + 키보드 — 임시: 코스믹 음악)"
+		"해커 연구소 (전자음 삐빅 — 코스믹 우주 신스를 1.15배 빠르게)",
+		1.15
 	),
 	Bgm_developer_room = music(
-		1848120001,
-		0.3,
-		"개발자의 방 (차분한 작업 음악 — 임시: 타이탄 사원 음악)"
+		84797666595507,
+		0.28,
+		"개발자의 방 (차분한 작업 음악 — 베이스 음악을 0.85배 느리게)",
+		0.85
 	),
 	Bgm_bug_dimension = music(
-		9038465993,
+		1836013838,
 		0.3,
-		"버그 차원 (지지직 깨진 소리 — 임시: 마법의 숲 음악)"
+		"버그 차원 (늘어진 깨진 소리 — 유령 성 오르간을 0.72배로 늘어지게)",
+		0.72
 	),
 }
 

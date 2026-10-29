@@ -4,7 +4,8 @@
 
 	- 경비 15종(+ 천사&악마 어두운 쪽): Visuals.guards[구역].model → Visuals.monsters (몸 + 머리 + 소품).
 	  파리지옥·연꽃 개구리풀·가시 선인장 대장·덩굴 호랑이꽃·서리 가시나무·용암 머리꽃·심해 해초 괴물·공룡 고사리·
-	  우주 버섯 거인·벚꽃 여우나무·돌 거인 나무·천사 백합/악마 장미·정령 버섯·사탕수수 거인·호박 머리 덩굴.
+	  우주 버섯 거인·벚꽃 여우나무·돌 거인 나무·천사 백합/악마 장미·정령 버섯·사탕수수 거인·호박 머리 덩굴 ·
+	  7판: 바이러스 덩굴(몸 vines + 머리 virus) · 디버그 선인장(안경·돋보기) · 글리치 장미 괴물(어긋난 겹 머리·깨진 픽셀).
 	- 키 25~40 스터드 (Visuals.guards[..].height 에 맞춰 배율 자동). 겉모습 모델 이름 = model id, Attr Height = 키
 	  → GuardianService 잡힘 거리. HumanoidRootPart 에 Weld "GuardPose" (Humanoid·HumanoidRootPart 이름은 그대로)
 	  State Idle/Sleeping → 자는 자세 + BillboardGui "SleepZ"(TextLabel Z1~Z3), Chase → 일어섬 + Highlight "GuardGlow"
@@ -441,6 +442,39 @@ local function monsterBody(ctx: Ctx, kind: string): Shape
 			hy = 2.6,
 			faceOnBody = true,
 		}
+	elseif kind == "vines" then
+		-- 7판 바이러스 덩굴: 동그란 몸통을 꼬인 덩굴 3가닥이 감고 올라가고, 땅을 기는 덩굴 4가닥
+		local body = sm(ctx, "Ball", Vector3.one * 1.45, at(0, 0.95, 0), c1)
+		ctx.body = body
+		for i = 1, 3 do
+			local a = i / 3 * math.pi * 2
+			sm(
+				ctx,
+				"Cyl",
+				Vector3.new(0.34, 2.5, 0.34),
+				CFrame.Angles(0, a, 0) * at(0, 1.35, 0.3, 14),
+				if i % 2 == 0 then ctx.c2 else c1:Lerp(BLACK, 0.12)
+			)
+		end
+		for i = 1, 4 do
+			local a = i / 4 * math.pi * 2 + 0.4
+			sm(
+				ctx,
+				"Cyl",
+				Vector3.new(0.28, 1.7, 0.28),
+				CFrame.Angles(0, a, 0) * at(0, 0.22, -1.0, 75),
+				c1:Lerp(BLACK, 0.2)
+			)
+		end
+		return {
+			head = at(0, 2.6, 0),
+			headSize = Vector3.new(1.1, 1.0, 1.4),
+			body = at(0, 0.95, 0),
+			bodySize = Vector3.new(1.45, 2.5, 1.45),
+			top = 2.6,
+			hy = 2.45,
+			faceOnBody = false,
+		}
 	elseif kind == "kelp" then
 		local body = sm(ctx, "Ball", Vector3.one * 1.5, at(0, 1.1, 0), c1)
 		ctx.body = body
@@ -554,6 +588,20 @@ local function monsterHead(ctx: Ctx, kind: string, sh: Shape): Shape
 		sh.head = at(0, hy + 0.3, 0)
 		sh.headSize = Vector3.new(0.95, 0.95, 1.25)
 		sh.top = hy + 0.95
+	elseif kind == "virus" then
+		-- 7판 바이러스 덩굴 머리: 돌기(끝이 빛나는 공) 8개가 난 바이러스 공
+		local cy = hy + 0.55
+		local head = sm(ctx, "Ball", Vector3.one * 1.55, at(0, cy, 0), c2)
+		ctx.body = head
+		for i = 1, 8 do
+			local tilt = if i % 2 == 0 then 48 else 128
+			local turn = CFrame.Angles(0, rad(i * 45 + 22), 0) * CFrame.Angles(rad(tilt), 0, 0)
+			sm(ctx, "Cyl", Vector3.new(0.13, 0.5, 0.13), at(0, cy, 0) * turn * at(0, 0.9, 0), c2:Lerp(BLACK, 0.25))
+			sm(ctx, "Ball", Vector3.one * 0.28, at(0, cy, 0) * turn * at(0, 1.17, 0), c3, NEON)
+		end
+		sh.head = at(0, cy, 0)
+		sh.headSize = Vector3.new(1.15, 1.1, 1.55)
+		sh.top = cy + 1.25
 	elseif kind == "lily" then
 		local head = sm(ctx, "Ball", Vector3.one * 0.9, at(0, hy + 0.25, 0), c2)
 		ctx.body = head
@@ -751,6 +799,98 @@ end
 MONSTER_EXTRAS.candy_top = function(ctx, sh)
 	sm(ctx, "Cyl", Vector3.new(1.3, 0.25, 1.3), at(0, sh.top + 0.55, 0, 90), ctx.c2)
 	sm(ctx, "Cyl", Vector3.new(0.8, 0.27, 0.8), at(0, sh.top + 0.55, -0.01, 90), WHITE)
+end
+-- 7판 바이러스 덩굴: 몸 옆으로 굽어 올라가는 덩굴 손 2개 (끝에 빛나는 잎)
+MONSTER_EXTRAS.tendrils = function(ctx, _sh)
+	for _, side in SIDES do
+		local base = at(side * 0.75, 0.9, 0.1)
+		sm(ctx, "Cyl", Vector3.new(0.24, 1.3, 0.24), base * at(side * 0.25, 0.55, 0, 0, 0, side * -28), ctx.c1)
+		sm(ctx, "Cyl", Vector3.new(0.2, 1.0, 0.2), base * at(side * 0.75, 1.45, -0.1, -20, 0, side * 22), ctx.c2)
+		sm(ctx, "Ell", Vector3.new(0.5, 0.12, 0.8), base * at(side * 0.6, 2.0, -0.35, 30, 0, 0), ctx.c3, NEON)
+	end
+end
+-- 7판 바이러스 덩굴: 둘레에 떠 있는 초록 코드 조각 4개 + 위로 흩날리는 빛 (가까울 때만 보이게 Rate 작게)
+MONSTER_EXTRAS.codebits = function(ctx, sh)
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + 0.3
+		sm(
+			ctx,
+			"Block",
+			Vector3.new(0.12, 0.42, 0.12),
+			CFrame.Angles(0, a, 0) * at(0, sh.hy * 0.5 + (i % 2) * 0.6, -1.45),
+			ctx.c3,
+			NEON,
+			0.2
+		)
+	end
+	if ctx.body then
+		monsterEmitter(ctx, ctx.body, "embers", ctx.c3)
+	end
+end
+-- 7판 디버그 선인장: 얼굴에 네모난 안경 (검은 테 + 파란 반투명 알 + 다리)
+MONSTER_EXTRAS.glasses = function(ctx, sh)
+	local hs = sh.headSize
+	local e = math.max(0.14, math.min(hs.X, hs.Y) * 0.22)
+	local w = e * 2.1
+	local z = -hs.Z * 0.5 - 0.08
+	for _, side in SIDES do
+		local c = sh.head * CFrame.new(side * hs.X * 0.24, hs.Y * 0.1, z)
+		sm(ctx, "Block", Vector3.new(w, w * 0.9, 0.03), c, ctx.c2, NEON, 0.6)
+		sm(ctx, "Block", Vector3.new(w + 0.06, 0.06, 0.06), c * CFrame.new(0, w * 0.45 + 0.03, 0), BLACK)
+		sm(ctx, "Block", Vector3.new(w + 0.06, 0.06, 0.06), c * CFrame.new(0, -w * 0.45 - 0.03, 0), BLACK)
+		sm(
+			ctx,
+			"Block",
+			Vector3.new(0.05, 0.05, hs.Z * 0.45),
+			c * CFrame.new(side * w * 0.5, w * 0.3, hs.Z * 0.22),
+			BLACK
+		)
+	end
+	sm(
+		ctx,
+		"Block",
+		Vector3.new(hs.X * 0.48 - w + 0.06, 0.05, 0.05),
+		sh.head * CFrame.new(0, hs.Y * 0.1 + w * 0.2, z),
+		BLACK
+	)
+end
+-- 7판 디버그 선인장: 오른손에 돋보기 (버그 찾기)
+MONSTER_EXTRAS.magnifier = function(ctx, sh)
+	local r = sh.bodySize.X / 2
+	local hand = at(r + 0.95, sh.bodySize.Y * 0.55 + 0.85, -0.1)
+	sm(ctx, "Cyl", Vector3.new(0.14, 0.7, 0.14), hand * at(0, 0.3, 0), DARK)
+	sm(ctx, "Cyl", Vector3.new(0.95, 0.1, 0.95), hand * at(0, 1.05, -0.05, 90), BLACK)
+	sm(ctx, "Cyl", Vector3.new(0.78, 0.12, 0.78), hand * at(0, 1.05, -0.06, 90), ctx.c2, NEON, 0.55)
+end
+-- 7판 글리치 장미 괴물: 머리 둘레에 떠 있는 깨진 픽셀 6개 (Attr Glitch + EggShell 태그 → 클라가 색을 뚝뚝 바꿈)
+MONSTER_EXTRAS.pixelshards = function(ctx, sh)
+	for i = 1, 6 do
+		local a = i / 6 * math.pi * 2 + (i % 2) * 0.4
+		local px = sm(
+			ctx,
+			"Block",
+			Vector3.one * (0.22 + (i % 3) * 0.08),
+			CFrame.Angles(0, a, 0) * at(0, sh.hy - 0.6 + (i % 3) * 0.6, -1.3 - (i % 2) * 0.3),
+			if i % 2 == 0 then ctx.c2 else ctx.c3,
+			NEON
+		)
+		px:SetAttribute("Glitch", true)
+		CollectionService:AddTag(px, Visuals.Tags.EggShell)
+	end
+end
+-- 7판 글리치 장미 괴물: 머리가 분홍·초록으로 어긋나 겹쳐 보임 (화면이 깨진 것처럼, 반투명 2겹)
+MONSTER_EXTRAS.ghostlayer = function(ctx, sh)
+	for i, side in SIDES do
+		sm(
+			ctx,
+			"Ball",
+			Vector3.one * 1.3,
+			sh.head * CFrame.new(side * 0.22, 0.05 * side, 0.12),
+			if i == 1 then Color3.fromRGB(255, 0, 200) else Color3.fromRGB(0, 255, 90),
+			NEON,
+			0.7
+		)
+	end
 end
 
 -- 괴물 하나 만들기 (경비 겉모습). Height Attribute = 꼭대기 높이 × scale (GuardianService 잡힘 거리)

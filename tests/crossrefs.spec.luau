@@ -521,10 +521,10 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"서버 코드에서 식물 모양 16종, 식물 괴물 소품 20종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
+		"서버 코드에서 식물 모양 19종(7판), 식물 괴물 소품 20종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
 		function()
-			T.eq(#sorted(plantForms), 16)
-			T.eq(#Visuals.PLANT_FORMS, 16)
+			T.eq(#sorted(plantForms), 19)
+			T.eq(#Visuals.PLANT_FORMS, 19)
 			T.truthy(#sorted(monsterExtras) >= 20, #sorted(monsterExtras))
 			T.truthy(#sorted(decors) >= 50, #sorted(decors))
 		end
@@ -700,7 +700,7 @@ return function(T, Loader)
 			for id in Visuals.specialEggs do
 				T.truthy(rarityIds[id], "특별 씨앗 표의 모르는 등급 " .. id)
 			end
-			-- 7판: 등급 16개 전부 아우라 모양·씨앗 껍데기가 있어야 서버가 안 깨짐 (새 6개는 [7판 수석 임시])
+			-- 7판: 등급 16개 전부 아우라 모양·씨앗 껍데기가 있어야 서버가 안 깨짐
 			for _, r in Rarities.list do
 				T.truthy(Visuals.auras[r.aura], r.id .. " 아우라 " .. r.aura .. " 모양 없음")
 				T.truthy(Visuals.eggLooks[r.id], r.id .. " 씨앗 껍데기")

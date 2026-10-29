@@ -106,7 +106,7 @@ local function eggDetail(record: any): string
 	local parts: { string } = {}
 	local rarity = Rarities.get(rarityOf(tostring(record.petId)))
 	if rarity then
-		table.insert(parts, rarity.name)
+		table.insert(parts, rarity.displayName)
 	end
 	local size = Sizes.get(tostring(record.size))
 	if size and size.id ~= "normal" then

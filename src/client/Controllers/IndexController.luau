@@ -7,14 +7,14 @@
 	  │ [그림  ]  [카드][카드][카드][카드]   ???  일반  [>] │
 	  │ [목록 ↕]  [■■■□□□□□ 1/8      ]     보상: 100 코인 +420 │
 	  │                                    [  획득!  ]     │
-	  │ [📘 모두 획득 (n)!  /  잠금 해제: 18/134         ] │
+	  │ [📘 모두 획득 (n)!  /  잠금 해제: 18/158         ] │
 	  └───────────────────────────────────────────────────┘
 	- 왼쪽: 구역 18개(7판) 그림 탭 (세로 스크롤). 받을 보상이 있는 구역은 "!" 표시
 	- 가운데: 구역 식물 카드 (등급 색 바탕 — 등급 16개(7판), Theme.RainbowRarities 는 무지개 띠, 발견 전 검은 실루엣 "???")
 	  + 진행바 "발견/전체". 발견 = 한 번이라도 성체가 됨
 	- 오른쪽: 고른 식물 크게 + 이름·등급 + "열매 1개 N 코인 · N초마다" + 빨간 ">" (다음 식물)
 	  + 보상(코인·속도) + "획득!" → ClaimIndexReward(plantId)
-	- 아래: "모두 획득 (n)!" → ClaimIndexReward("all"), 받을 게 없으면 "잠금 해제: 발견/134"
+	- 아래: "모두 획득 (n)!" → ClaimIndexReward("all"), 받을 게 없으면 "잠금 해제: 발견/158 (7판, 전체 수는 Pets.list)"
 	- 창 오른쪽 위 밖의 "월드" 버튼: 다른 월드는 준비 중 안내
 	데이터: State.indexDiscovered / indexClaimed, 보상 미리보기 Index.reward (shared, 코인 = 열매 1개 값 × 10)
 ]]
@@ -116,7 +116,7 @@ local function rainbow(target: GuiObject, rarityId: string)
 	if Theme.RainbowRarities[rarityId] then
 		local g = Instance.new("UIGradient")
 		g.Name = "Rainbow"
-		g.Color = Theme.RAINBOW
+		g.Color = Theme.bandFor(rarityId) -- 해커 글리치 = 깨진 띠
 		g.Rotation = 20
 		g.Parent = target
 	end
@@ -331,7 +331,7 @@ function IndexController.start()
 		currentView = view
 		local rarity = Rarities.get(pet.rarity)
 		detailName.Text = if found then pet.name else "???"
-		detailRarity.Text = if rarity then rarity.name else pet.rarity
+		detailRarity.Text = if rarity then rarity.displayName else pet.rarity
 		detailRarity.TextColor3 = Theme.rarityColor(pet.rarity)
 		local oldRainbow = detailRarity:FindFirstChild("Rainbow")
 		if oldRainbow then
@@ -399,6 +399,15 @@ function IndexController.start()
 			view.Parent = card
 			Ui.label(if found then pet.name else "???", UDim2.new(1, -4, 0, 22), 18, C.white, {
 				Position = UDim2.fromOffset(2, 1),
+				TextScaled = true,
+				ZIndex = 3,
+				Parent = card,
+			})
+			-- 7판: 카드 아래 등급 영어 이름 (16번은 "H?a.(cke_r!#" 글자 그대로)
+			Ui.label(Theme.rarityName(pet.rarity), UDim2.new(1, -4, 0, 16), 13, C.white, {
+				Name = "RarityTag",
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0, 2, 1, -2),
 				TextScaled = true,
 				ZIndex = 3,
 				Parent = card,

@@ -12,7 +12,7 @@
 	  껍데기는 파트 가운데에 맞춤 (EggService 가 바닥 + 높이 절반에 놓으므로 바닥에 딱 붙음). 크기는 파트 크기 그대로.
 	- 등급 아우라: PlantVisualService.addAura (희귀 이상 파티클·빛, 꺼진 채 + Shell 에 AuraFx 태그 → 클라가 100 스터드 안만 켬).
 	- 돌연변이: 실버(은색 Foil) / 골든(금색 네온) / 레인보우(네온 + 클라가 색 순환: Shell 에 EggShell 태그 + Rainbow)
-	- 특별 씨앗(Special = true: 비밀 이상 9등급, 7판 EggSpawn.SPECIAL_RARITIES): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "비밀 씨앗!" 이름표
+	- 특별 씨앗(Special = true: 비밀 이상 9등급, 7판 EggSpawn.SPECIAL_RARITIES): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "Secret 씨앗!" 이름표 (7판: 등급 영어)
 	- 들고 있는 씨앗(EggState == "Carried"): 위 BillboardGui "WeightTag" (자식 TextLabel "Gender" = ♂/♀, "Kg" = "4,740Kg").
 	  무게 = 파트 Attribute WeightKg (없으면 든 플레이어의 CarryWeightKg). 값이 없으면 숨김.
 ]]
@@ -139,6 +139,23 @@ local RAINBOW_STRIPES = {
 	Color3.fromRGB(90, 220, 120),
 	Color3.fromRGB(90, 170, 255),
 }
+-- 7판 해커 글리치: 줄무늬 처음 색 (클라 WorldFx 가 Attr Glitch 파트 색을 뚝뚝 바꿈) · 빛기둥 끊긴 분홍·초록 띠
+local GLITCH_STRIPES = {
+	Color3.fromRGB(255, 0, 200),
+	Color3.fromRGB(0, 255, 90),
+	Color3.fromRGB(240, 240, 255),
+	Color3.fromRGB(40, 220, 255),
+}
+local GLITCH_BEAM = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(0.24, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(0, 255, 90)),
+	ColorSequenceKeypoint.new(0.49, Color3.fromRGB(0, 255, 90)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(240, 240, 255)),
+	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(240, 240, 255)),
+	ColorSequenceKeypoint.new(0.61, Color3.fromRGB(255, 0, 200)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 90)),
+})
 
 -- 씨앗 껍데기 비율: 지름 d 에 대해 폭 X = d × SEED_WIDTH, 깊이 Z = d, 높이 = d × EGG_HEIGHT (판정 파트에 맞춤)
 local SEED_WIDTH = 0.82
@@ -216,7 +233,10 @@ local function dress(egg: BasePart, petId: string, mutations: { string }, rarity
 		local rx = r * SEED_WIDTH * 0.93
 		local rz = r * 0.93
 		local offset = Vector3.new(math.sin(az) * rx, 0, -math.cos(az) * rz)
-		local color = if look.rainbow then RAINBOW_STRIPES[(i - 1) % #RAINBOW_STRIPES + 1] else stripe
+		local color = if look.glitch
+			then GLITCH_STRIPES[(i - 1) % #GLITCH_STRIPES + 1]
+			elseif look.rainbow then RAINBOW_STRIPES[(i - 1) % #RAINBOW_STRIPES + 1]
+			else stripe
 		local p = piece(
 			egg,
 			folder,
@@ -230,6 +250,10 @@ local function dress(egg: BasePart, petId: string, mutations: { string }, rarity
 		local m = Instance.new("SpecialMesh")
 		m.MeshType = Enum.MeshType.Sphere
 		m.Parent = p
+		if look.glitch then
+			p:SetAttribute("Glitch", true)
+			CollectionService:AddTag(p, Visuals.Tags.EggShell)
+		end
 	end
 	-- 별·보석 점 (껍데기 앞쪽 표면)
 	if look.dots == "stars" or look.dots == "gems" then
@@ -246,7 +270,10 @@ local function dress(egg: BasePart, petId: string, mutations: { string }, rarity
 				Enum.PartType.Ball,
 				Vector3.one * d * (if stars then 0.14 else 0.17),
 				CFrame.new(offset),
-				if stars then Color3.fromRGB(255, 245, 170) else Color3.fromRGB(255, 70, 110),
+				if look.dotColor
+					then rgb(look.dotColor)
+					elseif stars then Color3.fromRGB(255, 245, 170)
+					else Color3.fromRGB(255, 70, 110),
 				Enum.Material.Neon
 			)
 		end
@@ -406,13 +433,15 @@ local function decorateEgg(egg: BasePart)
 		beam.LightEmission = 1
 		beam.LightInfluence = 0
 		beam.Segments = 1
-		beam.Color = if rarity == "divine"
+		-- 7판: spec.beam "rainbow"(신성·슈퍼·울트라디바인) · "glitch"(해커 글리치: 분홍·초록 끊긴 띠) · 없으면 한 색
+		beam.Color = if spec.beam == "rainbow"
 			then ColorSequence.new({
 				ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 90)),
 				ColorSequenceKeypoint.new(0.33, Color3.fromRGB(255, 240, 90)),
 				ColorSequenceKeypoint.new(0.66, Color3.fromRGB(90, 220, 255)),
 				ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 110, 255)),
 			})
+			elseif spec.beam == "glitch" then GLITCH_BEAM
 			else ColorSequence.new(if rarity == "secret" then Color3.fromRGB(120, 120, 140) else color)
 		beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
 		beam.Parent = egg

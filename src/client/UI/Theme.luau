@@ -67,8 +67,8 @@ Theme.Tween = {
 }
 
 -- 등급 색 16개 (7판): 색은 Rarities 표 하나에서만 읽음 (common … divine · super · hacker · original · developer ·
---   ultradivine · hacker_glitch). 무지개 글씨를 쓸 등급 (신성·슈퍼·울트라디바인·해커 글리치)
--- [7판 수석 임시] super_ultradivine 이 없어져서 새 id 로만 바꿈 — 해커 글리치 깨진 글자 연출 등은 선임
+--   ultradivine · hacker_glitch). 무지개 띠를 쓸 등급 (신성·슈퍼·울트라디바인·해커 글리치).
+--   해커 글리치("H?a.(cke_r!#")는 무지개 대신 **깨진 띠** Theme.GLITCH (형광 분홍·초록이 뚝뚝 끊김) — Theme.bandFor(id)
 Theme.RainbowRarities =
 	{ divine = true, super = true, ultradivine = true, hacker_glitch = true } :: { [string]: boolean }
 Theme.RAINBOW = ColorSequence.new({
@@ -78,6 +78,28 @@ Theme.RAINBOW = ColorSequence.new({
 	ColorSequenceKeypoint.new(0.75, Color3.fromRGB(80, 160, 255)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 100, 255)),
 })
+local GPINK = Color3.fromRGB(255, 50, 200)
+local GGREEN = Color3.fromRGB(60, 255, 110)
+local GWHITE = Color3.fromRGB(235, 235, 255)
+Theme.GLITCH = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, GPINK),
+	ColorSequenceKeypoint.new(0.18, GPINK),
+	ColorSequenceKeypoint.new(0.19, GGREEN),
+	ColorSequenceKeypoint.new(0.4, GGREEN),
+	ColorSequenceKeypoint.new(0.41, GWHITE),
+	ColorSequenceKeypoint.new(0.47, GWHITE),
+	ColorSequenceKeypoint.new(0.48, GPINK),
+	ColorSequenceKeypoint.new(0.7, GPINK),
+	ColorSequenceKeypoint.new(0.71, Color3.fromRGB(20, 20, 30)),
+	ColorSequenceKeypoint.new(0.78, Color3.fromRGB(20, 20, 30)),
+	ColorSequenceKeypoint.new(0.79, GGREEN),
+	ColorSequenceKeypoint.new(1, GGREEN),
+})
+
+-- 무지개 등급의 띠 색 (해커 글리치 = 깨진 띠, 나머지 = 무지개)
+function Theme.bandFor(id: string): ColorSequence
+	return if id == "hacker_glitch" then Theme.GLITCH else Theme.RAINBOW
+end
 
 -- 등급 id 목록 (낮은 것 → 높은 것)
 function Theme.rarityIds(): { string }
@@ -88,9 +110,9 @@ function Theme.rarityIds(): { string }
 	return ids
 end
 
+-- 7판: 화면에 보이는 등급 이름 = 영어 (Rarities.displayName — "Common" … "Ultradivine", 16번 "H?a.(cke_r!#" 글자 그대로)
 function Theme.rarityName(id: string): string
-	local r = Rarities.get(id)
-	return if r then r.name else id
+	return Rarities.displayName(id)
 end
 
 function Theme.rarityColor(id: string): Color3

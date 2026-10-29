@@ -67,6 +67,7 @@ local function getSound(name: string): Sound?
 	s.SoundId = def.id
 	s.Volume = def.volume
 	s.Looped = def.looped == true
+	s.PlaybackSpeed = def.speed or 1
 	s.Parent = getFolder()
 	cache[name] = s
 	return s

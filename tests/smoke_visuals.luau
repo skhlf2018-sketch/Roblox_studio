@@ -255,7 +255,7 @@ local function body()
 	local budget = MapBuilder.PART_BUDGET
 	check(
 		budget ~= nil and budget.zone == 400 and budget.map == 8000,
-		"PART_BUDGET = 구역 400 / 맵 8,000 (7판 구역 18개 — [7판 수석 임시], 6판 7,000)"
+		"PART_BUDGET = 구역 400 / 맵 8,000 (7판 구역 18개, 6판 7,000)"
 	)
 	local counts = MapBuilder.partCounts()
 	check(counts.total == count(map), "partCounts().total = 실제 맵 파트 수: " .. counts.total)
@@ -720,7 +720,7 @@ local function petsBody()
 		)
 	)
 	print("  모양별 식물 수: " .. table.concat(forms, ", "))
-	check(#forms == 16, "식물 모양 16종 모두 쓰임: " .. #forms)
+	check(#forms == 19, "식물 모양 19종(7판 circuit·blocky·glitch 추가) 모두 쓰임: " .. #forms)
 	check(maxParts <= 40 and minParts >= 8, string.format("식물 하나 파트 8~40 (평균 %.1f)", avg))
 	check(rootOk == #Pets.list, "Root(Anchored) + 나머지 용접·충돌/터치/쿼리 꺼짐: " .. rootOk)
 	check(swayOk == #Pets.list, "모델 Attr Sway = true: " .. swayOk)
@@ -738,6 +738,60 @@ local function petsBody()
 		"슈퍼 울트라디바인 하늘 빛기둥(SkyPillar) 켜짐"
 	)
 	check(sky:FindFirstChild("AuraRing") ~= nil, "슈퍼 울트라디바인 고리(AuraRing)")
+	-- 7판 새 아우라 5개: 등급마다 고리 모양 + (울트라디바인·해커 글리치) 빛기둥, 해커 글리치 깨진 픽셀(Attr Glitch)
+	local auraPlants = {
+		{ "code_vine", "code_rain", 6, false },
+		{ "mainframe_tree", "first_light", 7, false },
+		{ "script_fern", "build_grid", 8, false },
+		{ "error_rose", "ultra_halo", 12, true },
+		{ "static_world_tree", "glitch_static", 6, true },
+	}
+	for _, spec in auraPlants do
+		local m = PlantVS.build(spec[1], { fx = true })
+		local rings, glitches = 0, 0
+		for _, d in m:GetChildren() do
+			if d:IsA("BasePart") and d.Name == "AuraRing" then
+				rings += 1
+				if d:GetAttribute("Glitch") == true and has(tagged.EggShell, d) then
+					glitches += 1
+				end
+			end
+		end
+		local pillar = m:FindFirstChild("SkyPillar", true)
+		local e1, _, on1 = fxOf(m)
+		check(
+			rings == spec[3] and (pillar ~= nil) == spec[4] and e1 >= 1 and on1 == 0,
+			string.format(
+				"7판 아우라 %s (%s): 고리 %d, 빛기둥 %s, 파티클 꺼짐",
+				spec[2],
+				spec[1],
+				rings,
+				tostring(pillar ~= nil)
+			)
+		)
+		if spec[2] == "glitch_static" then
+			check(glitches == 6, "glitch_static 깨진 픽셀 6개 Attr Glitch + EggShell: " .. glitches)
+		end
+	end
+	local glitchPlant = PlantVS.build("upside_down_tree", {})
+	local gp = 0
+	for _, d in glitchPlant:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("Glitch") == true then
+			gp += 1
+		end
+	end
+	check(
+		glitchPlant:GetAttribute("Form") == "glitch" and gp >= 5,
+		"거꾸로 나무 = glitch 모양 + 깨진 픽셀 꽃잎 " .. gp
+	)
+	local goldGlitch = PlantVS.build("upside_down_tree", { mutations = { "golden" } })
+	local gg = 0
+	for _, d in goldGlitch:GetDescendants() do
+		if d:IsA("BasePart") and d:GetAttribute("Glitch") == true then
+			gg += 1
+		end
+	end
+	check(gg == 0, "황금 돌연변이면 깨진 픽셀 꽃잎 깜빡임 끔 (돌연변이 색이 보임): " .. gg)
 	local lib = PlantVS.build("owl_oak", { fx = false, fruits = 3 })
 	local le, ll = fxOf(lib)
 	check(le == 0 and ll == 0 and lib:FindFirstChild("Aura") == nil, "UI 모델(fx = false)은 아우라 없음")
@@ -960,9 +1014,20 @@ local function petsBody()
 		table.insert(partLine, id .. " " .. n)
 	end
 	print("  괴물 파트: " .. table.concat(partLine, ", "))
+	local uniq = {}
+	for _, id in guardIds do
+		uniq[id] = (uniq[id] or 0) + 1
+	end
+	local dup = {}
+	for id, k in uniq do
+		if k > 1 then
+			table.insert(dup, id)
+		end
+	end
+	check(#dup == 0, "7판: 경비 모양이 구역마다 다름 (빌린 모양 없음): " .. table.concat(dup, ","))
 	check(
 		#guardIds == 19,
-		"경비 모양 19개 (18구역 + 악마 장미, 7판 새 경비 3마리는 옛 괴물을 빌린 임시): "
+		"경비 모양 19개 (18구역 + 악마 장미, 7판 바이러스 덩굴·디버그 선인장·글리치 장미 괴물): "
 			.. #guardIds
 	)
 	check(
@@ -1193,6 +1258,17 @@ local function petsBody()
 		table.insert(line, r.id .. " " .. n)
 	end
 	print("  등급별 씨앗 파트: " .. table.concat(line, ", "))
+	local glitchStripes = 0
+	local gv = made.hacker_glitch:FindFirstChild("EggVisual")
+	for _, d in (gv and gv:GetChildren() or {}) do
+		if d:GetAttribute("Glitch") == true and has(tagged.EggShell, d) then
+			glitchStripes += 1
+		end
+	end
+	check(
+		glitchStripes == 4,
+		"7판 해커 글리치 씨앗 줄무늬 4개 Attr Glitch (클라가 색을 뚝뚝): " .. glitchStripes
+	)
 	check(looksOk == #Rarities.list, "등급 16개 씨앗: 아몬드 껍데기 + 무늬, 3~8 파트: " .. looksOk)
 	check(
 		auraOk2 == #Rarities.list,

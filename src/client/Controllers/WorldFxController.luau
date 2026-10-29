@@ -2,6 +2,7 @@
 --[[
 	WorldFxController — 월드 연출 (내 화면에서만, 판정과 상관없음)
 	- 레인보우 껍데기·꽃잎(EggShell + Rainbow — 씨앗·무지개 돌연변이 식물) 색 순환
+	- 7판: EggShell + Attr Glitch (해커 글리치 씨앗 줄무늬·glitch_static 깨진 픽셀) → 형광 분홍·초록·흰·검정으로 뚝뚝 바뀜 (같은 루프)
 	- 머리 위에 든 씨앗 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 등급 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
@@ -35,6 +36,14 @@ local SPARKLE_TEX = "rbxasset://textures/particles/sparkles_main.dds"
 local MAX_HIGHLIGHTS = 26
 
 local rng = Random.new()
+-- 7판 해커 글리치 깨진 색 (Attr Glitch 파트)
+local GLITCH_COLORS = {
+	Color3.fromRGB(255, 40, 200),
+	Color3.fromRGB(50, 255, 110),
+	Color3.fromRGB(240, 240, 255),
+	Color3.fromRGB(15, 10, 25),
+	Color3.fromRGB(40, 220, 255),
+}
 
 local function watchTag(tag: string, fn: (Instance) -> ())
 	for _, inst in CollectionService:GetTagged(tag) do
@@ -269,10 +278,15 @@ function WorldFxController.start()
 	end)
 
 	-- 레인보우 껍데기 + 든 씨앗 흔들기 (한 프레임 루프)
-	local shells: { [BasePart]: boolean } = {}
+	-- 값: "rainbow" (무지개 순환) | "glitch" (7판 해커 글리치: 정해진 색 중 아무거나로 뚝뚝)
+	local shells: { [BasePart]: string } = {}
 	watchTag(VT.EggShell, function(inst)
-		if inst:IsA("BasePart") and inst:GetAttribute("Rainbow") == true then
-			shells[inst] = true
+		if inst:IsA("BasePart") then
+			if inst:GetAttribute("Glitch") == true then
+				shells[inst] = "glitch"
+			elseif inst:GetAttribute("Rainbow") == true then
+				shells[inst] = "rainbow"
+			end
 		end
 	end)
 	CollectionService:GetInstanceRemovedSignal(VT.EggShell):Connect(function(inst)
@@ -320,8 +334,12 @@ function WorldFxController.start()
 		if hueAccum > 0.08 then
 			hueAccum = 0
 			local hue = (t * 0.25) % 1
-			for part in shells do
-				if part.Parent then
+			for part, kind in shells do
+				if part.Parent and kind == "glitch" then
+					if rng:NextNumber() < 0.45 then -- 매번 바꾸지 않아서 "지지직" 끊기는 느낌
+						part.Color = GLITCH_COLORS[rng:NextInteger(1, #GLITCH_COLORS)]
+					end
+				elseif part.Parent then
 					part.Color = Color3.fromHSV(hue, 0.65, 1)
 				else
 					shells[part] = nil

@@ -339,7 +339,7 @@ function FruitBagController.start()
 				Parent = card,
 			})
 			local rarity = Rarities.get(rarityId)
-			Ui.label(if rarity then rarity.name else "", UDim2.new(1, -8, 0, 18), 15, C.white, {
+			Ui.label(if rarity then rarity.displayName else "", UDim2.new(1, -8, 0, 18), 15, C.white, {
 				Position = UDim2.fromOffset(4, 106),
 				TextScaled = true,
 				Parent = card,

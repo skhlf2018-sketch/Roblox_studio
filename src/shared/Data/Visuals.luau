@@ -5,13 +5,15 @@
 	선임 담당. 서버 PetVisualService / EggVisualService / MapBuilder 와 클라 연출이 읽습니다.
 
 	6판 "씨앗을 훔치세요" (선임):
-	  - 식물 134종 생김새 = 구역 테마(plantThemes) + 이름 낱말(FORM_WORDS) + id 해시 → Visuals.plantLook(id)
-	    (PlantVisualService 가 모양 16종 PLANT_FORMS 로 만듦). 대표 색 Visuals.petColor(id, 1~3) = 꽃잎·잎·열매.
+	  - 식물 134종 (7판 158종) 생김새 = 구역 테마(plantThemes) + 이름 낱말(FORM_WORDS) + id 해시 → Visuals.plantLook(id)
+	    (PlantVisualService 가 모양 16종(7판 19종) PLANT_FORMS 로 만듦). 대표 색 Visuals.petColor(id, 1~3) = 꽃잎·잎·열매.
 	  - 경비 15종(+ 어두운 쪽 1) = 식물 괴물 (Visuals.monsters + Visuals.guards, PetVisualService.buildMonster).
-	  - 등급 아우라 11종 (Visuals.auras, 이름 = Rarities.aura), 돌연변이 겉모습 (mutationLooks, 원소 3종 effect).
-	7판 (수석 임시, `[7판 수석 임시]` 주석): 등급 16개·구역 18개가 안 깨지게 새 칸만 채워 둠 — 아우라 5개(code_rain ·
-	  first_light · build_grid · ultra_halo · glitch_static)·씨앗 껍데기·특별 씨앗 글자·새 구역 테마 3개·식물 색 3개·
-	  새 경비 3마리(옛 괴물 모양을 빌림). 진짜 모양은 선임 (docs/REMOTES.md 8장 7판 체크리스트).
+	  - 등급 아우라 11종(7판 16종) (Visuals.auras, 이름 = Rarities.aura), 돌연변이 겉모습 (mutationLooks, 원소 3종 effect).
+	7판 (선임, 2026-10-29): 등급 16개 · 구역 18개 · 식물 158종 — 새 아우라 5개(code_rain 초록 코드 비 · first_light 금빛
+	  햇살 · build_grid 파란 빛 격자 · ultra_halo 두 겹 후광 + 빛기둥 · glitch_static 깨진 픽셀 + 끊긴 빛기둥) · 새 등급 씨앗 껍데기
+	  (해커 글리치 줄무늬는 Attr Glitch → 클라가 색을 뚝뚝) · 특별 씨앗 글자 영어 · 식물 모양 3개 추가 (circuit · blocky · glitch,
+	  19종) · 새 구역 테마 3개 (MapBuilder 무늬·아치·담장·장식·둥지·분위기) · 새 경비 3마리 (virus_vine · debug_cactus ·
+	  glitch_rose_monster).
 	  - 씨앗 껍데기 (eggLooks, EggVisualService: 아몬드 모양 + 등급 줄무늬).
 	색은 RGB 0~255 배열. Material 은 Enum.Material 이름(문자열).
 
@@ -44,12 +46,12 @@ export type BiomeTheme = {
 	rightSide: { floor: Color, floor2: Color, wall: Color, wallGlow: Color? }?, -- 오른쪽(x > 0) 절반만 다른 색 (천사&악마)
 	label: string, -- 구역 배너 이모지 (원작 "Jungle 😬")
 	-- 4판 비주얼 (MapBuilder): 바닥 무늬 · 가운데 길 · 가운데 작은 장식 · 벽 장식 · 입구 아치 · 담장 기둥 색
-	pattern: string?, -- "stripes" | "checker" | "tiles" | "dunes" | "ice" | "cracks" | "caustics" | "grid" | "patches"
+	pattern: string?, -- "stripes" | "checker" | "tiles" | "dunes" | "ice" | "cracks" | "caustics" | "grid" | "patches" | 7판 "circuit" | "baseplate" | "pixels"
 	floorTile: Color?, -- 무늬 색 (없으면 floor2)
 	path: { color: Color, kind: string, glow: boolean? }?, -- kind "road"(흙길·돌길) | "stones"(징검돌)
 	scatter: { DecorSpec }?, -- 복도 가운데에 흩어 놓는 작은 장식 (안 부딪힘, 경비 길을 막지 않음)
-	wallDecor: string?, -- 담장 면 장식 "vines" | "hiero" | "icicles" | "portholes" | "torches" | "lanterns" | "crystals" | "candystripes" | "windows"
-	arch: string?, -- 구역 입구 아치 모양 "wood" | "sandstone" | "ice" | "basalt" | "coral" | "bone" | "space" | "torii" | "marble" | "crystal" | "candy" | "gothic"
+	wallDecor: string?, -- 담장 면 장식 "vines" | "hiero" | "icicles" | "portholes" | "torches" | "lanterns" | "crystals" | "candystripes" | "windows" | 7판 "screens" | "toyshelf" | "glitchwall"
+	arch: string?, -- 구역 입구 아치 모양 "wood" | "sandstone" | "ice" | "basalt" | "coral" | "bone" | "space" | "torii" | "marble" | "crystal" | "candy" | "gothic" | 7판 "terminal" | "toyblocks" | "glitch"
 	pilaster: Color?, -- 담장 기둥 색 (없으면 trim)
 }
 
@@ -102,7 +104,7 @@ Visuals.Tags = {
 	AuraFx = "AuraFx", -- 6판: 등급 아우라·돌연변이 파티클/빛을 담은 파트 (서버는 Enabled = false, 클라가 100 스터드 안만 켬)
 	GuardVisual = "GuardVisual", -- 경비 겉모습 모델
 	RarityHighlight = "RarityHighlight", -- 희귀도 테두리 Highlight (클라가 가까운 것만 켬, 31개 한계)
-	EggShell = "EggShell", -- 씨앗 껍데기·무지개 돌연변이 식물 파트 (Attr Rainbow = true 면 클라가 색 순환)
+	EggShell = "EggShell", -- 씨앗 껍데기·무지개 돌연변이 식물 파트 (Attr Rainbow = true 면 클라가 색 순환, 7판 Attr Glitch = 깨진 색 깜빡)
 	Ambient = "AmbientEmitter", -- 구역 분위기 파티클
 	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 클라가 "업그레이드" 프롬프트
 	LeaderboardBoard = "LeaderboardBoard", -- 5판: 허브 스폰 광장 랭킹판 (판 파트만, Front 면 글은 클라 LeaderboardController 가 채움)
@@ -143,6 +145,9 @@ Visuals.PLANT_FORMS = {
 	"coral",
 	"crystal",
 	"candy",
+	"circuit", -- 7판 해커 연구소 (네모 줄기 + 회로 줄 + 칩)
+	"blocky", -- 7판 개발자의 방 (스터드 블록을 쌓음)
+	"glitch", -- 7판 버그 차원 (거꾸로 + 떠 있는 깨진 픽셀)
 }
 
 Visuals.plantThemes = {
@@ -257,27 +262,28 @@ Visuals.plantThemes = {
 		fruits = { { 255, 140, 30 }, { 150, 255, 140 }, { 180, 110, 230 } },
 		glow = true,
 	},
-	-- [7판 수석 임시] 새 구역 3개 식물 색 (선임이 다시 꾸밈)
+	-- 7판 새 구역 3개 (선임): 해커 연구소 = 검정 회로 + 초록·하늘 네온 · 개발자의 방 = 스튜디오 블록 색(파랑·빨강·노랑·초록) ·
+	--   버그 차원 = 검보라 + 형광 분홍·초록·흰 (깨진 화면). 모양은 새 3종(circuit·blocky·glitch) + 원래 모양 하나씩
 	hacker_lab = {
-		forms = { "crystal", "vine" },
+		forms = { "circuit", "vine" },
 		leaf = { 40, 200, 90 },
-		stem = { 40, 50, 45 },
-		petals = { { 60, 255, 110 }, { 30, 30, 36 }, { 120, 255, 200 } },
+		stem = { 34, 42, 40 },
+		petals = { { 60, 255, 110 }, { 40, 220, 255 }, { 170, 255, 120 } },
 		fruits = { { 60, 255, 110 }, { 200, 255, 120 }, { 40, 200, 255 } },
 		glow = true,
 	},
 	developer_room = {
-		forms = { "cup", "tree" },
-		leaf = { 80, 150, 230 },
-		stem = { 120, 110, 100 },
-		petals = { { 40, 110, 230 }, { 255, 255, 255 }, { 225, 130, 50 } },
-		fruits = { { 40, 110, 230 }, { 255, 200, 60 }, { 230, 230, 240 } },
+		forms = { "blocky", "cup" },
+		leaf = { 75, 151, 75 },
+		stem = { 99, 95, 98 },
+		petals = { { 13, 105, 172 }, { 196, 40, 28 }, { 245, 205, 48 }, { 255, 255, 255 } },
+		fruits = { { 13, 105, 172 }, { 245, 205, 48 }, { 196, 40, 28 } },
 	},
 	bug_dimension = {
-		forms = { "rose", "crystal" },
+		forms = { "glitch", "rose" },
 		leaf = { 120, 40, 160 },
 		stem = { 30, 20, 40 },
-		petals = { { 255, 0, 200 }, { 0, 255, 90 }, { 255, 255, 255 } },
+		petals = { { 255, 0, 200 }, { 0, 255, 90 }, { 240, 240, 255 } },
 		fruits = { { 255, 0, 200 }, { 0, 255, 90 }, { 60, 160, 255 } },
 		glow = true,
 	},
@@ -285,8 +291,12 @@ Visuals.plantThemes = {
 
 local DEFAULT_THEME: PlantTheme = Visuals.plantThemes.forest
 
--- 이름 낱말 → 모양 (위에서부터 먼저 맞는 것)
+-- 이름 낱말 → 모양 (위에서부터 먼저 맞는 것). 7판 새 모양 3개가 맨 위 (메인프레임·와이파이 → 회로, 블록·키보드·스튜디오·모니터
+--   → 블록, 거꾸로·지지직·깨진 → 글리치) — 나머지 새 식물은 구역 테마 forms 를 해시로
 local FORM_WORDS: { { string } } = {
+	{ "circuit", "circuit", "mainframe", "wifi" },
+	{ "blocky", "block_", "keyboard", "studio", "monitor" },
+	{ "glitch", "upside_down", "static", "broken_pixel" },
 	{ "mushroom", "mushroom", "toadstool", "candle" },
 	{ "cactus", "cactus", "aloe", "thistle", "thorn" },
 	{ "palm", "palm" },
@@ -525,6 +535,27 @@ Visuals.monsters = {
 		"leaves,mist",
 		{ glowEyes = true }
 	),
+	-- 7판 새 경비 3마리 (선임)
+	virus_vine = monster( -- 바이러스 덩굴: 보라 덩굴 몸 + 초록 바이러스 공 머리 + 덩굴 손 + 떠 있는 코드 조각
+		"vines",
+		"virus",
+		{ { 110, 50, 170 }, { 70, 220, 90 }, { 190, 255, 80 } },
+		"tendrils,codebits",
+		{ glowEyes = true }
+	),
+	debug_cactus = monster( -- 디버그 선인장: 선인장 몸 + 네모 안경 + 돋보기 + 파란 꽃
+		"column",
+		"none",
+		{ { 90, 170, 90 }, { 60, 140, 255 }, { 240, 230, 180 } },
+		"spines,arms,glasses,magnifier,flower_top"
+	),
+	glitch_rose_monster = monster( -- 글리치 장미 괴물: 검보라 줄기 + 형광 분홍 장미 + 어긋난 겹 머리 + 깨진 픽셀
+		"stalk",
+		"rose",
+		{ { 45, 22, 60 }, { 255, 0, 200 }, { 0, 255, 90 } },
+		"thorns,leaves,ghostlayer,pixelshards",
+		{ glowEyes = true }
+	),
 } :: { [string]: MonsterLook }
 
 ------------------------------------------------------------------
@@ -549,10 +580,10 @@ Visuals.guards = {
 	enchanted_forest = { model = "spirit_mushroom", scale = 11.2, height = 32 },
 	candy_kingdom = { model = "candy_cane_giant", scale = 10.9, height = 36 },
 	haunted_castle = { model = "pumpkin_vine_monster", scale = 13.3, height = 38 },
-	-- [7판 수석 임시] 새 구역 경비 3마리는 지금 있는 괴물 모양을 빌려 씀 (이름은 Biomes.guardName). 진짜 모양은 선임
-	hacker_lab = { model = "seaweed_monster", scale = 12, height = 38 }, -- 바이러스 덩굴
-	developer_room = { model = "cactus_captain", scale = 14, height = 38 }, -- 디버그 선인장
-	bug_dimension = { model = "devil_rose", scale = 13, height = 40 }, -- 글리치 장미 괴물
+	-- 7판 새 경비 3마리 (이름은 Biomes.guardName, scale·height 는 수석 값 그대로)
+	hacker_lab = { model = "virus_vine", scale = 12, height = 38 }, -- 바이러스 덩굴
+	developer_room = { model = "debug_cactus", scale = 14, height = 38 }, -- 디버그 선인장
+	bug_dimension = { model = "glitch_rose_monster", scale = 13, height = 40 }, -- 글리치 장미 괴물
 } :: { [string]: { model: string, darkModel: string?, scale: number, height: number? } }
 
 ------------------------------------------------------------------
@@ -567,20 +598,33 @@ Visuals.rarityEffects = {
 	secret = { highlight = C.black, particle = "smoke", particleColor = C.black },
 	eternity = { highlight = C.white, particle = "sparkle", particleColor = C.white, light = C.white },
 	divine = { highlight = C.white, particle = "rainbow", light = C.pink },
-	-- [7판 수석 임시] 새 등급 6개 (super = 6판 슈퍼 울트라디바인 그대로) — 선임이 다시 고름
+	-- 7판 새 등급 6개 (super = 6판 슈퍼 울트라디바인 그대로). 빛 색 = Rarities 색 (해커 초록 · 오리지널 구리 주황 ·
+	--   개발자 파랑 · 울트라디바인 흰 · 해커 글리치 형광 분홍 + 초록)
 	super = { highlight = C.gold, particle = "rainbow", light = C.yellow },
-	hacker = { highlight = C.green, particle = "spark", particleColor = C.green, light = C.green },
-	original = { highlight = C.orange, particle = "sparkle", particleColor = C.gold, light = C.orange },
-	developer = { highlight = C.blue, particle = "sparkle", particleColor = C.cyan, light = C.blue },
+	hacker = {
+		highlight = { 40, 230, 90 },
+		particle = "spark",
+		particleColor = { 60, 255, 110 },
+		light = { 60, 255, 110 },
+	},
+	original = { highlight = { 225, 130, 50 }, particle = "sparkle", particleColor = C.gold, light = { 255, 180, 90 } },
+	developer = { highlight = { 30, 100, 230 }, particle = "sparkle", particleColor = C.cyan, light = { 80, 150, 255 } },
 	ultradivine = { highlight = C.white, particle = "rainbow", light = C.white },
-	hacker_glitch = { highlight = C.hotpink, particle = "spark", particleColor = C.hotpink, light = C.lime },
+	hacker_glitch = {
+		highlight = { 255, 0, 200 },
+		particle = "spark",
+		particleColor = { 0, 255, 90 },
+		light = { 255, 0, 200 },
+	},
 } :: { [string]: { highlight: Color?, particle: string?, particleColor: Color?, light: Color? } }
 
 --[[
-	등급 아우라 (Rarities.aura 이름 11개, 설계 3장). PlantVisualService.addAura 가 씨앗·자라는 씨앗·성체에 붙임.
-	  particle: "sparkle" | "flame" | "spark" | "stars" | "smoke" | "rainbow" (없으면 파티클 없음)
-	  ring: 고정 고리 파트 (네온) — "ground"(바닥) | "halo"(가운데 높이 가로) | "clock"(뒤에 세운 고리)
-	  beam: 하늘로 솟는 빛기둥 (항상 켜짐, 맵 어디서나)
+	등급 아우라 (Rarities.aura 이름 16개, 7판 — 설계 3장). PlantVisualService.addAura 가 씨앗·자라는 씨앗·성체에 붙임.
+	  particle: "sparkle" | "flame" | "spark" | "stars" | "smoke" | "rainbow" | 7판 "code" | "motes" | "grid" | "glitch"
+	    (없으면 파티클 없음)
+	  ring: 고정 고리 파트 (네온) — "ground"(바닥) | "halo"(가운데 높이 가로) | "clock"(뒤에 세운 고리) |
+	    7판 "code" | "sun" | "grid" | "double" | "pixels" (고리는 정원 식물 모델에만 — 씨앗은 파티클·빛만)
+	  beam: 하늘로 솟는 빛기둥 (항상 켜짐, 맵 어디서나). beamStyle "glitch" = 분홍·초록 끊긴 색 (없으면 무지개)
 	파티클·빛은 희귀(rare) 이상만, 서버는 꺼진 채(Enabled = false) 만들고 AuraFx 태그 → 클라가 100 스터드 안만 켬.
 ]]
 export type AuraLook = {
@@ -591,6 +635,7 @@ export type AuraLook = {
 	ring: string?,
 	ringColor: Color?,
 	beam: boolean?,
+	beamStyle: string?, -- 7판: "glitch" = 분홍·초록 끊긴 빛기둥 (없으면 무지개)
 }
 Visuals.auras = {
 	none = {},
@@ -630,49 +675,51 @@ Visuals.auras = {
 		ringColor = { 255, 215, 60 },
 		beam = true,
 	},
-	-- [7판 수석 임시] 새 아우라 5개 (Rarities.aura) — 지금 있는 파티클·고리만으로 임시 모양. 진짜 모양은 선임
-	--   (code_rain 초록 코드 비 · first_light 태초의 금빛 햇살 · build_grid 파란 빛 격자 · ultra_halo 무지개 후광 두 겹 + 빛기둥 ·
-	--    glitch_static 지지직 깨진 픽셀)
+	-- 7판 새 아우라 5개 (선임). 새 particle 종류: "code"(아래로 흐르는 초록 줄) · "motes"(천천히 떠오르는 금빛 점) ·
+	--   "grid"(제자리에서 깜빡이는 파란 점) · "glitch"(아주 짧게 튀는 분홍·초록 조각). 새 ring 종류: "code"(세로 코드 줄 6) ·
+	--   "sun"(뒤에 세운 햇살 원판 + 빛살 6) · "grid"(빛 격자 상자 기둥 4 + 윗변 4) · "double"(흰 고리 + 무지개 고리) ·
+	--   "pixels"(둘레에 떠 있는 깨진 픽셀 6, Attr Glitch → 클라가 색을 뚝뚝 바꿈). beamStyle "glitch" = 분홍·초록 빛기둥
 	code_rain = {
-		particle = "spark",
+		particle = "code",
 		color = { 60, 255, 110 },
-		rate = 7,
+		rate = 10,
 		light = { 60, 255, 110 },
-		ring = "ground",
+		ring = "code",
 		ringColor = { 40, 230, 90 },
 	},
 	first_light = {
-		particle = "sparkle",
-		color = { 255, 200, 120 },
-		rate = 7,
-		light = { 255, 190, 110 },
-		ring = "halo",
-		ringColor = { 255, 170, 70 },
+		particle = "motes",
+		color = { 255, 214, 130 },
+		rate = 6,
+		light = { 255, 196, 110 },
+		ring = "sun",
+		ringColor = { 255, 190, 80 },
 	},
 	build_grid = {
-		particle = "stars",
+		particle = "grid",
 		color = { 120, 190, 255 },
-		rate = 7,
+		rate = 8,
 		light = { 90, 160, 255 },
-		ring = "ground",
-		ringColor = { 60, 140, 255 },
+		ring = "grid",
+		ringColor = { 70, 150, 255 },
 	},
 	ultra_halo = {
 		particle = "rainbow",
 		rate = 9,
 		light = { 255, 255, 255 },
-		ring = "halo",
+		ring = "double",
 		ringColor = { 255, 255, 255 },
 		beam = true,
 	},
 	glitch_static = {
-		particle = "spark",
-		color = { 255, 0, 200 },
-		rate = 10,
-		light = { 0, 255, 90 },
-		ring = "clock",
+		particle = "glitch",
+		color = { 255, 40, 200 },
+		rate = 12,
+		light = { 255, 0, 200 },
+		ring = "pixels",
 		ringColor = { 255, 0, 200 },
 		beam = true,
+		beamStyle = "glitch",
 	},
 } :: { [string]: AuraLook }
 
@@ -704,7 +751,8 @@ Visuals.mutationLooks = {
 -- 6판: 씨앗 껍데기 등급별 모양 (EggVisualService). 아몬드(물방울) 모양 껍데기 + 뾰족한 끝 + 세로 줄무늬.
 --   shell = 껍데기 색 (없으면 등급 색을 파스텔로), stripe = 줄무늬 색 (없으면 등급 색), stripes = 줄무늬 수(0~4),
 --   tip = 끝 색 (없으면 껍데기를 조금 어둡게), neon = 줄무늬 네온, dots = "stars"(별 점 2) | "gems"(보석 2) | nil,
---   rainbow = 줄무늬를 무지개 색으로. 씨앗 하나 ≤ 8 파트. 파티클·빛은 등급 아우라(Visuals.auras)
+--   rainbow = 줄무늬를 무지개 색으로, 7판 glitch = 줄무늬 색이 뚝뚝 바뀜(Attr Glitch), dotColor = 별·보석 점 색.
+--   씨앗 하나 ≤ 8 파트. 파티클·빛은 등급 아우라(Visuals.auras)
 export type EggLook = {
 	stripes: number,
 	shell: Color?,
@@ -713,6 +761,8 @@ export type EggLook = {
 	neon: boolean?,
 	dots: string?,
 	rainbow: boolean?,
+	glitch: boolean?,
+	dotColor: Color?,
 }
 Visuals.eggLooks = {
 	common = { stripes = 2, shell = { 236, 222, 188 }, stripe = { 120, 95, 70 } },
@@ -732,41 +782,73 @@ Visuals.eggLooks = {
 		rainbow = true,
 		dots = "stars",
 	},
-	-- [7판 수석 임시] 새 등급 5개 껍데기 (선임이 다시 꾸밈)
-	hacker = { stripes = 4, shell = { 20, 30, 24 }, stripe = { 60, 255, 110 }, neon = true, dots = "gems" },
+	-- 7판 새 등급 5개 (선임): 해커 = 검정 껍데기 + 초록 회로 줄 · 오리지널 = 오래된 상아색 + 구리 줄 + 금 끝 ·
+	--   개발자 = 흰 껍데기 + 파란 격자 줄 + 흰 보석 · 울트라디바인 = 흰 껍데기 + 무지개 줄 + 금 별 ·
+	--   해커 글리치 = 검보라 껍데기 + 줄무늬가 형광 분홍·초록으로 뚝뚝 바뀜(glitch → Attr Glitch, 클라 WorldFx)
+	hacker = {
+		stripes = 4,
+		shell = { 18, 26, 22 },
+		stripe = { 60, 255, 110 },
+		tip = { 40, 200, 90 },
+		neon = true,
+		dots = "gems",
+		dotColor = { 60, 255, 110 },
+	},
 	original = {
 		stripes = 3,
-		shell = { 250, 225, 180 },
-		stripe = { 225, 130, 50 },
+		shell = { 246, 226, 186 },
+		stripe = { 200, 110, 45 },
 		tip = { 255, 200, 60 },
 		dots = "stars",
+		dotColor = { 255, 215, 120 },
 	},
-	developer = { stripes = 4, shell = { 220, 235, 255 }, stripe = { 30, 100, 230 }, neon = true, dots = "gems" },
-	ultradivine = { stripes = 4, shell = { 255, 255, 255 }, tip = { 255, 240, 160 }, rainbow = true, dots = "stars" },
+	developer = {
+		stripes = 4,
+		shell = { 236, 242, 255 },
+		stripe = { 30, 100, 230 },
+		tip = { 30, 100, 230 },
+		neon = true,
+		dots = "gems",
+		dotColor = { 255, 255, 255 },
+	},
+	ultradivine = {
+		stripes = 4,
+		shell = { 255, 255, 255 },
+		tip = { 255, 236, 150 },
+		rainbow = true,
+		dots = "stars",
+		dotColor = { 255, 215, 80 },
+	},
 	hacker_glitch = {
 		stripes = 4,
-		shell = { 15, 10, 25 },
+		shell = { 22, 12, 34 },
 		stripe = { 255, 0, 200 },
 		tip = { 0, 255, 90 },
 		neon = true,
-		rainbow = true,
+		glitch = true,
 		dots = "gems",
+		dotColor = { 0, 255, 90 },
 	},
 } :: { [string]: EggLook }
 
--- 특별 씨앗(EggSpawn.SPECIAL_RARITIES: 비밀 이상 9등급, 7판) 빔 색과 글자
---   [7판 수석 임시] 새 등급 6개는 화면 영어 이름(Rarities.displayName) + " 씨앗!" — 선임이 옛 4개도 영어로 맞춤
+-- 특별 씨앗(EggSpawn.SPECIAL_RARITIES: 비밀 이상 9등급, 7판) 빔 색과 글자 — 등급은 화면 영어 이름(Rarities.displayName)
+--   + " 씨앗!" (16번은 "H?a.(cke_r!#" 글자 그대로). beam = 빛기둥 색 종류 ("rainbow" | "glitch", 없으면 color 한 색)
 Visuals.specialEggs = {
-	secret = { text = "비밀 씨앗!", color = { 40, 40, 40 }, textColor = C.white },
-	eternity = { text = "영원 씨앗!", color = C.cyan, textColor = { 0, 50, 50 } },
-	divine = { text = "신성 씨앗!", color = C.pink, textColor = C.white },
-	super = { text = "Super 씨앗!", color = C.gold, textColor = { 60, 20, 90 } },
+	secret = { text = "Secret 씨앗!", color = { 40, 40, 40 }, textColor = C.white },
+	eternity = { text = "Eternity 씨앗!", color = C.cyan, textColor = { 0, 50, 50 } },
+	divine = { text = "Divine 씨앗!", color = C.pink, textColor = C.white, beam = "rainbow" },
+	super = { text = "Super 씨앗!", color = C.gold, textColor = { 60, 20, 90 }, beam = "rainbow" },
 	hacker = { text = "Hacker 씨앗!", color = { 40, 230, 90 }, textColor = { 0, 30, 10 } },
 	original = { text = "Original 씨앗!", color = { 225, 130, 50 }, textColor = C.white },
 	developer = { text = "Developer 씨앗!", color = { 30, 100, 230 }, textColor = C.white },
-	ultradivine = { text = "Ultradivine 씨앗!", color = C.white, textColor = { 120, 40, 160 } },
-	hacker_glitch = { text = "H?a.(cke_r!# 씨앗!", color = { 255, 0, 200 }, textColor = { 0, 255, 90 } },
-} :: { [string]: { text: string, color: Color, textColor: Color } }
+	ultradivine = { text = "Ultradivine 씨앗!", color = C.white, textColor = { 120, 40, 160 }, beam = "rainbow" },
+	hacker_glitch = {
+		text = "H?a.(cke_r!# 씨앗!",
+		color = { 255, 0, 200 },
+		textColor = { 0, 255, 90 },
+		beam = "glitch",
+	},
+} :: { [string]: { text: string, color: Color, textColor: Color, beam: string? } }
 
 ------------------------------------------------------------------
 -- 베이스 색 (1~7번) = 우리 울타리 가로대·X 보강재 색 (원작: 나무 갈색 / 흰색 / 노랑 …, 기둥은 모두 검정)
@@ -1178,8 +1260,10 @@ Visuals.biomes = {
 		music = "Bgm_haunted_castle",
 		label = "👻",
 	},
-	-- [7판 수석 임시] 새 구역 3개 테마: 지금 MapBuilder 가 아는 무늬·아치·장식·배경음만 빌려 씀 (진짜 모양은 선임).
-	--   장식 수는 맵 파트 상한(MapBuilder.PART_BUDGET)을 넘지 않게 적게
+	-- 7판 새 구역 3개 (선임, GAME_DESIGN 4장 "7판 새 구역"):
+	--   해커 연구소 = 검정 바닥 + 초록 회로 무늬 · 서버 랙 · 떠다니는 코드 줄 · 담장 모니터 · 초록 코드 비
+	--   개발자의 방 = 스튜디오 회색 기본 바닥(격자 + 색 블록 판) · 책상·모니터·커피 · 스터드 블록 · 블록 선반
+	--   버그 차원 = 검보라 + 깨진 픽셀 바닥 · 거꾸로 나무 · "텍스처 없음" 체크 상자 · 찢어진 담장 · 지지직 조각
 	hacker_lab = {
 		floor = { 24, 30, 28 },
 		floor2 = { 20, 26, 24 },
@@ -1189,33 +1273,33 @@ Visuals.biomes = {
 		trim = { 40, 230, 90 },
 		accent = { 60, 255, 110 },
 		accent2 = { 40, 200, 255 },
-		pattern = "grid",
-		arch = "space",
-		wallDecor = "crystals",
+		pattern = "circuit",
+		path = { color = { 40, 48, 46 }, kind = "road" },
+		arch = "terminal",
+		wallDecor = "screens",
 		pilaster = { 30, 60, 40 },
-		decor = decor({ { "crystal", 10 }, { "satellite", 3 }, { "spacerock", 6 }, { "pillar", 4 } }),
-		scatter = decor({ { "glowmoss", 10 }, { "pebbles", 4 } }),
-		ambient = "sparkle",
+		decor = decor({ { "serverrack", 12 }, { "codecolumn", 10 }, { "satellite", 2 } }),
+		scatter = decor({ { "cables", 12 }, { "glowmoss", 6 } }),
+		ambient = "code",
 		atmosphere = { color = { 120, 255, 160 }, decay = { 20, 80, 40 }, density = 0.25, haze = 1.2 },
 		music = "Bgm_hacker_lab",
 		label = "💻",
 	},
 	developer_room = {
-		floor = { 70, 110, 190 },
-		floor2 = { 62, 100, 176 },
+		floor = { 163, 162, 165 },
+		floor2 = { 150, 149, 152 },
 		floorMaterial = "Plastic",
-		wall = { 230, 232, 240 },
-		wallCap = { 60, 110, 220 },
-		trim = { 60, 110, 220 },
+		wall = { 236, 236, 242 },
+		wallCap = { 13, 105, 172 },
+		trim = { 13, 105, 172 },
 		accent = { 255, 255, 255 },
-		accent2 = { 225, 130, 50 },
-		pattern = "checker",
-		floorTile = { 86, 128, 206 },
-		arch = "marble",
-		wallDecor = "windows",
-		pilaster = { 60, 110, 220 },
-		decor = decor({ { "pillar", 6 }, { "statue", 3 }, { "urn", 4 }, { "crystal", 4 } }),
-		scatter = decor({ { "goldcoin", 8 }, { "pebbles", 6 } }),
+		accent2 = { 60, 140, 255 },
+		pattern = "baseplate",
+		arch = "toyblocks",
+		wallDecor = "toyshelf",
+		pilaster = { 13, 105, 172 },
+		decor = decor({ { "desk", 8 }, { "toyblock", 12 }, { "giantmug", 4 } }),
+		scatter = decor({ { "stickynote", 12 }, { "pencil", 5 } }),
 		ambient = "dust",
 		music = "Bgm_developer_room",
 		label = "🛠️",
@@ -1229,13 +1313,13 @@ Visuals.biomes = {
 		trim = { 255, 0, 200 },
 		accent = { 0, 255, 90 },
 		accent2 = { 255, 0, 200 },
-		pattern = "cracks",
-		arch = "crystal",
-		wallDecor = "crystals",
+		pattern = "pixels",
+		arch = "glitch",
+		wallDecor = "glitchwall",
 		pilaster = { 50, 20, 70 },
-		decor = decor({ { "crystal", 10 }, { "spacerock", 8 }, { "darkspike", 5 }, { "planet", 2 } }),
-		scatter = decor({ { "stars", 16 }, { "glowmoss", 6 } }),
-		ambient = "stars",
+		decor = decor({ { "upsidetree", 7 }, { "missingtex", 8 }, { "darkspike", 4 } }),
+		scatter = decor({ { "glitchpixel", 16 }, { "stars", 8 } }),
+		ambient = "glitch",
 		atmosphere = { color = { 255, 120, 230 }, decay = { 60, 0, 90 }, density = 0.3, haze = 1.8 },
 		music = "Bgm_bug_dimension",
 		label = "👾",

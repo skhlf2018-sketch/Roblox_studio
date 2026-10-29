@@ -281,25 +281,26 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 ## 8. 선임 할 일
 
 ### 8-7. 7판 선임 체크리스트 (수석 2026-10-29 — 지금은 `[7판 수석 임시]` 로 안 깨질 만큼만)
+> **선임 완료 (2026-10-29)**: 아래 전부 됨 — `[7판 수석 임시]` 주석 없음. 자세한 모양·이름은 `docs/UI.md` 0장. 배경음 3개는 새 무료 id 를 못 골라 옛 음악을 빠르기(`Sounds[..].speed`)만 바꿔 씀 (주임·사장님 귀로 확인). 둥지 씨앗 이름표(`EggService.eggTitle`)의 등급도 영어로 바꿈 (글자만, 규칙 그대로).
 
 **등급 16개 · 영어 표시** (사장님: "화면 표시 이름은 영어")
-- [ ] 화면의 등급 글자를 전부 `Rarities.displayName(id)` 로 (지금 `Theme.rarityName` 은 한국어 `name` 을 돌려줌 → displayName 으로 바꾸면 거의 다 됨): 도감(`IndexController`)·성체 카드(`HatchController`)·자라는 씨앗 패널(`IncubatorController`)·정원 식물 창(`PetsController`/`PetPicker`)·열매 가방(`FruitBagController`)·공지(`NotifyController` rareEgg)·핫바·씨앗 이름표·특별 씨앗 글자(`Visuals.specialEggs` — 새 6개는 이미 "Hacker 씨앗!" 식, 옛 비밀·영원·신성도 영어로). 서버 안내 글(`Notify`·`Announce.text`)은 한국어 이름 그대로 옴 → 화면에서 등급 부분만 바꾸려면 payload 의 `rarity` id 로
-- [ ] **16번 "H?a.(cke_r!#"**: 글자 그대로 보이게 (RichText 를 쓰는 곳은 `<`·`&` 가 없어서 그대로 됨). 어울리는 깨진 글자·색 바뀜 연출 환영
-- [ ] 등급 색·무지개 (`Theme.RainbowRarities` 임시: divine·super·ultradivine·hacker_glitch), `Visuals.rarityEffects`·`eggLooks`(씨앗 껍데기) 새 6개는 임시 → 다시 꾸미기
-- [ ] **아우라 5개 새로** (`Visuals.auras`, 이름 = `Rarities.aura`): `code_rain`(해커, 초록 코드 비) · `first_light`(오리지널, 태초의 금빛 햇살) · `build_grid`(개발자, 파란 빛 격자) · `ultra_halo`(울트라디바인, 무지개 후광 두 겹 + 빛기둥) · `glitch_static`(해커 글리치, 지지직 깨진 픽셀 + 빛기둥). 지금은 있는 파티클·고리로 임시. `sky_pillar` 는 이제 **슈퍼** 등급 (유령 성 무지개 번개나무·하늘 기둥꽃)
-- [ ] 도감 창: 등급 16개·식물 158종·구역 탭 18개가 다 들어가는지 (스크롤), 등급 정렬·필터
+- [x] 화면의 등급 글자를 전부 `Rarities.displayName(id)` 로 (지금 `Theme.rarityName` 은 한국어 `name` 을 돌려줌 → displayName 으로 바꾸면 거의 다 됨): 도감(`IndexController`)·성체 카드(`HatchController`)·자라는 씨앗 패널(`IncubatorController`)·정원 식물 창(`PetsController`/`PetPicker`)·열매 가방(`FruitBagController`)·공지(`NotifyController` rareEgg)·핫바·씨앗 이름표·특별 씨앗 글자(`Visuals.specialEggs` — 새 6개는 이미 "Hacker 씨앗!" 식, 옛 비밀·영원·신성도 영어로). 서버 안내 글(`Notify`·`Announce.text`)은 한국어 이름 그대로 옴 → 화면에서 등급 부분만 바꾸려면 payload 의 `rarity` id 로
+- [x] **16번 "H?a.(cke_r!#"**: 글자 그대로 보이게 (RichText 를 쓰는 곳은 `<`·`&` 가 없어서 그대로 됨). 어울리는 깨진 글자·색 바뀜 연출 환영
+- [x] 등급 색·무지개 (`Theme.RainbowRarities` 임시: divine·super·ultradivine·hacker_glitch), `Visuals.rarityEffects`·`eggLooks`(씨앗 껍데기) 새 6개는 임시 → 다시 꾸미기
+- [x] **아우라 5개 새로** (`Visuals.auras`, 이름 = `Rarities.aura`): `code_rain`(해커, 초록 코드 비) · `first_light`(오리지널, 태초의 금빛 햇살) · `build_grid`(개발자, 파란 빛 격자) · `ultra_halo`(울트라디바인, 무지개 후광 두 겹 + 빛기둥) · `glitch_static`(해커 글리치, 지지직 깨진 픽셀 + 빛기둥). 지금은 있는 파티클·고리로 임시. `sky_pillar` 는 이제 **슈퍼** 등급 (유령 성 무지개 번개나무·하늘 기둥꽃)
+- [x] 도감 창: 등급 16개·식물 158종·구역 탭 18개가 다 들어가는지 (스크롤), 등급 정렬·필터
 
 **새 구역 3개** (16 `hacker_lab` 해커 연구소 · 17 `developer_room` 개발자의 방 · 18 `bug_dimension` 버그 차원, 테마는 GAME_DESIGN 4장 "7판 새 구역")
-- [ ] 구역 테마 (`Visuals.biomes`): 지금은 코스믹·타이탄·마법의 숲 것을 빌린 임시 (무늬 grid/checker/cracks, 아치 space/marble/crystal). 바닥·담장·아치·장식·분위기 파티클 새로. 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 은 임시 8,000 (6판 7,000) — 꾸미고 나서 다시 정하기 (`tests/smoke_visuals.luau`)
-- [ ] 둥지 모양 `MapBuilder.NEST_STYLE` (새 구역은 기본 "hay")
-- [ ] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시 — 회로 새싹 · 와이파이 해바라기 · 메인프레임 나무 · 키보드 튤립 · 블록 버섯 · 무한 루프 덩굴 · 거꾸로 나무 · 지지직 세계수 …, SEED 10장 135~158번)
-- [ ] **새 경비 3마리 모양** (`Visuals.guards` 임시: 바이러스 덩굴 = `seaweed_monster`, 디버그 선인장 = `cactus_captain`, 글리치 장미 괴물 = `devil_rose` 를 빌림) → `Visuals.monsters` 에 새 괴물 3개
-- [ ] 배경음 `Sounds.Bgm_hacker_lab` · `Bgm_developer_room` · `Bgm_bug_dimension` (지금은 옛 음악 id 를 빌림)
-- [ ] 구역 배너 이모지(`label`)·조명(`LightingController`)·입구 표지판 추천 속도 700B · 900B · 1.2T 확인
+- [x] 구역 테마 (`Visuals.biomes`): 지금은 코스믹·타이탄·마법의 숲 것을 빌린 임시 (무늬 grid/checker/cracks, 아치 space/marble/crystal). 바닥·담장·아치·장식·분위기 파티클 새로. 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 은 임시 8,000 (6판 7,000) — 꾸미고 나서 다시 정하기 (`tests/smoke_visuals.luau`)
+- [x] 둥지 모양 `MapBuilder.NEST_STYLE` (새 구역은 기본 "hay")
+- [x] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시 — 회로 새싹 · 와이파이 해바라기 · 메인프레임 나무 · 키보드 튤립 · 블록 버섯 · 무한 루프 덩굴 · 거꾸로 나무 · 지지직 세계수 …, SEED 10장 135~158번)
+- [x] **새 경비 3마리 모양** (`Visuals.guards` 임시: 바이러스 덩굴 = `seaweed_monster`, 디버그 선인장 = `cactus_captain`, 글리치 장미 괴물 = `devil_rose` 를 빌림) → `Visuals.monsters` 에 새 괴물 3개
+- [x] 배경음 `Sounds.Bgm_hacker_lab` · `Bgm_developer_room` · `Bgm_bug_dimension` (지금은 옛 음악 id 를 빌림)
+- [x] 구역 배너 이모지(`label`)·조명(`LightingController`)·입구 표지판 추천 속도 700B · 900B · 1.2T 확인
 
 **성장 3배** — 화면이 할 일 거의 없음 (`Required` 가 이미 ÷3)
-- [ ] 화면에 "성장 시간"을 `Plants.growSeconds`(표 시간)로 직접 보여 주는 곳이 있으면 `Economy.growSeconds(id)`(실제 시간)로. 튜토리얼 4단계 안내는 "강아지풀 씨앗은 1초" (`Data/Tutorial` 이미 바뀜)
-- [ ] 문서 `docs/UI.md`·`docs/STUDIO_CHECKLIST.md` 의 등급 11개·구역 15개·슈퍼 울트라디바인 설명
+- [x] 화면에 "성장 시간"을 `Plants.growSeconds`(표 시간)로 직접 보여 주는 곳이 있으면 `Economy.growSeconds(id)`(실제 시간)로. 튜토리얼 4단계 안내는 "강아지풀 씨앗은 1초" (`Data/Tutorial` 이미 바뀜)
+- [x] 문서 `docs/UI.md`·`docs/STUDIO_CHECKLIST.md` 의 등급 11개·구역 15개·슈퍼 울트라디바인 설명
 
 ### 8-6. 6판 체크리스트 (끝남)
 > **선임 완료 (2026-10-27)**: 아래 전부 됨 — 클라에서 `placedEggMax`·`record.slot` 은 더 안 씀 (수석이 서버·Types 에서 지워도 됨). 모양 계약(`SeedVisual`·식물 id 모델·`Fruit1~5`·`AuraFx`·`VisualHeight`)은 `docs/UI.md` 2-1장. 둥지 파트 "씨앗 주머니" 모양만 다음에.

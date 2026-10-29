@@ -203,7 +203,8 @@ local function eggTitle(egg: EggSeed): string
 		table.insert(parts, size.name)
 	end
 	table.insert(parts, if pet then Pets.seedName(pet.id) else egg.petId)
-	return table.concat(parts, " ") .. "\n" .. (if rarity then rarity.name else egg.rarity)
+	-- 7판: 이름표의 등급은 화면 영어 이름 (Rarities.displayName, 16번 "H?a.(cke_r!#") — 선임
+	return table.concat(parts, " ") .. "\n" .. (if rarity then rarity.displayName else egg.rarity)
 end
 
 -- 알 파트 만들기 (선임이 나중에 메시로 바꿀 자리: 크기·색만 간단히)

@@ -482,11 +482,21 @@ return function(T, Loader)
 			local left = secret.required - secret.progress
 			T.eq(
 				w.GardenRules.skipCost("rune_rose", secret.progress, secret.required, "all"),
-				math.ceil(left / 60 - 1e-9) * 10 * 100
+				math.ceil(
+					math.ceil(left / 60 - 1e-9) * 10 * 100
+						+ (left / secret.required)
+							* w.H.shared("Economy").fruitValue("rune_rose", "normal", {})
+							* w.H.shared("Data/Config").SKIP_FRUIT_FACTOR
+				)
 			)
 			T.eq(
 				w.GardenRules.skipCost("rune_rose", secret.progress, secret.required, "all"),
-				420 * 10 * 100,
+				math.ceil(
+					420 * 10 * 100
+						+ (420 * 60 / secret.required)
+							* w.H.shared("Economy").fruitValue("rune_rose", "normal", {})
+							* w.H.shared("Data/Config").SKIP_FRUIT_FACTOR
+				),
 				"7판: 남은 실제 420분"
 			)
 			-- 밤: 같은 비밀 씨앗이 30배 빨리 (남은 25,200초 → 840초 = 14분)

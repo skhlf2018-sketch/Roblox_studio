@@ -767,15 +767,17 @@ return function(T, Loader)
 			B.start()
 			local record = placeNew(w, "owl_oak") -- 표 240초 → 7판 80초
 			T.eq(record.required, 80)
-			w.data.money = 79
+			local price = w.H.shared("GardenRules").skipCost("owl_oak", 0, 80, "all") -- 80 + 열매 값 × 10
+			T.truthy(price > 80, "열매 값 부분이 더해짐")
+			w.data.money = price - 1
 			w.H.client(w.player, "SkipGrowth", record.uid, "all")
-			T.eq(w.data.money, 79, "코인 안 빠짐")
+			T.eq(w.data.money, price - 1, "코인 안 빠짐")
 			T.eq(record.progress, 0)
 			T.truthy(w.H.hasNotify(w.player, "error", "코인이 부족해요"))
-			T.truthy(w.H.hasNotify(w.player, "error", "80 코인 필요"))
-			w.data.money = 1000
+			T.truthy(w.H.hasNotify(w.player, "error", "코인 필요"))
+			w.data.money = price
 			w.H.client(w.player, "SkipGrowth", record.uid, "all")
-			T.eq(w.data.money, 1000 - 80)
+			T.eq(w.data.money, 0, "딱 가격만큼 빠짐")
 			T.eq(#w.data.incubators, 0)
 			T.eq(#w.data.pets, 1, "바로 성체")
 			T.eq(w.data.stats.skips, 1)
@@ -791,9 +793,10 @@ return function(T, Loader)
 			local B = w.BaseService
 			B.start()
 			local record = placeNew(w, "owl_oak")
-			w.data.money = 1000
+			local priceHalf = w.H.shared("GardenRules").skipCost("owl_oak", 0, 80, "half") -- 40 + 열매 값 × 10 / 2
+			w.data.money = 1e9
 			w.H.client(w.player, "SkipGrowth", record.uid, "half")
-			T.eq(w.data.money, 1000 - 40)
+			T.eq(w.data.money, 1e9 - priceHalf)
 			T.near(record.progress, 40, 1e-9)
 			T.eq(#w.data.pets, 0, "아직 성체 아님")
 			T.truthy(w.H.hasNotify(w.player, "success", "절반"))
@@ -801,8 +804,9 @@ return function(T, Loader)
 			w.H.advance(1)
 			local before = w.data.money
 			w.H.advance(1) -- 레이트 리밋 여유
+			local expectHalf = w.H.shared("GardenRules").skipCost("owl_oak", record.progress, record.required, "half")
 			w.H.client(w.player, "SkipGrowth", record.uid, "half")
-			T.eq(before - w.data.money, 40)
+			T.eq(before - w.data.money, expectHalf, "두 번째 절반도 공식대로")
 			w.H.uninstall()
 		end
 	)
@@ -812,16 +816,33 @@ return function(T, Loader)
 		function()
 			local w = world()
 			local GardenRules = w.H.shared("GardenRules")
-			T.eq(GardenRules.skipCost("rune_rose", 0, 86400, "all"), 1440 * 10 * 100)
-			T.eq(GardenRules.skipCost("rainbow_thunder_tree", 0, 7 * 86400, "all"), 7 * 1440 * 10 * 500)
-			T.eq(GardenRules.skipCost("static_world_tree", 0, 86400, "all"), 1440 * 10 * 5000)
 			local Economy = w.H.shared("Economy")
+			local Config = w.H.shared("Data/Config")
+			local function fruitPart(id: string): number
+				return Economy.fruitValue(id, "normal", {}) * Config.SKIP_FRUIT_FACTOR
+			end
+			T.eq(
+				GardenRules.skipCost("rune_rose", 0, 86400, "all"),
+				math.ceil(1440 * 10 * 100 + fruitPart("rune_rose"))
+			)
+			T.eq(
+				GardenRules.skipCost("rainbow_thunder_tree", 0, 7 * 86400, "all"),
+				math.ceil(7 * 1440 * 10 * 500 + fruitPart("rainbow_thunder_tree"))
+			)
+			T.eq(
+				GardenRules.skipCost("static_world_tree", 0, 86400, "all"),
+				math.ceil(1440 * 10 * 5000 + fruitPart("static_world_tree"))
+			)
 			T.eq(
 				GardenRules.skipCost("rune_rose", 0, Economy.growSeconds("rune_rose"), "all"),
-				480 * 10 * 100,
+				math.ceil(480 * 10 * 100 + fruitPart("rune_rose")),
 				"7판: 실제 Required(표 1일 ÷ 3 = 8시간) 기준 → 48만 코인"
 			)
-			T.eq(GardenRules.skipCost("sprout_daisy", 0, 10, "all"), 10, "10초도 1분으로 올림")
+			T.eq(
+				GardenRules.skipCost("sprout_daisy", 0, 10, "all"),
+				math.ceil(10 + fruitPart("sprout_daisy")),
+				"10초도 1분으로 올림 + 열매 값 × 10"
+			)
 			T.eq(GardenRules.skipCost("sprout_daisy", 10, 10, "all"), 0, "다 자랐으면 0")
 			T.eq(GardenRules.skipCost("없는식물", 0, 10, "all"), nil)
 			w.H.uninstall()

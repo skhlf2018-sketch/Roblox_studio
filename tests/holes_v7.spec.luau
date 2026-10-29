@@ -545,7 +545,10 @@ return function(T, Loader)
 					local minutes = math.max(1, math.ceil(tableSeconds / 3 / 60 - 1e-9))
 					T.eq(
 						GardenRules.skipCost(id, 0, record.required, "all"),
-						minutes * 10 * SKIP_MULT[plant.rarity],
+						math.ceil(
+							minutes * 10 * SKIP_MULT[plant.rarity]
+								+ w.H.shared("Economy").fruitValue(id, "normal", {}) * w.Config.SKIP_FRUIT_FACTOR
+						),
 						id .. " 건너뛰기 가격"
 					)
 					T.eq(Economy.timerSeconds(0, record.required), record.required)
@@ -1246,9 +1249,14 @@ return function(T, Loader)
 									remaining /= 2
 								end
 								if remaining > 0 then
-									expectCost = math.max(1, math.ceil(remaining / 60 - 1e-9))
+									local timePart = math.max(1, math.ceil(remaining / 60 - 1e-9))
 										* 10
 										* SKIP_MULT[Plants.get(r.petId).rarity]
+									-- 7판(사장님 2026-10-29): + 건너뛸 비율 × 열매 1개 값 × SKIP_FRUIT_FACTOR
+									local fruitPart = (remaining / r.required)
+										* w.H.shared("Economy").fruitValue(r.petId, "normal", {})
+										* w.Config.SKIP_FRUIT_FACTOR
+									expectCost = math.ceil(timePart + fruitPart)
 								end
 							end
 						end

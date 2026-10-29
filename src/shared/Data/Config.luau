@@ -48,6 +48,7 @@ local Config = {
 	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·먹이기·성체 뽑기: 내 정원(울타리 사각형)에서 이 거리 안
 	-- 건너뛰기 (SkipGrowth): 가격 = ceil(건너뛸 남은 시간(분)) × SKIP_COINS_PER_MINUTE × 등급 배수. "half" 는 남은 시간의 절반만
 	SKIP_COINS_PER_MINUTE = 10,
+	SKIP_FRUIT_FACTOR = 10, -- 사장님(2026-10-29 "올려"): 건너뛰기 가격에 (건너뛸 비율 × 그 식물 열매 1개 값 × 10) 을 더함 — 높은 등급이 거의 공짜였던 것 수정
 	SKIP_RARITY_MULTIPLIER = {
 		common = 1,
 		uncommon = 2,

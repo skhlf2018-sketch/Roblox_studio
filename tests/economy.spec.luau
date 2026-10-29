@@ -101,8 +101,13 @@ return function(T, Loader)
 				"밤이면 표 시간의 1/90"
 			)
 			T.eq(Economy.timerSeconds(0, required), 8 * 3600, "타이머 = ÷3 된 남은 시간")
-			T.eq(GardenRules.skipCost("rune_rose", 0, required, "all"), 480 * 10 * 100, "남은 실제 480분")
-			T.eq(GardenRules.skipCost("rune_rose", 0, required, "half"), 240 * 10 * 100)
+			local fruitPart = Economy.fruitValue("rune_rose", "normal", {}) * Config.SKIP_FRUIT_FACTOR
+			T.eq(
+				GardenRules.skipCost("rune_rose", 0, required, "all"),
+				math.ceil(480 * 10 * 100 + fruitPart),
+				"남은 실제 480분 + 열매 값 × 10"
+			)
+			T.eq(GardenRules.skipCost("rune_rose", 0, required, "half"), math.ceil(240 * 10 * 100 + fruitPart / 2))
 			T.eq(GardenRules.stage(required * 0.3, required), "stem", "단계(%)도 ÷3 된 Required 기준")
 			T.near(Economy.fruitInterval("rune_rose"), 16 / 1.8, 1e-9, "열매 간격은 3배와 상관없음")
 			T.eq(Economy.fruitValue("rune_rose", "normal", {}), 5e6, "열매 값도 그대로")

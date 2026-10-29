@@ -93,7 +93,15 @@ function GardenRules.skipCost(petId: string, progress: number, required: number,
 	if not plant then
 		return nil
 	end
-	return GardenRules.skipCostForSeconds(plant.rarity, GardenRules.skipSeconds(progress, required, mode))
+	local seconds = GardenRules.skipSeconds(progress, required, mode)
+	local timePart = GardenRules.skipCostForSeconds(plant.rarity, seconds)
+	if timePart <= 0 or required ~= required or required <= 0 or required == math.huge or seconds == math.huge then
+		return timePart
+	end
+	-- 7판 (사장님 2026-10-29): + 건너뛸 비율 × 열매 1개 값(보통 크기, 돌연변이 없음) × SKIP_FRUIT_FACTOR(10)
+	local fraction = math.clamp(seconds / required, 0, 1)
+	local fruitPart = fraction * Economy.fruitValue(petId, "normal", {}) * Config.SKIP_FRUIT_FACTOR
+	return math.ceil(timePart + fruitPart)
 end
 
 -- 성체 뽑아서 팔기 값 (코인) = 열매 1개 값 × 20

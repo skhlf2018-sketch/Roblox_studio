@@ -1,4 +1,10 @@
-# Remote 목록 (서버 ↔ 클라) — 6판 "씨앗을 훔치세요"
+# Remote 목록 (서버 ↔ 클라) — 7판 "씨앗을 훔치세요"
+> **[7판] 등급 16개 · 구역 18개 · 성장 속도 3배 (수석, 2026-10-29 — 사장님 지시 2026-10-28)** — **Remote·Attribute·Snapshot 모양은 그대로** (새 Remote 없음). 설계: `docs/SEED_GAME_DESIGN.md` 9장 21~32번.
+> - **등급** (`Data/Rarities`): 16개 = common … divine · **super · hacker · original · developer · ultradivine · hacker_glitch** (`super_ultradivine` 없앰 → 유령 성 2종은 `super`). 새 칸 **`displayName`** = 화면에 보일 영어 이름 (`Rarities.displayName(id)`, 16번은 `"H?a.(cke_r!#"`). `Rarity` Attribute·`EggInfo.rarity`·`Announce.rarity` 에 새 id 가 옴. 아우라 id 5개 추가 (`code_rain` · `first_light` · `build_grid` · `ultra_halo` · `glitch_static`).
+> - **구역** (`Data/Biomes`): 18개 = … 15 유령 성 · **16 `hacker_lab` 해커 연구소 · 17 `developer_room` 개발자의 방 · 18 `bug_dimension` 버그 차원**. `ZoneEntered`·`CurrentZone`·`RunAlert.guardName`(바이러스 덩굴 · 디버그 선인장 · 글리치 장미 괴물)에 새 id·이름이 옴. 맵 끝 `MapLayout.MAP_END_Z` = 4320. 새 구역 도감 무기 없음.
+> - **성장 3배** (`Config.GROWTH_SPEED_MULTIPLIER = 3`, `Economy.growSeconds`): 씨앗 `Required`(BagEgg·IncubatorRecord·IncubatingEgg Attr)가 표 시간 ÷ 3. 타이머·단계·건너뛰기 가격 계산식은 그대로 (`Required` 가 이미 ÷3). 강아지풀 1초. 저장 스키마 7.
+> - 선임 할 일: **8장 "7판 선임 체크리스트"**. 지금 클라·Visuals 는 `[7판 수석 임시]` 로 안 깨질 만큼만.
+
 > **2026-10-28 사장님 지시로 물 주기(PetPet → PetPetted) 전부 삭제.** 아래에 남은 "물 주기" 글은 옛 설명이며 코드에는 없음.
 
 > **[6판] 씨앗을 훔치세요 (수석, 2026-10-27)** — 사장님이 만든 게임으로 바꿈 (설계: `docs/SEED_GAME_DESIGN.md`). **서버·공유 규칙은 다 됨, 클라 화면은 선임** (8장 "선임 할 일").
@@ -40,7 +46,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 위에서 본 모습 (+z 가 "멀리"). 바닥 윗면 `FLOOR_Y = 0`, 복도 벽 안쪽 면 `x = ±110`, 벽 높이 `WALL_HEIGHT = 60`.
 
 ```
- z = 3600  ── 맵 끝 벽 ──────────────────────────  MAP_END_Z
+ z = 4320  ── 맵 끝 벽 ──────────────────────────  MAP_END_Z (7판: 구역 18개, 6판까지 3600)
+ z = 4080~4320  18 버그 차원 (7판)   · 3840~4080 17 개발자의 방 · 3600~3840 16 해커 연구소
  z = 3360~3600  15 유령 성
    ...          (구역 하나 = 복도 폭 220 × 길이 240, 사이에 벽·문 없음)
  z = 240~480    2 호수
@@ -57,8 +64,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `CORRIDOR_WIDTH`, `HALF_WIDTH`, `WALL_HEIGHT`, `FLOOR_Y` | 220, 110, 60, 0 | 바닥·벽 |
 | `HUB` | `{ zMin = -290, zMax = 0 }` | 허브 바닥·뒤 벽 |
 | `SAFE_ZONE_Z` | 0 | 허브 경계 (z < 0 = 안전) |
-| `BIOME_LENGTH`, `MAP_END_Z` | 240, 3600 | 구역 바닥 |
-| `biomes[i]` | `{ id, index, zMin, zMax, centerZ, name, nameEn }` 15개 (Biomes.list 순서) | 구역 바닥·표지판 |
+| `BIOME_LENGTH`, `MAP_END_Z` | 240, 4320 (7판, 구역 18개) | 구역 바닥 |
+| `biomes[i]` | `{ id, index, zMin, zMax, centerZ, name, nameEn }` 18개 (Biomes.list 순서, 7판) | 구역 바닥·표지판 |
 | `NIGHT_WALL` | `{ z = 0, xMin = -110, xMax = 110, height = 60, thickness = 2 }` | NightWall 태그 파트 |
 | `plots[i]` (`plot(i)`) | `{ index, side "left"/"right", center {x,z}, size {w=60(z 방향), d=70(x 방향)}, facing (+1 = +x 를 봄 / -1), rect, penRect, yardRect, spawn, treadmill, sellStall, signs = { owner, penUpgrade, treadmillUpgrade } }` | 베이스 전부 |
 | `penRect(i)` | 정원(5판 우리) = 뒤쪽 46 (벽 쪽) | 울타리·정원 바닥 · **6판: 씨앗을 심는 곳 (PlaceEgg) = 성체 식물이 서 있는 곳**, 열매 따기·먹이기·성체 팔기·물 주기 거리(20)도 이 사각형 기준 |
@@ -127,7 +134,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `PurchaseUpgrade` | `kind: "Pen"\|"Treadmill"\|"Trail"`, `trailId: string?` (Trail 일 때만) | 종류·id 허용 목록, 다음 레벨 있는지, 코인 충분한지 (상점 화면 버튼이라 거리 검사 없음). `"Pen"` = 6판 **정원 업그레이드**(칸 7 → 18). 러닝머신은 **20레벨까지** (6판). 트레일은 사면 바로 장착 | 5 / 2 |
 | `UseTool` | `kind`: `"Bat"\|"BearTrap"\|"WaterBat"\|"Katana"\|"Axe"\|"AngelSpear"\|"Hammer"\|"CandyCane"\|"Scythe"` (`Remotes.ToolKinds`) | 그 도구를 손에 들고 있는지, 구역 무기는 해금했는지, 근접 무기 공용 쿨다운, **허브(안전 구역)가 아닌지**, 곰덫 개수. 대상·위치는 서버가 찾음 | 4 / 2 |
 | `ClaimIndexReward` | `"all"` 또는 식물 id | 발견했고(= 한 번이라도 성체가 됨) 아직 안 받았는지 | 5 / 1 |
-| `SakuraOffer` | `plantUid: string` (내 정원의 **성체** uid) | 사쿠라 나무(`SakuraIncubator` 파트 표면) 14 스터드 안, 내 정원의 성체인지 (자라는 씨앗은 안 됨). 통과: 그 성체가 없어지고(정원 자리가 빔) 크리스탈 +등급별(`Config.SAKURA_OFFER_CRYSTALS`: 일반 1 … 비밀 20 … 슈퍼 울트라디바인 100) → `SakuraResult` offered + `Notify` + `DataUpdate("pets")`·`DataUpdate("special")` | 3 / 1 |
+| `SakuraOffer` | `plantUid: string` (내 정원의 **성체** uid) | 사쿠라 나무(`SakuraIncubator` 파트 표면) 14 스터드 안, 내 정원의 성체인지 (자라는 씨앗은 안 됨). 통과: 그 성체가 없어지고(정원 자리가 빔) 크리스탈 +등급별(`Config.SAKURA_OFFER_CRYSTALS`: 일반 1 … 비밀 20 … 슈퍼 100 … 해커 글리치 700, 7판) → `SakuraResult` offered + `Notify` + `DataUpdate("pets")`·`DataUpdate("special")` | 3 / 1 |
 | **`DropEgg`** (2판) | 없음 | 씨앗을 들고 있는지. 씨앗은 그 자리에 떨어짐 → 경비 추격 끝(`ChaseEnded` dropped), 60초 뒤 사라짐 | 2 / 1 |
 | **`TreadmillLeave`** (2판) | 없음 | 러닝머신 위인지. 내려서 벨트 앞으로 옮겨 줌. **클라가 러닝머신 위에서 점프할 때 보내세요** (`OnTreadmill` 이 true 일 때) | 3 / 2 |
 | **`EquipTrail`** (2판 마무리) | `trailId: string` 또는 `"none"` | 허용 목록, 가진 트레일인지. 바꾸면 저장 + 속도 다시 계산 + `DataUpdate("upgrades")` + `Notify` | 5 / 2 |
@@ -136,7 +143,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`PickFruit`** (6판) | `plantUid: string` 또는 `"all"` | 내 정원(`penRect`)에서 **20 스터드 안**(`Config.GARDEN_ACTION_RADIUS`), uid 면 내 정원의 성체인지(아니면 조용히 무시). 그 성체(들)의 열매를 전부 **열매 가방 자리만큼** 땀 (열매 1개 값 = 딸 때 크기·돌연변이 반영, `FruitRules.fruitValue`). → 식물마다 `FruitPicked` + `DataUpdate("fruits")` + `DataUpdate("pets")`. 열매가 없으면 `Notify` info, 가방이 가득 차면 `Notify` error | 10 / 5 |
 | **`SellFruits`** (6판) | 없음 | **판매 가판대 14 스터드 안** (`SellStall` 태그 파트 표면 또는 `MapLayout.sellSpots()` — 허브 1 + 베이스마다 1), 가방에 열매가 1개 이상. 가방을 전부 팖 → 코인 (`FruitRules.bagValue` × 코인 2배 게임패스) → `FruitsSold` + `Notify` + `DataUpdate("fruits")`. 튜토리얼 5단계는 이걸로 끝남 | 3 / 1 |
 | **`FeedFruit`** (6판) | `plantUid: string`, `fruitId: string` (열매 가방의 칸 = 그 열매를 맺은 **식물 id**) | 내 정원 20 안, 내 정원의 성체, 가방에 그 열매가 1개 이상, **붙을 수 있는 돌연변이가 남아 있음** (`FruitRules.feedOptions(fruitId, plant.mutations)` 가 비면 거부 — 열매 그대로, `Notify` error). 통과: 열매 1개를 먹고 `FruitRules.rollFeed` 확률로 돌연변이 1개 (자연: 황금·무지개는 더 좋은 것으로만 바뀜 / 원소: 얼음·불·번개 중 하나만, 그 구역 열매면 ×3, 높은 등급 열매일수록 ↑, 합 상한 90%) → `FeedResult` + `Notify` + `DataUpdate("fruits"/"pets")`. 미리보기 확률은 `FruitRules.feedChance` | 5 / 2 |
-| **`SkipGrowth`** (6판) | `eggUid: string` (정원에서 자라는 씨앗), `mode: "all"\|"half"` (`Remotes.SkipModes`) | 내 정원의 자라는 씨앗, 남은 시간 > 0, **코인 충분** (가격 = `GardenRules.skipCost(petId, progress, required, mode)` = 올림(건너뛸 분) × 10 코인 × 등급 배수, 일반 1 … 슈퍼 울트라디바인 500. 남은 시간은 씨앗 위 타이머 숫자(밤에도 같은 "성장 초")). `"all"` 이면 바로 성체(`PlantGrown`), `"half"` 면 남은 시간 절반. 화면 버튼이라 거리 검사 없음. 코인 부족은 `Notify` error | 5 / 2 |
+| **`SkipGrowth`** (6판) | `eggUid: string` (정원에서 자라는 씨앗), `mode: "all"\|"half"` (`Remotes.SkipModes`) | 내 정원의 자라는 씨앗, 남은 시간 > 0, **코인 충분** (가격 = `GardenRules.skipCost(petId, progress, required, mode)` = 올림(건너뛸 분) × 10 코인 × 등급 배수, 일반 1 … 슈퍼 500 … 해커 글리치 5000. 남은 시간은 씨앗 위 타이머 숫자(밤에도 같은 "성장 초" — 7판: 성장 3배가 적용된 Required 기준)). `"all"` 이면 바로 성체(`PlantGrown`), `"half"` 면 남은 시간 절반. 화면 버튼이라 거리 검사 없음. 코인 부족은 `Notify` error | 5 / 2 |
 | **`SellPlant`** (6판, 5판 `SellPet` 자리) | `plantUid: string` (내 정원의 **성체**) | 내 정원 20 안 **또는** 판매 가판대 14 안, 내 정원의 성체. 값 = 열매 1개 값 × 20 (`GardenRules.sellPrice(plant)`, 코인 2배 게임패스면 × 2) → 정원 자리가 빔 (달린 열매도 같이 없어짐 — 먼저 따세요) → `Notify` + `DataUpdate("pets")` | 10 / 4 |
 | **`SakuraDraw`** (6판) | 없음 | 사쿠라 나무 14 안, 크리스탈 ≥ `Config.SAKURA_DRAW_COST`(10), 씨앗 가방에 빈칸 (가득 차면 거부, 크리스탈 그대로). 뽑기: 벚꽃 씨앗(벚꽃 요정 나무·코스믹) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무·비밀) 2.5% (`Config.SAKURA_SEEDS`), 크기·자연 돌연변이는 둥지 씨앗처럼 → `EggGranted`(source `"sakura"`) + `SakuraResult` draw | 5 / 2 |
 
@@ -260,7 +267,7 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 ## 7. 6판 규칙 요약 (자세한 건 코드 맨 위 주석)
 
 - **속도 → 걷기·경비·잡힘·떨어진 씨앗·배달·밤 귀가·치트 방지**: 5판 그대로 (`SpeedMath`, `GuardianService`, `EggRules`, `BaseService`, `AntiCheatService`). 경비는 이름만 식물 괴물.
-- **둥지 씨앗** (`EggService`, `EggRoll`, `Data/EggSpawn`): 구역마다 등급 가중치(`BIOME_RARITY_WEIGHTS`, SEED 12장) → 그 등급 식물 중 고르게. 초기화 때 특별 추첨(슈퍼 울트라디바인 0.5% · 신성 0.2% · 영원 2% · 비밀 8%)과 공지 씨앗(춤추는 버섯·세계수·황혼 꽃·균형의 나무)은 전체 공지. 자연 돌연변이 실버 5% · 황금 2% · 무지개 0.5%.
+- **둥지 씨앗** (`EggService`, `EggRoll`, `Data/EggSpawn`): 구역마다 등급 가중치(`BIOME_RARITY_WEIGHTS`, SEED 12장) → 그 등급 식물 중 고르게. 초기화 때 특별 추첨(7판: 해커 글리치 0.5% · 울트라디바인·개발자·오리지널·해커·슈퍼 각 1% · 신성 0.2% · 영원 2% · 비밀 8%)과 공지 씨앗(춤추는 버섯·세계수·황혼 꽃·균형의 나무)은 전체 공지. 자연 돌연변이 실버 5% · 황금 2% · 무지개 0.5%.
 - **정원** (`BaseService`, `shared/GardenRules`, `shared/EggPlacement`): 칸 = 정원 업그레이드 칸 수(7 → 18) = 자라는 씨앗 + 성체. 심은 씨앗만 자람(밤 30배, 게임패스 2배, 오프라인 24시간까지). 단계 새싹 0% · 줄기 25% · 봉오리 60% · 성체 100%. 다 자라면 그 자리에서 성체 + 도감 발견 + 열매 1개.
 - **열매** (`FruitService`, `shared/FruitRules`): 성체마다 `fruitIntervalSeconds`(Data/Plants, 일반 30초 … 슈퍼 9초)마다 +1, 최대 5. 밤에도 빠르기 그대로, 오프라인에도 맺음. 열매 1개 값 = 식물 열매 값 × 크기(보통 1 · 큼 1.5 · 거대 3 · 초거대 6) × 돌연변이(곱). 가방 300개. **자동 수입 없음**.
 - **건너뛰기** (`GardenRules.skipCost`): 올림(남은 분) × 10 코인 × 등급 배수 (전부 / 절반).
@@ -271,7 +278,30 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 - **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+500 코인). 튜토리얼 씨앗 = 숲 강아지풀(3초).
 - **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id`.
 
-## 8. 선임 할 일 (6판 체크리스트)
+## 8. 선임 할 일
+
+### 8-7. 7판 선임 체크리스트 (수석 2026-10-29 — 지금은 `[7판 수석 임시]` 로 안 깨질 만큼만)
+
+**등급 16개 · 영어 표시** (사장님: "화면 표시 이름은 영어")
+- [ ] 화면의 등급 글자를 전부 `Rarities.displayName(id)` 로 (지금 `Theme.rarityName` 은 한국어 `name` 을 돌려줌 → displayName 으로 바꾸면 거의 다 됨): 도감(`IndexController`)·성체 카드(`HatchController`)·자라는 씨앗 패널(`IncubatorController`)·정원 식물 창(`PetsController`/`PetPicker`)·열매 가방(`FruitBagController`)·공지(`NotifyController` rareEgg)·핫바·씨앗 이름표·특별 씨앗 글자(`Visuals.specialEggs` — 새 6개는 이미 "Hacker 씨앗!" 식, 옛 비밀·영원·신성도 영어로). 서버 안내 글(`Notify`·`Announce.text`)은 한국어 이름 그대로 옴 → 화면에서 등급 부분만 바꾸려면 payload 의 `rarity` id 로
+- [ ] **16번 "H?a.(cke_r!#"**: 글자 그대로 보이게 (RichText 를 쓰는 곳은 `<`·`&` 가 없어서 그대로 됨). 어울리는 깨진 글자·색 바뀜 연출 환영
+- [ ] 등급 색·무지개 (`Theme.RainbowRarities` 임시: divine·super·ultradivine·hacker_glitch), `Visuals.rarityEffects`·`eggLooks`(씨앗 껍데기) 새 6개는 임시 → 다시 꾸미기
+- [ ] **아우라 5개 새로** (`Visuals.auras`, 이름 = `Rarities.aura`): `code_rain`(해커, 초록 코드 비) · `first_light`(오리지널, 태초의 금빛 햇살) · `build_grid`(개발자, 파란 빛 격자) · `ultra_halo`(울트라디바인, 무지개 후광 두 겹 + 빛기둥) · `glitch_static`(해커 글리치, 지지직 깨진 픽셀 + 빛기둥). 지금은 있는 파티클·고리로 임시. `sky_pillar` 는 이제 **슈퍼** 등급 (유령 성 무지개 번개나무·하늘 기둥꽃)
+- [ ] 도감 창: 등급 16개·식물 158종·구역 탭 18개가 다 들어가는지 (스크롤), 등급 정렬·필터
+
+**새 구역 3개** (16 `hacker_lab` 해커 연구소 · 17 `developer_room` 개발자의 방 · 18 `bug_dimension` 버그 차원, 테마는 GAME_DESIGN 4장 "7판 새 구역")
+- [ ] 구역 테마 (`Visuals.biomes`): 지금은 코스믹·타이탄·마법의 숲 것을 빌린 임시 (무늬 grid/checker/cracks, 아치 space/marble/crystal). 바닥·담장·아치·장식·분위기 파티클 새로. 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 은 임시 8,000 (6판 7,000) — 꾸미고 나서 다시 정하기 (`tests/smoke_visuals.luau`)
+- [ ] 둥지 모양 `MapBuilder.NEST_STYLE` (새 구역은 기본 "hay")
+- [ ] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시 — 회로 새싹 · 와이파이 해바라기 · 메인프레임 나무 · 키보드 튤립 · 블록 버섯 · 무한 루프 덩굴 · 거꾸로 나무 · 지지직 세계수 …, SEED 10장 135~158번)
+- [ ] **새 경비 3마리 모양** (`Visuals.guards` 임시: 바이러스 덩굴 = `seaweed_monster`, 디버그 선인장 = `cactus_captain`, 글리치 장미 괴물 = `devil_rose` 를 빌림) → `Visuals.monsters` 에 새 괴물 3개
+- [ ] 배경음 `Sounds.Bgm_hacker_lab` · `Bgm_developer_room` · `Bgm_bug_dimension` (지금은 옛 음악 id 를 빌림)
+- [ ] 구역 배너 이모지(`label`)·조명(`LightingController`)·입구 표지판 추천 속도 700B · 900B · 1.2T 확인
+
+**성장 3배** — 화면이 할 일 거의 없음 (`Required` 가 이미 ÷3)
+- [ ] 화면에 "성장 시간"을 `Plants.growSeconds`(표 시간)로 직접 보여 주는 곳이 있으면 `Economy.growSeconds(id)`(실제 시간)로. 튜토리얼 4단계 안내는 "강아지풀 씨앗은 1초" (`Data/Tutorial` 이미 바뀜)
+- [ ] 문서 `docs/UI.md`·`docs/STUDIO_CHECKLIST.md` 의 등급 11개·구역 15개·슈퍼 울트라디바인 설명
+
+### 8-6. 6판 체크리스트 (끝남)
 > **선임 완료 (2026-10-27)**: 아래 전부 됨 — 클라에서 `placedEggMax`·`record.slot` 은 더 안 씀 (수석이 서버·Types 에서 지워도 됨). 모양 계약(`SeedVisual`·식물 id 모델·`Fruit1~5`·`AuraFx`·`VisualHeight`)은 `docs/UI.md` 2-1장. 둥지 파트 "씨앗 주머니" 모양만 다음에.
 
 서버·공유 규칙은 끝남. 아래는 화면·모양·소리 (지금은 수석이 클라를 **안 깨질 만큼만** 고쳐 둠 — `[6판 수석 임시]` 주석이 붙은 곳).

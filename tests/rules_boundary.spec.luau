@@ -51,7 +51,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"크기별 안전선: 딱 경계는 안전, 경계보다 0.1% 모자라면 잡힘 (4크기 × 15구역)",
+		"크기별 안전선: 딱 경계는 안전, 경계보다 0.1% 모자라면 잡힘 (4크기 × 18구역)",
 		function()
 			for _, b in Biomes.list do
 				for _, size in Sizes.list do
@@ -185,19 +185,25 @@ return function(T, Loader)
 		T.eq(p, 300)
 	end)
 
-	T.test("성장 시간이 가장 긴 씨앗(하늘 기둥꽃 8일)은 몇 바퀴 만에 성체가 되나", function()
-		local longest, id = 0, nil
-		for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
-			if plant.growSeconds > longest then
-				longest, id = plant.growSeconds, plant.id
+	T.test(
+		"성장 시간이 가장 긴 씨앗(7판 지지직 세계수: 표 60일 → 성장 3배로 실제 20일)은 몇 바퀴 만에 성체가 되나",
+		function()
+			local longest, id = 0, nil
+			for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
+				local seconds = Economy.growSeconds(plant.id)
+				if seconds > longest then
+					longest, id = seconds, plant.id
+				end
 			end
+			T.eq(id, "static_world_tree")
+			T.eq(longest, 20 * 86400)
+			-- 한 바퀴(298초)에 자라는 양 = 588초 → 약 2939바퀴 = 접속한 채로 약 10일 (밤 30배 덕분에 절반쯤)
+			local cycles = longest / (285 + 300 + 3)
+			T.truthy(cycles > 2930 and cycles < 2945, "실제 " .. cycles)
+			local days = cycles * 298 / 86400
+			T.truthy(days > 10 and days < 10.3, "약 10일: " .. days)
 		end
-		T.eq(id, "sky_pillar_flower")
-		T.eq(longest, 8 * 86400)
-		-- 한 바퀴(298초)에 자라는 양 = 588초 → 약 1176바퀴 = 약 4일 (밤 30배 덕분에 절반쯤)
-		local cycles = longest / (285 + 300 + 3)
-		T.truthy(cycles > 1170 and cycles < 1180, "실제 " .. cycles)
-	end)
+	)
 
 	T.test("성장 진행: 시간이 거꾸로(dt<0)여도 줄지 않고, 필요량에서 멈춤", function()
 		local p, ready = Economy.advanceIncubation(10, 100, -5, 30)
@@ -460,7 +466,10 @@ return function(T, Loader)
 		end
 		T.truthy(MapLayout.isInHub({ X = 0, Z = -0.001 }))
 		T.falsy(MapLayout.isInHub({ X = 0, Z = 0 }))
-		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z - 0.001), "haunted_castle")
+		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z - 0.001), "bug_dimension", "7판: 맨 끝 = 18 버그 차원")
+		T.eq(MapLayout.MAP_END_Z, 4320)
+		T.eq(MapLayout.zoneAt(3600 - 0.001), "haunted_castle", "15 유령 성 자리는 그대로")
+		T.eq(MapLayout.zoneAt(3600), "hacker_lab")
 		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z), nil)
 	end)
 

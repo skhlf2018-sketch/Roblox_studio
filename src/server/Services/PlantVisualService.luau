@@ -17,10 +17,10 @@
 	모델 구조: PrimaryPart "Root"(Anchored, 바닥 가운데) + 나머지 파트는 Root 에 WeldConstraint (Anchored = false).
 	  CanCollide/CanTouch/CanQuery = false. 모델 Attr Sway = true (클라가 가까운 식물만 Root 를 살짝 흔듦),
 	  Height = 꼭대기 높이(스터드). 정원 파트에는 Attr VisualHeight (파트 바닥 기준 모델 꼭대기 높이) — 클라 팝업·프롬프트용.
-	아우라 (addAura, Visuals.auras = Rarities.aura 11종):
+	아우라 (addAura, Visuals.auras = Rarities.aura 16종, 7판):
 	  파티클·빛은 희귀(rare) 이상만 (원소 돌연변이 파티클은 등급 상관없이). 서버는 Enabled = false 로 만들고
 	  그 파트에 태그 Visuals.Tags.AuraFx → 클라가 100 스터드 안 것만 켬. 고리(ring)는 고정 네온 파트,
-	  슈퍼 울트라디바인 하늘 빛기둥(Beam "SkyPillar")은 항상 켜짐 (AuraFx 대상 아님).
+	  beam 아우라(sky_pillar 슈퍼 · 7판 ultra_halo · glitch_static) 하늘 빛기둥(Beam "SkyPillar")은 항상 켜짐 (AuraFx 대상 아님).
 	서버에서 매 프레임 루프 없음. 연결은 파트가 없어질 때 같이 끊김 (상태 표도 Destroying 때 지움).
 ]]
 
@@ -269,7 +269,7 @@ export type AuraOptions = { mutations: { string }?, noBeam: boolean?, height: nu
 
 --[[
 	host 파트에 등급 아우라 파티클·빛 (+ 원소 돌연변이 파티클)을 붙임. 만든 게 있으면 host 에 AuraFx 태그.
-	  파티클/빛 = 희귀(rare) 이상만, 모두 Enabled = false (클라가 켬). sky_pillar 빛기둥은 Enabled = true.
+	  파티클/빛 = 희귀(rare) 이상만, 모두 Enabled = false (클라가 켬). beam 아우라 빛기둥은 Enabled = true.
 	반환: 붙인 효과 수
 ]]
 function PlantVisualService.addAura(host: BasePart, rarityId: string, scale: number, opts: AuraOptions?): number

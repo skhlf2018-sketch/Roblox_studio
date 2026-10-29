@@ -2,7 +2,7 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 6 (6판 "씨앗을 훔치세요"). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 7 (7판 — 칸 모양은 6판 "씨앗을 훔치세요" 그대로). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 식물 id, 잘못된 숫자, 중복 uid, 정원 칸 수 초과 등은 고치거나 버림)
 	6판 용어: pets = 정원의 성체 식물, incubators = 정원에 심어 자라는 씨앗, eggs = 씨앗 가방, fruits = 열매 가방, money = 코인
 
@@ -13,6 +13,9 @@
 	     5 이하 → 6: **초기화** (사장님 지시: 새 사람으로 시작). 남기는 것 = 속도(speed)·트레일(trails, equippedTrail)·
 	       러닝머신 레벨(treadmillLevel) 만. 펫·알·돈·도감·정원(우리) 레벨·곰덫·무기·크리스탈·통계는 버리고 튜토리얼 1단계부터.
 	       (옛 펫 id 는 6판 식물에 없어서 어차피 못 씀. 3 이전 데이터는 장착 트레일이 없으니 가진 것 중 최고를 장착)
+	  7 (7판): 칸 모양은 6 그대로. 성장 3배(Config.GROWTH_SPEED_MULTIPLIER) → 씨앗 Required = 표 시간 ÷ 3.
+	     6 → 7: 정원·가방 씨앗의 progress 를 "자란 비율" 이 같게 새 Required 에 맞춤 (rescaleProgress). 등급 16개로
+	     바뀌었지만 저장 데이터에는 등급 id 가 없고(식물 id 만) 옛 슈퍼 울트라디바인 식물 2종은 id 그대로라 보정할 것 없음.
 	  보정: 정원(자라는 씨앗 + 성체)이 정원 칸 수를 넘으면 자라는 씨앗은 가방으로, 그래도 넘치는 성체는 코인으로 바꿈
 	        (팔기 값 = GardenRules.sellPrice). 자리가 깨진 씨앗·성체는 빈 격자 자리로.
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
@@ -421,6 +424,37 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	return data
 end
 
+-- 6 → 7: 씨앗 한 칸의 진행도를 새 Required(Economy.growSeconds = 표 ÷ 3)에 같은 비율로 맞춤. 고쳤으면 true
+function DataSchema.rescaleProgress(entry: unknown): boolean
+	if typeof(entry) ~= "table" then
+		return false
+	end
+	local e = entry :: { [string]: unknown }
+	local petId = e.petId
+	local plant = if typeof(petId) == "string" then Plants.get(petId :: string) else nil
+	local progress = e.progress
+	if not plant or typeof(progress) ~= "number" then
+		return false
+	end
+	local p = progress :: number
+	if p ~= p or p < 0 then
+		return false
+	end
+	local saved = e.required
+	local oldRequired = plant.growSeconds
+	if typeof(saved) == "number" then
+		local s = saved :: number
+		if s == s and s > 0 and s < math.huge then
+			oldRequired = s
+		end
+	end
+	local fraction = math.clamp(p / oldRequired, 0, 1)
+	local newRequired = Economy.growSeconds(plant.id)
+	e.progress = fraction * newRequired
+	e.required = newRequired
+	return true
+end
+
 -- 버전 마이그레이션 (reconcile 전에 실행). 표를 그 자리에서 고쳐서 돌려줌.
 function DataSchema.migrate(raw: unknown): unknown
 	if typeof(raw) ~= "table" then
@@ -455,6 +489,20 @@ function DataSchema.migrate(raw: unknown): unknown
 		src.tutorialStep = 1
 		src.resetFromVersion = version -- 기록용 (reconcile 이 버리므로 저장 데이터에 남지 않음)
 		version = 6
+	end
+	if version < 7 then
+		-- 6 → 7 (7판 성장 3배): 씨앗 Required 가 표 시간 ÷ 3 으로 줄었으므로, 정원·가방 씨앗의 진행도(progress)도
+		-- 같은 "자란 비율" 이 되게 새 Required 에 맞춤 (안 하면 3분의 1 넘게 자란 씨앗이 접속하자마자 성체가 됨).
+		-- 저장된 required 가 쓸 수 있으면 그것, 아니면 표 시간(6판 Required) 기준. 이상한 칸은 reconcile 이 고침
+		for _, key in { "incubators", "eggs" } do
+			local entries = src[key]
+			if typeof(entries) == "table" then
+				for _, entry in entries :: { unknown } do
+					DataSchema.rescaleProgress(entry)
+				end
+			end
+		end
+		version = 7
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

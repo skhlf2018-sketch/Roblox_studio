@@ -76,7 +76,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"15구역 모두: 쫓는 WalkSpeed = toWalkSpeed(경비 속도 × 0.99) (상한 250) — 플레이어 속도 5 · 1천 · 1e15 · 1e30 · 알 무게 0 / 0.5 / 0.9 에도 같음",
+		"18구역(7판) 모두: 쫓는 WalkSpeed = toWalkSpeed(경비 속도 × 0.99) (상한 250) — 플레이어 속도 5 · 1천 · 1e15 · 1e30 · 알 무게 0 / 0.5 / 0.9 에도 같음",
 		function()
 			local w = guardWorld()
 			for _, biome in Biomes.list do
@@ -302,15 +302,16 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"정원 씨앗 이름표: 5분짜리 씨앗은 낮 1초에 5m → 4m 59s, 밤 1초에 30 줄어듦 — 낮→밤 전환에서 ÷30 으로 튀지 않음",
+		"정원 씨앗 이름표: 표 5분 씨앗(7판 실제 1분 40초)은 낮 1초에 1m 40s → 1m 39s, 밤 1초에 30 줄어듦 — 낮→밤 전환에서 ÷30 으로 튀지 않음",
 		function()
 			local w = labelWorld()
 			local petId = "frost_pine"
 			local plant = Pets.get(petId)
-			T.eq(plant.growSeconds, 300)
+			T.eq(plant.growSeconds, 300, "표 5분")
 			local record = placeEggOf(w, petId)
+			T.eq(record.required, 100, "7판 성장 3배: 1분 40초")
 			local label = w.labels[#w.labels]
-			T.eq(label.Text, plant.name .. " 씨앗\n새싹 · 5m", "처음")
+			T.eq(label.Text, plant.name .. " 씨앗\n새싹 · 1m 40s", "처음")
 			local required = record.required
 			w.H.advance(1.05)
 			T.eq(label.Text, seedLabel(record), "낮 1초")
@@ -332,16 +333,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"강아지풀 씨앗(3초): 이름표 새싹 → 줄기 → … 낮 3초면 성체 (성체 이름표 '열매 1/5'), 밤이면 0.1초 만에",
+		"강아지풀 씨앗(표 3초 → 7판 1초): 이름표 새싹 · 1s → 낮 1초면 성체 (성체 이름표 '열매 1/5'), 밤에도 첫 1초에",
 		function()
 			local w = labelWorld()
 			local record = placeEggOf(w, "puppy_grass")
 			local label = w.labels[#w.labels]
-			T.eq(record.required, 3, "강아지풀 3초")
-			T.eq(label.Text, "강아지풀 씨앗\n새싹 · 3s")
+			T.eq(record.required, 1, "강아지풀 표 3초 ÷ 성장 3배 = 1초")
+			T.eq(label.Text, "강아지풀 씨앗\n새싹 · 1s")
 			w.H.advance(1.05)
-			T.eq(label.Text, "강아지풀 씨앗\n줄기 · 2s")
-			w.H.advance(2)
 			T.eq(#w.data.incubators, 0)
 			T.eq(#w.data.pets, 1, "성체가 됨")
 			T.eq(w.labels[#w.labels].Text, "강아지풀\n열매 1/" .. Config.FRUIT_MAX_PER_PLANT, "성체 이름표")
@@ -356,7 +355,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"개발 명령 /seed puppy_grass → 가방에 강아지풀 씨앗(3초), 씨앗 번호는 중복 없음, 옛 /egg 는 없는 명령",
+		"개발 명령 /seed puppy_grass → 가방에 강아지풀 씨앗(표 3초 → 7판 1초), 씨앗 번호는 중복 없음, 옛 /egg 는 없는 명령",
 		function()
 			local H = ServerHarness.install(Loader, T)
 			H.startNet()
@@ -375,7 +374,7 @@ return function(T, Loader)
 			p.Chatted:Fire("/egg puppy_grass")
 			T.eq(#data.eggs, 2)
 			T.eq(data.eggs[1].petId, "puppy_grass")
-			T.eq(data.eggs[1].required, 3)
+			T.eq(data.eggs[1].required, 1, "7판: 표 3초 ÷ 성장 3배")
 			T.truthy(data.eggs[1].uid ~= data.eggs[2].uid)
 			H.uninstall()
 		end
@@ -509,7 +508,7 @@ return function(T, Loader)
 			fruitProgress = 0,
 		})
 		w.BaseService.grantEgg(w.player, "puppy_grass", "normal", {}, "dev")
-		w.BaseService.grantEgg(w.player, "sprout_daisy", "normal", {}, "dev")
+		w.BaseService.grantEgg(w.player, "bell_mushroom", "normal", {}, "dev") -- 7판: 표 1분 → 실제 20초 (시험 중에 성체가 되지 않게)
 		return w
 	end
 
@@ -638,7 +637,7 @@ return function(T, Loader)
 			otherSession.plotIndex = 2
 			w.BaseService.grantEgg(other, "puppy_grass", "normal", {}, "dev")
 			local victimEgg = otherData.eggs[1].uid
-			local mine = w.data.eggs[2].uid -- 아기 데이지(10초): 시험 중에 성체가 되지 않게
+			local mine = w.data.eggs[2].uid -- 종소리 버섯(7판 실제 20초): 시험 중에 성체가 되지 않게
 			local x, z = w.H.plotSpot(1)
 			-- 남이 가진 알 uid (우연히 내 번호와 같아도 내 데이터 기준으로만 찾음)
 			w.H.advance(4)

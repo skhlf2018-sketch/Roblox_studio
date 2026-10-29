@@ -12,7 +12,7 @@
 	  껍데기는 파트 가운데에 맞춤 (EggService 가 바닥 + 높이 절반에 놓으므로 바닥에 딱 붙음). 크기는 파트 크기 그대로.
 	- 등급 아우라: PlantVisualService.addAura (희귀 이상 파티클·빛, 꺼진 채 + Shell 에 AuraFx 태그 → 클라가 100 스터드 안만 켬).
 	- 돌연변이: 실버(은색 Foil) / 골든(금색 네온) / 레인보우(네온 + 클라가 색 순환: Shell 에 EggShell 태그 + Rainbow)
-	- 특별 씨앗(Special = true: 비밀/영원/신성/슈퍼 울트라디바인): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "비밀 씨앗!" 이름표
+	- 특별 씨앗(Special = true: 비밀 이상 9등급, 7판 EggSpawn.SPECIAL_RARITIES): 하늘로 솟는 빛 기둥(Beam) + 어디서나 보이는 "비밀 씨앗!" 이름표
 	- 들고 있는 씨앗(EggState == "Carried"): 위 BillboardGui "WeightTag" (자식 TextLabel "Gender" = ♂/♀, "Kg" = "4,740Kg").
 	  무게 = 파트 Attribute WeightKg (없으면 든 플레이어의 CarryWeightKg). 값이 없으면 숨김.
 ]]

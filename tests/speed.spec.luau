@@ -43,15 +43,46 @@ return function(T, Loader)
 		end
 	)
 
+	T.test(
+		"7판 새 구역 16~18: 경비 추격 WalkSpeed 가 15구역(222.3)보다 계속 빠르고 상한 230 보다는 느림 (225.1 · 227.2 · 229.6)",
+		function()
+			local prev = 0
+			for _, b in Biomes.list do
+				local chase = SpeedMath.guardChaseSpeed(b.guardSpeed)
+				T.truthy(chase >= prev, b.id .. " 경비 추격 속도가 줄지 않음")
+				prev = chase
+			end
+			local function chaseOf(id)
+				return SpeedMath.guardChaseSpeed(Biomes.get(id).guardSpeed)
+			end
+			T.near(chaseOf("haunted_castle"), 222.3, 0.05)
+			T.near(chaseOf("hacker_lab"), 225.1, 0.05)
+			T.near(chaseOf("developer_room"), 227.2, 0.05)
+			T.near(chaseOf("bug_dimension"), 229.55, 0.01)
+			T.truthy(chaseOf("hacker_lab") > chaseOf("haunted_castle"))
+			T.truthy(chaseOf("bug_dimension") > chaseOf("developer_room"))
+			-- 경비 추격 속도의 0.1% 위(= 추천 속도면 안전한 사람)도 상한 230 밑이어야 "안전/위험" 이 걷기로 갈림
+			local last = Biomes.list[#Biomes.list]
+			local safeWalk = SpeedMath.toWalkSpeed(last.guardSpeed * Config.GUARD_CHASE_MARGIN * 1.001)
+			T.truthy(safeWalk > chaseOf(last.id), "18구역 안전한 사람이 경비보다 빠름")
+			T.truthy(SpeedMath.toWalkSpeed(last.guardSpeed * Config.GUARD_CHASE_MARGIN * 1.001) < Config.SPEED_WALK_MAX)
+		end
+	)
+
 	T.test("NaN 은 0 취급", function()
 		T.eq(SpeedMath.toWalkSpeed(0 / 0), 20)
 	end)
 
 	T.test(
-		"4판 고정 추격: 추천 속도 이상이면 경비가 플레이어보다 느리고(못 잡음), 모자라면 경비가 더 빠름 (15구역 × 4크기, WalkSpeed 기준)",
+		"4판 고정 추격: 추천 속도 이상이면 경비가 플레이어보다 느리고(못 잡음), 모자라면 경비가 더 빠름 (18구역 × 4크기, WalkSpeed 기준 — 7판 18구역 1.2T 도 상한 230 안쪽)",
 		function()
 			-- 플레이어 상한(230)이 맨 끝 구역 경비 추격 속도보다 커야 빠른 사람은 추월 가능
 			T.truthy(Config.SPEED_WALK_MAX > SpeedMath.guardChaseSpeed(SpeedMath.guardSpeedFor(500e9)))
+			local last = Biomes.list[#Biomes.list]
+			T.truthy(
+				Config.SPEED_WALK_MAX > SpeedMath.guardChaseSpeed(last.guardSpeed),
+				"맨 끝 구역 " .. last.id .. " 경비도 상한보다 느림"
+			)
 			T.truthy(Config.GUARD_MAX_WALKSPEED >= Config.SPEED_WALK_MAX)
 			for _, b in Biomes.list do
 				for _, size in Sizes.list do

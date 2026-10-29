@@ -36,7 +36,11 @@ return function(T, Loader)
 		T.eq(texts[3], "핫바에서 씨앗을 골라 정원에 심기")
 		T.eq(texts[4], "성체가 될 때까지 기다리기")
 		T.eq(texts[5], "열매 따서 팔기")
-		T.truthy(string.find(Tutorial.steps[4].hint, "3초", 1, true), "강아지풀 씨앗 3초 안내")
+		T.truthy(
+			string.find(Tutorial.steps[4].hint, "1초", 1, true),
+			"강아지풀 씨앗 1초 안내 (7판: 표 3초 ÷ 성장 3배)"
+		)
+		T.falsy(string.find(Tutorial.steps[4].hint, "3초", 1, true), "옛 3초 안내가 남지 않음")
 		T.eq(Tutorial.HOLD_AUTO_EQUIP, nil, "6판: 장착 없음")
 		T.eq(TutorialRules.holdsAutoEquip, nil)
 		T.eq(TutorialRules.migratedStep, nil, "6판: 4 → 5 마이그레이션 규칙 없앰 (6 으로 초기화)")
@@ -194,7 +198,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"처음부터 끝까지: 훔치기 → (잡혀서 1로) → 다시 → 배달 → 심기 → (다시 주워 3으로) → 심기 → 3초 뒤 성체 → 열매 따서 팔기 → 500 코인",
+		"처음부터 끝까지: 훔치기 → (잡혀서 1로) → 다시 → 배달 → 심기 → (다시 주워 3으로) → 심기 → 1초 뒤 성체(7판) → 열매 따서 팔기 → 500 코인",
 		function()
 			local w = world(1)
 			w.BaseService.start()
@@ -228,8 +232,8 @@ return function(T, Loader)
 			T.eq(w.data.tutorialStep, 3)
 			placeLast(w)
 			T.eq(w.data.tutorialStep, 4)
-			-- 강아지풀 씨앗 3초 → 그 자리에서 성체 (부화 버튼 없음) → 5
-			T.eq(w.data.incubators[1].required, 3)
+			-- 강아지풀 씨앗 (7판 1초) → 그 자리에서 성체 (부화 버튼 없음) → 5
+			T.eq(w.data.incubators[1].required, 1)
 			w.H.advance(3.1)
 			T.eq(#w.data.incubators, 0)
 			T.eq(#w.data.pets, 1)
@@ -340,11 +344,14 @@ return function(T, Loader)
 		w.H.uninstall()
 	end)
 
-	T.test("강아지풀 씨앗: 성장 3초 (밤이면 30배 → 0.1초), 숲 둥지에 나옴", function()
-		local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
-		local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
-		T.eq(Economy.growSeconds("puppy_grass"), 3)
-		T.eq(Economy.growSeconds("sprout_daisy"), 10, "아기 데이지는 10초")
-		T.truthy(EggRoll.nestOdds("forest", nil).puppy_grass > 0.1, "숲에서 자주 나옴")
-	end)
+	T.test(
+		"강아지풀 씨앗: 표 3초 → 7판 성장 3배로 1초 (밤이면 30배 → 1/30초), 숲 둥지에 나옴",
+		function()
+			local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
+			local EggRoll = Loader.require("ReplicatedStorage/Shared/EggRoll")
+			T.eq(Economy.growSeconds("puppy_grass"), 1)
+			T.near(Economy.growSeconds("sprout_daisy"), 10 / 3, 1e-9, "아기 데이지는 표 10초 → 약 3.3초")
+			T.truthy(EggRoll.nestOdds("forest", nil).puppy_grass > 0.1, "숲에서 자주 나옴")
+		end
+	)
 end

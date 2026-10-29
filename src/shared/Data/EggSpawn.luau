@@ -1,6 +1,6 @@
 --!strict
 --[[
-	EggSpawn — 둥지에 어떤 씨앗이 놓일지 정하는 가중치 표 (6판 "씨앗을 훔치세요", docs/SEED_GAME_DESIGN.md 4장 표 그대로)
+	EggSpawn — 둥지에 어떤 씨앗이 놓일지 정하는 가중치 표 (7판, docs/SEED_GAME_DESIGN.md 4·12장 표 그대로)
 	(파일 이름은 5판 그대로 — 알 → 씨앗)
 
 	1) 일반 추첨 (매 초기화 + 낮 동안 빈 둥지 다시 채울 때): EggRoll.rollNestPet
@@ -8,13 +8,15 @@
 	     ① 등급을 BIOME_RARITY_WEIGHTS[구역] 가중치로 고르고 (뒤 구역일수록 높은 등급)
 	     ② 그 등급 식물 중 하나를 똑같은 확률로 고름
 	   = 식물 하나의 가중치 = (그 등급 가중치) ÷ (풀 안 그 등급 식물 수)  (EggRoll.nestWeight)
-	   구역 1~2 일반·고급(가끔 희귀) → … → 14 비밀·영원(가끔 신성) → 15 영원·신성.
-	   슈퍼 울트라디바인은 일반 추첨에 안 나옴 (가중치 0) → 2) 의 공지 씨앗으로만 (하루 1~2개)
+	   구역 1~2 일반·고급(가끔 희귀) → … → 15 영원·신성(가끔 슈퍼) → 16 슈퍼·해커 → 17 오리지널·개발자 →
+	   18 개발자·울트라디바인(아주 가끔 해커 글리치).
+	   7판: 6판 슈퍼 울트라디바인(일반 추첨 0, 공지로만)은 없앰 → 유령 성 2종은 슈퍼 등급이 되어 일반 추첨 5%
 
 	2) 특별 추첨 (초기화 때만):
 	   구역마다, 그 구역 풀에 해당 등급 식물이 있으면 SPECIAL_CHANCE_PER_RESET 확률로
 	   그 등급 식물 1개를 무작위 둥지 하나에 놓고 서버 전체에 공지 ("희귀 씨앗 레이스").
-	   슈퍼 울트라디바인 0.5%: 주기 하나 = 낮 285 + 밤 10 + 대기 3 = 298초 → 하루 약 290번 초기화 × 0.005 ≈ 1.45개/일
+	   해커 글리치 0.5%: 주기 하나 = 낮 285 + 밤 10 + 대기 3 = 298초 → 하루 약 290번 초기화 × 0.005 ≈ 1.45개/일
+	   (6판 슈퍼 울트라디바인 자리 — 이제 맨 위 등급은 버그 차원 둥지 일반 추첨 5% 에도 나옴)
 
 	3) 공지 씨앗 (초기화 때만): EXTRA_SPECIALS — 둥지 풀에 없는 식물(source = "special")을 이 확률로
 	   그 식물 구역의 무작위 둥지에 놓고 공지 (누구나 훔침). 5판 특별 알(지터버그·영혼 세계 수호자)과 제단 펫 자리.
@@ -37,14 +39,33 @@ local EggSpawn = {
 		angels_demons = { mythic = 45, cosmic = 45, secret = 10 },
 		enchanted_forest = { cosmic = 55, secret = 40, eternity = 5 },
 		candy_kingdom = { secret = 55, eternity = 40, divine = 5 },
-		haunted_castle = { eternity = 55, divine = 45, super_ultradivine = 0 },
+		haunted_castle = { eternity = 55, divine = 40, super = 5 }, -- 7판: 슈퍼 울트라디바인 0 → 슈퍼 5 (신성 45 → 40)
+		-- 7판 새 구역
+		hacker_lab = { super = 55, hacker = 40, original = 5 },
+		developer_room = { original = 55, developer = 40, ultradivine = 5 },
+		bug_dimension = { developer = 40, ultradivine = 55, hacker_glitch = 5 },
 	} :: { [string]: { [string]: number } },
 
 	-- 초기화 때만 등장 + 공지되는 등급 (희귀한 것부터)
-	SPECIAL_RARITIES = { "super_ultradivine", "divine", "eternity", "secret" },
+	SPECIAL_RARITIES = {
+		"hacker_glitch",
+		"ultradivine",
+		"developer",
+		"original",
+		"hacker",
+		"super",
+		"divine",
+		"eternity",
+		"secret",
+	},
 
 	SPECIAL_CHANCE_PER_RESET = {
-		super_ultradivine = 0.005, -- 하루 약 1.45개 (설계 4장 "하루 1~2개, 전체 공지")
+		hacker_glitch = 0.005, -- 하루 약 1.45개 (6판 슈퍼 울트라디바인 "하루 1~2개, 전체 공지" 자리)
+		ultradivine = 0.01, -- [수석] 7판
+		developer = 0.01, -- [수석] 7판
+		original = 0.01, -- [수석] 7판
+		hacker = 0.01, -- [수석] 7판
+		super = 0.01, -- [수석] 7판
 		divine = 0.002, -- 5판 설계 "약 0.2%" 그대로
 		eternity = 0.02, -- [추정]
 		secret = 0.08, -- [추정]

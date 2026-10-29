@@ -1,5 +1,5 @@
 --!nocheck
--- 데이터 표 무결성 검사 (6판 "씨앗을 훔치세요"): 등급 11개, 식물 134종, 구역마다 둥지 식물 8종, id 참조가 전부 맞는지
+-- 데이터 표 무결성 검사 (7판 "씨앗을 훔치세요"): 등급 16개, 식물 158종, 구역 18개마다 둥지 식물 8종, id 참조가 전부 맞는지
 
 return function(T, Loader)
 	local Plants = Loader.require("ReplicatedStorage/Shared/Data/Plants")
@@ -22,50 +22,127 @@ return function(T, Loader)
 		T.eq(Config.PASSIVE_INCOME_PER_SECOND, 0, "자동 수입 0")
 	end)
 
-	T.test("등급 11개 (사장님 순서), id 그대로 영어, eternal → eternity, 아우라 칸", function()
-		local ids = {
-			"common",
-			"uncommon",
-			"rare",
-			"epic",
-			"legendary",
-			"mythic",
-			"cosmic",
-			"secret",
-			"eternity",
-			"divine",
-			"super_ultradivine",
-		}
-		T.eq(#Rarities.list, 11)
-		for i, r in Rarities.list do
-			T.eq(r.id, ids[i])
-			T.eq(r.order, i, r.id)
-			T.eq(#r.color, 3, r.id .. " color")
-			T.truthy(typeof(r.aura) == "string" and #r.aura > 0, r.id .. " aura")
-			T.truthy(r.baseGrowSeconds > 0, r.id)
-		end
-		T.eq(Rarities.get("eternal"), nil)
-		T.eq(Rarities.get("eternity").name, "영원")
-		T.eq(Rarities.get("super_ultradivine").name, "슈퍼 울트라디바인")
-		T.eq(Rarities.get("common").aura, "none")
-		T.eq(Rarities.get("super_ultradivine").aura, "sky_pillar")
-	end)
-
 	T.test(
-		"등급 기준 성장 시간 = 설계 3장 표 (10초 · 1분 · 5분 · 20분 · 1시간 · 3시간 · 8시간 · 1일 · 2일 · 4일 · 7일)",
+		"7판 등급 16개 (사장님 순서), id 그대로 영어, eternal → eternity, super_ultradivine 없앰, 아우라 칸",
 		function()
-			local expect = { 10, 60, 300, 1200, 3600, 10800, 28800, 86400, 172800, 345600, 604800 }
+			local ids = {
+				"common",
+				"uncommon",
+				"rare",
+				"epic",
+				"legendary",
+				"mythic",
+				"cosmic",
+				"secret",
+				"eternity",
+				"divine",
+				"super",
+				"hacker",
+				"original",
+				"developer",
+				"ultradivine",
+				"hacker_glitch",
+			}
+			T.eq(#Rarities.list, 16)
+			T.eq(Rarities.count, 16)
 			for i, r in Rarities.list do
-				T.eq(r.baseGrowSeconds, expect[i], r.id)
+				T.eq(r.id, ids[i])
+				T.eq(r.order, i, r.id)
+				T.eq(#r.color, 3, r.id .. " color")
+				T.truthy(typeof(r.aura) == "string" and #r.aura > 0, r.id .. " aura")
+				T.truthy(r.baseGrowSeconds > 0, r.id)
+			end
+			T.eq(Rarities.get("eternal"), nil)
+			T.eq(Rarities.get("super_ultradivine"), nil, "7판: 슈퍼 울트라디바인 등급 없앰")
+			T.eq(Rarities.get("eternity").name, "영원")
+			T.eq(Rarities.get("common").aura, "none")
+			T.eq(
+				Rarities.get("super").aura,
+				"sky_pillar",
+				"슈퍼가 6판 슈퍼 울트라디바인 아우라를 물려받음"
+			)
+			T.eq(Rarities.get("hacker_glitch").aura, "glitch_static")
+			T.eq(Rarities.TOP, "hacker_glitch")
+			local auras, names = {}, {}
+			for _, r in Rarities.list do
+				T.eq(#r.textColor, 3, r.id .. " textColor")
+				T.falsy(auras[r.aura], r.id .. " 아우라가 다른 등급과 겹침: " .. r.aura)
+				auras[r.aura] = true
+				T.falsy(names[r.name], r.id .. " 한국어 이름이 겹침 (문서 대조가 이름으로 함)")
+				names[r.name] = true
 			end
 		end
 	)
 
 	T.test(
-		"구역 15개, 순서·추천 속도 오름차순, 경비 속도 = 추천 속도 × (1 - 보통 무게 감소), 경비는 식물 괴물 이름",
+		"7판 화면 이름(displayName)은 영어: Common … Ultradivine, 16번은 글자 그대로 H?a.(cke_r!#",
+		function()
+			local expect = {
+				"Common",
+				"Uncommon",
+				"Rare",
+				"Epic",
+				"Legendary",
+				"Mythic",
+				"Cosmic",
+				"Secret",
+				"Eternity",
+				"Divine",
+				"Super",
+				"Hacker",
+				"Original",
+				"Developer",
+				"Ultradivine",
+				"H?a.(cke_r!#",
+			}
+			for i, r in Rarities.list do
+				T.eq(r.displayName, expect[i], r.id .. " 화면 이름")
+				T.eq(Rarities.displayName(r.id), expect[i], r.id .. " displayName()")
+				T.truthy(string.match(r.displayName, "^[%w%p ]+$") ~= nil, r.id .. " 화면 이름은 영어 글자")
+				T.truthy(#r.name > 0 and #r.nameEn > 0, r.id .. " 한국어·영어 이름 (문서·로그용)")
+			end
+			T.eq(Rarities.get("hacker_glitch").name, "해커 글리치")
+			T.eq(Rarities.displayName("없는 등급"), "없는 등급", "모르는 id 는 그대로")
+		end
+	)
+
+	T.test(
+		"등급 기준 성장 시간 = 설계 3장 표 (표 시간, 3배 전): 10초 … 4일 · 슈퍼 8일 · 14일 · 20일 · 30일 · 45일 · 60일",
+		function()
+			local D = 86400
+			local expect = {
+				10,
+				60,
+				300,
+				1200,
+				3600,
+				10800,
+				28800,
+				D,
+				2 * D,
+				4 * D,
+				8 * D,
+				14 * D,
+				20 * D,
+				30 * D,
+				45 * D,
+				60 * D,
+			}
+			local prev = 0
+			for i, r in Rarities.list do
+				T.eq(r.baseGrowSeconds, expect[i], r.id)
+				T.truthy(r.baseGrowSeconds > prev, r.id .. " 뒤 등급일수록 길게")
+				prev = r.baseGrowSeconds
+			end
+		end
+	)
+
+	T.test(
+		"구역 18개(7판), 순서·추천 속도 오름차순, 경비 속도 = 추천 속도 × (1 - 보통 무게 감소), 경비는 식물 괴물 이름",
 		function()
 			local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
-			T.eq(#Biomes.list, 15)
+			T.eq(#Biomes.list, 18)
+			T.eq(Biomes.count, 18)
 			local prev = 0
 			for i, b in Biomes.list do
 				T.eq(b.order, i, b.id .. " order")
@@ -85,6 +162,21 @@ return function(T, Loader)
 			T.eq(Biomes.get("haunted_castle").recommendedSpeed, 500e9)
 			T.eq(Biomes.get("forest").guardName, "덥석 파리지옥")
 			T.eq(Biomes.get("haunted_castle").guardName, "호박 머리 덩굴")
+			-- 7판 새 구역 3개 (1~15 는 그대로, 맨 뒤에 붙음)
+			T.eq(Biomes.list[15].id, "haunted_castle")
+			T.eq(Biomes.list[16].id, "hacker_lab")
+			T.eq(Biomes.list[17].id, "developer_room")
+			T.eq(Biomes.list[18].id, "bug_dimension")
+			T.eq(Biomes.get("hacker_lab").recommendedSpeed, 700e9)
+			T.eq(Biomes.get("developer_room").recommendedSpeed, 900e9)
+			T.eq(Biomes.get("bug_dimension").recommendedSpeed, 1.2e12)
+			T.eq(Biomes.get("hacker_lab").guardName, "바이러스 덩굴")
+			T.eq(Biomes.get("developer_room").guardName, "디버그 선인장")
+			T.eq(Biomes.get("bug_dimension").guardName, "글리치 장미 괴물")
+			for _, id in { "hacker_lab", "developer_room", "bug_dimension" } do
+				T.eq(Biomes.get(id).weapon, nil, id .. " 도감 무기 없음 (SEED 9장 24번)")
+				T.eq(Biomes.get(id).isNew, true, id)
+			end
 			T.eq(Biomes.guardDisplayName(Biomes.get("angels_demons"), "dark"), "악마 장미")
 			for _, b in Biomes.list do
 				T.falsy(string.find(b.guardName, "닭", 1, true), "5판 경비 이름이 남음: " .. b.guardName)
@@ -92,9 +184,12 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("식물 134종 (구역 12개 × 8 + 벚꽃 10 + 천사&악마 18 + 마법의 숲 10)", function()
-		T.eq(Plants.count, 134)
-		T.eq(#Plants.list, 134)
+	T.test("식물 158종 (7판: 구역 15개 × 8 + 벚꽃 10 + 천사&악마 18 + 마법의 숲 10)", function()
+		T.eq(Plants.count, 158)
+		T.eq(#Plants.list, 158)
+		for _, id in { "hacker_lab", "developer_room", "bug_dimension" } do
+			T.eq(#Plants.inBiome(id), 8, id .. " 식물 8종")
+		end
 		T.eq(#Plants.inBiome("cherry_blossom"), 10)
 		T.eq(#Plants.inBiome("angels_demons"), 18)
 		T.eq(#Plants.inBiome("enchanted_forest"), 10)
@@ -185,7 +280,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역 등급 표 합 100, 뒤 구역일수록 높은 등급 (설계 4장: 1~2 일반·고급 … 15 영원·신성)",
+		"구역 등급 표 합 100, 뒤 구역일수록 높은 등급 (설계 4장: 1~2 일반·고급 … 15 영원·신성 … 18 개발자·울트라디바인)",
 		function()
 			local prevTop = 0
 			for _, b in Biomes.list do
@@ -202,11 +297,50 @@ return function(T, Loader)
 				prevTop = top
 			end
 			T.eq(EggSpawn.BIOME_RARITY_WEIGHTS.forest.common, 60)
-			T.eq(
-				EggSpawn.BIOME_RARITY_WEIGHTS.haunted_castle.super_ultradivine,
-				0,
-				"슈퍼 울트라디바인은 공지 씨앗으로만"
-			)
+			-- 7판: 유령 성 슈퍼 울트라디바인 0 → 슈퍼 5, 새 구역 3개 (SEED 9장 26번)
+			local w = EggSpawn.BIOME_RARITY_WEIGHTS
+			T.eq(w.haunted_castle.super_ultradivine, nil)
+			T.eq(w.haunted_castle.eternity, 55)
+			T.eq(w.haunted_castle.divine, 40)
+			T.eq(w.haunted_castle.super, 5)
+			T.eq(w.hacker_lab.super, 55)
+			T.eq(w.hacker_lab.hacker, 40)
+			T.eq(w.hacker_lab.original, 5)
+			T.eq(w.developer_room.original, 55)
+			T.eq(w.developer_room.developer, 40)
+			T.eq(w.developer_room.ultradivine, 5)
+			T.eq(w.bug_dimension.developer, 40)
+			T.eq(w.bug_dimension.ultradivine, 55)
+			T.eq(w.bug_dimension.hacker_glitch, 5)
+		end
+	)
+
+	T.test(
+		"7판: 모든 등급이 어느 구역 둥지에든 나옴, 등급마다 식물이 있음 (새 등급 6개 포함)",
+		function()
+			for _, r in Rarities.list do
+				local where = 0
+				for _, weights in EggSpawn.BIOME_RARITY_WEIGHTS do
+					if (weights[r.id] or 0) > 0 then
+						where += 1
+					end
+				end
+				T.truthy(where > 0, r.id .. " 가 나오는 구역이 없음")
+				local plants = 0
+				for _, p in Plants.list do
+					if p.rarity == r.id then
+						plants += 1
+					end
+				end
+				T.truthy(plants >= 2, r.id .. " 식물 " .. plants)
+			end
+			for _, p in Plants.list do
+				T.truthy(p.rarity ~= "super_ultradivine", p.id .. " 옛 등급 id")
+			end
+			T.eq(Plants.get("rainbow_thunder_tree").rarity, "super")
+			T.eq(Plants.get("sky_pillar_flower").rarity, "super")
+			T.eq(Plants.get("rainbow_thunder_tree").growSeconds, 7 * 86400, "표 숫자는 6판 그대로")
+			T.eq(Plants.get("sky_pillar_flower").fruitValue, 12e9)
 		end
 	)
 
@@ -233,20 +367,30 @@ return function(T, Loader)
 		T.eq(Plants.seedName("없는것"), "씨앗")
 	end)
 
-	T.test("슈퍼 울트라디바인: 유령 성에만, 특별 추첨 0.5% (하루 약 1~2개)", function()
-		local n = 0
-		for _, p in Plants.list do
-			if p.rarity == "super_ultradivine" then
-				n += 1
-				T.eq(p.biome, "haunted_castle", p.id)
+	T.test(
+		"7판 해커 글리치: 버그 차원에만 (2종), 특별 추첨 0.5% (하루 약 1~2개, 6판 슈퍼 울트라디바인 자리)",
+		function()
+			local n = 0
+			for _, p in Plants.list do
+				if p.rarity == "hacker_glitch" then
+					n += 1
+					T.eq(p.biome, "bug_dimension", p.id)
+					T.eq(p.source, "nest", p.id)
+				end
 			end
+			T.eq(n, 2)
+			T.eq(EggSpawn.SPECIAL_RARITIES[1], "hacker_glitch", "가장 희귀한 것부터")
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.super_ultradivine, nil)
+			for _, id in EggSpawn.SPECIAL_RARITIES do
+				T.truthy(Rarities.get(id), id)
+				T.truthy((EggSpawn.SPECIAL_CHANCE_PER_RESET[id] or 0) > 0, id .. " 확률")
+			end
+			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch
+			local cycle = Config.DAY_SECONDS + Config.NIGHT_SECONDS + Config.INTERMISSION_SECONDS
+			local perDay = 86400 / cycle * chance
+			T.truthy(perDay >= 1 and perDay <= 2, "하루 " .. perDay .. "개")
 		end
-		T.eq(n, 2)
-		local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.super_ultradivine
-		local cycle = Config.DAY_SECONDS + Config.NIGHT_SECONDS + Config.INTERMISSION_SECONDS
-		local perDay = 86400 / cycle * chance
-		T.truthy(perDay >= 1 and perDay <= 2, "하루 " .. perDay .. "개")
-	end)
+	)
 
 	T.test("크기 확률 합 100, 돌연변이 6종 (자연 3 + 먹이기 원소 3)", function()
 		local sum = 0
@@ -289,7 +433,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"Config 6판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…500",
+		"Config 7판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…5000, 성장 3배, 스키마 7",
 		function()
 			local stages = Config.GROWTH_STAGES
 			T.eq(#stages, 4)
@@ -301,17 +445,36 @@ return function(T, Loader)
 			T.eq(Config.FRUIT_MAX_PER_PLANT, 5)
 			T.eq(Config.SKIP_COINS_PER_MINUTE, 10)
 			T.eq(Config.SKIP_RARITY_MULTIPLIER.common, 1)
-			T.eq(Config.SKIP_RARITY_MULTIPLIER.super_ultradivine, 500)
+			T.eq(Config.SKIP_RARITY_MULTIPLIER.super_ultradivine, nil)
+			T.eq(Config.SKIP_RARITY_MULTIPLIER.super, 500, "슈퍼 = 6판 슈퍼 울트라디바인 배수")
+			T.eq(Config.SKIP_RARITY_MULTIPLIER.hacker_glitch, 5000)
+			T.eq(Config.SAKURA_OFFER_CRYSTALS.super, 100)
+			T.eq(Config.SAKURA_OFFER_CRYSTALS.hacker_glitch, 700)
+			T.eq(Config.GROWTH_SPEED_MULTIPLIER, 3, "7판 사장님 지시: 성장 속도 3배")
+			T.eq(Config.GROWTH_MULTIPLIER, nil, "5판 G 배율(열매·러닝머신까지)과는 다른 칸")
 			local prev = 0
 			for _, r in Rarities.list do
 				local m = Config.SKIP_RARITY_MULTIPLIER[r.id]
 				T.truthy(m and m > prev, r.id .. " 배수 증가")
 				prev = m
 				T.truthy(Config.SAKURA_OFFER_CRYSTALS[r.id] ~= nil, r.id .. " 크리스탈")
+				if r.order > 1 then
+					local below = Rarities.list[r.order - 1].id
+					T.truthy(
+						Config.SAKURA_OFFER_CRYSTALS[r.id] >= Config.SAKURA_OFFER_CRYSTALS[below],
+						r.id .. " 크리스탈이 줄지 않음"
+					)
+				end
+			end
+			for id in Config.SKIP_RARITY_MULTIPLIER do
+				T.truthy(Rarities.get(id), "건너뛰기 배수의 모르는 등급 " .. id)
+			end
+			for id in Config.SAKURA_OFFER_CRYSTALS do
+				T.truthy(Rarities.get(id), "크리스탈 표의 모르는 등급 " .. id)
 			end
 			T.eq(Config.NIGHT_GROWTH_MULTIPLIER, 30)
 			T.eq(Config.PLANT_SELL_FRUIT_MULTIPLIER, 20)
-			T.eq(Config.SCHEMA_VERSION, 6)
+			T.eq(Config.SCHEMA_VERSION, 7)
 		end
 	)
 
@@ -325,8 +488,14 @@ return function(T, Loader)
 		local r2 = Index.reward(oak.rarity, oak.fruitValue, forest)
 		T.eq(r2.speed, 620)
 		T.eq(r2.money, 1800)
+		local prev = 0
 		for _, rarity in Rarities.list do
 			T.truthy(Index.RARITY_SPEED[rarity.id] ~= nil, rarity.id)
+			T.truthy(Index.RARITY_SPEED[rarity.id] > prev, rarity.id .. " 도감 속도 증가")
+			prev = Index.RARITY_SPEED[rarity.id]
+		end
+		for id in Index.RARITY_SPEED do
+			T.truthy(Rarities.get(id), "도감 속도 표의 모르는 등급 " .. id)
 		end
 	end)
 

@@ -97,6 +97,22 @@ local Sounds: { [string]: SoundDef } = {
 	Bgm_enchanted_forest = music(9038465993, 0.3, "마법의 숲 (반짝이는 요정 음악)"),
 	Bgm_candy_kingdom = music(1835943156, 0.3, "사탕 왕국 (통통 튀는 귀여운 음악)"),
 	Bgm_haunted_castle = music(1836013838, 0.3, "유령 성 (으스스한 오르간 + 바람)"),
+	-- [7판 수석 임시] 새 구역 3개 배경음: 지금 있는 음악 id 를 빌려 씀 (선임이 어울리는 음악으로 바꿈)
+	Bgm_hacker_lab = music(
+		71997529567005,
+		0.3,
+		"해커 연구소 (전자음 삐빅 + 키보드 — 임시: 코스믹 음악)"
+	),
+	Bgm_developer_room = music(
+		1848120001,
+		0.3,
+		"개발자의 방 (차분한 작업 음악 — 임시: 타이탄 사원 음악)"
+	),
+	Bgm_bug_dimension = music(
+		9038465993,
+		0.3,
+		"버그 차원 (지지직 깨진 소리 — 임시: 마법의 숲 음악)"
+	),
 }
 
 return Sounds

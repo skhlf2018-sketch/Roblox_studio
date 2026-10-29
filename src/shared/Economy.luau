@@ -6,7 +6,7 @@
 	  (5판 GROWTH_MULTIPLIER ×3 는 없앰 — 러닝머신 배율 Config.TREADMILL_MULTIPLIER 만 남음).
 	  열매 1개 값 = 식물 열매 값(Plants.fruitValue) × 크기 배율(Sizes.incomeMultiplier) × 돌연변이 배율(곱)
 	  recordIncome = 열매로 환산한 초당 코인 (표시용 — 정원 이름표·도감 등)
-	  성장 시간 = Plants.growSeconds (밤 30배는 growthRate)
+	  성장 시간 = Plants.growSeconds ÷ Config.GROWTH_SPEED_MULTIPLIER (7판 성장 3배, growSeconds 한 곳. 밤 30배는 growthRate)
 	  정원 칸 수 = Upgrades.Pen 칸 수 (penSlots — 5판 우리 장착 칸 숫자 그대로)
 ]]
 
@@ -99,13 +99,27 @@ end
 -- 성장 (씨앗 → 성체)
 ------------------------------------------------------------------
 
--- 성체까지 시간(초) = Data/Plants.growSeconds (낮 기준). 강아지풀 3초 · 일반 약 10초 · … · 슈퍼 울트라디바인 7~8일
+-- 성장 속도 배율 (7판 사장님 지시 "성장 속도 3배" = Config.GROWTH_SPEED_MULTIPLIER). 0 이하·이상한 값이면 1
+function Economy.growthSpeedMultiplier(): number
+	local m = Config.GROWTH_SPEED_MULTIPLIER
+	return if typeof(m) == "number" and m == m and m > 0 and m < math.huge then m else 1
+end
+
+-- 식물 표에 적힌 성체까지 시간(초, 3배 적용 전 — 문서 10장 "성체까지" 칸). 모르는 식물이면 nil
+function Economy.tableGrowSeconds(petId: string): number?
+	local plant = Plants.get(petId)
+	return if plant then plant.growSeconds else nil
+end
+
+-- 성체까지 **실제** 시간(초, 낮 기준) = 표 시간(Data/Plants.growSeconds) ÷ 성장 속도 3배 (7판).
+--   씨앗 Required · 타이머 · 건너뛰기 가격(남은 시간)이 전부 이 값을 씀 — 3배를 나누는 곳은 여기 한 곳뿐.
+--   강아지풀 표 3초 → 1초 · 일반 약 3.3초 · … · 해커 글리치 표 48~60일 → 16~20일. 밤 30배는 growthRate
 function Economy.growSeconds(petId: string): number
 	local plant = Plants.get(petId)
 	if not plant then
 		return 1
 	end
-	return plant.growSeconds
+	return plant.growSeconds / Economy.growthSpeedMultiplier()
 end
 
 -- [5판 호환 이름] = growSeconds

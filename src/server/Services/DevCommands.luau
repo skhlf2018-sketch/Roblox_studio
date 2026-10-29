@@ -16,7 +16,7 @@
 	  /plant star_mushroom 3  정원 빈자리에 그 식물 성체를 바로 (최대 20그루, 정원 칸까지, 열매 1개 달림) — 5판 /pet
 	  /fruit 20 [식물id]  열매 가방에 열매 받기 (식물 id 를 안 쓰면 정원 첫 성체의 열매, 없으면 아기 데이지)
 	  /tutorial reset   튜토리얼을 1단계부터 다시 (보상도 다시 받음)
-	  /zone lake        그 구역 입구로 순간이동 (구역 id 또는 번호 1~15, "hub" = 허브 기본 스폰) — 긴 복도 시험용
+	  /zone lake        그 구역 입구로 순간이동 (구역 id 또는 번호 1~18, "hub" = 허브 기본 스폰) — 긴 복도 시험용
 ]]
 
 local RunService = game:GetService("RunService")

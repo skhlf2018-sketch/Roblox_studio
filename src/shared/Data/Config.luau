@@ -10,6 +10,8 @@
 	6판에서 없앤 것: GROWTH_MULTIPLIER(펫 수입 ×3 — 열매 값은 Data/Plants 숫자 그대로), 펫 보관함(PET_INVENTORY_MAX)·
 	  자동 수입(INCOME_*)·오프라인 수입·펫 판매(PET_SELL_SECONDS)·퓨전(FUSION_*)·제단/비밀 통로(ALTAR_*, SHRINE_*)·
 	  사쿠라 해금(SAKURA_UNLOCK_PET)·블룸(SAKURA_APPLY_COST)·우리에 놓는 알 상한(PLACED_EGG_MAX → 정원 칸 수 = 정원 업그레이드)
+	7판: 등급 16개(SKIP_RARITY_MULTIPLIER·SAKURA_OFFER_CRYSTALS 칸 6개 추가, super_ultradivine 없앰), 성장 속도 3배
+	  (GROWTH_SPEED_MULTIPLIER — 성장 시간에만. 5판 GROWTH_MULTIPLIER 처럼 열매 값·러닝머신에 곱하지 않음), 저장 스키마 7
 ]]
 
 local Config = {
@@ -57,7 +59,13 @@ local Config = {
 		secret = 100,
 		eternity = 180,
 		divine = 300,
-		super_ultradivine = 500,
+		-- 7판 새 등급 (super = 6판 슈퍼 울트라디바인 500 그대로)
+		super = 500,
+		hacker = 800,
+		original = 1200,
+		developer = 2000,
+		ultradivine = 3000,
+		hacker_glitch = 5000,
 	} :: { [string]: number },
 
 	------------------------------------------------------------------
@@ -67,6 +75,10 @@ local Config = {
 	NIGHT_SECONDS = 10,
 	INTERMISSION_SECONDS = 3,
 	NIGHT_GROWTH_MULTIPLIER = 30, -- 밤에는 씨앗이 30배 빨리 자람 (6판 사장님 결정 3: 그대로). 열매 맺는 빠르기는 밤에도 그대로
+	-- 7판 사장님 지시 "성장 속도 3배": 성체까지 걸리는 시간 = 식물 표(Data/Plants.growSeconds) ÷ 이 값 (Economy.growSeconds 한 곳).
+	--   표 숫자는 그대로 두고 계산에서만 나눔 → 씨앗 Required·타이머·건너뛰기 가격(남은 시간)이 전부 ÷3 된 값.
+	--   밤 30배·게임패스 2배와는 곱 (밤 + 3배 = 표 시간의 1/90). 열매 맺는 빠르기(FRUIT_SPEED_MULTIPLIER)와는 따로
+	GROWTH_SPEED_MULTIPLIER = 3,
 	GAMEPASS_GROWTH_MULTIPLIER = 2, -- 게임패스 "성장 속도 2배" (1차 버전에서는 플래그만)
 	GAMEPASS_MONEY_MULTIPLIER = 2, -- 게임패스 "코인 2배" (플래그만 — 6판: 열매 판매 값에 곱함)
 	DAY_CLOCK_TIME = 14,
@@ -214,7 +226,13 @@ local Config = {
 		secret = 20,
 		eternity = 30,
 		divine = 50,
-		super_ultradivine = 100,
+		-- 7판 새 등급 (super = 6판 슈퍼 울트라디바인 100 그대로)
+		super = 100,
+		hacker = 150,
+		original = 220,
+		developer = 320,
+		ultradivine = 480,
+		hacker_glitch = 700,
 	} :: { [string]: number },
 	-- 뽑기 결과: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (5판 블룸 97.5% / 스피릿 블룸 2.5% 확률 그대로)
 	SAKURA_SEEDS = {
@@ -256,7 +274,9 @@ local Config = {
 	-- 3 (2판 마무리): + equippedTrail · 4 (2판 수정): + eggs(알 가방), 놓인 알 x/z, eggQueue 없앰 · 5 (5판): + tutorialStep, 퀘스트·무료 보상 칸 없앰
 	-- 6 (6판 씨앗을 훔치세요): 새 게임 — 옛 데이터는 속도·트레일·러닝머신 레벨만 남기고 초기화. + fruits(열매 가방),
 	--   pets = 정원 성체 식물(x, z, fruits, fruitProgress), equipped·sakuraUnlocked·shrineUsed 칸 없앰 (Logic/DataSchema)
-	SCHEMA_VERSION = 6,
+	-- 7 (7판): 칸 모양은 6 그대로. 성장 3배라 저장된 씨앗 진행도(progress)를 새 Required 에 맞춰 같은 비율로 줄임
+	--   (6 → 7 마이그레이션, Logic/DataSchema). 등급 id 는 저장하지 않으므로 옛 super_ultradivine 보정은 없음
+	SCHEMA_VERSION = 7,
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

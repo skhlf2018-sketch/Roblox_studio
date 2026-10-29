@@ -80,7 +80,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"일반 추첨: 구역 둥지 풀 안에서만, 구역 표에 없는 등급은 안 나옴, 슈퍼 울트라디바인은 일반 추첨에 안 나옴",
+		"일반 추첨: 구역 둥지 풀 안에서만, 구역 표에 없는 등급은 안 나옴 (7판: 유령 성 슈퍼 2종은 일반 추첨 5%)",
 		function()
 			local rand = T.rng(42)
 			for _, b in Biomes.list do
@@ -94,15 +94,14 @@ return function(T, Loader)
 					T.truthy(pet, b.id .. " 추첨 결과")
 					T.truthy(pool[pet.id], b.id .. " 풀 밖 " .. pet.id)
 					T.truthy(EggRoll.rarityWeight(b.id, pet.rarity) > 0, b.id .. " 표 밖 등급 " .. pet.rarity)
-					T.truthy(
-						pet.rarity ~= "super_ultradivine",
-						b.id .. " 슈퍼 울트라디바인이 일반 둥지에"
-					)
 				end
 			end
 			local castle = EggRoll.nestOdds("haunted_castle", nil)
-			T.eq(castle.rainbow_thunder_tree, 0)
-			T.eq(castle.sky_pillar_flower, 0)
+			T.near(castle.rainbow_thunder_tree, 0.025, 1e-9, "슈퍼 5% ÷ 2종")
+			T.near(castle.sky_pillar_flower, 0.025, 1e-9)
+			local bug = EggRoll.nestOdds("bug_dimension", nil)
+			T.near(bug.glitch_hacker_bloom, 0.025, 1e-9, "해커 글리치 5% ÷ 2종")
+			T.near(bug.static_world_tree, 0.025, 1e-9)
 		end
 	)
 
@@ -129,7 +128,22 @@ return function(T, Loader)
 			T.eq(forest.epic, nil)
 			local castle = shares("haunted_castle")
 			T.near(castle.eternity, 0.55, 0.01)
-			T.near(castle.divine, 0.45, 0.01)
+			T.near(castle.divine, 0.40, 0.01)
+			T.near(castle.super, 0.05, 0.005, "7판: 유령 성 가끔 슈퍼")
+			-- 7판 새 구역
+			local lab = shares("hacker_lab")
+			T.near(lab.super, 0.55, 0.01)
+			T.near(lab.hacker, 0.40, 0.01)
+			T.near(lab.original, 0.05, 0.005)
+			local room = shares("developer_room")
+			T.near(room.original, 0.55, 0.01)
+			T.near(room.developer, 0.40, 0.01)
+			T.near(room.ultradivine, 0.05, 0.005)
+			local bug = shares("bug_dimension")
+			T.near(bug.developer, 0.40, 0.01)
+			T.near(bug.ultradivine, 0.55, 0.01)
+			T.near(bug.hacker_glitch, 0.05, 0.005)
+			T.eq(bug.super, nil)
 		end
 	)
 
@@ -144,12 +158,26 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (슈퍼 울트라디바인은 유령 성에서만)",
+		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (7판: 해커 글리치는 버그 차원에서만)",
 		function()
 			local specials = EggRoll.rollSpecials("haunted_castle", nil, T.constant(0))
 			T.eq(#specials, EggSpawn.MAX_SPECIALS_PER_BIOME)
-			T.eq(specials[1].rarity, "super_ultradivine")
+			T.eq(specials[1].rarity, "super")
 			T.eq(specials[2].rarity, "divine")
+			local bug = EggRoll.rollSpecials("bug_dimension", nil, T.constant(0))
+			T.eq(#bug, 2)
+			T.eq(bug[1].rarity, "hacker_glitch")
+			T.eq(bug[2].rarity, "ultradivine")
+			local lab = EggRoll.rollSpecials("hacker_lab", nil, T.constant(0))
+			T.eq(lab[1].rarity, "original")
+			T.eq(lab[2].rarity, "hacker")
+			for _, b in Biomes.list do
+				for _, pet in EggRoll.rollSpecials(b.id, Biomes.sideForCycle(b, 1), T.constant(0)) do
+					if pet.rarity == "hacker_glitch" then
+						T.eq(b.id, "bug_dimension", "해커 글리치 공지는 버그 차원에서만")
+					end
+				end
+			end
 			T.eq(#EggRoll.rollSpecials("haunted_castle", nil, T.constant(0.99)), 0)
 			-- 숲에는 비밀 이상 식물이 없음
 			T.eq(#EggRoll.rollSpecials("forest", nil, T.constant(0)), 0)

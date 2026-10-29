@@ -7,7 +7,7 @@
 	    서버는 심은 씨앗 파트(IncubatingEgg)의 Attribute "Stage" 로 내보냄 → 선임이 단계별 모양
 	- 정원 칸 수 = 정원 업그레이드 칸 수 (Economy.penSlots). 자라는 씨앗 + 성체 식물이 이만큼까지
 	- 건너뛰기 (SkipGrowth): 가격 = ceil(건너뛸 시간(분)) × Config.SKIP_COINS_PER_MINUTE(10) × 등급 배수
-	    (일반 1 … 슈퍼 울트라디바인 500, Config.SKIP_RARITY_MULTIPLIER). "all" = 남은 시간 전부, "half" = 절반
+	    (일반 1 … 슈퍼 500 … 해커 글리치 5000, Config.SKIP_RARITY_MULTIPLIER — 7판 등급 16개). "all" = 남은 시간 전부, "half" = 절반
 	    남은 시간 = required - progress ("성장 시간" — 밤에 30배 빨리 줄어드는 그 숫자, 씨앗 위 타이머와 같음)
 	- 성체 뽑아서 팔기 (SellPlant): 값 = 그 식물 열매 1개 값 × Config.PLANT_SELL_FRUIT_MULTIPLIER(20)
 ]]

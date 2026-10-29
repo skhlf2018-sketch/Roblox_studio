@@ -4,6 +4,7 @@
 	문서가 바뀌었는데 코드를 안 고쳤거나, 코드만 바꾸고 문서를 안 고쳤으면 여기서 걸립니다.
 	(문서를 직접 파싱 — 표를 테스트에 옮겨 적은 게 아니라서 문서가 "진짜 기준"입니다.)
 
+	7판: 식물 158종 · 등급 16개(화면 이름 영어 · 실제 성장 ÷3 칸) · 구역 18개 · 14장 "성장 속도 ×3"
 	- docs/SEED_GAME_DESIGN.md 9~14장 ↔ Plants · Rarities · Biomes(식물 괴물 경비) · EggSpawn(구역 등급 가중치·공지 씨앗)
 	  · Mutations · Config(정원·열매·건너뛰기·사쿠라 씨앗·러닝머신)
 	- docs/GAME_DESIGN.md 2·4·7·9장 ↔ 시간 주기 · 구역 추천 속도·도감 무기 · Sizes · Upgrades(정원 칸·러닝머신·트레일) · 도감 보상
@@ -199,14 +200,14 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("GAME_DESIGN 4장 · SEED 12장 ↔ Biomes · EggSpawn (구역 15개)")
+	T.suite("GAME_DESIGN 4장 · SEED 12장 ↔ Biomes · EggSpawn (구역 18개, 7판)")
 
 	T.test(
 		"GAME_DESIGN 4장: 순서·이름·추천 속도·경비(식물 괴물)·도감 무기가 문서 표와 같음",
 		function()
 			local rows = tableRows(sections["4"], "^%d+$")
-			T.eq(#rows, 15, "표 줄 수")
-			T.eq(#Biomes.list, 15)
+			T.eq(#rows, 18, "표 줄 수")
+			T.eq(#Biomes.list, 18)
 			for i, row in rows do
 				local biome = Biomes.list[i]
 				T.eq(tonumber(row[1]), biome.order, i .. "번 순서")
@@ -243,7 +244,8 @@ return function(T, Loader)
 		"SEED 12장: 이름·추천 속도·경비 한국어/영어 이름·둥지 등급 가중치(%)가 같음",
 		function()
 			local rows = tableRows(seed["12"], "^%d+$")
-			T.eq(#rows, 15, "표 줄 수")
+			T.eq(#rows, 18, "표 줄 수")
+			T.eq(#rows, #Biomes.list)
 			for i, row in rows do
 				local biome = Biomes.list[i]
 				T.eq(tonumber(row[1]), biome.order)
@@ -291,7 +293,7 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("SEED 10장 ↔ Plants (식물 134종의 이름·등급·출처·성장 시간·열매)")
+	T.suite("SEED 10장 ↔ Plants (식물 158종의 이름·등급·출처·성장 시간(표)·열매)")
 
 	local SOURCES = {
 		["둥지"] = { "nest", nil },
@@ -302,9 +304,9 @@ return function(T, Loader)
 	}
 	local plantRows = tableRows(seed["10"], "^%d+$")
 
-	T.test("문서 10장 식물 줄 수 = 코드 식물 수 (134), 번호가 1부터 차례대로", function()
+	T.test("문서 10장 식물 줄 수 = 코드 식물 수 (158), 번호가 1부터 차례대로", function()
 		T.eq(#plantRows, Plants.count)
-		T.eq(#plantRows, 134)
+		T.eq(#plantRows, 158)
 		for i, row in plantRows do
 			T.eq(tonumber(row[1]), i, "번호")
 		end
@@ -430,29 +432,36 @@ return function(T, Loader)
 			T.near(total, 1, 1e-12)
 			T.truthy(hasText(SEED, "크리스탈 " .. Config.SAKURA_DRAW_COST .. "개 → 특별 씨앗 뽑기"))
 			T.truthy(
-				hasText(SEED, "초기화 특별 추첨 " .. pct(EggSpawn.SPECIAL_CHANCE_PER_RESET.super_ultradivine)),
-				"슈퍼 울트라디바인 확률"
+				hasText(SEED, "초기화 특별 추첨 " .. pct(EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch)),
+				"해커 글리치 확률 (7판, 6판 슈퍼 울트라디바인 자리)"
 			)
 		end
 	)
 
 	------------------------------------------------------------------
-	T.suite("SEED 11장 ↔ Rarities (등급 11개)")
+	T.suite("SEED 11장 ↔ Rarities (등급 16개, 7판)")
 
 	T.test(
-		"11개: 순서·id·한국어·아우라·기준 성장 시간·식물 수·열매 간격·열매 값 범위·건너뛰기 배수·크리스탈·도감 속도",
+		"16개: 순서·id·한국어·화면 이름(영어)·아우라·기준 성장 시간·실제(÷3)·식물 수·열매 간격·열매 값 범위·건너뛰기 배수·크리스탈·도감 속도",
 		function()
 			local rows = tableRows(seed["11"], "^%d+$")
-			T.eq(#rows, 11)
-			T.eq(#Rarities.list, 11)
+			T.eq(#rows, 16)
+			T.eq(#Rarities.list, 16)
 			T.eq(Rarities.get("eternal"), nil, "eternal → eternity 로 바뀜")
+			T.eq(Rarities.get("super_ultradivine"), nil, "7판: 슈퍼 울트라디바인 없앰")
 			for i, row in rows do
 				local rarity = Rarities.list[i]
 				T.eq(tonumber(row[1]), rarity.order)
 				T.eq(row[2], rarity.id)
 				T.eq(row[3], rarity.name)
-				T.eq(row[4], rarity.aura, rarity.id .. " 아우라")
-				T.eq(parseDuration(row[5]), rarity.baseGrowSeconds, rarity.id .. " 기준 성장 시간")
+				T.eq(row[4], rarity.displayName, rarity.id .. " 화면 이름 (영어)")
+				T.eq(row[5], rarity.aura, rarity.id .. " 아우라")
+				T.eq(parseDuration(row[6]), rarity.baseGrowSeconds, rarity.id .. " 기준 성장 시간 (표)")
+				-- 실제 (÷3): 일반은 "약 3.3초" 라 정수 초로 읽으면 1초 안쪽 차이
+				local real = rarity.baseGrowSeconds / Config.GROWTH_SPEED_MULTIPLIER
+				T.truthy(math.abs(parseDuration(row[7]) - real) < 1, rarity.id .. " 실제 (÷3) " .. row[7])
+				-- 아래 칸들은 6판 표에서 두 칸(화면 이름·실제) 뒤로 밀림
+				row = { row[1], row[2], row[3], row[5], row[6], row[8], row[9], row[10], row[11], row[12], row[13] }
 				local count, minI, maxI, minV, maxV = 0, math.huge, 0, math.huge, 0
 				for _, plant in Plants.list do
 					if plant.rarity == rarity.id then
@@ -568,8 +577,11 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("열매·정원·건너뛰기·자동 수입·튜토리얼 숫자", function()
+	T.test("열매·정원·건너뛰기·자동 수입·튜토리얼 숫자 (7판: 성장 속도 ×3)", function()
+		T.eq(parseNumber(configRows["성장 속도"]), Config.GROWTH_SPEED_MULTIPLIER, "14장 성장 속도 ×3")
+		T.eq(Config.GROWTH_SPEED_MULTIPLIER, 3)
 		T.eq(parseNumber(configRows["밤 성장 배율"]), Config.NIGHT_GROWTH_MULTIPLIER)
+		T.truthy(startsWith(configRows["물 주기"], "없음"), "물 주기는 사장님이 없앰 (2026-10-28)")
 		T.eq(parseNumber(configRows["열매 최대 (식물마다)"]), Config.FRUIT_MAX_PER_PLANT)
 		T.eq(parseNumber(configRows["성체가 될 때 달린 열매"]), Config.FRUITS_ON_ADULT)
 		T.eq(parseNumber(configRows["열매 가방 최대"]), Config.FRUIT_BAG_MAX)

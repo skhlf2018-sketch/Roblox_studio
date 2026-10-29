@@ -1,14 +1,15 @@
 --!strict
 --[[
-	Plants — 식물 134종 (6판 "씨앗을 훔치세요", docs/SEED_GAME_DESIGN.md 10장 표와 같아야 함 — tests/design_doc.spec)
-	5판 Pets(펫 134종) 자리. 이름·모양은 우리가 새로 지은 것 (유명 게임 이름·캐릭터 안 씀).
+	Plants — 식물 158종 (7판, docs/SEED_GAME_DESIGN.md 10장 표와 같아야 함 — tests/design_doc.spec)
+	6판 134종(5판 Pets 자리) + 7판 새 구역 3개 × 8종. 이름·모양은 우리가 새로 지은 것 (유명 게임 이름·캐릭터 안 씀).
 
-	숫자는 전부 "그대로 쓰는" 값입니다 (5판처럼 × GROWTH_MULTIPLIER 하지 않음).
-	- growSeconds: 씨앗을 심어서 성체가 될 때까지 (낮 기준 초). 설계 3장 등급 기준(Rarities.baseGrowSeconds)에서
-	    등급 안에서 ×0.8 / ×1 / ×1.25 정도로 조금씩 다름. 밤에는 30배 빨리 자람 (Config.NIGHT_GROWTH_MULTIPLIER).
-	    예외: 숲의 강아지풀 3초 (튜토리얼 4단계 "성체가 될 때까지 기다리기" 를 빨리 — 5판 개 알 3초 자리)
+	- growSeconds: 씨앗을 심어서 성체가 될 때까지의 **표 시간** (낮 기준 초). 설계 3장 등급 기준(Rarities.baseGrowSeconds)에서
+	    등급 안에서 ×0.8 / ×1 / ×1.25 정도로 조금씩 다름.
+	    7판 성장 3배: 실제 시간 = 이 값 ÷ Config.GROWTH_SPEED_MULTIPLIER(3) — 나누기는 Economy.growSeconds 한 곳에서만
+	    (표 숫자는 그대로). 밤에는 거기서 또 30배 빨리 자람 (Config.NIGHT_GROWTH_MULTIPLIER).
+	    예외: 숲의 강아지풀 3초 (표 3초 → 실제 1초, 튜토리얼 4단계 "성체가 될 때까지 기다리기" 를 빨리 — 5판 개 알 자리)
 	  hatchSeconds: growSeconds 와 같은 값 (5판 코드 호환용 별칭, 정리 예정)
-	- fruitIntervalSeconds: 성체가 열매 1개를 맺는 간격(초). 등급이 높을수록 짧음 (일반 30초 → 슈퍼 울트라디바인 10초)
+	- fruitIntervalSeconds: 성체가 열매 1개를 맺는 간격(초). 등급이 높을수록 짧음 (일반 30초 → 해커 글리치 4초)
 	- fruitValue: 열매 1개 값(코인, 크기·돌연변이 전). 등급이 높을수록 큼. 실제 값 = FruitRules.fruitValue
 	- income: 열매로 환산한 초당 코인 = fruitValue / fruitIntervalSeconds (표시·밸런스 확인용. 6판은 자동 수입 없음)
 	- source: 어디서 나오나
@@ -47,6 +48,8 @@ type PlantOptions = {
 local K = 1e3
 local M = 1e6
 local B = 1e9
+local T = 1e12
+local Qa = 1e15
 
 local function mins(m: number, s: number?): number
 	return m * 60 + (s or 0)
@@ -299,7 +302,7 @@ plant("donut_sunflower", "도넛 해바라기", "Donut Sunflower", "eternity", h
 plant("cake_rose", "케이크 장미", "Cake Rose", "divine", hours(76, 48), 13, 540 * M)
 plant("sugar_crown", "설탕 왕관꽃", "Sugar Crown", "divine", days(4), 12, 600 * M)
 
--- 15. 유령 성 Haunted Castle — 영원·신성, 아주 가끔 슈퍼 울트라디바인 (하루 1~2개, 초기화 때만 · 전체 공지)
+-- 15. 유령 성 Haunted Castle — 영원·신성, 가끔 슈퍼 (7판: 6판 슈퍼 울트라디바인 2종 → 슈퍼, 숫자는 그대로)
 biome("haunted_castle")
 plant("ghost_lily", "유령 백합", "Ghost Lily", "eternity", hours(38, 24), 15, 50 * M)
 plant("pumpkin_vine", "호박 덩굴", "Pumpkin Vine", "eternity", days(2), 14, 55 * M)
@@ -307,16 +310,49 @@ plant("bat_orchid", "박쥐 난초", "Bat Orchid", "eternity", hours(60), 13, 66
 plant("candle_mushroom", "촛불 버섯", "Candle Mushroom", "divine", hours(76, 48), 13, 600 * M)
 plant("skull_rose", "해골 장미", "Skull Rose", "divine", days(4), 12, 660 * M)
 plant("moon_ghost_tree", "달빛 유령나무", "Moon Ghost Tree", "divine", days(5), 11, 790 * M)
+plant("rainbow_thunder_tree", "무지개 번개나무", "Rainbow Thunder Tree", "super", days(7), 10, 10 * B)
+plant("sky_pillar_flower", "하늘 기둥꽃", "Sky Pillar Flower", "super", days(8), 9, 12 * B)
+
+-- 16. 해커 연구소 Hacker Lab — 슈퍼·해커, 가끔 오리지널 (7판)
+biome("hacker_lab")
+plant("circuit_sprout", "회로 새싹", "Circuit Sprout", "super", days(6) + hours(9, 36), 10, 11 * B)
+plant("password_fern", "비밀번호 고사리", "Password Fern", "super", days(8), 10, 13 * B)
+plant("wifi_sunflower", "와이파이 해바라기", "Wi-Fi Sunflower", "super", days(10), 9, 15 * B)
+plant("firewall_cactus", "방화벽 선인장", "Firewall Cactus", "hacker", days(11) + hours(4, 48), 9, 120 * B)
+plant("virus_mushroom", "바이러스 버섯", "Virus Mushroom", "hacker", days(14), 9, 150 * B)
+plant("code_vine", "코드 덩굴", "Code Vine", "hacker", days(14), 8, 160 * B)
+plant("pixel_rose", "픽셀 장미", "Pixel Rose", "hacker", days(17) + hours(12), 8, 180 * B)
+plant("mainframe_tree", "메인프레임 나무", "Mainframe Tree", "original", days(16), 8, 1.5 * T)
+
+-- 17. 개발자의 방 Developer's Room — 오리지널·개발자, 가끔 울트라디바인 (7판)
+biome("developer_room")
+plant("keyboard_tulip", "키보드 튤립", "Keyboard Tulip", "original", days(16), 8, 1.6 * T)
+plant("coffee_bean_tree", "커피콩 나무", "Coffee Bean Tree", "original", days(20), 8, 1.8 * T)
+plant("monitor_lily", "모니터 백합", "Monitor Lily", "original", days(25), 7, 2.2 * T)
+plant("script_fern", "스크립트 고사리", "Script Fern", "developer", days(24), 7, 18 * T)
+plant("bug_catcher_bloom", "버그 잡이 꽃", "Bug Catcher Bloom", "developer", days(30), 7, 22 * T)
+plant("block_mushroom", "블록 버섯", "Block Mushroom", "developer", days(30), 6, 24 * T)
+plant("studio_tree", "스튜디오 나무", "Studio Tree", "developer", days(37) + hours(12), 6, 27 * T)
 plant(
-	"rainbow_thunder_tree",
-	"무지개 번개나무",
-	"Rainbow Thunder Tree",
-	"super_ultradivine",
-	days(7),
-	10,
-	10 * B
+	"update_rainbow_flower",
+	"업데이트 무지개꽃",
+	"Update Rainbow Flower",
+	"ultradivine",
+	days(36),
+	6,
+	220 * T
 )
-plant("sky_pillar_flower", "하늘 기둥꽃", "Sky Pillar Flower", "super_ultradivine", days(8), 9, 12 * B)
+
+-- 18. 버그 차원 Bug Dimension — 개발자·울트라디바인, 아주 가끔 해커 글리치 (7판, 화면 등급 이름 "H?a.(cke_r!#")
+biome("bug_dimension")
+plant("broken_pixel_flower", "깨진 픽셀 꽃", "Broken Pixel Flower", "developer", days(24), 7, 20 * T)
+plant("laggy_cactus", "렉 걸린 선인장", "Laggy Cactus", "developer", days(37) + hours(12), 6, 25 * T)
+plant("infinite_loop_vine", "무한 루프 덩굴", "Infinite Loop Vine", "ultradivine", days(36), 6, 230 * T)
+plant("upside_down_tree", "거꾸로 나무", "Upside-Down Tree", "ultradivine", days(45), 6, 270 * T)
+plant("missing_lotus", "사라진 연꽃", "Missing Lotus", "ultradivine", days(45), 5, 300 * T)
+plant("error_rose", "오류 장미", "Error Rose", "ultradivine", days(56) + hours(6), 5, 330 * T)
+plant("glitch_hacker_bloom", "글리치 해커 꽃", "Glitch Hacker Bloom", "hacker_glitch", days(48), 5, 2.7 * Qa)
+plant("static_world_tree", "지지직 세계수", "Static World Tree", "hacker_glitch", days(60), 4, 3.3 * Qa)
 
 ------------------------------------------------------------------
 -- 색인

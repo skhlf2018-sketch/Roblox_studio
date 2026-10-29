@@ -5,7 +5,7 @@
 
 	- 나무: Tag "SakuraIncubator" 파트 (맵에 없으면 벚꽃 구역 안 MapLayout.specials.sakuraIncubator 자리에 임시 파트)
 	- Remote SakuraOffer(plantUid): 나무 SAKURA_RADIUS(14) 안에서 내 정원의 성체 식물 1그루를 바침 → 크리스탈
-	    (등급별 Config.SAKURA_OFFER_CRYSTALS: 일반 1 … 슈퍼 울트라디바인 100). 정원 자리가 빔.
+	    (등급별 Config.SAKURA_OFFER_CRYSTALS: 일반 1 … 슈퍼 100 … 해커 글리치 700, 7판). 정원 자리가 빔.
 	    → SakuraResult { kind = "offered", consumed = plantUid, petId, gained, crystals } + Notify
 	- Remote SakuraDraw(): 나무 근처에서 크리스탈 SAKURA_DRAW_COST(10) 개로 특별 씨앗 뽑기 → 씨앗 가방으로
 	    벚꽃 씨앗(벚꽃 요정 나무) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무) 2.5%. 크기·자연 돌연변이는 둥지 씨앗처럼 굴림.

@@ -8,7 +8,9 @@
 
 	위에서 본 모습 (+z 가 "멀리", 복도 폭 220 = x -110 ~ 110, 양옆은 벽 WALL_HEIGHT):
 
-	   z = 3600 ┌──────────── 15 유령 성 ────────────┐  (맵 끝 벽)
+	   z = 4320 ┌──────────── 18 버그 차원 ──────────┐  (맵 끝 벽, 7판: 구역 18개 × 240 — 6판까지 15개 3600)
+	            │  16 해커 연구소 · 17 개발자의 방 (7판)  │
+	   z = 3600 ├──────────── 15 유령 성 ────────────┤
 	            │                 ...                  │
 	   z = 240  ├──────────── 1 숲 (0~240) ──────────┤
 	   z = 0    ├═══════ 안전 구역 경계 (밤 벽) ═══════┤  SAFE_ZONE_Z
@@ -87,7 +89,7 @@ MapLayout.SAFE_ZONE_Z = 0
 
 MapLayout.BIOME_LENGTH = 240
 MapLayout.BIOME_COUNT = #Biomes.list
-MapLayout.MAP_END_Z = MapLayout.BIOME_LENGTH * MapLayout.BIOME_COUNT -- 3600 (맵 끝 벽)
+MapLayout.MAP_END_Z = MapLayout.BIOME_LENGTH * MapLayout.BIOME_COUNT -- 4320 (맵 끝 벽, 7판 구역 18개)
 
 -- 밤 벽: 허브 경계 z = 0 에 한 장 (선임이 NightWall 태그 파트로 만듦)
 MapLayout.NIGHT_WALL = { z = 0, xMin = -110, xMax = 110, height = 60, thickness = 2 }
@@ -101,7 +103,8 @@ MapLayout.TREADMILL_PAD = { sizeX = 12, sizeZ = 8 } -- 러닝머신 벨트 (x �
 MapLayout.EGG_AREA_DEPTH = 16 -- 우리 앞쪽(울타리 쪽) 이 깊이 = 펫을 안 세우는 곳 (알을 놓기 좋은 자리), 그 뒤 = 펫 자리
 
 ------------------------------------------------------------------
--- 구역 15개 (Biomes.list 순서: 숲 → … → 유령 성)
+-- 구역 18개 (Biomes.list 순서: 숲 → … → 유령 성 → 해커 연구소 → 개발자의 방 → 버그 차원). 7판에서 늘어난 3개는
+-- 맨 뒤에 붙으므로 1~15 구역 좌표는 그대로, 맵 끝 벽만 3600 → 4320
 ------------------------------------------------------------------
 local biomes: { BiomeRange } = {}
 local biomeById: { [string]: BiomeRange } = {}

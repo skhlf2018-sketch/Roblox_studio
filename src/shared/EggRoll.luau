@@ -128,7 +128,7 @@ function EggRoll.nestWeight(pet: Pet, side: string?): number
 	return if count > 0 then w / count else 0
 end
 
--- 일반 추첨 1개 (등급 가중치 → 그 등급 안에서 고르게). 슈퍼 울트라디바인은 안 나옴
+-- 일반 추첨 1개 (등급 가중치 → 그 등급 안에서 고르게). 가중치 0 인 등급은 안 나옴 (7판: 모든 등급이 어느 구역엔가 나옴)
 function EggRoll.rollNestPet(biomeId: string, side: string?, rand: RandomFn): Pet?
 	return EggRoll.weightedPick(EggRoll.nestPool(biomeId, side), function(pet: Pet): number
 		return EggRoll.nestWeight(pet, side)

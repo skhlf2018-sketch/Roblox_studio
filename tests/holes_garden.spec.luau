@@ -457,39 +457,45 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"성장 시간 실측: 일반 10초 · 밤 30배(비밀 24시간 = 밤 48분) · 낮에는 그대로 24시간 · 건너뛰기 가격 = 표",
+		"성장 시간 실측 (7판 성장 3배): 일반 표 10초 → 약 3.3초 · 비밀 표 24시간 → 낮 8시간 · 밤 30배면 16분 · 건너뛰기 가격 = 표",
 		function()
 			local w = world()
 			local H = w.H
 			local function lastSeed()
 				return w.dataA.incubators[#w.dataA.incubators]
 			end
-			-- 낮: 일반 씨앗 10초 (서버 1초 틱)
+			-- 낮: 일반 씨앗 표 10초 → 실제 약 3.3초 (서버 1초 틱)
 			plantSeed(w, w.A, w.dataA, 1, "sprout_daisy")
-			T.eq(lastSeed().required, 10)
-			H.advance(8.5)
-			T.eq(#w.dataA.incubators, 1, "8초에는 아직 씨앗")
+			T.near(lastSeed().required, 10 / 3, 1e-9)
+			H.advance(2.5)
+			T.eq(#w.dataA.incubators, 1, "2초에는 아직 씨앗")
 			H.advance(2)
-			T.eq(#w.dataA.incubators, 0, "10초 뒤 성체")
+			T.eq(#w.dataA.incubators, 0, "약 3.3초 뒤 성체 (4초 틱에)")
 			T.eq(#w.dataA.pets, 1)
-			-- 낮: 비밀 씨앗은 밤 48분이 아니라 낮에는 24시간 (1시간 지나도 씨앗, 진행도는 정확히 3600)
+			-- 낮: 비밀 씨앗은 표 24시간 → 실제 8시간 (1시간 지나도 씨앗, 진행도는 정확히 3600)
 			plantSeed(w, w.A, w.dataA, 1, "rune_rose")
 			local secret = lastSeed()
-			T.eq(secret.required, 86400)
+			T.eq(secret.required, 28800)
 			H.advance(3600)
 			T.near(secret.progress, 3600, 2, "낮 1시간 = 성장 3600초")
-			-- 건너뛰기 가격 = 남은 분 × 10 × 100 (남은 1,440분 - 60분)
+			-- 건너뛰기 가격 = 남은 분 × 10 × 100 (남은 실제 480분 - 60분)
 			local left = secret.required - secret.progress
 			T.eq(
 				w.GardenRules.skipCost("rune_rose", secret.progress, secret.required, "all"),
 				math.ceil(left / 60 - 1e-9) * 10 * 100
 			)
-			-- 밤: 같은 비밀 씨앗이 30배 빨리 (남은 82,800초 → 2,760초 = 46분)
+			T.eq(
+				w.GardenRules.skipCost("rune_rose", secret.progress, secret.required, "all"),
+				420 * 10 * 100,
+				"7판: 남은 실제 420분"
+			)
+			-- 밤: 같은 비밀 씨앗이 30배 빨리 (남은 25,200초 → 840초 = 14분)
 			H.setPhase("Night")
+			T.eq(math.ceil(left / 30), 840)
 			H.advance(math.ceil(left / 30) - 5)
-			T.eq(#w.dataA.incubators, 1, "밤 46분에서 5초 모자라면 아직 씨앗")
+			T.eq(#w.dataA.incubators, 1, "밤 14분에서 5초 모자라면 아직 씨앗")
 			H.advance(10)
-			T.eq(#w.dataA.incubators, 0, "밤 46분 + 몇 초 뒤 성체")
+			T.eq(#w.dataA.incubators, 0, "밤 14분 + 몇 초 뒤 성체")
 			T.eq(w.dataA.pets[#w.dataA.pets].petId, "rune_rose")
 			T.eq(w.dataA.pets[#w.dataA.pets].fruits, w.Config.FRUITS_ON_ADULT)
 			H.uninstall()

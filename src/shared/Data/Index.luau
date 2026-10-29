@@ -1,6 +1,7 @@
 --!strict
 --[[
 	Index — 도감 보상 규칙 (6판 "씨앗을 훔치세요": 성체 도감. 5판 설계문서 9-5 공식 그대로, 돈 칸만 열매 값 기준)
+	7판: 등급 16개 → RARITY_SPEED 칸 6개 추가 (super ~ hacker_glitch), 식물 158종
 
 	처음 성체가 된 식물마다 속도 + 코인 보상 (Claim All 로 수령).
 	  코인 = 그 식물 열매 1개 값(Data/Plants.fruitValue) × MONEY_PER_FRUIT
@@ -28,7 +29,13 @@ local Index = {
 		secret = 2200,
 		eternity = 2800,
 		divine = 3600,
-		super_ultradivine = 4600, -- [수석] 6판 새 등급
+		-- 7판 새 등급 (super = 6판 슈퍼 울트라디바인 4600 그대로)
+		super = 4600,
+		hacker = 5800,
+		original = 7200,
+		developer = 9000,
+		ultradivine = 11000,
+		hacker_glitch = 14000,
 	} :: { [string]: number },
 	MONEY_PER_FRUIT = 10, -- [수석] 6판: 도감 코인 = 열매 1개 값 × 10
 	SPEED_BIOME_REFERENCE = 3600,

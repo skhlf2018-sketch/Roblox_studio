@@ -9,8 +9,8 @@
 	  │                                    [  획득!  ]     │
 	  │ [📘 모두 획득 (n)!  /  잠금 해제: 18/134         ] │
 	  └───────────────────────────────────────────────────┘
-	- 왼쪽: 구역 15개 그림 탭 (세로 스크롤). 받을 보상이 있는 구역은 "!" 표시
-	- 가운데: 구역 식물 카드 (등급 색 바탕 — 등급 11개, 신성·슈퍼 울트라디바인은 무지개 띠, 발견 전 검은 실루엣 "???")
+	- 왼쪽: 구역 18개(7판) 그림 탭 (세로 스크롤). 받을 보상이 있는 구역은 "!" 표시
+	- 가운데: 구역 식물 카드 (등급 색 바탕 — 등급 16개(7판), Theme.RainbowRarities 는 무지개 띠, 발견 전 검은 실루엣 "???")
 	  + 진행바 "발견/전체". 발견 = 한 번이라도 성체가 됨
 	- 오른쪽: 고른 식물 크게 + 이름·등급 + "열매 1개 N 코인 · N초마다" + 빨간 ">" (다음 식물)
 	  + 보상(코인·속도) + "획득!" → ClaimIndexReward(plantId)
@@ -111,7 +111,7 @@ local function zonePicture(parent: Instance, biomeId: string)
 	end
 end
 
--- 신성·슈퍼 울트라디바인: 무지개 띠 (카드 바탕·등급 글씨)
+-- Theme.RainbowRarities (신성·슈퍼·울트라디바인·해커 글리치, 7판): 무지개 띠 (카드 바탕·등급 글씨)
 local function rainbow(target: GuiObject, rarityId: string)
 	if Theme.RainbowRarities[rarityId] then
 		local g = Instance.new("UIGradient")

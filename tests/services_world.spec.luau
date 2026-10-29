@@ -79,11 +79,11 @@ return function(T, Loader)
 	T.suite("서비스: EggService 초기화·알 놓기")
 
 	T.test(
-		"초기화마다 15구역 × 둥지 8개 = 알 120개, 'ALL EGG RESET!' 공지, 알은 둥지 위에 놓임",
+		"초기화마다 18구역(7판) × 둥지 8개 = 알 144개, 'ALL EGG RESET!' 공지, 알은 둥지 위에 놓임",
 		function()
 			local w = eggWorld()
 			local all = eggParts(w.H)
-			T.eq(#all, 120)
+			T.eq(#all, 144)
 			local perBiome = {}
 			for _, egg in all do
 				local biomeId = egg:GetAttribute("BiomeId")
@@ -119,10 +119,7 @@ return function(T, Loader)
 						T.truthy(EggRoll.nestWeight(pet) > 0, pet.id)
 					else
 						T.truthy(
-							pet.rarity == "secret"
-								or pet.rarity == "eternity"
-								or pet.rarity == "divine"
-								or pet.rarity == "super_ultradivine",
+							table.find(w.H.shared("Data/EggSpawn").SPECIAL_RARITIES, pet.rarity) ~= nil, -- 7판: 비밀 이상 9등급
 							pet.id
 						)
 					end
@@ -140,23 +137,20 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"초기화를 60번 반복해도 알이 새지 않고(항상 120개) 희귀 알 공지가 가끔 나옴 (비밀 8%·영원 2%·신성 0.2%)",
+		"초기화를 60번 반복해도 알이 새지 않고(항상 144개) 희귀 알 공지가 가끔 나옴 (비밀 8%·영원 2%·신성 0.2%)",
 		function()
 			local w = eggWorld()
 			local seen = #announces(w.H, "rareEgg") -- 첫 초기화(주기 1)에서 이미 나온 것은 제외
 			local firstSeen = seen
 			for cycle = 2, 61 do
 				w.H.setPhase("Intermission", cycle)
-				T.eq(#eggParts(w.H), 120, "주기 " .. cycle)
+				T.eq(#eggParts(w.H), 144, "주기 " .. cycle)
 				-- 공지한 알은 그 초기화 직후에는 진짜 있어야 함 (다음 초기화 때 지워짐)
 				local rare = announces(w.H, "rareEgg")
 				for i = seen + 1, #rare do
 					local a = rare[i]
 					T.truthy(
-						a.rarity == "secret"
-							or a.rarity == "eternity"
-							or a.rarity == "divine"
-							or a.rarity == "super_ultradivine",
+						table.find(w.H.shared("Data/EggSpawn").SPECIAL_RARITIES, a.rarity) ~= nil, -- 7판: 비밀 이상 9등급
 						a.rarity
 					)
 					T.truthy(
@@ -172,7 +166,7 @@ return function(T, Loader)
 			end
 			T.truthy(
 				seen - firstSeen >= 10,
-				"희귀 알 공지 " .. (seen - firstSeen) .. "번 (60주기 × 15구역 = 900번 추첨)"
+				"희귀 알 공지 " .. (seen - firstSeen) .. "번 (60주기 × 18구역 = 1080번 추첨)"
 			)
 			w.H.uninstall()
 		end
@@ -308,7 +302,7 @@ return function(T, Loader)
 					end
 				end
 				seen = #rare
-				T.eq(#eggParts(w.H), 120, "알 수는 그대로 " .. cycle)
+				T.eq(#eggParts(w.H), 144, "알 수는 그대로 " .. cycle)
 			end
 			T.truthy(jitter >= 2 and jitter <= 20, "춤추는 버섯 공지 " .. jitter .. "번 (100번 × 8% ≈ 8)")
 			w.H.uninstall()
@@ -525,7 +519,7 @@ return function(T, Loader)
 			w.EggService.dropEgg(w.player)
 			w.H.setPhase("Intermission", 2)
 			T.truthy(egg4.destroyed)
-			T.eq(#eggParts(w.H), 120, "둥지 120개 전부 새 알")
+			T.eq(#eggParts(w.H), 144, "둥지 144개(18구역) 전부 새 알")
 			w.H.uninstall()
 		end
 	)
@@ -547,7 +541,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"초기화(대기)가 와도 든 알은 안 지워지고, 둥지 120개는 새 알로 전부 채워짐 (들고 있는 알 + 120 = 121)",
+		"초기화(대기)가 와도 든 알은 안 지워지고, 둥지 144개(7판 18구역)는 새 알로 전부 채워짐 (들고 있는 알 + 144 = 145)",
 		function()
 			local w = eggWorld()
 			local egg = nestEgg(w.H, "forest")
@@ -555,7 +549,7 @@ return function(T, Loader)
 			w.H.setPhase("Intermission", 2)
 			T.eq(egg:GetAttribute("EggState"), "Carried")
 			T.falsy(egg.destroyed)
-			T.eq(#eggParts(w.H), 121)
+			T.eq(#eggParts(w.H), 145)
 			-- 든 알은 예약이 풀려서, 이제 구역 안에서 잡혀도 빈 둥지가 없어 그 자리에 떨어짐 (설계상 허용되는 모서리 경우)
 			local cx, cz = zoneCenter(w, "forest")
 			w.H.teleport(w.player, cx, 3, cz)
@@ -758,7 +752,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"시작하면 15구역에 경비가 1마리씩 자고 있음 (집 = MapLayout.guardHome 구역 가운데, 상태 Sleeping, 대상 없음)",
+		"시작하면 18구역(7판)에 경비가 1마리씩 자고 있음 (집 = MapLayout.guardHome 구역 가운데, 상태 Sleeping, 대상 없음)",
 		function()
 			local w = guardWorld()
 			local count = 0
@@ -778,7 +772,7 @@ return function(T, Loader)
 				T.eq(root.Position.Z, home.z)
 				T.eq(w.H.MapLayout.zoneAt(root.Position.Z), biome.id)
 			end
-			T.eq(count, 15)
+			T.eq(count, 18)
 			w.H.uninstall()
 		end
 	)
@@ -1107,7 +1101,7 @@ return function(T, Loader)
 			for _ in w.H.map.folders.Guardians.children do
 				count += 1
 			end
-			T.eq(count, 15)
+			T.eq(count, 18)
 			local root = guardRoot(fresh)
 			root.CFrame = { Position = w.H.vec(root.Position.X, -50, root.Position.Z) }
 			w.H.advance(0.2)

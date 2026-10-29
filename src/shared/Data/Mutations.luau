@@ -50,7 +50,7 @@ local list: { Mutation } = {
 		source = "nest",
 		naturalChance = 0.02,
 		feedChance = 0.04,
-		feedBiomes = { "titan_temple", "angels_demons" },
+		feedBiomes = { "titan_temple", "angels_demons", "developer_room" }, -- 7판: + 개발자의 방
 		color = { 255, 200, 50 },
 	},
 	{
@@ -63,7 +63,7 @@ local list: { Mutation } = {
 		source = "nest",
 		naturalChance = 0.005,
 		feedChance = 0.01,
-		feedBiomes = { "enchanted_forest", "candy_kingdom", "haunted_castle" },
+		feedBiomes = { "enchanted_forest", "candy_kingdom", "haunted_castle", "bug_dimension" }, -- 7판: + 버그 차원
 		color = { 255, 90, 200 },
 	},
 	{
@@ -102,7 +102,7 @@ local list: { Mutation } = {
 		source = "fruit",
 		naturalChance = 0,
 		feedChance = 0.03,
-		feedBiomes = { "jungle", "cosmic", "cherry_blossom" },
+		feedBiomes = { "jungle", "cosmic", "cherry_blossom", "hacker_lab" }, -- 7판: + 해커 연구소
 		color = { 255, 240, 90 },
 	},
 }
@@ -131,7 +131,7 @@ local Mutations = {
 	-- 6판: 열매 먹이기로 얻을 수 있는 돌연변이 (Data 순서)
 	feed = feed,
 	FEED_BIOME_BONUS = 3, -- 그 돌연변이의 feedBiomes 구역 식물 열매면 확률 × 3
-	-- 열매 등급 보너스: 확률 × (1 + (등급 순서 - 1) × 이 값) → 일반 ×1 … 슈퍼 울트라디바인 ×2
+	-- 열매 등급 보너스: 확률 × (1 + (등급 순서 - 1) × 이 값) → 일반 ×1 … 신성 ×1.9 … 해커 글리치 ×2.5 (7판 등급 16개)
 	FEED_RARITY_BONUS_PER_ORDER = 0.1,
 	FEED_MAX_CHANCE = 0.9, -- 한 번 먹일 때 무언가 붙을 확률 상한
 }

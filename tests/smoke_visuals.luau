@@ -4,10 +4,10 @@
 	(tests/run.luau 에는 안 들어감. 로블록스 없이 @lune/roblox 진짜 인스턴스로 만들어 보며
 	 속성 이름·타입 오타, nil 인덱싱 같은 실행 오류를 잡습니다. 모양이 예쁜지는 스튜디오에서 봐야 함)
 
-	검사: MapBuilder.start() (맵 15구역·베이스 7개·특수 장소 = 6판 사쿠라 나무만), PetVisualService.build(식물 134종 — 아직 5판 동물 모양),
+	검사: MapBuilder.start() (맵 18구역(7판)·베이스 7개·특수 장소 = 6판 사쿠라 나무만), PetVisualService.build(식물 158종),
 	      6판 정원 펫 진열 없음, 경비 겉모습, EggVisualService (씨앗 껍데기 — 아직 알 모양)
 	      + 특수 장소 태그 파트 개수/Attribute/구역 안에 있는지 (서버 Landmarks 가 임시 파트를 안 만들게)
-	      + 4판: 파트 수 상한 (구역 ≤ 400, 맵 ≤ 7,000, 러닝머신 7개가 모두 가장 큰 모양이어도), 입구 아치·큰 바닥 판,
+	      + 4판: 파트 수 상한 (구역 ≤ 400, 맵 ≤ 8,000(7판, 6판 7,000), 러닝머신 7개가 모두 가장 큰 모양이어도), 입구 아치·큰 바닥 판,
 	        둥지 태그 파트 높이 그대로, 경비 전용 소품(키 그대로), 등급 10개 알 모양(매끈한 타원 + 띠·점, ≤ 8 파트, 희귀 이상 반짝이)
 ]]
 local fs = require("@lune/fs")
@@ -253,7 +253,10 @@ local function body()
 	end
 	print("[4판 비주얼: 파트 수 상한]")
 	local budget = MapBuilder.PART_BUDGET
-	check(budget ~= nil and budget.zone == 400 and budget.map == 7000, "PART_BUDGET = 구역 400 / 맵 7,000")
+	check(
+		budget ~= nil and budget.zone == 400 and budget.map == 8000,
+		"PART_BUDGET = 구역 400 / 맵 8,000 (7판 구역 18개 — [7판 수석 임시], 6판 7,000)"
+	)
 	local counts = MapBuilder.partCounts()
 	check(counts.total == count(map), "partCounts().total = 실제 맵 파트 수: " .. counts.total)
 	local zoneOver, zoneSeen, items, skippedAll = {}, 0, 0, 0
@@ -303,8 +306,8 @@ local function body()
 			skippedAll
 		)
 	)
-	check(zoneSeen == 15 and #zoneOver == 0, "구역마다 파트 ≤ 400: " .. table.concat(zoneOver, ", "))
-	check(counts.total <= budget.map, "맵 전체 파트 ≤ 7,000: " .. counts.total)
+	check(zoneSeen == 18 and #zoneOver == 0, "구역마다 파트 ≤ 400: " .. table.concat(zoneOver, ", "))
+	check(counts.total <= budget.map, "맵 전체 파트 ≤ 8,000: " .. counts.total)
 	check(
 		skippedAll == 0,
 		"장식이 상한에 막혀 빠진 것 없음 (Visuals 장식 개수가 상한 안): " .. skippedAll
@@ -438,11 +441,11 @@ local function body()
 		distinct == 20,
 		"6판: 러닝머신 1~20레벨 모양이 전부 다름 (벨트 색·재질·파트 수): " .. distinct
 	)
-	-- 7 베이스 모두 가장 파트가 많은 러닝머신 모양이어도 맵 7,000 이하
+	-- 7 베이스 모두 가장 파트가 많은 러닝머신 모양이어도 맵 8,000 이하 (7판)
 	local worst = mapBefore - lookBefore + 7 * maxLook
 	check(
-		worst <= 7000,
-		string.format("러닝머신 7개 모두 가장 큰 모양(%d)이어도 맵 ≤ 7,000: %d", maxLook, worst)
+		worst <= 8000,
+		string.format("러닝머신 7개 모두 가장 큰 모양(%d)이어도 맵 ≤ 8,000: %d", maxLook, worst)
 	)
 	-- 6판 (사장님: 러닝머신 최대 1초 1M): 20레벨까지, 11~20레벨 모양 10개 더 (정글·바다·사탕·벚꽃·용암·수정·유령·은하·무지개·황제)
 	local Upgrades = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Upgrades"))
@@ -640,7 +643,7 @@ local function petsBody()
 		return n, total
 	end
 
-	print("[6판 식물 134종]")
+	print("[식물 158종 (7판)]")
 	local total, maxParts, maxId, minParts, minId = 0, 0, "", math.huge, ""
 	local byForm = {}
 	local rootOk, swayOk, fruitOk, auraOk, heightOk = 0, 0, 0, 0, 0
@@ -923,7 +926,7 @@ local function petsBody()
 			fire(g.guard, "State") -- Idle → 잠
 		end
 	end
-	check(dressed == 15, "경비 겉모습 15구역 전부 붙음: " .. dressed)
+	check(dressed == 18, "경비 겉모습 18구역(7판) 전부 붙음: " .. dressed)
 	local guardIds = {}
 	for _, spec in Visuals.guards do
 		table.insert(guardIds, spec.model)
@@ -957,7 +960,11 @@ local function petsBody()
 		table.insert(partLine, id .. " " .. n)
 	end
 	print("  괴물 파트: " .. table.concat(partLine, ", "))
-	check(#guardIds == 16, "식물 괴물 16종 (15구역 + 악마 장미): " .. #guardIds)
+	check(
+		#guardIds == 19,
+		"경비 모양 19개 (18구역 + 악마 장미, 7판 새 경비 3마리는 옛 괴물을 빌린 임시): "
+			.. #guardIds
+	)
 	check(
 		faceOk == #guardIds,
 		"괴물 모두 자는 얼굴로 시작 (눈썹 숨김·감은 눈 2·뜬 눈 숨김): " .. faceOk
@@ -972,7 +979,10 @@ local function petsBody()
 		end
 	end
 	check(heightOk2, "경비 겉모습 Height = Visuals.guards[..].height (GuardianService 잡힘 거리)")
-	check(tall == 15, string.format("경비 키 25~40 스터드: %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH))
+	check(
+		tall == 18,
+		string.format("경비 키 25~40 스터드 (18구역): %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH)
+	)
 	local forest = guards.forest
 	if forest then
 		local visual = forest.guard:FindFirstChild(forest.model)
@@ -1135,7 +1145,7 @@ local function petsBody()
 	local special = eggs:GetChildren()[2]
 	check(special and special:FindFirstChild("SpecialBeam") ~= nil, "특별 씨앗 빛기둥(SpecialBeam) 그대로")
 
-	-- 등급 11개 씨앗 모양 + 아우라 (희귀 이상 꺼진 파티클·빛 + AuraFx)
+	-- 등급 16개(7판) 씨앗 모양 + 아우라 (희귀 이상 꺼진 파티클·빛 + AuraFx)
 	local rarityEggs = Instance.new("Folder")
 	rarityEggs.Parent = Workspace
 	local made = {}
@@ -1183,7 +1193,7 @@ local function petsBody()
 		table.insert(line, r.id .. " " .. n)
 	end
 	print("  등급별 씨앗 파트: " .. table.concat(line, ", "))
-	check(looksOk == #Rarities.list, "등급 11개 씨앗: 아몬드 껍데기 + 무늬, 3~8 파트: " .. looksOk)
+	check(looksOk == #Rarities.list, "등급 16개 씨앗: 아몬드 껍데기 + 무늬, 3~8 파트: " .. looksOk)
 	check(
 		auraOk2 == #Rarities.list,
 		"희귀(rare) 이상만 아우라 (꺼진 채 + AuraFx 태그, 클라가 가까운 것만 켬): " .. auraOk2

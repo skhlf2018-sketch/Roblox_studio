@@ -19,7 +19,14 @@ return function(T, Loader)
 
 	T.test("바치기: 등급이 높을수록 크리스탈이 많음, 모르는 식물 0", function()
 		T.eq(SakuraRules.crystalsFor("sprout_daisy"), Config.SAKURA_OFFER_CRYSTALS.common)
-		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), Config.SAKURA_OFFER_CRYSTALS.super_ultradivine)
+		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), Config.SAKURA_OFFER_CRYSTALS.super, "7판: 슈퍼 100")
+		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), 100)
+		T.eq(
+			SakuraRules.crystalsFor("static_world_tree"),
+			Config.SAKURA_OFFER_CRYSTALS.hacker_glitch,
+			"해커 글리치 700"
+		)
+		T.truthy(SakuraRules.crystalsFor("static_world_tree") > SakuraRules.crystalsFor("rainbow_thunder_tree"))
 		T.eq(SakuraRules.crystalsFor("없는식물"), 0)
 		T.truthy(SakuraRules.crystalsFor("rune_rose") > SakuraRules.crystalsFor("owl_oak"))
 	end)

@@ -58,18 +58,56 @@ return function(T, Loader)
 		T.falsy(Economy.isValidMutationSet({ "bloom" }), "6판에 없는 돌연변이")
 	end)
 
-	T.test("성장 시간 = Plants.growSeconds (hatchSeconds 는 별칭), 낮 1초 = 1, 밤 30배", function()
-		T.eq(Economy.growSeconds("puppy_grass"), 3)
-		T.eq(Economy.growSeconds("sprout_daisy"), 10)
-		T.eq(Economy.growSeconds("crystal_snowdrop"), 3600, "전설 1시간")
-		T.eq(Economy.growSeconds("rune_rose"), 86400, "비밀 1일")
-		T.eq(Economy.growSeconds("rainbow_thunder_tree"), 7 * 86400, "슈퍼 울트라디바인 7일")
-		T.eq(Economy.hatchSeconds("sprout_daisy"), 10)
-		T.eq(Economy.growSeconds("없는식물"), 1)
-		T.eq(Economy.remainingSeconds(0, 10, Economy.growthRate(false, false)), 10)
-		T.near(Economy.remainingSeconds(0, 10, Economy.growthRate(true, false)), 1 / 3, 1e-9)
-		T.eq(Economy.remainingSeconds(0, 300, Economy.growthRate(true, false)), 10, "희귀 5분은 밤 10초 내내")
-	end)
+	T.test(
+		"7판 성장 3배: 성장 시간 = Plants.growSeconds(표) ÷ 3 (hatchSeconds 는 별칭), 낮 1초 = 1, 밤 30배",
+		function()
+			T.eq(Config.GROWTH_SPEED_MULTIPLIER, 3)
+			T.eq(Economy.growthSpeedMultiplier(), 3)
+			T.eq(Economy.growSeconds("puppy_grass"), 1, "강아지풀 표 3초 → 1초")
+			T.near(Economy.growSeconds("sprout_daisy"), 10 / 3, 1e-9)
+			T.eq(Economy.growSeconds("crystal_snowdrop"), 1200, "전설 표 1시간 → 20분")
+			T.eq(Economy.growSeconds("rune_rose"), 28800, "비밀 표 1일 → 8시간")
+			T.near(Economy.growSeconds("rainbow_thunder_tree"), 7 * 86400 / 3, 1e-6, "슈퍼 표 7일")
+			T.eq(Economy.growSeconds("static_world_tree"), 20 * 86400, "해커 글리치 표 60일 → 20일")
+			T.eq(Economy.tableGrowSeconds("puppy_grass"), 3, "표 숫자는 그대로")
+			T.eq(Economy.tableGrowSeconds("없는식물"), nil)
+			T.near(Economy.hatchSeconds("sprout_daisy"), 10 / 3, 1e-9)
+			T.eq(Economy.growSeconds("없는식물"), 1)
+			for _, plant in Plants.list do
+				T.near(Economy.growSeconds(plant.id) * 3, plant.growSeconds, 1e-6, plant.id .. " ÷3")
+			end
+			T.eq(Economy.remainingSeconds(0, 10, Economy.growthRate(false, false)), 10)
+			T.near(Economy.remainingSeconds(0, 10, Economy.growthRate(true, false)), 1 / 3, 1e-9)
+			T.eq(
+				Economy.remainingSeconds(0, 300, Economy.growthRate(true, false)),
+				10,
+				"희귀 5분은 밤 10초 내내"
+			)
+		end
+	)
+
+	T.test(
+		"7판 성장 3배는 밤 30배와 곱: 비밀 룬 장미(표 1일) = 낮 8시간 · 밤 16분, 타이머·건너뛰기 값도 ÷3 시간 기준, 열매는 그대로",
+		function()
+			local GardenRules = Loader.require("ReplicatedStorage/Shared/GardenRules")
+			local required = Economy.growSeconds("rune_rose")
+			T.eq(required, 8 * 3600)
+			T.eq(Economy.remainingSeconds(0, required, Economy.growthRate(false, false)), 8 * 3600)
+			T.eq(Economy.remainingSeconds(0, required, Economy.growthRate(true, false)), 16 * 60)
+			T.near(
+				Economy.remainingSeconds(0, required, Economy.growthRate(true, false)) * 90,
+				86400,
+				1e-6,
+				"밤이면 표 시간의 1/90"
+			)
+			T.eq(Economy.timerSeconds(0, required), 8 * 3600, "타이머 = ÷3 된 남은 시간")
+			T.eq(GardenRules.skipCost("rune_rose", 0, required, "all"), 480 * 10 * 100, "남은 실제 480분")
+			T.eq(GardenRules.skipCost("rune_rose", 0, required, "half"), 240 * 10 * 100)
+			T.eq(GardenRules.stage(required * 0.3, required), "stem", "단계(%)도 ÷3 된 Required 기준")
+			T.near(Economy.fruitInterval("rune_rose"), 16 / 1.8, 1e-9, "열매 간격은 3배와 상관없음")
+			T.eq(Economy.fruitValue("rune_rose", "normal", {}), 5e6, "열매 값도 그대로")
+		end
+	)
 
 	T.test("성장 속도: 밤 30배, 게임패스 2배, 둘 다 60배", function()
 		T.eq(Economy.growthRate(false, false), 1)

@@ -558,7 +558,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"6판: 15구역 경비 = 식물 괴물 (Visuals.monsters) 이 다 있고 몸·머리·소품이 PetVisualService 에 구현돼 있음",
+		"7판: 18구역 경비 = 식물 괴물 (Visuals.monsters) 이 다 있고 몸·머리·소품이 PetVisualService 에 구현돼 있음",
 		function()
 			for id, look in Visuals.monsters do
 				T.truthy(look.body == "stalk" or monsterKinds[look.body], id .. " 몸 " .. look.body) -- stalk = 기본 몸
@@ -629,7 +629,7 @@ return function(T, Loader)
 	})
 
 	T.test(
-		"15개 구역 테마: 구역 장식 종류가 MapBuilder 에 구현돼 있고, 재료 이름이 진짜 Enum.Material, 배경음이 있음",
+		"18개 구역 테마(7판): 구역 장식 종류가 MapBuilder 에 구현돼 있고, 재료 이름이 진짜 Enum.Material, 배경음이 있음",
 		function()
 			for _, biome in Biomes.list do
 				local theme = Visuals.biomes[biome.id]
@@ -676,7 +676,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"돌연변이마다 씨앗 껍데기 모양, 등급 효과 이름, 특별 씨앗 4종(6판 eternity·super_ultradivine), 베이스 색 7개",
+		"돌연변이마다 씨앗 껍데기 모양, 등급 효과 이름, 특별 씨앗(7판 EggSpawn.SPECIAL_RARITIES 9등급), 등급마다 아우라·씨앗 껍데기, 베이스 색 7개",
 		function()
 			for _, mutation in Mutations.list do
 				local look = Visuals.mutationLooks[mutation.id]
@@ -692,8 +692,21 @@ return function(T, Loader)
 			for id in Visuals.rarityEffects do
 				T.truthy(rarityIds[id], "희귀도 효과의 모르는 희귀도 " .. id)
 			end
-			for _, id in { "secret", "eternity", "divine", "super_ultradivine" } do
-				T.truthy(Visuals.specialEggs[id], id)
+			local EggSpawn = Loader.require("ReplicatedStorage/Shared/Data/EggSpawn")
+			T.eq(#EggSpawn.SPECIAL_RARITIES, 9)
+			for _, id in EggSpawn.SPECIAL_RARITIES do
+				T.truthy(Visuals.specialEggs[id], id .. " 특별 씨앗 빔·글자")
+			end
+			for id in Visuals.specialEggs do
+				T.truthy(rarityIds[id], "특별 씨앗 표의 모르는 등급 " .. id)
+			end
+			-- 7판: 등급 16개 전부 아우라 모양·씨앗 껍데기가 있어야 서버가 안 깨짐 (새 6개는 [7판 수석 임시])
+			for _, r in Rarities.list do
+				T.truthy(Visuals.auras[r.aura], r.id .. " 아우라 " .. r.aura .. " 모양 없음")
+				T.truthy(Visuals.eggLooks[r.id], r.id .. " 씨앗 껍데기")
+			end
+			for id in Visuals.eggLooks do
+				T.truthy(rarityIds[id], "씨앗 껍데기 표의 모르는 등급 " .. id)
 			end
 			T.truthy(#Visuals.plotColors >= Config.PLOT_COUNT)
 		end

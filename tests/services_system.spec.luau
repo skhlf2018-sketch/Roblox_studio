@@ -183,7 +183,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"/zone lake · /zone 15 · /zone hub: 구역 입구·허브로 서버 순간이동 (위치 검증 쉼), 없는 구역은 무시",
+		"/zone lake · /zone 15 · /zone 18 · /zone hub: 구역 입구·허브로 서버 순간이동 (위치 검증 쉼), 없는 구역은 무시",
 		function()
 			local w = devWorld()
 			local MapLayout = w.H.shared("Data/MapLayout")
@@ -193,6 +193,11 @@ return function(T, Loader)
 			T.truthy(w.session.moveExemptUntil > w.H.clock(), "위치 검증 쉼")
 			chat(w, "/zone 15")
 			T.eq(MapLayout.zoneAt(w.player.Character.root.Position.Z), "haunted_castle")
+			chat(w, "/zone 18")
+			T.eq(MapLayout.zoneAt(w.player.Character.root.Position.Z), "bug_dimension", "7판 18번 구역")
+			T.eq(w.player.Character.root.Position.Z, 17 * 240 + 12)
+			chat(w, "/zone hacker_lab")
+			T.eq(MapLayout.zoneAt(w.player.Character.root.Position.Z), "hacker_lab")
 			chat(w, "/zone hub")
 			T.eq(w.player.Character.root.Position.Z, MapLayout.hubSpots.mainSpawn.z)
 			chat(w, "/zone 99")
@@ -403,7 +408,7 @@ return function(T, Loader)
 		local data, saveEnabled, newer = load(w, p)
 		T.truthy(saveEnabled)
 		T.falsy(newer)
-		T.eq(data.version, 6)
+		T.eq(data.version, 7)
 		T.eq(data.money, w.Config.STARTING_MONEY)
 		T.eq(data.tutorialStep, 1, "새 사람은 튜토리얼 1단계부터")
 		local stored = w.H.store.data["player_7"]
@@ -516,11 +521,11 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"더 새 버전(7) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
+		"더 새 버전(8) 데이터: 저장 끔 + 락 바로 풀기 + 원본(모르는 필드 포함)은 그대로",
 		function()
 			local w = dataWorld()
 			w.H.store.data["player_11"] = {
-				data = { version = 7, money = 999, futureField = "중요" },
+				data = { version = 8, money = 999, futureField = "중요" },
 			}
 			local p = w.H.newPlayer(11, "Future")
 			local data, saveEnabled, newer = load(w, p)
@@ -531,14 +536,14 @@ return function(T, Loader)
 			local stored = w.H.store.data["player_11"]
 			T.eq(stored._lock, nil)
 			T.eq(stored.data.futureField, "중요")
-			T.eq(stored.data.version, 7)
+			T.eq(stored.data.version, 8)
 			-- 이 세션의 저장은 막혀 있음
 			local session = openSession(w, p, data)
 			session.saveEnabled = saveEnabled
 			T.falsy(w.H.run(function()
 				return w.DataService.save(p, true)
 			end))
-			T.eq(w.H.store.data["player_11"].data.version, 7, "저장 안 됨")
+			T.eq(w.H.store.data["player_11"].data.version, 8, "저장 안 됨")
 			w.H.uninstall()
 		end
 	)

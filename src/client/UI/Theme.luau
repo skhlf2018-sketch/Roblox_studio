@@ -66,9 +66,11 @@ Theme.Tween = {
 	slow = TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 }
 
--- 등급 색 11개 (6판): 색은 Rarities 표 하나에서만 읽음 (common·uncommon·rare·epic·legendary·mythic·cosmic·
---   secret·eternity·divine·super_ultradivine). 무지개 글씨를 쓸 등급 (신성·슈퍼 울트라디바인)
-Theme.RainbowRarities = { divine = true, super_ultradivine = true } :: { [string]: boolean }
+-- 등급 색 16개 (7판): 색은 Rarities 표 하나에서만 읽음 (common … divine · super · hacker · original · developer ·
+--   ultradivine · hacker_glitch). 무지개 글씨를 쓸 등급 (신성·슈퍼·울트라디바인·해커 글리치)
+-- [7판 수석 임시] super_ultradivine 이 없어져서 새 id 로만 바꿈 — 해커 글리치 깨진 글자 연출 등은 선임
+Theme.RainbowRarities =
+	{ divine = true, super = true, ultradivine = true, hacker_glitch = true } :: { [string]: boolean }
 Theme.RAINBOW = ColorSequence.new({
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 90, 90)),
 	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 220, 70)),

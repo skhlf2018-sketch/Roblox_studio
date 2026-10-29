@@ -1,6 +1,7 @@
 --!strict
 --[[
-	Biomes — 구역 15개 (설계문서 4장). 모든 구역 처음부터 열림(해금 비용 없음).
+	Biomes — 구역 18개 (설계문서 4장). 모든 구역 처음부터 열림(해금 비용 없음).
+	7판 (사장님 2026-10-28): 16 해커 연구소 · 17 개발자의 방 · 18 버그 차원 추가 (1~15 는 그대로, 맵은 MapLayout 이 자동으로 늘어남)
 
 	6판 "씨앗을 훔치세요": 구역 이름·추천 속도·경비 속도는 그대로, 경비는 구역 테마 **식물 괴물** (이름만 여기 —
 	  모양은 선임 Visuals.guards / PetVisualService). 둥지에는 씨앗이 놓임 (등급 가중치는 Data/EggSpawn).
@@ -46,6 +47,7 @@ export type Biome = {
 local K = 1e3
 local M = 1e6
 local B = 1e9
+local T = 1e12
 
 local list: { Biome } = {
 	{
@@ -237,6 +239,48 @@ local list: { Biome } = {
 		weapon = { id = "scythe", name = "낫", nameEn = "Scythe" },
 		nests = 8,
 		color = { 80, 50, 100 },
+		isNew = true,
+	},
+	-- 7판 (사장님 2026-10-28): 새 등급(슈퍼 ~ 해커 글리치)에 맞춘 구역 3개. 도감 무기 없음 (SEED 9장 22번).
+	--   추천 속도는 WalkSpeed 상한(230, SpeedMath 그대로) 때문에 약 1.26T 를 넘으면 경비와 플레이어가 둘 다 상한에
+	--   붙어 "추천 속도면 안전 / 모자라면 잡힘" 이 깨짐 → 15구역(500B)과 1.25T 사이에서 계속 올라가게 (SEED 9장 23번)
+	{
+		id = "hacker_lab",
+		order = 16,
+		name = "해커 연구소",
+		nameEn = "Hacker Lab",
+		recommendedSpeed = 700 * B,
+		guardName = "바이러스 덩굴",
+		guardNameEn = "Virus Vine",
+		guardSpeed = 0,
+		nests = 8,
+		color = { 30, 200, 90 },
+		isNew = true,
+	},
+	{
+		id = "developer_room",
+		order = 17,
+		name = "개발자의 방",
+		nameEn = "Developer's Room",
+		recommendedSpeed = 900 * B,
+		guardName = "디버그 선인장",
+		guardNameEn = "Debug Cactus",
+		guardSpeed = 0,
+		nests = 8,
+		color = { 60, 110, 220 },
+		isNew = true,
+	},
+	{
+		id = "bug_dimension",
+		order = 18,
+		name = "버그 차원",
+		nameEn = "Bug Dimension",
+		recommendedSpeed = 1.2 * T,
+		guardName = "글리치 장미 괴물",
+		guardNameEn = "Glitch Rose Monster",
+		guardSpeed = 0,
+		nests = 8,
+		color = { 200, 40, 220 },
 		isNew = true,
 	},
 }

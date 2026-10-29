@@ -606,8 +606,8 @@ return function(T, Loader)
 			B.grown:connect(function(_, plant)
 				table.insert(grown, plant)
 			end)
-			local record = placeNew(w, "puppy_grass", "giant", { "golden" }) -- 3초 (튜토리얼)
-			T.eq(record.required, 3)
+			local record = placeNew(w, "puppy_grass", "giant", { "golden" }) -- 표 3초 → 7판 성장 3배로 1초 (튜토리얼)
+			T.eq(record.required, 1)
 			T.truthy(seedPart(w, record.uid), "심은 씨앗 파트")
 			w.H.clearSent()
 			w.H.advance(3.1)
@@ -655,15 +655,15 @@ return function(T, Loader)
 			local w = world()
 			local B = w.BaseService
 			B.start()
-			local record = placeNew(w, "sprout_daisy") -- 10초
+			local record = placeNew(w, "bell_mushroom") -- 표 60초 → 7판 20초
 			local part = seedPart(w, record.uid)
 			T.eq(part:GetAttribute("Stage"), "sprout")
-			w.H.advance(3) -- 30%
+			w.H.advance(6) -- 30%
 			T.eq(part:GetAttribute("Stage"), "stem")
-			w.H.advance(4) -- 70%
+			w.H.advance(8) -- 70%
 			T.eq(part:GetAttribute("Stage"), "bud")
 			T.eq(part:GetAttribute("Ready"), false)
-			w.H.advance(3.1)
+			w.H.advance(6.1)
 			T.eq(#w.data.pets, 1, "100% = 성체")
 			T.eq(w.H.shared("GardenRules").stage(5, 10), "stem")
 			w.H.uninstall()
@@ -696,14 +696,14 @@ return function(T, Loader)
 		local w = world()
 		local B = w.BaseService
 		B.start()
-		local record = placeNew(w, "bell_mushroom") -- 60초
-		T.eq(record.required, 60)
+		local record = placeNew(w, "bell_mushroom") -- 표 60초 → 7판 20초
+		T.eq(record.required, 20)
 		w.H.advance(3)
 		T.near(record.progress, 3, 1e-9)
 		T.eq(countNotify(w, "성체가 됐어요"), 0, "아직 안 자라서 알림 없음")
 		w.H.setPhase("Night")
 		w.H.advance(2)
-		T.eq(#w.data.pets, 1, "밤 2초 = 60초 → 성체")
+		T.eq(#w.data.pets, 1, "밤 2초 = 60초 성장 → 남은 17초를 넘어 성체")
 		T.eq(countNotify(w, "성체가 됐어요"), 1)
 		w.H.advance(5)
 		T.eq(countNotify(w, "성체가 됐어요"), 1, "계속 알리지 않음")
@@ -760,21 +760,22 @@ return function(T, Loader)
 	T.suite("서비스: BaseService 건너뛰기 (SkipGrowth: 남은 1분당 10코인 × 등급 배수)")
 
 	T.test(
-		"전부(all): 부엉이 참나무(희귀 ×4, 4분) = 160 코인 → 바로 성체 / 코인이 모자라면 거부",
+		"전부(all): 부엉이 참나무(희귀 ×4, 표 4분 → 7판 실제 80초 = 2분으로 올림) = 80 코인 → 바로 성체 / 코인이 모자라면 거부",
 		function()
 			local w = world()
 			local B = w.BaseService
 			B.start()
-			local record = placeNew(w, "owl_oak") -- 240초
-			w.data.money = 159
+			local record = placeNew(w, "owl_oak") -- 표 240초 → 7판 80초
+			T.eq(record.required, 80)
+			w.data.money = 79
 			w.H.client(w.player, "SkipGrowth", record.uid, "all")
-			T.eq(w.data.money, 159, "코인 안 빠짐")
+			T.eq(w.data.money, 79, "코인 안 빠짐")
 			T.eq(record.progress, 0)
 			T.truthy(w.H.hasNotify(w.player, "error", "코인이 부족해요"))
-			T.truthy(w.H.hasNotify(w.player, "error", "160 코인 필요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "80 코인 필요"))
 			w.data.money = 1000
 			w.H.client(w.player, "SkipGrowth", record.uid, "all")
-			T.eq(w.data.money, 1000 - 160)
+			T.eq(w.data.money, 1000 - 80)
 			T.eq(#w.data.incubators, 0)
 			T.eq(#w.data.pets, 1, "바로 성체")
 			T.eq(w.data.stats.skips, 1)
@@ -784,7 +785,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"절반(half): 남은 시간의 절반만, 가격도 그만큼 (남은 2분 → 80 코인), 분은 올림",
+		"절반(half): 남은 시간의 절반만, 가격도 그만큼 (7판 부엉이 참나무 실제 80초 → 절반 40초 = 1분으로 올림 → 40 코인)",
 		function()
 			local w = world()
 			local B = w.BaseService
@@ -792,8 +793,8 @@ return function(T, Loader)
 			local record = placeNew(w, "owl_oak")
 			w.data.money = 1000
 			w.H.client(w.player, "SkipGrowth", record.uid, "half")
-			T.eq(w.data.money, 1000 - 80)
-			T.near(record.progress, 120, 1e-9)
+			T.eq(w.data.money, 1000 - 40)
+			T.near(record.progress, 40, 1e-9)
 			T.eq(#w.data.pets, 0, "아직 성체 아님")
 			T.truthy(w.H.hasNotify(w.player, "success", "절반"))
 			-- 조금 자란 뒤 남은 시간의 절반 = 1분이 안 됨 → 1분으로 올림 → 40 코인
@@ -807,12 +808,19 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"등급 배수: 비밀 룬 장미 전부 = 1440분 × 10 × 100 = 1,440,000 코인, 슈퍼 울트라디바인은 × 500",
+		"등급 배수: 비밀 룬 장미 1일어치 = 1440분 × 10 × 100 = 1,440,000 코인, 슈퍼 × 500, 해커 글리치 × 5000",
 		function()
 			local w = world()
 			local GardenRules = w.H.shared("GardenRules")
 			T.eq(GardenRules.skipCost("rune_rose", 0, 86400, "all"), 1440 * 10 * 100)
 			T.eq(GardenRules.skipCost("rainbow_thunder_tree", 0, 7 * 86400, "all"), 7 * 1440 * 10 * 500)
+			T.eq(GardenRules.skipCost("static_world_tree", 0, 86400, "all"), 1440 * 10 * 5000)
+			local Economy = w.H.shared("Economy")
+			T.eq(
+				GardenRules.skipCost("rune_rose", 0, Economy.growSeconds("rune_rose"), "all"),
+				480 * 10 * 100,
+				"7판: 실제 Required(표 1일 ÷ 3 = 8시간) 기준 → 48만 코인"
+			)
 			T.eq(GardenRules.skipCost("sprout_daisy", 0, 10, "all"), 10, "10초도 1분으로 올림")
 			T.eq(GardenRules.skipCost("sprout_daisy", 10, 10, "all"), 0, "다 자랐으면 0")
 			T.eq(GardenRules.skipCost("없는식물", 0, 10, "all"), nil)
@@ -976,7 +984,7 @@ return function(T, Loader)
 			local egg = w.data.eggs[1]
 			T.truthy(egg.petId == "blossom_fairy" or egg.petId == "spirit_blossom", egg.petId)
 			T.eq(egg.biomeId, "cherry_blossom")
-			T.eq(egg.required, w.Pets.get(egg.petId).growSeconds)
+			T.near(egg.required, w.Pets.get(egg.petId).growSeconds / 3, 1e-6, "7판 성장 3배")
 			local granted = w.H.sent(w.player, "EggGranted")[1][1]
 			T.eq(granted.source, "sakura")
 			local result = w.H.sent(w.player, "SakuraResult")[1][1]

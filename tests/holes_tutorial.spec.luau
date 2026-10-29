@@ -462,12 +462,12 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"5판에서 튜토리얼을 끝낸 사람도 6판은 새 게임 → 1단계부터, 속도·트레일·러닝머신은 그대로, 저장하면 6판 모양",
+		"5판에서 튜토리얼을 끝낸 사람도 6판은 새 게임 → 1단계부터, 속도·트레일·러닝머신은 그대로, 저장하면 7판(스키마 7) 모양",
 		function()
 			local w = world()
 			w.H.store.data["player_3001"] = { data = v5() }
 			local p, _, d = join(w, 3001, "Old")
-			T.eq(d.version, 6)
+			T.eq(d.version, 7)
 			T.eq(d.tutorialStep, 1, "6판 튜토리얼 1단계부터")
 			T.eq(lastView(w, p).step, 1, "TutorialUpdate 1단계")
 			T.eq(d.speed, 10020, "속도 그대로")
@@ -478,7 +478,7 @@ return function(T, Loader)
 			T.eq(d.stats.eggsStolen, 0)
 			leave(w, p)
 			local stored = w.H.store.data["player_3001"].data
-			T.eq(stored.version, 6)
+			T.eq(stored.version, 7)
 			T.eq(stored.tutorialStep, 1)
 			T.eq(stored.equipped, nil, "저장된 모양에도 장착 칸 없음")
 			T.eq(stored.resetFromVersion, nil)

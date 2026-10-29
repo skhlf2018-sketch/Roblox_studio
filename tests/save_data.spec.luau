@@ -303,7 +303,7 @@ return function(T, Loader)
 		"5판 데이터: 속도·트레일·장착 트레일·러닝머신만 남고 나머지는 새 사람처럼 (튜토리얼 1단계)",
 		function()
 			local migrated = DataSchema.migrate(v5Save())
-			T.eq(migrated.version, 6)
+			T.eq(migrated.version, 7, "5 → 6(초기화) → 7 한 번에")
 			local d = DataSchema.reconcile(migrated, 1700001000)
 			T.eq(checkValid(d), nil)
 			T.eq(d.speed, 987654321, "속도")
@@ -380,17 +380,141 @@ return function(T, Loader)
 		T.eq(canonical(once), canonical(twice))
 	end)
 
-	T.test("더 새 버전(7, 6.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
-		for _, v in { 7, 6.5, 1e9 } do
+	T.test("더 새 버전(8, 7.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
+		for _, v in { 8, 7.5, 1e9 } do
 			T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
 			local raw = { version = v, money = 5, pets = { "미래 모양" } }
 			local migrated = DataSchema.migrate(raw)
 			T.eq(migrated.version, v)
 			T.eq(migrated.money, 5)
 		end
+		T.falsy(DataSchema.isNewerVersion({ version = 7 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 6 }))
 		T.falsy(DataSchema.isNewerVersion({ version = 5 }))
 	end)
+
+	------------------------------------------------------------------
+	T.suite("저장 데이터: 6 → 7 (7판 성장 3배 — 자라던 씨앗은 같은 비율로 이어짐)")
+
+	local function v6Save()
+		return {
+			version = 6,
+			money = 1234,
+			speed = 5e9,
+			penLevel = 3,
+			incubators = {
+				-- 비밀 룬 장미 (6판 Required 1일 = 86400), 절반 자람
+				{
+					uid = "s1",
+					petId = "rune_rose",
+					size = "normal",
+					mutations = {},
+					x = -20,
+					z = 0,
+					progress = 43200,
+					required = 86400,
+				},
+				-- 강아지풀 (6판 3초), 2초 자람 (= 3분의 2)
+				{
+					uid = "s2",
+					petId = "puppy_grass",
+					size = "normal",
+					mutations = {},
+					x = -20,
+					z = 14,
+					progress = 2,
+					required = 3,
+				},
+				-- required 칸이 깨짐 → 표 시간(6판 Required) 기준
+				{
+					uid = "s3",
+					petId = "owl_oak",
+					size = "normal",
+					mutations = {},
+					x = -6,
+					z = 0,
+					progress = 60,
+					required = "?",
+				},
+			},
+			eggs = {
+				-- 가방 속 씨앗: 다시 주운 반쯤 자란 하늘 기둥꽃 (6판 슈퍼 울트라디바인 → 7판 슈퍼)
+				{
+					uid = "s4",
+					petId = "sky_pillar_flower",
+					size = "big",
+					mutations = {},
+					progress = 172800,
+					required = 691200,
+				},
+			},
+			nextUid = 10,
+			tutorialStep = 6,
+		}
+	end
+
+	T.test(
+		"정원·가방 씨앗의 progress 가 자란 비율 그대로 새 Required(표 ÷ 3)에 맞춰짐, 다른 칸은 그대로",
+		function()
+			local migrated = DataSchema.migrate(v6Save())
+			T.eq(migrated.version, 7)
+			local d = DataSchema.reconcile(migrated, 0)
+			T.eq(checkValid(d), nil)
+			T.eq(d.money, 1234, "코인 그대로 (6 → 7 은 초기화 아님)")
+			T.eq(d.speed, 5e9)
+			T.eq(d.penLevel, 3)
+			T.eq(d.tutorialStep, 6)
+			local byUid = {}
+			for _, e in d.incubators do
+				byUid[e.uid] = e
+			end
+			T.eq(byUid.s1.required, 28800, "비밀 룬 장미: 1일 ÷ 3 = 8시간")
+			T.near(byUid.s1.progress, 14400, 1e-6, "절반 자란 채로")
+			T.eq(byUid.s2.required, 1, "강아지풀 1초")
+			T.near(byUid.s2.progress, 2 / 3, 1e-9)
+			T.near(byUid.s3.required, 80, 1e-9, "부엉이 참나무 4분 ÷ 3")
+			T.near(byUid.s3.progress, 20, 1e-9, "60 / 240 = 25% → 20")
+			local bag = d.eggs[1]
+			T.eq(bag.uid, "s4")
+			T.near(bag.required, 691200 / 3, 1e-6)
+			T.near(bag.progress, 172800 / 3, 1e-6, "가방 씨앗도 같은 비율 (25%)")
+			for _, e in d.incubators do
+				local GardenRules = Loader.require("ReplicatedStorage/Shared/GardenRules")
+				local before = if e.uid == "s1" then 0.5 elseif e.uid == "s2" then 2 / 3 else 0.25
+				T.near(GardenRules.fraction(e.progress, e.required), before, 1e-9, e.uid .. " 자란 비율")
+			end
+		end
+	)
+
+	T.test("7 데이터는 다시 줄이지 않음, 마이그레이션 + 보정을 두 번 돌려도 같음", function()
+		local once = DataSchema.reconcile(DataSchema.migrate(v6Save()), 0)
+		local again = DataSchema.reconcile(DataSchema.migrate(DataSchema.reconcile(DataSchema.migrate(v6Save()), 0)), 0)
+		T.eq(canonical(once), canonical(again))
+		T.near(again.incubators[1].progress, 14400, 1e-6)
+	end)
+
+	T.test(
+		"6 → 7: 이상한 progress(NaN·음수·너무 큼)·모르는 식물도 안 터지고 보정됨",
+		function()
+			local raw = v6Save()
+			raw.incubators[1].progress = 0 / 0
+			raw.incubators[2].progress = -5
+			raw.incubators[3].progress = 1e300
+			table.insert(
+				raw.incubators,
+				{ uid = "s9", petId = "없는식물", progress = 10, required = 20, x = 0, z = 0 }
+			)
+			local d = DataSchema.reconcile(DataSchema.migrate(raw), 0)
+			T.eq(checkValid(d), nil)
+			for _, e in d.incubators do
+				T.truthy(e.progress >= 0 and e.progress <= e.required, e.uid .. " progress 범위")
+				T.eq(e.required, Economy.growSeconds(e.petId), e.uid .. " Required = 표 ÷ 3")
+				T.truthy(e.petId ~= "없는식물")
+			end
+			T.eq(DataSchema.rescaleProgress("문자열"), false)
+			T.eq(DataSchema.rescaleProgress({ petId = "rune_rose" }), false, "progress 없음")
+		end
+	)
 
 	------------------------------------------------------------------
 	T.suite("저장 데이터: 엉터리 입력")

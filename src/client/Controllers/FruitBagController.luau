@@ -378,6 +378,7 @@ function FruitBagController.start()
 	local handle = WorldPrompt.attach({
 		tag = Tags.SellStall,
 		name = "SellFruitsPrompt",
+		slot = 1, -- 8판: 같은 가판대 "식물 팔기"(F, 2칸) 와 안 겹치게
 		action = function(): string
 			return if fruitCount() > 0 then "열매 팔기" else "열매 팔기 (없음)"
 		end,

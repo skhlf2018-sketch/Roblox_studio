@@ -22,6 +22,7 @@ local Client = script.Parent.Parent
 local Net = require(Client.Net)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
+local SpeedFxController = require(script.Parent.SpeedFxController)
 
 local NotifyController = {}
 
@@ -37,6 +38,23 @@ local KIND_COLORS: { [string]: Color3 } = {
 	info = Color3.fromRGB(220, 235, 255),
 	money = Color3.fromRGB(255, 215, 70), -- 코인 (금색)
 }
+
+-- 8판: 다른 화면이 대신 보여 주는 서버 안내는 토스트로 안 띄움 (글 앞부분이 같으면)
+--   예: 러닝머신 잠김 안내 "러닝머신이 잠겨 있어요!…" → TreadmillController 의 러닝머신 창이 대신
+local muted: { string } = {}
+function NotifyController.mute(prefix: string)
+	if prefix ~= "" and not table.find(muted, prefix) then
+		table.insert(muted, prefix)
+	end
+end
+function NotifyController.isMuted(text: string): boolean
+	for _, prefix in muted do
+		if string.sub(text, 1, #prefix) == prefix then
+			return true
+		end
+	end
+	return false
+end
 
 -- 원작 토스트: 바탕 없이 굵은 외곽선 흰 글씨 ("씨앗을 훔쳤어요!")
 function NotifyController.toast(text: string, kind: string?)
@@ -189,7 +207,10 @@ function NotifyController.start()
 	local E = Remotes.ToClient
 	Net.on(E.Notify, function(payload: any)
 		if typeof(payload) == "table" then
-			NotifyController.toast(tostring(payload.text), tostring(payload.kind))
+			local text = tostring(payload.text)
+			if not NotifyController.isMuted(text) then
+				NotifyController.toast(text, tostring(payload.kind))
+			end
 		end
 	end)
 	Net.on(E.Announce, function(payload: any)
@@ -218,6 +239,7 @@ function NotifyController.start()
 			Format.number(tonumber(payload.money) or 0)
 		)
 		NotifyController.toast(text, "money")
+		SpeedFxController.popGain(tonumber(payload.speed) or 0) -- 8판: 위 가운데 "+N" 속도 배지
 		if payload.completeBonus then
 			NotifyController.banner("도감 전체 완성!! 엄청난 보너스!", C.purple)
 		end

@@ -25,7 +25,7 @@
 	        / openSkip(uid) (핫바·튜토리얼·정원 프롬프트·테스트도 씀)
 
 	월드: 내 자라는 씨앗(태그 IncubatingEgg)에 프롬프트 — "집기"(E, PickUpPlacedEgg · Config.ALLOW_EGG_PICKUP)
-	  · "건너뛰기"(R, 건너뛰기 창). 머리 위 이름표는 서버(BaseService) 것.
+	  · "건너뛰기"(R, 건너뛰기 창). 8판: 둘은 WorldPrompt.stack 1칸·2칸 (높이 다르고 화면에서 옆으로 나란히). 머리 위 이름표는 서버(BaseService) 것.
 	진행값: 씨앗 파트 Attribute Progress/Required(서버가 1초마다 갱신) 우선, 없으면 Snapshot incubators.
 ]]
 
@@ -56,6 +56,7 @@ local State = require(Client.State)
 local Theme = require(Client.UI.Theme)
 local Icons = require(Client.UI.Icons)
 local Ui = require(Client.UI.Ui)
+local WorldPrompt = require(Client.UI.WorldPrompt)
 local HudController = require(script.Parent.HudController)
 local NotifyController = require(script.Parent.NotifyController)
 local SoundController = require(script.Parent.SoundController)
@@ -356,6 +357,7 @@ local function makePrompt(
 	action: string,
 	hold: number,
 	key: Enum.KeyCode,
+	slot: number,
 	onTrigger: (string) -> ()
 )
 	local prompt = Instance.new("ProximityPrompt")
@@ -373,7 +375,7 @@ local function makePrompt(
 			onTrigger(uid)
 		end
 	end)
-	prompt.Parent = part
+	WorldPrompt.stack(part, prompt, slot) -- 8판: "집기"(1칸)·"건너뛰기"(2칸) 높이·화면 자리 다르게 (사장님: 글자가 겹쳐요)
 	return prompt
 end
 
@@ -386,10 +388,10 @@ local function decorate(inst: Instance)
 		return -- 남의 씨앗은 이름표(서버)만
 	end
 	-- 6판: 다 자라면 서버가 그 자리에서 성체로 바꿈 (부화 버튼 없음) → 아직 자랄 때 "건너뛰기" 창
-	local skip = makePrompt(part, "SkipPrompt", "건너뛰기", 0, Enum.KeyCode.R, function(uid)
+	local skip = makePrompt(part, "SkipPrompt", "건너뛰기", 0, Enum.KeyCode.R, 2, function(uid)
 		IncubatorController.openSkip(uid)
 	end)
-	local pickUp = makePrompt(part, "PickUpPrompt", "집기", 0.4, Enum.KeyCode.E, function(uid)
+	local pickUp = makePrompt(part, "PickUpPrompt", "집기", 0.4, Enum.KeyCode.E, 1, function(uid)
 		Net.send(Remotes.ToServer.PickUpPlacedEgg, uid)
 	end)
 	eggPrompts[part] = { skip = skip, pickUp = pickUp }
@@ -402,8 +404,14 @@ local function refreshPrompts()
 		else
 			local progress, required = partProgress(part, 0, 1)
 			local ready = part:GetAttribute("Ready") == true or progress >= required
-			prompts.skip.Enabled = not ready
-			prompts.pickUp.Enabled = not ready and Config.ALLOW_EGG_PICKUP
+			local skipOn = not ready
+			local pickOn = not ready and Config.ALLOW_EGG_PICKUP
+			local changed = prompts.skip.Enabled ~= skipOn or prompts.pickUp.Enabled ~= pickOn
+			prompts.skip.Enabled = skipOn
+			prompts.pickUp.Enabled = pickOn
+			if changed then
+				WorldPrompt.relayout(part) -- 켜진 것끼리 다시 나란히 (하나만 켜지면 가운데)
+			end
 		end
 	end
 end

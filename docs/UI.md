@@ -1,4 +1,4 @@
-# 화면·소리·생김새 (UI.md) — 7판 "씨앗을 훔치세요" (등급 16개 · 구역 18개)
+# 화면·소리·생김새 (UI.md) — 8판 "씨앗을 훔치세요" (등급 16개 · 7판 구역 18개 + 8판 화면 4가지)
 
 작성: 선임 (2026-10-18 처음 · 2판 원작 스타일 · 5판 2026-10-22 · **7차 전면 갱신 = 6판 "씨앗을 훔치세요", 2026-10-27**).
 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다. 이전 기록(알·펫·퓨전·제단·우리 펫 걷기)은 git 이력에.
@@ -6,6 +6,21 @@
 원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨. 배치 숫자는 전부 수석의 `src/shared/Data/MapLayout.luau`, Remote 는 `docs/REMOTES.md`, 규칙은 `docs/SEED_GAME_DESIGN.md`.
 
 **6판 용어** (화면 글): 알 → **씨앗** · 우리 → **정원** · 부화 → **성체가 됨** · 펫 → **(성체) 식물** · 돈 `$` → **코인** (`Format.money(n)` = "1.5K 코인") · 쓰다듬기 → **물 주기** · 경비 → **식물 괴물**. Remote·모듈·태그·변수 이름은 5판 그대로인 것이 많음 (`PetPet`, `IncubatingEgg`, `PetsController`, `PetModels` …).
+
+## 0-8. 8판 (선임 2026-11-08) — 프롬프트 안 겹침 · 러닝머신 터치 창 · 구역 입장 배너 · 속도 배지
+
+본부장이 원작 Steal An Egg 를 보고 사장님 지시로 바꾼 화면 4가지 (클라만, 서버 신호는 수석 8판 `TreadmillTouched`·Attr `TreadmillTouching`).
+
+- **프롬프트 안 겹침** (`UI/WorldPrompt.luau`): 한 파트에 프롬프트가 둘 이상이면 같은 자리에 겹쳐 그려짐 → 칸(slot) 번호마다 Attachment **`PromptSlot<n>`** (높이 = baseY + (칸−1) × `SLOT_STEP` 1.2 스터드)에 붙이고, **켜진 것끼리 `UIOffset` X 로 옆으로 나란히**(글자 폭 = 로블록스 기본 프롬프트 계산 `max(행동 글 19px, 물건 글 14px) + 96`, 사이 10px, 가운데 정렬. 하나만 켜지면 가운데). `WorldPrompt.attach{ slot = n }` · 직접 만든 것은 `WorldPrompt.stack(part, prompt, slot)` · 켜고 끈 뒤 `WorldPrompt.relayout(part)`. (UIOffset Y 는 위/아래 방향이 헷갈리기 쉬워서 X 만 씀.)
+  | 파트 | 1칸 (왼쪽·아래) | 2칸 (오른쪽·위) |
+  |---|---|---|
+  | 내 자라는 씨앗 `IncubatingEgg` | `PickUpPrompt` "집기" E | `SkipPrompt` "건너뛰기" R |
+  | 판매 가판대 `SellStall` | `SellFruitsPrompt` "열매 팔기" E (FruitBag) | `SellPrompt` "식물 팔기" F (Pets) |
+  하나씩만 있는 것(그대로): 성체 `PickFruitPrompt`(E, `GardenPromptAttach`) · 사쿠라 `SakuraPrompt` · 업그레이드 표지판 `UpgradePrompt` · 트레일 상점 `TrailPrompt` · 서버 둥지 씨앗 "훔치기"·크리스탈. 같은 키(E)끼리는 로블록스가 가장 가까운 것 하나만 보여 줌(`Exclusivity` 기본값).
+- **러닝머신 터치 창** (`TreadmillController`, `Ui.dialog` **"TreadmillDialog"**, 파란 띠 "👟 러닝머신 업그레이드"): 내 벨트에 올라서면 한 번 — 글 "레벨 n → n+1 (○○ 러닝머신) / 1초에 속도 +A → +B (`Economy.treadmillGainPerSecond`) / 내 코인", 버튼 "닫기" · **"올리기 · N 코인"**(`Economy.nextTreadmillCost`, 모자라면 회색·안 보냄) → `PurchaseUpgrade("Treadmill")`, 사도 창은 열린 채 다음 레벨로 바뀜. 0레벨 = "아직 러닝머신이 없어요!" + **"러닝머신 사기 · N 코인"**, 최대 = "최대 레벨!" 회색. 닫으면 벨트에서 내려올 때까지 안 뜸, 내려오면 저절로 닫힘. 판정은 **`setTouching(on)` 한 곳**: 서버 `TreadmillTouched` → true, Attr `TreadmillTouching` 이 있으면 그것, 없으면(옛 서버) 0.25초 클라 판정(`OnTreadmill` · `MapLayout.treadmillRect` · 태그 `Treadmill` 파트). 옛 서버 "러닝머신이 잠겨 있어요!…" 토스트는 `NotifyController.mute` 로 숨김. 상점 러닝머신 카드는 그대로.
+- **구역 입장 배너** (`HudController`, Alerts 층 Frame **"ZoneBanner"** > `Title`·`Sub`, 기준 560×80): 새 구역에 들어가면 위 가운데에 큰 **한국어 이름**(구역 `accent` 색, 52px) + 작은 **영어 이름·얼굴** "Jungle 😬"(22px), **1.5초** 보이고 0.35초 동안 사라짐. 허브·베이스 = 초록 **"안전 구역" / "Safe Zone"**. 접속 직후 첫 구역은 안 띄움, 같은 구역은 한 번만(서버 `ZoneEntered` 와 `ZoneController.changed` 둘 다 들음). 튜토리얼 패널이 보이면 아래로 밀림(전과 같음). `HudController.zoneBannerText(zone)` · `showZoneBanner(zone)`.
+- **속도 획득 배지** (`SpeedFxController.popGain(amount)`, Alerts 층 **"SpeedPop"** 240×60 분홍 알약 + 신발 그림 + "+4B"): 러닝머신 걸음 `TreadmillStep`(전의 캐릭터 옆 분홍 "+500" `StepPop` 을 이걸로 통일) · 도감 보상 `IndexRewarded.speed`. 처음 한 번만 만들고 글자·위치만 바꿈, 마지막으로 오른 뒤 1.2초 보임. 구역 배너가 떠 있으면 그 바로 아래, 아니면 그 자리.
+- 폰(750×381 · 844×390)·PC(1428×750): 구역 배너·속도 배지(혼자 / 배너 아래)가 화면 안이고 속도·코인 줄·시간·오른쪽 버튼·핫바·메뉴·튜토리얼 패널과 안 겹침, 러닝머신 창 392×224 · 버튼 46px (smoke).
 
 ## 0. 7판 (선임 2026-10-29) — 등급 16개 · 구역 18개 · 식물 158종 · 성장 3배
 
@@ -164,7 +179,7 @@
  ┌─────────────────────────────────────────────────────────────────┐
  │        [1/5 숲에서 씨앗 훔치기 · 작은 설명]   ← 튜토리얼     [🏆 랭킹 −]│
  │                  [ 달리기!! ]   ← 씨앗 들었을 때       [코인][속도] │
- │                  Jungle 😬      ← 구역 배너                         │
+ │                  정글 / Jungle 😬 ← 구역 배너 (8판: 1.5초)  [👟 +4B]  │
  │ [🛒 상점    ]                                          [🌰 씨앗]① │
  │ [📘 도감    ]                                          [🌿 식물]  │
  │ [■ 슬로우 모드]                                        [🍎 12/300]│
@@ -189,13 +204,13 @@
 | **정원 식물 창** | PetsController | `snap.pets`: "정원 n/칸 · 성체 n", **열매 모두 따기**(`PickFruit("all")`), 열매 가방 버튼, 카드: 열매 n/5 · 1개 값(`FruitRules.fruitValue`) · 다음 열매 n초(1초마다) · 따기(`PickFruit(uid)`) · 먹이기 · **팔기 N 코인**(`GardenRules.sellPrice`, 확인 창 → `SellPlant`) |
 | **열매 가방 창** | FruitBagController | `snap.fruits`: "열매 12/300 · 다 팔면 N 코인", 칸마다 열매 색 · 이름 · ×개수 · 값 · **먹이기** → 성체 고르기(카드에 `feedOptions`·`feedChance`, 더 붙을 게 없으면 회색) → `FeedFruit(plantUid, fruitId)` |
 | 판매 가판대 | FruitBagController / PetsController | E "열매 팔기 · 열매 12개 · 3.4K 코인"(Attr `FruitCount`·`FruitBagValue`, 0개면 안내만) → `SellFruits()` → `FruitsSold` "+3.4K 코인" / F "식물 팔기" → 정원 식물 창 |
-| 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐) / 내 씨앗: "집기"(E) · "건너뛰기"(R). 높이 = `VisualHeight`. (물 주기는 2026-10-28 삭제) |
+| 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐, 높이 = `VisualHeight`) / 내 씨앗: "집기"(E, 1칸) · "건너뛰기"(R, 2칸) 옆으로 나란히 (8판 `WorldPrompt.stack`). (물 주기는 2026-10-28 삭제) |
 | 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
 | "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
 | 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`) / "씨앗 뽑기 · 크리스탈 10"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
 | 도감 | IndexController | "식물 도감", 구역 탭 18(7판), 등급 16개 색·영어 이름(신성·슈퍼·울트라디바인 무지개 띠, 해커 글리치 깨진 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
 | 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") · 트레일 |
-| 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` "+1M" 분홍 팝업 |
+| 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` → 위 가운데 속도 배지 "👟 +1M" (8판), 벨트에 올라서면 **러닝머신 창** "올리기 · N 코인" (8판, 0장) |
 | 랭킹판 | LeaderboardController | 코인 / 속도 탭 + 허브 3D 판 |
 
 ### 4-1. 확인 창 (`Ui.dialog` / `Ui.confirm`)
@@ -240,8 +255,9 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 1. **씨앗 4단계·성체 모양**: 단계마다 모양이 바뀌는지, 식물이 바닥에 붙어 있는지(떠 있거나 묻히지 않음), 이름표·프롬프트·"+열매" 팝업 높이(`VisualHeight`)가 모양에 맞는지, 열매 개수가 따기에 맞게 보이고 사라지는지.
 2. **흔들기·아우라**: 가까운 식물만 살랑살랑(원래 자리에서 밀리지 않음), 희귀 이상 아우라가 100 스터드 안에서만 켜지고 정원에 식물이 많아도 안 끊기는지.
 3. **식물 괴물 16종**: 키·발 위치(땅에 닿음), 자는 얼굴 ↔ 추격 얼굴, 잡힘 거리가 5판과 같은지.
-4. **판매 가판대 E/F 두 프롬프트**가 겹치지 않고 따로 눌리는지, 건너뛰기 확인 창 가격이 1초마다 줄어드는지.
+4. **판매 가판대 E/F · 자라는 씨앗 E/R 두 프롬프트**가 옆으로 나란히 떠서 겹치지 않고 따로 눌리는지 (8판 UIOffset — 폰에서도), 건너뛰기 확인 창 가격이 1초마다 줄어드는지.
 5. **사쿠라 나무**·**러닝머신 11~20레벨 모양**·폰 에뮬레이터(오른쪽 버튼 3개와 점프 버튼).
+6. **8판**: 러닝머신 벨트에 올라서면 창이 한 번만 뜨는지(매초 다시 안 뜸·내려오면 닫힘), 구역 이름 배너 1.5초·"안전 구역", 속도 배지가 구역 배너 아래로 비키는지.
 
 ## 7. 알려진 한계 / 다음 할 일
 - 둥지 파트는 아직 5판 둥지 모양 ("씨앗 주머니/꽃받침" 은 다음에).
@@ -253,7 +269,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
-lune run tests/smoke_visuals.luau   # 서버: 맵(18구역·파트 상한 8,000·사쿠라 나무·러닝머신 20 모양), 식물 158종 모델(모양 19종·파트 수·모양 다 다름, 7판 아우라 5개 고리·빛기둥·Glitch), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴)
-lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·FeedFruit·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·FeedResult·PetPetted·SakuraResult), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침
+lune run tests/smoke_visuals.luau   # 서버: 맵(18구역·파트 상한 8,000·사쿠라 나무·러닝머신 20 모양), 식물 158종 모델(모양 19종·파트 수·모양 다 다름, 7판 아우라 5개 고리·빛기둥·Glitch), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴), 8판: 러닝머신 벨트 = 태그 Treadmill + PlotIndex 가 treadmillRect 안, 맵 파트마다 서버 프롬프트 1개 이하
+lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·FeedFruit·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·FeedResult·PetPetted·SakuraResult), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침. 8판: 같은 파트 프롬프트 = Attachment 높이 다름·켜진 것끼리 UIOffset 으로 안 겹침, 러닝머신 터치 창(0레벨 사기·올리기·회색·한 번만·내려오면 닫힘·서버 TreadmillTouched/Attr TreadmillTouching), 구역 배너 "정글 / Jungle 😬"·"안전 구역", 속도 배지 "+500"(Instance 안 늘어남)·구역 배너 아래, 폰 3종·PC 위 가운데 겹침
 ```
 `@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 / STUDIO_CHECKLIST 로 스튜디오에서.

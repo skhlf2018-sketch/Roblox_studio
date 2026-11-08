@@ -577,6 +577,43 @@ cam.ViewportSize = roblox.Vector2.new(844, 390) -- 폰 가로
 cam.Parent = Workspace
 Workspace.CurrentCamera = cam
 
+-- 8판: 위 가운데 구역 입장 배너 · 속도 배지가 화면 안이고 다른 HUD 와 안 겹침 (배너가 떠 있을 때·없을 때 배지 둘 다)
+-- (body 안 지역 변수가 200개를 넘어서 밖으로 뺌)
+local function checkTopCenter(screen, area, tutRect, others, tag, fmt, Layout)
+	local zb8 = screen:FindFirstChild("Alerts"):FindFirstChild("ZoneBanner")
+	local zs = zb8.ScreenScale.Scale
+	local zbRect = {
+		x = area.X / 2 - zb8.Size.X.Offset * zs / 2,
+		y = zb8.Position.Y.Offset,
+		w = zb8.Size.X.Offset * zs,
+		h = zb8.Size.Y.Offset * zs,
+	}
+	local SpeedFx8 = ctrl("SpeedFxController")
+	local wasVisible = zb8.Visible
+	zb8.Visible = false
+	local popAlone = SpeedFx8.popRect(area)
+	zb8.Visible = true
+	local popBelow = SpeedFx8.popRect(area)
+	zb8.Visible = wasVisible
+	local tops = {
+		{ name = "구역 배너", rect = zbRect },
+		{ name = "속도 배지(혼자)", rect = popAlone },
+		{ name = "속도 배지(배너 아래)", rect = popBelow },
+	}
+	for _, t in tops do
+		local r = t.rect
+		check(
+			r.x >= 0 and r.y >= 0 and r.x + r.w <= area.X and r.y + r.h <= area.Y,
+			tag .. " " .. t.name .. " 화면 안 " .. fmt(r)
+		)
+		check(not Layout.overlaps(r, tutRect), tag .. " " .. t.name .. " 이 튜토리얼 패널과 안 겹침")
+		for _, o in others do
+			check(not Layout.overlaps(r, o.rect), tag .. " " .. t.name .. " 이 " .. o.name .. " 과 안 겹침")
+		end
+	end
+	check(not Layout.overlaps(zbRect, popBelow), tag .. " 구역 배너와 그 아래 속도 배지 안 겹침")
+end
+
 local function body()
 	print("[컨트롤러 시작]")
 	local State = requireNode(Loader.get("ReplicatedStorage/Client/State"))
@@ -1234,18 +1271,18 @@ local function body()
 	-- 내 자라는 씨앗: 이름표는 서버 것, 클라는 "집기"(E) · "건너뛰기"(R) (물 주기는 성체만)
 	check(growingEgg:FindFirstChild("GrowTag") == nil, "클라 이름표 없음 (서버 이름표만)")
 	check(growingEgg:FindFirstChild("HatchPrompt") == nil, "6판: '부화' 프롬프트 없음")
-	local readySkip = growingEgg:FindFirstChild("SkipPrompt")
+	local readySkip = growingEgg:FindFirstChild("SkipPrompt", true)
 	check(readySkip and not readySkip.Enabled, "다 자란 내 씨앗: '건너뛰기' 프롬프트 꺼짐")
 	check(
-		growingEgg:FindFirstChild("PickUpPrompt") and not growingEgg.PickUpPrompt.Enabled,
+		growingEgg:FindFirstChild("PickUpPrompt", true) and not growingEgg:FindFirstChild("PickUpPrompt", true).Enabled,
 		"다 자란 씨앗: '집기' 프롬프트 꺼짐"
 	)
-	local pickPrompt = youngEgg:FindFirstChild("PickUpPrompt")
+	local pickPrompt = youngEgg:FindFirstChild("PickUpPrompt", true)
 	check(
 		pickPrompt and pickPrompt.ActionText == "집기" and pickPrompt.Enabled,
 		"자라는 내 씨앗: '집기' 프롬프트 켜짐"
 	)
-	local youngSkip = youngEgg:FindFirstChild("SkipPrompt")
+	local youngSkip = youngEgg:FindFirstChild("SkipPrompt", true)
 	check(
 		youngSkip
 			and youngSkip.Enabled
@@ -1262,8 +1299,8 @@ local function body()
 		"자라는 씨앗: '물 주기' 프롬프트 없음 (사장님 2026-10-28)"
 	)
 	check(
-		othersEgg:FindFirstChild("SkipPrompt") == nil
-			and othersEgg:FindFirstChild("PickUpPrompt") == nil
+		othersEgg:FindFirstChild("SkipPrompt", true) == nil
+			and othersEgg:FindFirstChild("PickUpPrompt", true) == nil
 			and othersEgg:FindFirstChild("GardenPromptAttach") == nil,
 		"남의 씨앗은 프롬프트 없음"
 	)
@@ -1286,7 +1323,7 @@ local function body()
 		"표지판 → PurchaseUpgrade(Treadmill)"
 	)
 	-- 판매 가판대: "열매 팔기"(E) → SellFruits / "식물 팔기"(F) → 정원 식물 창 · 트레일 상점 프롬프트
-	local sellFruits = sellStall:FindFirstChild("SellFruitsPrompt")
+	local sellFruits = sellStall:FindFirstChild("SellFruitsPrompt", true)
 	check(
 		sellFruits
 			and sellFruits.ActionText == "열매 팔기"
@@ -1303,7 +1340,7 @@ local function body()
 	check(#sent == beforeSellFruits, "열매가 없으면 안 보냄 (안내만)")
 	player:SetAttribute("FruitCount", 3)
 	sigOf(player, "Attr_FruitCount"):Fire()
-	local sellPlantPrompt = sellStall:FindFirstChild("SellPrompt")
+	local sellPlantPrompt = sellStall:FindFirstChild("SellPrompt", true)
 	check(
 		sellPlantPrompt and sellPlantPrompt.KeyboardKeyCode == roblox.Enum.KeyCode.F,
 		"'식물 팔기' 프롬프트는 F (열매 팔기 E 와 안 겹침)"
@@ -1314,6 +1351,106 @@ local function body()
 		"트레일 상점 프롬프트 → 트레일 창"
 	)
 	Windows.close()
+	-- 8판 (사장님 2026-11-08 "글자가 겹쳐 안 보여요"): 한 파트의 프롬프트 = 칸마다 Attachment 높이가 다르고, 켜진 것끼리 화면에서 옆으로 안 겹침
+	print("[8판: 같은 파트의 프롬프트는 안 겹침]")
+	do
+		local WP = uiModule("WorldPrompt")
+		-- 파트마다 그 파트의 프롬프트 (중간에 다른 파트가 끼면 그 파트 것). Lune 은 같은 Instance 도 매번 다른
+		-- userdata 라 표 키로 못 써서 파트 목록 → 목록 쌍으로 모음
+		local byPart = {}
+		for _, part in Workspace:GetDescendants() do
+			if part:IsA("BasePart") then
+				local list = {}
+				for _, d in part:GetDescendants() do
+					if d:IsA("ProximityPrompt") then
+						local owner = d.Parent
+						while owner and not owner:IsA("BasePart") do
+							owner = owner.Parent
+						end
+						if owner == part then
+							table.insert(list, d)
+						end
+					end
+				end
+				if #list > 0 then
+					table.insert(byPart, { part, list })
+				end
+			end
+		end
+		local pairsSeen, heightsOk, screenOk = 0, true, true
+		local bad = {}
+		for _, entry in byPart do
+			local part, list = entry[1], entry[2]
+			if #list >= 2 then
+				pairsSeen += 1
+				local ys = {}
+				for _, prompt in list do
+					local a = prompt.Parent
+					if not a:IsA("Attachment") then
+						heightsOk = false
+						table.insert(bad, part.Name .. "." .. prompt.Name .. " 가 Attachment 에 없음")
+					else
+						for _, y in ys do
+							if math.abs(y - a.Position.Y) < 0.5 then
+								heightsOk = false
+								table.insert(bad, part.Name .. "." .. prompt.Name .. " 높이 같음")
+							end
+						end
+						table.insert(ys, a.Position.Y)
+					end
+				end
+				-- 켜진 프롬프트끼리 화면 가로 범위가 안 겹침 (UIOffset X ± 폭/2)
+				local shown = {}
+				for _, prompt in list do
+					if prompt.Enabled then
+						local w = WP.promptWidth(prompt)
+						table.insert(shown, { prompt.UIOffset.X - w / 2, prompt.UIOffset.X + w / 2, prompt.Name })
+					end
+				end
+				for i = 1, #shown do
+					for j = i + 1, #shown do
+						local a, b = shown[i], shown[j]
+						if a[1] < b[2] - 0.5 and b[1] < a[2] - 0.5 then
+							screenOk = false
+							table.insert(bad, part.Name .. ": " .. a[3] .. " ↔ " .. b[3] .. " 화면에서 겹침")
+						end
+					end
+				end
+			end
+		end
+		check(
+			pairsSeen >= 3,
+			"프롬프트 2개 붙은 파트: 가판대·자라는 씨앗 2개 (" .. pairsSeen .. "곳)"
+		)
+		check(heightsOk, "같은 파트 프롬프트 = Attachment 높이 다름 " .. table.concat(bad, ", "))
+		check(screenOk, "켜진 프롬프트끼리 화면에서 옆으로 안 겹침 " .. table.concat(bad, ", "))
+		local skipA = youngEgg:FindFirstChild("SkipPrompt", true)
+		local pickA = youngEgg:FindFirstChild("PickUpPrompt", true)
+		check(
+			pickA.UIOffset.X < 0 and skipA.UIOffset.X > 0 and skipA.Parent.Position.Y > pickA.Parent.Position.Y,
+			string.format(
+				"자라는 씨앗: 집기(E) 왼쪽 %d · 건너뛰기(R) 오른쪽 %d, 건너뛰기가 %.1f 스터드 위",
+				pickA.UIOffset.X,
+				skipA.UIOffset.X,
+				skipA.Parent.Position.Y - pickA.Parent.Position.Y
+			)
+		)
+		local sf = sellStall:FindFirstChild("SellFruitsPrompt", true)
+		local sp = sellStall:FindFirstChild("SellPrompt", true)
+		check(
+			sf.UIOffset.X < 0 and sp.UIOffset.X > 0 and sp.Parent.Position.Y > sf.Parent.Position.Y,
+			"판매 가판대: 열매 팔기(E) 왼쪽 · 식물 팔기(F) 오른쪽·위"
+		)
+		-- 하나만 켜지면 가운데로
+		sp.Enabled = false
+		WP.relayout(sellStall)
+		check(sf.UIOffset.X == 0, "하나만 켜지면 가운데 (UIOffset 0)")
+		sp.Enabled = true
+		WP.relayout(sellStall)
+		check(sf.UIOffset.X < 0, "다시 켜지면 나란히")
+		local readyA = growingEgg:FindFirstChild("SkipPrompt", true)
+		check(readyA.UIOffset.X == 0 and not readyA.Enabled, "다 자란 씨앗(둘 다 꺼짐): UIOffset 0")
+	end
 	-- 알 들기: 달리기!! 배너 + 비네트 + 드롭 버튼 + 핫바 알 칸
 	player:SetAttribute("CarryingEgg", "e1")
 	sigOf(player, "Attr_CarryingEgg"):Fire()
@@ -1346,15 +1483,196 @@ local function body()
 	fakeServices.UserInputService.InputBegan:Fire({ KeyCode = roblox.Enum.KeyCode.Space }, false)
 	check(lastSent("TreadmillLeave") ~= nil, "점프(스페이스) → TreadmillLeave")
 	holdDelays = true
-	fire("TreadmillStep", { amount = 500 })
-	local pop = root:FindFirstChild("StepPop")
-	check(pop and pop:FindFirstChildWhichIsA("TextLabel").Text == "+500", "걸음 팝업 '+500'")
-	player:SetAttribute("OnTreadmill", false)
-	sigOf(player, "Attr_OnTreadmill"):Fire()
-	-- 구역 배너 · 돈 팝업
-	fire("ZoneEntered", { biomeId = "jungle", name = "정글", nameEn = "Jungle" })
-	local zb = playerGui:FindFirstChild("ZoneBanner", true)
-	check(zb and zb.Text == "Jungle 😬", "구역 배너 'Jungle 😬': " .. tostring(zb and zb.Text))
+	do
+		-- 8판: 러닝머신 걸음 = 위 가운데 분홍 속도 배지 "+500" (캐릭터 옆 떠오르는 글씨 없앰)
+		fire("TreadmillStep", { amount = 500 })
+		local speedPop = playerGui:FindFirstChild("SpeedPop", true)
+		check(
+			speedPop and speedPop.Visible and speedPop.Amount.Text == "+500" and speedPop:FindFirstChild("Icon") ~= nil,
+			"걸음 → 위 가운데 속도 배지 '👟 +500': " .. tostring(speedPop and speedPop.Amount.Text)
+		)
+		check(root:FindFirstChild("StepPop") == nil, "캐릭터 옆 분홍 글씨(StepPop)는 이제 안 만듦")
+		local popChildren = #speedPop:GetDescendants()
+		fire("TreadmillStep", { amount = 4e9 })
+		check(
+			speedPop.Amount.Text == "+4B",
+			"다음 걸음: 같은 배지 숫자만 '+4B' (" .. speedPop.Amount.Text .. ")"
+		)
+		check(#speedPop:GetDescendants() == popChildren, "팝업마다 Instance 를 새로 안 만듦")
+		speedPop.Amount.Text = ""
+		fire("IndexRewarded", { speed = 1500, money = 10 })
+		check(
+			speedPop.Amount.Text == "+1.5K",
+			"도감 보상 속도 → 같은 배지 '+1.5K': " .. speedPop.Amount.Text
+		)
+		local SpeedFx = ctrl("SpeedFxController")
+		check(not SpeedFx.popGain(0) and not SpeedFx.popGain(0 / 0), "0·NaN 이면 안 띄움")
+		player:SetAttribute("OnTreadmill", false)
+		sigOf(player, "Attr_OnTreadmill"):Fire()
+		-- 8판 구역 입장 배너: 큰 한국어 이름 + 작은 영어, 같은 구역은 한 번만, 허브 = 안전 구역
+		fire("ZoneEntered", { biomeId = "jungle", name = "정글", nameEn = "Jungle" })
+		local zb = playerGui:FindFirstChild("ZoneBanner", true)
+		check(
+			zb and zb.Visible and zb.Title.Text == "정글" and zb.Sub.Text == "Jungle 😬",
+			"구역 배너 '정글' + 작은 'Jungle 😬': "
+				.. tostring(zb and zb.Title.Text)
+				.. " / "
+				.. tostring(zb and zb.Sub.Text)
+		)
+		check(not Hud0.showZoneBanner("jungle"), "같은 구역은 다시 안 띄움")
+		local Zone = ctrl("ZoneController")
+		player:SetAttribute("CurrentZone", "jungle")
+		Zone.poll()
+		player:SetAttribute("CurrentZone", "hub")
+		Zone.poll()
+		check(
+			zb.Visible and zb.Title.Text == "안전 구역" and zb.Sub.Text == "Safe Zone",
+			"허브로 오면 '안전 구역' / 'Safe Zone': " .. zb.Title.Text
+		)
+		check(Zone.current() == "base", "ZoneController.current() = base")
+		-- 구역 배너가 떠 있을 때 속도 배지는 그 아래 (위 가운데에서 안 겹침)
+		fire("TreadmillStep", { amount = 500 })
+		local zbS = zb.ScreenScale.Scale
+		check(
+			speedPop.Position.Y.Offset >= zb.Position.Y.Offset + zb.Size.Y.Offset * zbS,
+			string.format(
+				"구역 배너(%d~%.0f) 아래 속도 배지 (y %d)",
+				zb.Position.Y.Offset,
+				zb.Position.Y.Offset + zb.Size.Y.Offset * zbS,
+				speedPop.Position.Y.Offset
+			)
+		)
+		player:SetAttribute("CurrentZone", nil)
+	end
+	-- 8판 러닝머신 터치 창: 벨트에 올라서면 창 한 번 (닫으면 내려올 때까지 안 뜸), 0레벨 = "러닝머신 사기"
+	print("[8판: 러닝머신 터치 창]")
+	do
+		local Tread = ctrl("TreadmillController")
+		local MapLayout8 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/MapLayout"))
+		local Economy8 = requireNode(Loader.get("ReplicatedStorage/Shared/Economy"))
+		local Format8 = requireNode(Loader.get("ReplicatedStorage/Shared/Format"))
+		local belt = MapLayout8.treadmillRect(1)
+		local onPos = roblox.Vector3.new((belt.xMin + belt.xMax) / 2, 3, (belt.zMin + belt.zMax) / 2)
+		local offPos = onPos + roblox.Vector3.new(0, 0, 40)
+		player:SetAttribute("TreadmillLevel", 0)
+		player:SetAttribute("Money", 12345)
+		root.Position = offPos
+		Tread.checkBelt()
+		check(dialogRoot("TreadmillDialog") == nil and not Tread.onBelt(), "벨트 밖: 창 없음")
+		root.Position = onPos
+		check(Tread.onBelt(), "벨트 위 판정 (MapLayout.treadmillRect)")
+		Tread.checkBelt()
+		local td = dialogRoot("TreadmillDialog")
+		check(td ~= nil, "벨트에 올라서면 러닝머신 창")
+		local cost0 = Economy8.nextTreadmillCost(0)
+		local buy = td and td:FindFirstChild("TreadmillUpgrade", true)
+		check(
+			buy and buy.Text == "러닝머신 사기 · " .. Format8.money(cost0),
+			"0레벨(잠김): '러닝머신 사기 · 가격' (" .. tostring(buy and buy.Text) .. ")"
+		)
+		local body0 = td and td:FindFirstChild("Body", true)
+		check(
+			body0 and string.find(body0.Text, "아직 러닝머신이 없어요", 1, true) ~= nil,
+			"0레벨 창 글: " .. (string.gsub(tostring(body0 and body0.Text), "\n", " / "))
+		)
+		local beforeBuy = #sent
+		check(click(buy), "'러닝머신 사기' 누름")
+		local pu = lastSent("PurchaseUpgrade")
+		check(#sent == beforeBuy + 1 and pu.args[1] == "Treadmill", "PurchaseUpgrade(Treadmill) 보냄")
+		check(dialogRoot("TreadmillDialog") ~= nil, "사도 창은 열린 채 (다음 가격이 바로 보이게)")
+		-- 레벨이 오르면 창 글·버튼이 바로 바뀜
+		player:SetAttribute("TreadmillLevel", 3)
+		sigOf(player, "Attr_TreadmillLevel"):Fire()
+		local body3 = td:FindFirstChild("Body", true).Text
+		check(
+			string.find(body3, "레벨 3 → 레벨 4", 1, true) ~= nil
+				and string.find(body3, "+" .. Format8.number(Economy8.treadmillGainPerSecond(4)), 1, true) ~= nil,
+			"레벨 3: '레벨 3 → 레벨 4 · 1초에 속도 +A → +B': " .. (string.gsub(body3, "\n", " / "))
+		)
+		local cost3 = Economy8.nextTreadmillCost(3)
+		check(buy.Text == "올리기 · " .. Format8.money(cost3), "버튼 '올리기 · 가격' (" .. buy.Text .. ")")
+		-- 코인이 모자라면 회색 + 눌러도 안 보냄
+		player:SetAttribute("Money", 0)
+		sigOf(player, "Attr_Money"):Fire()
+		check(
+			buy.Active == false and buy.BackgroundColor3 == uiModule("Theme").Colors.gray,
+			"코인 모자라면 회색"
+		)
+		local beforePoor = #sent
+		click(buy)
+		check(#sent == beforePoor, "코인 모자라면 눌러도 안 보냄")
+		player:SetAttribute("Money", 12345)
+		-- 닫으면 벨트 위에 계속 있어도 다시 안 뜸 → 내려왔다 다시 올라서면 뜸
+		check(click(td:FindFirstChild("DialogCancel", true)) and dialogRoot("TreadmillDialog") == nil, "닫기")
+		Tread.checkBelt()
+		Tread.checkBelt()
+		check(dialogRoot("TreadmillDialog") == nil, "벨트 위에 계속 있어도 다시 안 뜸")
+		root.Position = offPos
+		Tread.checkBelt()
+		root.Position = onPos
+		Tread.checkBelt()
+		check(dialogRoot("TreadmillDialog") ~= nil, "내려왔다 다시 올라서면 다시 뜸")
+		root.Position = offPos
+		Tread.checkBelt()
+		check(dialogRoot("TreadmillDialog") == nil, "벨트에서 내려오면 창 저절로 닫힘")
+		-- 8판 서버 신호 (수석): Remote TreadmillTouched → 창, Attr TreadmillTouching 이 있으면 클라 판정 대신 그것
+		fire("TreadmillTouched", { level = 0, nextLevel = 1, nextCost = 500, maxed = false })
+		check(dialogRoot("TreadmillDialog") ~= nil, "서버 TreadmillTouched → 러닝머신 창")
+		player:SetAttribute("TreadmillTouching", false)
+		sigOf(player, "Attr_TreadmillTouching"):Fire()
+		check(dialogRoot("TreadmillDialog") == nil, "Attr TreadmillTouching false → 창 닫힘")
+		root.Position = onPos -- 클라 판정으로는 벨트 위지만 서버 Attr 이 먼저
+		Tread.checkBelt()
+		check(
+			dialogRoot("TreadmillDialog") == nil,
+			"Attr TreadmillTouching 이 있으면 그걸 따름 (클라 판정 무시)"
+		)
+		player:SetAttribute("TreadmillTouching", true)
+		sigOf(player, "Attr_TreadmillTouching"):Fire()
+		check(dialogRoot("TreadmillDialog") ~= nil, "Attr TreadmillTouching true → 창")
+		-- 폰(844x390): 창이 화면 안, 버튼 46px 이상
+		local holder = dialogRoot("TreadmillDialog"):FindFirstChild("Holder")
+		local hs = holder.ScreenScale.Scale
+		local area8 = Ui.area()
+		check(
+			holder.Size.X.Offset * hs <= area8.X and holder.Size.Y.Offset * hs <= area8.Y,
+			string.format(
+				"폰 러닝머신 창 %.0fx%.0f 화면 안",
+				holder.Size.X.Offset * hs,
+				holder.Size.Y.Offset * hs
+			)
+		)
+		local upBtn = holder:FindFirstChild("TreadmillUpgrade", true)
+		check(
+			upBtn.Size.Y.Offset * hs >= 45.9,
+			string.format("폰 '올리기' 버튼 %.1fpx", upBtn.Size.Y.Offset * hs)
+		)
+		-- 최대 레벨
+		player:SetAttribute("TreadmillLevel", 9999)
+		sigOf(player, "Attr_TreadmillLevel"):Fire()
+		check(upBtn.Text == "최대 레벨!" and upBtn.Active == false, "최대 레벨: '최대 레벨!' 회색")
+		player:SetAttribute("TreadmillTouching", nil)
+		Tread.setTouching(false)
+		check(dialogRoot("TreadmillDialog") == nil, "setTouching(false) → 창 닫힘")
+		player:SetAttribute("TreadmillLevel", nil)
+		root.Position = roblox.Vector3.new(0, 3, 0)
+		-- 서버 잠김 안내 토스트는 창이 대신 → 안 띄움 (다른 안내는 그대로)
+		local function toastWith(text)
+			for _, d in playerGui:GetDescendants() do
+				if d.Name == "Toast" and string.find(d.Text, text, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+		fire(
+			"Notify",
+			{ text = "러닝머신이 잠겨 있어요! 상점에서 먼저 사세요 (500 코인)", kind = "info" }
+		)
+		check(not toastWith("러닝머신이 잠겨"), "서버 '러닝머신이 잠겨 있어요' 토스트 숨김")
+		fire("Notify", { text = "8판 다른 안내", kind = "info" })
+		check(toastWith("8판 다른 안내"), "다른 안내 토스트는 그대로")
+	end
 	holdDelays = false
 	check(handlers["IncomeTick"] == nil, "6판: 자동 수입 돈 팝업(IncomeTick) 받는 곳 없음")
 	-- 슬로우 모드
@@ -2554,6 +2872,7 @@ local function body()
 				tag .. " 튜토리얼 패널이 " .. o.name .. " 과 안 겹침"
 			)
 		end
+		checkTopCenter(screen, area, tutRect, others, tag, fmt, Layout)
 		for _, expandedNow in { false, true } do
 			Lb.setExpanded(expandedNow)
 			local lbS = lb.ScreenScale.Scale

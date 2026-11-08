@@ -350,6 +350,7 @@ function PetsController.start()
 	WorldPrompt.attach({
 		tag = Tags.SellStall,
 		name = "SellPrompt",
+		slot = 2, -- 8판: "열매 팔기"(E, 1칸) 옆·조금 위
 		action = "식물 팔기",
 		object = "판매 가판대",
 		key = Enum.KeyCode.F,

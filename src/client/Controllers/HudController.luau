@@ -8,7 +8,7 @@
 	  오른쪽 가운데 : 빨간 씨앗 버튼(자라는 씨앗 패널, 배지 = 가방 씨앗 수) · 주황 식물 버튼(정원 식물 창)
 	                  · 초록 열매 버튼(열매 가방 창, 배지 "12/300" = Attr FruitCount / fruitBagMax) — 6판
 	  오른쪽 아래   : 달/해 그림 + "3분 58초" (밤까지 / 낮까지 남은 시간)
-	  위 가운데     : 구역 배너 "Jungle 😬" (ZoneEntered, 없으면 클라 구역 계산)
+	  위 가운데     : 8판 구역 입장 배너 큰 "정글" + 작은 "Jungle 😬" 1.5초 / 허브 "안전 구역" (ZoneEntered + ZoneController.changed)
 
 	반응형: PC 는 왼쪽 메뉴가 넓은 1열 버튼(글자 포함). 터치 기기는 정사각 아이콘 버튼(44px 이상)을 조이스틱 위에,
 	속도·돈은 화면 위 왼쪽 한 줄로, 시간은 오른쪽 위로 옮김 (점프 버튼·조이스틱과 안 겹치게). 규칙 계산은 UI/Layout.luau.
@@ -41,7 +41,9 @@ local SoundController = require(script.Parent.SoundController)
 
 local HudController = {}
 HudController.eggBadge = nil :: TextLabel? -- 씨앗 버튼 배지 (IncubatorController 가 숫자를 씀)
-HudController.showZoneBanner = nil :: ((string, string?) -> ())?
+HudController.showZoneBanner = nil :: ((string?) -> boolean)? -- 8판: 구역 id ("base" = 안전 구역). 띄웠으면 true
+HudController.ZONE_BANNER_SIZE = Vector2.new(560, 80) -- 구역 배너 기준 크기 (폰에서는 Ui.scaled 로 작아짐)
+HudController.ZONE_BANNER_SECONDS = 1.5 -- 다 보이는 시간 (그 뒤 0.35초 동안 사라짐)
 HudController.petsButton = nil :: TextButton? -- 정원 식물 창 버튼 (튜토리얼 5단계 "열매 따서 팔기" 때 TutorialController 가 반짝이게 함)
 HudController.eggButton = nil :: TextButton?
 HudController.fruitButton = nil :: TextButton? -- 6판: 열매 가방 버튼
@@ -49,6 +51,22 @@ HudController.fruitBadge = nil :: TextLabel? -- "12/300"
 
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
+
+-- 8판 구역 입장 배너 글: 구역 id → 큰 글(한국어), 작은 글(영어 + 얼굴), 색. "base"/"hub" = 안전 구역
+function HudController.zoneBannerText(zone: string): (string, string, Color3)
+	if zone == "base" or zone == "hub" then
+		return "안전 구역", "Safe Zone", Color3.fromRGB(110, 235, 90)
+	end
+	local biome = Biomes.get(zone)
+	local theme = Visuals.biomes[zone]
+	local nameEn = if biome then biome.nameEn else ""
+	local face = if theme then theme.label else ""
+	local small = if nameEn ~= "" and face ~= "" then nameEn .. " " .. face else nameEn .. face
+	local color = if theme
+		then Color3.fromRGB(theme.accent[1], theme.accent[2], theme.accent[3]):Lerp(C.white, 0.15)
+		else C.white
+	return if biome then biome.name else zone, small, color
+end
 
 -- 메뉴 버튼 (넓은 모드: 아이콘 + 글자 / 좁은 모드: 아이콘 + 작은 글자)
 type MenuEntry = {
@@ -537,63 +555,103 @@ function HudController.start()
 	HudController.fruitBadge = fruitBadge
 
 	------------------------------------------------------------------
-	-- 위 가운데: 구역 배너 ("Jungle 😬")
+	-- 위 가운데: 8판 구역 입장 배너 (원작 "Desert" 스타일, 사장님 2026-11-08)
+	--   큰 한국어 이름(구역 색) + 작은 영어 이름·얼굴 "Jungle 😬", 1.5초 보였다가 0.35초 동안 사라짐.
+	--   허브·베이스 = "안전 구역 / Safe Zone". 접속 직후 첫 구역은 안 띄움. 같은 구역은 한 번만
+	--   (서버 ZoneEntered 와 ZoneController.changed 가 둘 다 와도 bannerZone 으로 거름)
 	------------------------------------------------------------------
-	local zoneBanner = Ui.label("", UDim2.fromOffset(600, 70), 60, C.white, {
+	local zoneBanner: Frame = Ui.new("Frame", {
 		Name = "ZoneBanner",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 52),
+		Size = UDim2.fromOffset(HudController.ZONE_BANNER_SIZE.X, HudController.ZONE_BANNER_SIZE.Y),
+		BackgroundTransparency = 1,
 		Visible = false,
 		Parent = Ui.layer("Alerts"),
 	})
 	Ui.scaled(zoneBanner)
-	local zbStroke = zoneBanner:FindFirstChildOfClass("UIStroke")
-	if zbStroke then
-		zbStroke.Color = C.winEdge
-		zbStroke.Thickness = 5
+	local zbTitle = Ui.label("", UDim2.new(1, 0, 0, 54), 52, C.white, {
+		Name = "Title",
+		TextWrapped = false,
+		Parent = zoneBanner,
+	})
+	local zbSub = Ui.label("", UDim2.new(1, 0, 0, 24), 22, C.white, {
+		Name = "Sub",
+		Position = UDim2.fromOffset(0, 56),
+		TextWrapped = false,
+		Parent = zoneBanner,
+	})
+	local zbTitleStroke = zbTitle:FindFirstChildOfClass("UIStroke")
+	if zbTitleStroke then
+		zbTitleStroke.Color = C.winEdge
+		zbTitleStroke.Thickness = 5
 	end
+	local zbStrokes: { UIStroke } = {}
+	for _, label in { zbTitle, zbSub } do
+		local s = label:FindFirstChildOfClass("UIStroke")
+		if s then
+			table.insert(zbStrokes, s)
+		end
+	end
+	local fadeInfo = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 	local bannerToken = 0
-	local function showZone(nameEn: string, biomeId: string?)
-		local theme = if biomeId then Visuals.biomes[biomeId] else nil
-		local label = if theme then theme.label else ""
-		local color = if theme then Color3.fromRGB(theme.accent[1], theme.accent[2], theme.accent[3]) else C.shopGreen
-		zoneBanner.Text = nameEn .. " " .. label
-		zoneBanner.TextColor3 = color:Lerp(C.white, 0.15)
+	local bannerZone: string? = nil -- 마지막으로 띄운 구역
+	local function showZone(zone: string?): boolean
+		if not zone or zone == bannerZone then
+			return false
+		end
+		bannerZone = zone
+		local big, small, color = HudController.zoneBannerText(zone)
+		zbTitle.Text = big
+		zbTitle.TextColor3 = color
+		zbSub.Text = small
+		zbTitle.TextTransparency = 0
+		zbSub.TextTransparency = 0
+		for _, s in zbStrokes do
+			s.Transparency = 0
+		end
 		zoneBanner.Visible = true
 		bannerToken += 1
 		local token = bannerToken
-		Ui.pop(zoneBanner, 1.35)
+		Ui.pop(zoneBanner, 1.3)
 		SoundController.play("ZoneEnter")
-		task.delay(2.6, function()
-			if bannerToken == token then
-				zoneBanner.Visible = false
+		task.delay(HudController.ZONE_BANNER_SECONDS, function()
+			if bannerToken ~= token then
+				return
 			end
+			Ui.tween(zbTitle, fadeInfo, { TextTransparency = 1 })
+			Ui.tween(zbSub, fadeInfo, { TextTransparency = 1 })
+			for _, s in zbStrokes do
+				Ui.tween(s, fadeInfo, { Transparency = 1 })
+			end
+			task.delay(0.4, function()
+				if bannerToken == token then
+					zoneBanner.Visible = false
+				end
+			end)
 		end)
+		return true
 	end
 	HudController.showZoneBanner = showZone
-	local serverBanner = false
+	local zoneSeen = false
 	Net.onLater(Remotes.ToClient.ZoneEntered, function(payload: any)
-		if typeof(payload) ~= "table" then
+		if typeof(payload) ~= "table" or typeof(payload.biomeId) ~= "string" or payload.biomeId == "hub" then
 			return
 		end
-		serverBanner = true
-		local id = if typeof(payload.biomeId) == "string" then payload.biomeId else nil
-		local biome = if id then Biomes.get(id) else nil
-		local nameEn = tostring(payload.nameEn or (if biome then biome.nameEn else ""))
-		if id == "hub" or nameEn == "" then
-			return
-		end
-		showZone(nameEn, id)
+		zoneSeen = true
+		showZone(payload.biomeId)
 	end)
-	-- 서버 ZoneEntered 가 아직 안 오면(구 서버) 클라 구역 계산으로
+	-- 클라 구역 판정 (서버 Attr CurrentZone 우선). 허브(= "base")는 서버가 ZoneEntered 를 안 보내서 이걸로
 	ZoneController.changed(function(zone: string?)
-		if serverBanner or zone == nil or zone == "base" then
+		if zone == nil then
 			return
 		end
-		local biome = Biomes.get(zone)
-		if biome then
-			showZone(biome.nameEn, zone)
+		if not zoneSeen then
+			zoneSeen = true
+			bannerZone = zone -- 접속 직후 첫 구역: 배너 없이 기억만
+			return
 		end
+		showZone(zone)
 	end)
 
 	------------------------------------------------------------------

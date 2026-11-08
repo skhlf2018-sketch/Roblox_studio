@@ -396,6 +396,37 @@ local function body()
 		end
 	end
 	check(plotOk, "베이스 7개: 우리(앞을 봄)·러닝머신(MapLayout 자리, 모양 모델)·스폰·간판")
+	-- 8판 러닝머신 터치 창(클라 TreadmillController): 벨트 파트 = 태그 Treadmill + Attr PlotIndex, MapLayout.treadmillRect 안
+	local beltOk, beltSeen = true, 0
+	for _, belt in tagged.Treadmill or {} do
+		beltSeen += 1
+		local pi = belt:GetAttribute("PlotIndex")
+		local r = typeof(pi) == "number" and MapLayout.treadmillRect(pi) or nil
+		local p = belt.CFrame.Position
+		if not r or p.X < r.xMin or p.X > r.xMax or p.Z < r.zMin or p.Z > r.zMax then
+			beltOk = false
+		end
+	end
+	check(
+		beltSeen == 7 and beltOk,
+		"8판: 러닝머신 벨트 7개 = 태그 Treadmill + PlotIndex, treadmillRect 안 (" .. beltSeen .. ")"
+	)
+	-- 8판: 서버가 만든 프롬프트도 한 파트에 2개 이상이면 안 됨 (겹쳐 보임)
+	local promptBad = {}
+	for _, part in map:GetDescendants() do
+		if part:IsA("BasePart") then
+			local n = 0
+			for _, d in part:GetChildren() do
+				if d:IsA("ProximityPrompt") then
+					n += 1
+				end
+			end
+			if n >= 2 then
+				table.insert(promptBad, part.Name)
+			end
+		end
+	end
+	check(#promptBad == 0, "8판: 맵 파트마다 서버 프롬프트 1개 이하 " .. table.concat(promptBad, ", "))
 	-- 주인이 생기면: 간판 이름, 업그레이드 표지판 숫자, 러닝머신 모양(레벨 0~10)
 	local kidLevels = { TreadmillLevel = 0, PenLevel = 5 }
 	local kid = {

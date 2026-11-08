@@ -5,29 +5,53 @@
 	- 플레이어 Attribute OnTreadmill = true 인 동안: 이동 입력(WASD·조이스틱)을 끔 (PlayerModule Controls:Disable)
 	  아래 가운데 "점프하면 내려와요" 안내 + 터치 기기는 "내리기" 버튼
 	- 점프 입력(스페이스·게임패드 A·JumpRequest·내리기 버튼) → TreadmillLeave (서버가 내려 줌)
-	- TreadmillStep({ amount }) 마다 캐릭터 주변에 분홍 "+500" 글씨가 떠오름 (원작)
+	- TreadmillStep({ amount }) 마다 위 가운데 분홍 속도 배지 "👟 +500" (8판: SpeedFxController.popGain 으로 통일)
 	판정·속도 증가는 전부 서버. 이 컨트롤러는 입력과 연출만.
+
+	8판 러닝머신 터치 창 (원작처럼, 사장님 2026-11-08):
+	  내 베이스 러닝머신 벨트에 올라서거나 닿으면 "TreadmillDialog" 창 (Ui.dialog):
+	    레벨 n → n+1 · 1초에 속도 +A → +B (Economy.treadmillGainPerSecond) · 가격 (Economy.nextTreadmillCost)
+	    "올리기 · N 코인" → PurchaseUpgrade("Treadmill") (코인이 모자라면 회색), 0레벨(잠김)이면 "러닝머신 사기 · N 코인"
+	    최대 레벨이면 "최대 레벨!" 회색. 레벨·코인이 바뀌면 창 글·버튼이 바로 바뀜 (창은 열린 채)
+	  한 번 열면(또는 닫으면) 벨트에서 내려올 때까지 다시 안 뜸. 벨트에서 내려오면 창이 저절로 닫힘.
+	  벨트 판정은 TreadmillController.setTouching(on) 한 곳으로 모음:
+	    · 서버(수석 8판): 올라선 순간 Remote TreadmillTouched → setTouching(true), 서 있는 동안 Attr TreadmillTouching
+	    · checkBelt(0.25초마다 + Attr 바뀔 때): Attr TreadmillTouching 이 있으면 그것, 없으면(옛 서버) 클라 판정
+	      (OnTreadmill 이거나 MapLayout.treadmillRect 위, 또는 내 베이스 Treadmill 태그 파트에 닿음)
+	  옛 서버의 "러닝머신이 잠겨 있어요!…" 토스트는 이 창이 대신하므로 NotifyController.mute 로 숨김.
+	공개: popStep(amount) · checkBelt() · onBelt() · setTouching(on) · openDialog() · dialogBody() · costInfo()
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage.Shared
+local Config = require(Shared.Data.Config)
+local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
+local MapLayout = require(Shared.Data.MapLayout)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
+local State = require(Client.State)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
+local WorldPrompt = require(Client.UI.WorldPrompt)
+local NotifyController = require(script.Parent.NotifyController)
+local ShopController = require(script.Parent.ShopController)
 local SoundController = require(script.Parent.SoundController)
+local SpeedFxController = require(script.Parent.SpeedFxController)
 
 local TreadmillController = {}
 
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
-local PINK = Color3.fromRGB(255, 90, 170)
+local DIALOG = "TreadmillDialog"
+local TREAD_BLUE = Color3.fromRGB(40, 120, 230) -- 상점 러닝머신 카드와 같은 색
+local TOUCH_DISTANCE = 2.5 -- 벨트 파트 상자에서 몸통까지 이만큼(+ TREADMILL_PAD_MARGIN)이면 "닿음" (몸통은 벨트 윗면 위 약 3)
 
 local controls: any = nil
 local function getControls(): any
@@ -64,40 +88,214 @@ local function leave()
 	end)
 end
 
--- "+500" 분홍 글씨 (캐릭터 옆에서 위로 떠오름)
+-- 러닝머신 걸음 "+500" → 위 가운데 분홍 속도 배지 (8판: 캐릭터 옆 떠오르는 글씨 대신)
 function TreadmillController.popStep(amount: number)
+	SpeedFxController.popGain(amount)
+end
+
+------------------------------------------------------------------
+-- 8판: 러닝머신 터치 창
+------------------------------------------------------------------
+
+local function myRoot(): BasePart?
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not root or not root:IsA("BasePart") then
+	return if root and root:IsA("BasePart") then root else nil
+end
+
+local function myPlot(): number
+	local p = Players.LocalPlayer:GetAttribute(Attr.PlotIndex)
+	return if typeof(p) == "number" then p else 0
+end
+
+local function myMoney(): number
+	local m = Players.LocalPlayer:GetAttribute(Attr.Money)
+	return if typeof(m) == "number" then m else 0
+end
+
+local function treadLevel(): number
+	local a = Players.LocalPlayer:GetAttribute(Attr.TreadmillLevel)
+	if typeof(a) == "number" then
+		return math.max(0, math.floor(a))
+	end
+	local snap = State.get()
+	local level = if snap then tonumber(snap.treadmillLevel) else nil
+	return if level then math.max(0, math.floor(level)) else 0
+end
+
+-- 내 베이스 러닝머신 벨트 파트들 (태그 Treadmill + Attr PlotIndex)
+local function myBelts(plot: number): { BasePart }
+	local list: { BasePart } = {}
+	for _, inst in CollectionService:GetTagged(Tags.Treadmill) do
+		local part: BasePart? = nil
+		if inst:IsA("BasePart") then
+			part = inst
+		elseif inst:IsA("Model") then
+			part = inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart", true)
+		end
+		local owner = inst:GetAttribute("PlotIndex")
+		if part and owner == plot then
+			table.insert(list, part)
+		end
+	end
+	return list
+end
+
+-- 내 몸통이 벨트에서 얼마나 떨어졌나 (MapLayout 사각형 · 태그 파트 중 가까운 것, 모르면 math.huge)
+local function beltDistance(root: BasePart, plot: number): number
+	local best = math.huge
+	local rect = MapLayout.treadmillRect(plot)
+	if rect then
+		local p = root.Position
+		local dx = math.max(rect.xMin - p.X, 0, p.X - rect.xMax)
+		local dz = math.max(rect.zMin - p.Z, 0, p.Z - rect.zMax)
+		if p.Y - MapLayout.FLOOR_Y < Config.TREADMILL_MAX_HEIGHT then
+			best = math.sqrt(dx * dx + dz * dz)
+		end
+	end
+	for _, part in myBelts(plot) do
+		local d = math.max(0, WorldPrompt.distanceTo(part, root.Position) - TOUCH_DISTANCE)
+		if d < best then
+			best = d
+		end
+	end
+	return best
+end
+
+-- 지금 내 벨트 위(또는 닿음)인가
+function TreadmillController.onBelt(): boolean
+	if onTreadmill() then
+		return true
+	end
+	local root = myRoot()
+	local plot = myPlot()
+	if not root or plot <= 0 then
+		return false
+	end
+	return beltDistance(root, plot) <= Config.TREADMILL_PAD_MARGIN
+end
+
+-- 가격·속도 정보: level, cost(nil = 최대), 지금 1초 속도, 다음 1초 속도, 다음 모양 이름
+function TreadmillController.costInfo(): (number, number?, number, number, string)
+	local level = treadLevel()
+	local cost = Economy.nextTreadmillCost(level)
+	local now = Economy.treadmillGainPerSecond(level)
+	local nextGain = if cost then Economy.treadmillGainPerSecond(level + 1) else now
+	local names = ShopController.TREADMILL_NAMES
+	local name = names[math.clamp(if cost then level + 1 else level, 1, #names)] or ""
+	return level, cost, now, nextGain, name
+end
+
+function TreadmillController.dialogBody(): string
+	local level, cost, now, nextGain, name = TreadmillController.costInfo()
+	local coins = "내 코인 " .. Format.money(myMoney())
+	if level <= 0 then
+		return string.format(
+			"아직 러닝머신이 없어요!\n사면 올라서 있는 동안 1초에 속도 +%s\n%s",
+			Format.number(nextGain),
+			coins
+		)
+	end
+	if not cost then
+		return string.format(
+			"최고 러닝머신! (레벨 %d)\n1초에 속도 +%s\n%s",
+			level,
+			Format.number(now),
+			coins
+		)
+	end
+	return string.format(
+		"레벨 %d → 레벨 %d (%s 러닝머신)\n1초에 속도 +%s → +%s\n%s",
+		level,
+		level + 1,
+		name,
+		Format.number(now),
+		Format.number(nextGain),
+		coins
+	)
+end
+
+local dialog: Ui.Dialog? = nil
+
+local function refreshDialog()
+	local d = dialog
+	if not d or not d.alive() then
 		return
 	end
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "StepPop"
-	gui.Size = UDim2.fromOffset(150, 44)
-	gui.AlwaysOnTop = true
-	gui.LightInfluence = 0
-	local start = Vector3.new(math.random() * 4 - 2, 1.5 + math.random() * 1.5, math.random() * 2 - 1)
-	gui.StudsOffset = start
-	gui.Adornee = root
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Theme.Font
-	label.TextScaled = true
-	label.Text = "+" .. Format.number(amount)
-	label.TextColor3 = PINK
-	label.Parent = gui
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = C.winEdge
-	stroke.Thickness = 2.5
-	stroke.Parent = label
-	gui.Parent = root
-	Ui.tween(gui, TweenInfo.new(0.9, Enum.EasingStyle.Quad), { StudsOffset = start + Vector3.new(0, 3.5, 0) })
-	Ui.tween(label, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1 })
-	Ui.tween(stroke, TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Transparency = 1 })
-	task.delay(1, function()
-		gui:Destroy()
-	end)
+	d.setBody(TreadmillController.dialogBody())
+	local button = d.buttons.TreadmillUpgrade
+	if button then
+		local level, cost = TreadmillController.costInfo()
+		if not cost then
+			Ui.setButton(button, "최대 레벨!", C.gray, false)
+		else
+			local afford = myMoney() >= cost
+			local verb = if level <= 0 then "러닝머신 사기" else "올리기"
+			Ui.setButton(button, verb .. " · " .. Format.money(cost), if afford then C.shopGreen else C.gray, afford)
+		end
+	end
+end
+
+function TreadmillController.isDialogOpen(): boolean
+	local d = dialog
+	return d ~= nil and d.alive()
+end
+
+-- 창 열기 (이미 열려 있으면 글만 다시)
+function TreadmillController.openDialog()
+	if TreadmillController.isDialogOpen() then
+		refreshDialog()
+		return
+	end
+	local d = Ui.dialog(DIALOG, "👟 러닝머신 업그레이드", TreadmillController.dialogBody(), {
+		{ name = "DialogCancel", text = "닫기", color = C.gray, sound = "Close" },
+		{
+			name = "TreadmillUpgrade",
+			text = "올리기",
+			color = C.shopGreen,
+			keepOpen = true, -- 사고 나서도 창은 그대로 (다음 레벨 가격이 바로 보이게)
+			sound = "Purchase",
+			onClick = function()
+				local _, cost = TreadmillController.costInfo()
+				if cost and myMoney() >= cost then
+					Net.send(Remotes.ToServer.PurchaseUpgrade, Remotes.UpgradeKinds.Treadmill)
+				end
+			end,
+		},
+	}, TREAD_BLUE)
+	dialog = d
+	refreshDialog()
+end
+
+-- 벨트 판정 한 곳: 올라서면(닿기 시작) 창 한 번, 내려오면 창을 닫고 다음 번을 위해 다시 준비
+local touching = false
+function TreadmillController.setTouching(on: boolean)
+	if on == touching then
+		return
+	end
+	touching = on
+	if on then
+		TreadmillController.openDialog()
+	else
+		local d = dialog
+		if d and d.alive() then
+			d.close() -- 벨트에서 내려옴
+		end
+	end
+end
+
+function TreadmillController.isTouching(): boolean
+	return touching
+end
+
+-- 판정 한 번 (0.25초마다 + 서버 Attr 이 바뀔 때): 서버 Attr TreadmillTouching 이 있으면 그것, 없으면(옛 서버) 클라 판정
+function TreadmillController.checkBelt()
+	local attr = Players.LocalPlayer:GetAttribute(Attr.TreadmillTouching)
+	if typeof(attr) == "boolean" then
+		TreadmillController.setTouching(attr or onTreadmill())
+	else
+		TreadmillController.setTouching(TreadmillController.onBelt())
+	end
 end
 
 function TreadmillController.start()
@@ -166,6 +364,31 @@ function TreadmillController.start()
 		if amount and amount > 0 then
 			TreadmillController.popStep(amount)
 			SoundController.play("TreadmillStep")
+		end
+	end)
+
+	-- 8판 러닝머신 터치 창
+	NotifyController.mute("러닝머신이 잠겨 있어요") -- 서버 잠김 안내 → 이 창이 대신
+	player:GetAttributeChangedSignal(Attr.TreadmillLevel):Connect(refreshDialog)
+	player:GetAttributeChangedSignal(Attr.Money):Connect(refreshDialog)
+	State.onChanged(function(section: string)
+		if section == "upgrades" or section == "snapshot" then
+			refreshDialog()
+		end
+	end)
+	-- 8판 서버 신호 (수석): 올라선 순간 Remote TreadmillTouched + 서 있는 동안 Attr TreadmillTouching
+	--   → 둘 다 같은 함수(setTouching)로. 옛 서버(신호 없음)면 0.25초 클라 판정만
+	local touchedRemote = (Remotes.ToClient :: any).TreadmillTouched
+	if typeof(touchedRemote) == "string" then
+		Net.onLater(touchedRemote, function()
+			TreadmillController.setTouching(true)
+		end)
+	end
+	player:GetAttributeChangedSignal(Attr.TreadmillTouching):Connect(TreadmillController.checkBelt)
+	task.spawn(function()
+		while true do
+			task.wait(0.25)
+			TreadmillController.checkBelt()
 		end
 	end)
 end

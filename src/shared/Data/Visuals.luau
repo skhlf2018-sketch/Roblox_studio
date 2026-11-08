@@ -46,12 +46,12 @@ export type BiomeTheme = {
 	rightSide: { floor: Color, floor2: Color, wall: Color, wallGlow: Color? }?, -- 오른쪽(x > 0) 절반만 다른 색 (천사&악마)
 	label: string, -- 구역 배너 이모지 (원작 "Jungle 😬")
 	-- 4판 비주얼 (MapBuilder): 바닥 무늬 · 가운데 길 · 가운데 작은 장식 · 벽 장식 · 입구 아치 · 담장 기둥 색
-	pattern: string?, -- "stripes" | "checker" | "tiles" | "dunes" | "ice" | "cracks" | "caustics" | "grid" | "patches" | 7판 "circuit" | "baseplate" | "pixels"
+	pattern: string?, -- "stripes" | "checker" | "tiles" | "dunes" | "ice" | "cracks" | "caustics" | "grid" | "patches" | 7판 "circuit" | "baseplate" | "pixels" | 8판 "hazard" | "clockface" | "clouds"
 	floorTile: Color?, -- 무늬 색 (없으면 floor2)
 	path: { color: Color, kind: string, glow: boolean? }?, -- kind "road"(흙길·돌길) | "stones"(징검돌)
 	scatter: { DecorSpec }?, -- 복도 가운데에 흩어 놓는 작은 장식 (안 부딪힘, 경비 길을 막지 않음)
-	wallDecor: string?, -- 담장 면 장식 "vines" | "hiero" | "icicles" | "portholes" | "torches" | "lanterns" | "crystals" | "candystripes" | "windows" | 7판 "screens" | "toyshelf" | "glitchwall"
-	arch: string?, -- 구역 입구 아치 모양 "wood" | "sandstone" | "ice" | "basalt" | "coral" | "bone" | "space" | "torii" | "marble" | "crystal" | "candy" | "gothic" | 7판 "terminal" | "toyblocks" | "glitch"
+	wallDecor: string?, -- 담장 면 장식 "vines" | "hiero" | "icicles" | "portholes" | "torches" | "lanterns" | "crystals" | "candystripes" | "windows" | 7판 "screens" | "toyshelf" | "glitchwall" | 8판 "pipes" | "clockgears" | "cloudwall"
+	arch: string?, -- 구역 입구 아치 모양 "wood" | "sandstone" | "ice" | "basalt" | "coral" | "bone" | "space" | "torii" | "marble" | "crystal" | "candy" | "gothic" | 7판 "terminal" | "toyblocks" | "glitch" | 8판 "factory" | "clock" | "rainbow"
 	pilaster: Color?, -- 담장 기둥 색 (없으면 trim)
 }
 
@@ -148,6 +148,9 @@ Visuals.PLANT_FORMS = {
 	"circuit", -- 7판 해커 연구소 (네모 줄기 + 회로 줄 + 칩)
 	"blocky", -- 7판 개발자의 방 (스터드 블록을 쌓음)
 	"glitch", -- 7판 버그 차원 (거꾸로 + 떠 있는 깨진 픽셀)
+	"gear", -- 8판 로봇 공장 (쇠 줄기 + 톱니바퀴 꽃 + 볼트 잎)
+	"clock", -- 8판 시간의 탑 (놋쇠 줄기 + 시계 판 꽃 + 시곗바늘)
+	"cloud", -- 8판 무지개 하늘섬 (구름 솜 덩어리 + 무지개 꽃잎 띠)
 }
 
 Visuals.plantThemes = {
@@ -287,29 +290,37 @@ Visuals.plantThemes = {
 		fruits = { { 255, 0, 200 }, { 0, 255, 90 }, { 60, 160, 255 } },
 		glow = true,
 	},
-	-- [8판 수석 임시] 새 구역 3개 (선임이 다시 꾸밀 자리): 로봇 공장 = 은회색 쇠 + 주황 불꽃 · 시간의 탑 = 놋쇠 금색 + 짙은 남색 ·
-	--   무지개 하늘섬 = 흰 구름 + 무지개 색. 모양은 지금 있는 것만 빌림
+	-- 8판 새 구역 3개 (선임): 로봇 공장 = 은회색 쇠 + 노랑·주황 불꽃 · 시간의 탑 = 놋쇠 금색 + 짙은 남색 + 상아 시계 판 ·
+	--   무지개 하늘섬 = 흰 구름 + 무지개 색. 모양은 새 3종(gear 톱니 꽃 · clock 시계 꽃 · cloud 구름 솜) + 원래 모양 하나씩
 	robot_factory = {
-		forms = { "circuit", "blocky" },
-		leaf = { 120, 130, 140 },
-		stem = { 80, 84, 92 },
-		petals = { { 255, 150, 40 }, { 200, 210, 220 }, { 90, 200, 255 } },
-		fruits = { { 255, 170, 50 }, { 210, 220, 230 }, { 90, 200, 255 } },
+		forms = { "gear", "circuit" },
+		leaf = { 140, 148, 160 },
+		stem = { 84, 88, 96 },
+		petals = { { 255, 196, 40 }, { 255, 140, 40 }, { 210, 220, 230 }, { 90, 200, 255 } },
+		fruits = { { 255, 170, 50 }, { 220, 228, 236 }, { 90, 200, 255 } },
 		glow = true,
+		petalMaterial = "Metal",
 	},
 	clock_tower = {
-		forms = { "cup", "tree" },
-		leaf = { 120, 140, 90 },
-		stem = { 150, 110, 50 },
-		petals = { { 230, 190, 80 }, { 40, 50, 110 }, { 250, 240, 210 } },
-		fruits = { { 240, 200, 80 }, { 60, 70, 140 }, { 250, 245, 220 } },
+		forms = { "clock", "cup" },
+		leaf = { 110, 132, 92 },
+		stem = { 160, 120, 52 },
+		petals = { { 232, 190, 82 }, { 60, 70, 140 }, { 250, 240, 214 }, { 200, 70, 90 } },
+		fruits = { { 240, 200, 80 }, { 70, 80, 160 }, { 250, 245, 220 } },
 	},
 	rainbow_sky = {
-		forms = { "flower", "crystal" },
-		leaf = { 150, 220, 200 },
-		stem = { 230, 240, 255 },
-		petals = { { 255, 120, 160 }, { 255, 230, 110 }, { 130, 200, 255 }, { 200, 150, 255 } },
-		fruits = { { 255, 140, 180 }, { 140, 220, 255 }, { 255, 240, 140 } },
+		forms = { "cloud", "flower" },
+		leaf = { 140, 220, 190 },
+		stem = { 220, 232, 250 },
+		petals = {
+			{ 255, 110, 130 },
+			{ 255, 190, 90 },
+			{ 255, 236, 110 },
+			{ 120, 220, 140 },
+			{ 110, 180, 255 },
+			{ 190, 140, 255 },
+		},
+		fruits = { { 255, 140, 180 }, { 140, 220, 255 }, { 255, 240, 140 }, { 190, 150, 255 } },
 		glow = true,
 	},
 } :: { [string]: PlantTheme }
@@ -319,6 +330,10 @@ local DEFAULT_THEME: PlantTheme = Visuals.plantThemes.forest
 -- 이름 낱말 → 모양 (위에서부터 먼저 맞는 것). 7판 새 모양 3개가 맨 위 (메인프레임·와이파이 → 회로, 블록·키보드·스튜디오·모니터
 --   → 블록, 거꾸로·지지직·깨진 → 글리치) — 나머지 새 식물은 구역 테마 forms 를 해시로
 local FORM_WORDS: { { string } } = {
+	-- 8판: 톱니(볼트·기어·오버클럭·태엽) → gear, 시계(해시계·초침·자정) → clock, 구름(구름 솜·천둥 구름) → cloud
+	{ "gear", "gear", "bolt", "overclock", "windup" },
+	{ "clock", "clock", "sundial", "second_hand", "midnight" },
+	{ "cloud", "cloud" },
 	{ "circuit", "circuit", "mainframe", "wifi" },
 	{ "blocky", "block_", "keyboard", "studio", "monitor" },
 	{ "glitch", "upside_down", "static", "broken_pixel" },
@@ -581,6 +596,26 @@ Visuals.monsters = {
 		"thorns,leaves,ghostlayer,pixelshards",
 		{ glowEyes = true }
 	),
+	-- 8판 새 경비 3마리 (선임)
+	gear_sunflower_bot = monster( -- 톱니 해바라기 로봇: 로봇 팔 줄기(마디·관절) + 톱니바퀴 꽃잎 머리 + 주황 렌즈 눈 + 집게 팔
+		"piston",
+		"gearflower",
+		{ { 150, 156, 168 }, { 255, 200, 40 }, { 255, 130, 30 } },
+		"lens,clawarms,rivets,antenna",
+		{ glowEyes = true }
+	),
+	clockwork_rose_knight = monster( -- 태엽 장미 기사: 놋쇠 갑옷 몸 + 빨간 장미 머리(투구 깃) + 등에 태엽 열쇠 + 시곗바늘 창
+		"armor",
+		"rose",
+		{ { 205, 160, 70 }, { 200, 30, 60 }, { 255, 236, 170 } },
+		"roseplates,windkey,clockspear,visor"
+	),
+	rainbow_dragon_vine = monster( -- 무지개 용 덩굴: S자로 솟은 덩굴 몸 + 용 머리(뿔·턱) + 무지개 비늘 잎 + 구름 입김
+		"serpent",
+		"dragon",
+		{ { 90, 190, 110 }, { 120, 205, 255 }, { 255, 255, 255 } },
+		"rainbowscales,cloudbreath,dragonhorns"
+	),
 } :: { [string]: MonsterLook }
 
 ------------------------------------------------------------------
@@ -609,11 +644,10 @@ Visuals.guards = {
 	hacker_lab = { model = "virus_vine", scale = 12, height = 38 }, -- 바이러스 덩굴
 	developer_room = { model = "debug_cactus", scale = 14, height = 38 }, -- 디버그 선인장
 	bug_dimension = { model = "glitch_rose_monster", scale = 13, height = 40 }, -- 글리치 장미 괴물
-	-- [8판 수석 임시] 새 경비 3마리 — 옛 괴물 모양을 빌림 (선임이 Visuals.monsters 에 새로):
-	--   톱니 해바라기 로봇 = 디버그 선인장 · 태엽 장미 기사 = 글리치 장미 괴물 · 무지개 용 덩굴 = 바이러스 덩굴
-	robot_factory = { model = "debug_cactus", scale = 14, height = 38 }, -- 톱니 해바라기 로봇
-	clock_tower = { model = "glitch_rose_monster", scale = 13, height = 40 }, -- 태엽 장미 기사
-	rainbow_sky = { model = "virus_vine", scale = 12, height = 40 }, -- 무지개 용 덩굴
+	-- 8판 새 경비 3마리 (선임, 이름은 Biomes.guardName, scale·height 는 수석 값 그대로)
+	robot_factory = { model = "gear_sunflower_bot", scale = 14, height = 38 }, -- 톱니 해바라기 로봇
+	clock_tower = { model = "clockwork_rose_knight", scale = 13, height = 40 }, -- 태엽 장미 기사
+	rainbow_sky = { model = "rainbow_dragon_vine", scale = 12, height = 40 }, -- 무지개 용 덩굴
 } :: { [string]: { model: string, darkModel: string?, scale: number, height: number? } }
 
 ------------------------------------------------------------------
@@ -1354,68 +1388,81 @@ Visuals.biomes = {
 		music = "Bgm_bug_dimension",
 		label = "👾",
 	},
-	-- [8판 수석 임시] 새 구역 3개 (GAME_DESIGN 4장 "8판 새 구역") — 지금 있는 장식·무늬·아치만 빌림, 선임이 새로 꾸밀 자리
-	--   로봇 공장 = 쇠 바닥 · 컨베이어 · 톱니 · 용접 불꽃 / 시간의 탑 = 놋쇠·남색 · 큰 시계 · 톱니 계단 · 모래시계 /
-	--   무지개 하늘섬 = 구름 바닥 · 떠 있는 섬 · 무지개 다리 · 폭포
+	-- 8판 새 구역 3개 (선임, GAME_DESIGN 4장 "8판 새 구역"):
+	--   로봇 공장 = 쇠판 바닥 + 노랑·검정 경고 줄무늬 · 컨베이어 벨트 · 큰 톱니 · 로봇 팔 · 용접 불꽃 · 담장 파이프
+	--   시간의 탑 = 남색 돌 + 놋쇠 금색 · 바닥 큰 시계 판 · 괘종시계(흔들리는 추) · 떠 있는 모래시계 · 톱니 계단 · 담장 톱니
+	--   무지개 하늘섬 = 구름 바닥 · 떠 있는 작은 섬(폭포) · 무지개 다리 · 무지개 폭포 · 구름 담장 · 별가루
 	robot_factory = {
-		floor = { 120, 124, 132 },
-		floor2 = { 108, 112, 120 },
+		floor = { 128, 132, 140 },
+		floor2 = { 116, 120, 128 },
 		floorMaterial = "Plastic",
-		wall = { 70, 74, 82 },
-		wallGlow = { 255, 150, 40 },
-		trim = { 255, 150, 40 },
-		accent = { 200, 210, 220 },
-		accent2 = { 255, 150, 40 },
-		pattern = "grid",
-		path = { color = { 90, 94, 102 }, kind = "road" },
-		arch = "terminal",
-		wallDecor = "screens",
-		pilaster = { 90, 94, 102 },
-		decor = decor({ { "serverrack", 10 }, { "toyblock", 8 }, { "satellite", 2 } }),
-		scatter = decor({ { "cables", 14 } }),
-		ambient = "dust",
+		wall = { 62, 66, 74 },
+		wallGlow = { 255, 170, 40 },
+		trim = { 255, 196, 40 },
+		accent = { 250, 140, 30 },
+		accent2 = { 255, 200, 40 },
+		pattern = "hazard",
+		path = { color = { 72, 76, 84 }, kind = "road" },
+		arch = "factory",
+		wallDecor = "pipes",
+		pilaster = { 84, 88, 96 },
+		decor = decor({ { "conveyor", 2 }, { "biggear", 4 }, { "robotarm", 4 }, { "welder", 4 } }),
+		scatter = decor({ { "bolts", 10 }, { "cables", 4 } }),
+		ambient = "sparks",
+		atmosphere = { color = { 255, 220, 170 }, decay = { 110, 100, 90 }, density = 0.24, haze = 1.2 },
 		music = "Bgm_robot_factory",
 		label = "🤖",
 	},
 	clock_tower = {
-		floor = { 60, 66, 110 },
-		floor2 = { 52, 58, 98 },
+		floor = { 54, 60, 108 },
+		floor2 = { 47, 53, 96 },
 		floorMaterial = "Plastic",
-		wall = { 40, 44, 80 },
-		wallGlow = { 240, 200, 90 },
+		wall = { 38, 42, 80 },
+		wallCap = { 214, 172, 72 },
 		trim = { 220, 180, 80 },
-		accent = { 240, 200, 90 },
-		accent2 = { 250, 240, 210 },
-		pattern = "tiles",
-		path = { color = { 200, 170, 90 }, kind = "stones" },
-		arch = "marble",
-		wallDecor = "windows",
-		pilaster = { 150, 110, 50 },
-		decor = decor({ { "goldpillar", 8 }, { "giantmug", 3 }, { "crystal", 6 } }),
-		scatter = decor({ { "stars", 10 } }),
-		ambient = "sparkle",
-		atmosphere = { color = { 200, 190, 255 }, decay = { 40, 40, 90 }, density = 0.22, haze = 1 },
+		accent = { 214, 168, 60 },
+		accent2 = { 250, 240, 212 },
+		pattern = "clockface",
+		path = { color = { 196, 160, 84 }, kind = "stones" },
+		arch = "clock",
+		wallDecor = "clockgears",
+		pilaster = { 150, 112, 50 },
+		decor = decor({
+			{ "grandclock", 5 },
+			{ "pendulum", 3 },
+			{ "hourglass", 4 },
+			{ "gearstairs", 2 },
+			{ "goldpillar", 3 },
+		}),
+		scatter = decor({ { "cogbits", 8 }, { "stars", 6 } }),
+		ambient = "sand",
+		atmosphere = { color = { 210, 196, 255 }, decay = { 40, 40, 92 }, density = 0.24, haze = 1.1 },
 		music = "Bgm_clock_tower",
 		label = "⏰",
 	},
 	rainbow_sky = {
-		floor = { 236, 244, 255 },
-		floor2 = { 222, 234, 250 },
+		floor = { 244, 248, 255 },
+		floor2 = { 230, 238, 252 },
 		floorMaterial = "Plastic",
-		wall = { 170, 210, 255 },
+		wall = { 150, 200, 255 },
 		wallCap = { 255, 255, 255 },
 		trim = { 255, 140, 200 },
-		accent = { 140, 210, 255 },
-		accent2 = { 255, 140, 200 },
-		pattern = "patches",
-		path = { color = { 255, 230, 140 }, kind = "stones", glow = true },
-		arch = "crystal",
-		wallDecor = "crystals",
-		pilaster = { 200, 225, 255 },
-		decor = decor({ { "crystal", 8 }, { "magictree", 5 }, { "fairylights", 6 } }),
-		scatter = decor({ { "stars", 12 }, { "glowmoss", 6 } }),
-		ambient = "sparkle",
-		atmosphere = { color = { 230, 240, 255 }, decay = { 160, 200, 255 }, density = 0.2, haze = 0.8 },
+		accent = { 110, 176, 255 },
+		accent2 = { 255, 130, 190 },
+		pattern = "clouds",
+		path = { color = { 255, 226, 130 }, kind = "stones", glow = true },
+		arch = "rainbow",
+		wallDecor = "cloudwall",
+		pilaster = { 225, 238, 255 },
+		decor = decor({
+			{ "rainbowbridge", 1 },
+			{ "floatisland", 5 },
+			{ "rainbowfall", 2 },
+			{ "cloud", 5 },
+		}),
+		scatter = decor({ { "stardust", 10 }, { "cloudpuff", 6 } }),
+		ambient = "rainbow",
+		atmosphere = { color = { 236, 244, 255 }, decay = { 170, 210, 255 }, density = 0.2, haze = 0.7 },
 		music = "Bgm_rainbow_sky",
 		label = "🌈",
 	},

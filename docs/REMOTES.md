@@ -295,42 +295,43 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 ## 8. 선임 할 일
 
 ### 8-8. 8판 선임 체크리스트 (수석 2026-11-08 — 지금은 `[8판 수석 임시]` 로 안 깨질 만큼만)
+> **선임 완료 (2026-11-08, 2차)**: 아래 전부 됨 — `[8판 수석 임시]` 주석 없음. 자세한 모양·이름은 `docs/UI.md` 0-8b장. 배경음 3개는 7판처럼 새 무료 id 를 못 골라 옛 음악 빠르기만 바꿈(선사시대 북 ×1.3 · 벚꽃 현악기 ×0.82 · 마법의 숲 ×1.12). 스튜디오에서 볼 것: 거대 경비가 둥지 무리를 덮는지, 경비 마지막 0.3초 돌진 걸음, 튜토리얼 1단계 화살표가 숲 둥지(x ≈ −82, z ≈ 204)를 가리키는지 (`docs/STUDIO_CHECKLIST.md` 45~54번).
 
 **러닝머신 터치 업그레이드** (사장님 4번, 원작: 러닝머신에 올라서면 "다음 레벨로 올리기")
-- [ ] `TreadmillTouched` 받으면 "러닝머신 레벨 n → n+1 · 1초 속도 a → b · 가격 (코인)" 창 (0레벨이면 "러닝머신 열기 500 코인"), 버튼 = `PurchaseUpgrade("Treadmill")`. 코인이 모자라면 회색, `maxed` 면 "최대 레벨!". 산 뒤에도 벨트 위면 `DataUpdate("upgrades")`·Attr `TreadmillLevel` 로 창 숫자 갱신 (`TreadmillService.touchInfo` 와 같은 계산 = `Economy.nextTreadmillCost`·`treadmillGainPerSecond`)
-- [ ] Attr `TreadmillTouching` 이 false 가 되면 창 닫기. 폰 터치·PC 클릭 둘 다. 0레벨 벨트에 서 있으면 서버가 안 태움(창만) → 사면 0.2초 안에 바로 탐
-- [ ] 7판까지 뜨던 "러닝머신이 잠겨 있어요! 상점에서 먼저 사세요" 회색 글은 서버가 더 안 보냄 — 클라에 같은 글이 있으면 지우기
+- [x] `TreadmillTouched` 받으면 "러닝머신 레벨 n → n+1 · 1초 속도 a → b · 가격 (코인)" 창 (0레벨이면 "러닝머신 열기 500 코인"), 버튼 = `PurchaseUpgrade("Treadmill")`. 코인이 모자라면 회색, `maxed` 면 "최대 레벨!". 산 뒤에도 벨트 위면 `DataUpdate("upgrades")`·Attr `TreadmillLevel` 로 창 숫자 갱신 (`TreadmillService.touchInfo` 와 같은 계산 = `Economy.nextTreadmillCost`·`treadmillGainPerSecond`)
+- [x] Attr `TreadmillTouching` 이 false 가 되면 창 닫기. 폰 터치·PC 클릭 둘 다. 0레벨 벨트에 서 있으면 서버가 안 태움(창만) → 사면 0.2초 안에 바로 탐
+- [x] 7판까지 뜨던 "러닝머신이 잠겨 있어요! 상점에서 먼저 사세요" 회색 글은 서버가 더 안 보냄 — 클라에 같은 글이 있으면 지우기
 
 **떨어진 씨앗** (사장님 1번)
-- [ ] 머리 위 카운트다운(`WorldFxController` DropTimer)은 `ExpiresAt` 이 있을 때만 = 구역 밖에 떨어진 씨앗 "5초" (지금 코드 그대로 동작). 글을 "5초 뒤 둥지로" 처럼 바꾸려면 Attr `ReturnsToNest`. 구역 안에 떨어진 씨앗은 카운트다운 없음 (그대로 남음)
-- [ ] `tests/smoke_client.luau` 552줄의 "60초 잔류 · 32초" 예시 → 5초 기준으로
+- [x] 머리 위 카운트다운(`WorldFxController` DropTimer)은 `ExpiresAt` 이 있을 때만 = 구역 밖에 떨어진 씨앗 "5초" (지금 코드 그대로 동작). 글을 "5초 뒤 둥지로" 처럼 바꾸려면 Attr `ReturnsToNest`. 구역 안에 떨어진 씨앗은 카운트다운 없음 (그대로 남음)
+- [x] `tests/smoke_client.luau` 552줄의 "60초 잔류 · 32초" 예시 → 5초 기준으로
 
 **둥지 무리 · 경비 · 표지판** (사장님 5번 — 좌표 규칙은 `MapLayout.nestCluster`, 숫자는 `MapLayout.NEST_CLUSTER`)
-- [ ] 구역마다 둥지 5개 = 가운데 (x −82, 구역 zMax − 36) + (0,0) · (8,−3) · (−8,−3) · (4,7) · (−4,7). 이웃 8 ~ 8.6 (둥지 지름 6). 원작처럼 한 무더기로 보이게 둥지 받침·풀·돌을 무리 둘레에 (MapBuilder 가 무리 둘레 반경 9 는 장식을 비움)
-- [ ] 경비 잠자리 = 가운데 + (24, 0) (`guardBed` 가 이미 그 자리). 거대한 경비(키 25~40)가 둥지를 덮지 않게 모델 크기 확인
-- [ ] 추천 속도 표지판 = 가운데 + (−14, −14), 입구(−z)를 바라봄 — 지금은 `[8판 수석 임시]` 기둥 + 판 `NestSpeedSign` (ZoneSign 태그, Attr `NestSign = true`, "추천 속도 1.2T" + 경비 이름). 원작 느낌으로 꾸미기. 입구 담장 `ZoneSign` 2장은 그대로 둠 (이름판)
-- [ ] 장식 식물 자리(`ParentAnimalSpot`) 2개 = 가운데 + (12, 12) · (−12, 12) (무리 뒤, 다음 구역 경계 쪽). 구역 가운데·입구 쪽은 장식만 (둥지 없음)
-- [ ] 튜토리얼 1단계 화살표·빔이 숲 둥지(이제 z ≈ 204, x ≈ −82)를 제대로 가리키는지
+- [x] 구역마다 둥지 5개 = 가운데 (x −82, 구역 zMax − 36) + (0,0) · (8,−3) · (−8,−3) · (4,7) · (−4,7). 이웃 8 ~ 8.6 (둥지 지름 6). 원작처럼 한 무더기로 보이게 둥지 받침·풀·돌을 무리 둘레에 (MapBuilder 가 무리 둘레 반경 9 는 장식을 비움)
+- [x] 경비 잠자리 = 가운데 + (24, 0) (`guardBed` 가 이미 그 자리). 거대한 경비(키 25~40)가 둥지를 덮지 않게 모델 크기 확인
+- [x] 추천 속도 표지판 = 가운데 + (−14, −14), 입구(−z)를 바라봄 — 지금은 `[8판 수석 임시]` 기둥 + 판 `NestSpeedSign` (ZoneSign 태그, Attr `NestSign = true`, "추천 속도 1.2T" + 경비 이름). 원작 느낌으로 꾸미기. 입구 담장 `ZoneSign` 2장은 그대로 둠 (이름판)
+- [x] 장식 식물 자리(`ParentAnimalSpot`) 2개 = 가운데 + (12, 12) · (−12, 12) (무리 뒤, 다음 구역 경계 쪽). 구역 가운데·입구 쪽은 장식만 (둥지 없음)
+- [x] 튜토리얼 1단계 화살표·빔이 숲 둥지(이제 z ≈ 204, x ≈ −82)를 제대로 가리키는지
 
 **새 구역 3개** (19 `robot_factory` · 20 `clock_tower` · 21 `rainbow_sky`, 테마는 GAME_DESIGN 4장 "8판 새 구역")
-- [ ] 구역 테마 `Visuals.biomes` (지금 임시: 로봇 공장 = 서버 랙·스터드 블록·위성 + grid · 시간의 탑 = 금 기둥·큰 컵·수정 + tiles · 무지개 하늘섬 = 수정·마법 나무·요정 전구 + patches). 새 장식 아이디어: 로봇 공장 = 컨베이어 벨트·큰 톱니·로봇 팔·용접 불꽃·노랑 검정 줄무늬 / 시간의 탑 = 큰 시계 판·태엽·흔들리는 추·떠 있는 모래시계·톱니 계단 / 무지개 하늘섬 = 구름 바닥·떠 있는 작은 섬·무지개 다리·무지개 폭포·별가루
-- [ ] 둥지 모양 `MapBuilder.NEST_STYLE` (임시: circuit · pot · candy)
-- [ ] **새 경비 3마리** (`Visuals.guards` 임시: 톱니 해바라기 로봇 = `debug_cactus` · 태엽 장미 기사 = `glitch_rose_monster` · 무지개 용 덩굴 = `virus_vine`) → `Visuals.monsters` 에 새로: 톱니 해바라기 로봇(톱니바퀴 꽃잎 + 로봇 팔 줄기 + 주황 렌즈 눈) · 태엽 장미 기사(장미 갑옷 + 등에 태엽 열쇠 + 시곗바늘 창) · 무지개 용 덩굴(무지개 비늘 잎 용 모양 덩굴 + 구름 입김)
-- [ ] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시, SEED 10장 159~182번 — 볼트 새싹 · 기어 데이지 · 슈퍼컴퓨터 나무 · 모래시계 선인장 · 해시계 해바라기 · 무지개 왕관 나무 · 끝판왕 꽃 …)
-- [ ] 배경음 `Sounds.Bgm_robot_factory` · `Bgm_clock_tower` · `Bgm_rainbow_sky` (임시: 정글 1.2배 · 타이탄 0.9배 · 마법의 숲 1.1배)
-- [ ] 구역 배너 이모지(`label` 🤖 ⏰ 🌈)·조명(`LightingController`)·도감 구역 탭 21개·입구 표지판 추천 속도 1.22T · 1.24T · 1.26T
-- [ ] 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 8,000 그대로 (지금 맵 7,446 — 새 구역 각 약 200) — 꾸민 뒤 다시 확인 (`tests/smoke_visuals.luau`)
+- [x] 구역 테마 `Visuals.biomes` (지금 임시: 로봇 공장 = 서버 랙·스터드 블록·위성 + grid · 시간의 탑 = 금 기둥·큰 컵·수정 + tiles · 무지개 하늘섬 = 수정·마법 나무·요정 전구 + patches). 새 장식 아이디어: 로봇 공장 = 컨베이어 벨트·큰 톱니·로봇 팔·용접 불꽃·노랑 검정 줄무늬 / 시간의 탑 = 큰 시계 판·태엽·흔들리는 추·떠 있는 모래시계·톱니 계단 / 무지개 하늘섬 = 구름 바닥·떠 있는 작은 섬·무지개 다리·무지개 폭포·별가루
+- [x] 둥지 모양 `MapBuilder.NEST_STYLE` (임시: circuit · pot · candy)
+- [x] **새 경비 3마리** (`Visuals.guards` 임시: 톱니 해바라기 로봇 = `debug_cactus` · 태엽 장미 기사 = `glitch_rose_monster` · 무지개 용 덩굴 = `virus_vine`) → `Visuals.monsters` 에 새로: 톱니 해바라기 로봇(톱니바퀴 꽃잎 + 로봇 팔 줄기 + 주황 렌즈 눈) · 태엽 장미 기사(장미 갑옷 + 등에 태엽 열쇠 + 시곗바늘 창) · 무지개 용 덩굴(무지개 비늘 잎 용 모양 덩굴 + 구름 입김)
+- [x] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시, SEED 10장 159~182번 — 볼트 새싹 · 기어 데이지 · 슈퍼컴퓨터 나무 · 모래시계 선인장 · 해시계 해바라기 · 무지개 왕관 나무 · 끝판왕 꽃 …)
+- [x] 배경음 `Sounds.Bgm_robot_factory` · `Bgm_clock_tower` · `Bgm_rainbow_sky` (임시: 정글 1.2배 · 타이탄 0.9배 · 마법의 숲 1.1배)
+- [x] 구역 배너 이모지(`label` 🤖 ⏰ 🌈)·조명(`LightingController`)·도감 구역 탭 21개·입구 표지판 추천 속도 1.22T · 1.24T · 1.26T
+- [x] 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 8,000 그대로 (지금 맵 7,446 — 새 구역 각 약 200) — 꾸민 뒤 다시 확인 (`tests/smoke_visuals.luau`)
 
 **식물 크기** (사장님 7번 — 숫자는 `Config` 한 곳)
-- [ ] `PlantVisualService` 의 `RARITY_SCALE`(1 ~ 2.2)·`SIZE_SCALE` 을 지우고 `Config.RARITY_PLANT_SCALE[등급]`(1 ~ 4.5) × `Config.PLANT_SIZE_SCALE[크기]` 로 (= `GardenRules.plantScale(petId, size)`). 성체 바닥 폭이 `Config.PLANT_FOOTPRINT`(2.6) × 배율 근처가 되게 (정원 간격 계산이 이 폭을 씀)
-- [ ] 자라는 씨앗(`SeedVisual`)도 자람 배율 `GardenRules.growthScale(Progress, Required)` (새싹 0.3 → 줄기 0.55 → 봉오리 0.8 → 성체 1, 그 사이는 자란 비율로 점점) × 등급 × 크기로 — 1초마다 오는 `Progress` 로 부드럽게
-- [ ] 클라 심기 미리보기(`IncubatorController.placedSpots`)에 `petId = record.petId` 를 넣고 `EggPlacement.check(lx, lz, size, spots, {}, egg.petId)`, 바닥 동그라미 `EggPlacement.gap(size, size, petId, petId)`, 폰 첫 자리 `EggPlacement.firstFreeGrid(size, spots, petId)` — 안 넣으면 미리보기는 초록인데 서버가 "너무 가까워요" 로 거부할 수 있음
-- [ ] 도감·성체 카드 뷰포트(`PetViewport`, `ReplicatedStorage.PetModels`)는 크기 1 로 두거나 화면에 맞게 줄이기 (큰 등급이 4.5배라 창 밖으로 나가지 않게)
+- [x] `PlantVisualService` 의 `RARITY_SCALE`(1 ~ 2.2)·`SIZE_SCALE` 을 지우고 `Config.RARITY_PLANT_SCALE[등급]`(1 ~ 4.5) × `Config.PLANT_SIZE_SCALE[크기]` 로 (= `GardenRules.plantScale(petId, size)`). 성체 바닥 폭이 `Config.PLANT_FOOTPRINT`(2.6) × 배율 근처가 되게 (정원 간격 계산이 이 폭을 씀)
+- [x] 자라는 씨앗(`SeedVisual`)도 자람 배율 `GardenRules.growthScale(Progress, Required)` (새싹 0.3 → 줄기 0.55 → 봉오리 0.8 → 성체 1, 그 사이는 자란 비율로 점점) × 등급 × 크기로 — 1초마다 오는 `Progress` 로 부드럽게
+- [x] 클라 심기 미리보기(`IncubatorController.placedSpots`)에 `petId = record.petId` 를 넣고 `EggPlacement.check(lx, lz, size, spots, {}, egg.petId)`, 바닥 동그라미 `EggPlacement.gap(size, size, petId, petId)`, 폰 첫 자리 `EggPlacement.firstFreeGrid(size, spots, petId)` — 안 넣으면 미리보기는 초록인데 서버가 "너무 가까워요" 로 거부할 수 있음
+- [x] 도감·성체 카드 뷰포트(`PetViewport`, `ReplicatedStorage.PetModels`)는 크기 1 로 두거나 화면에 맞게 줄이기 (큰 등급이 4.5배라 창 밖으로 나가지 않게)
 
 **경비 잡힘 시간** (사장님 추가 지시 8번)
-- [ ] "달리기!!" 경고에 "N초 뒤 잡혀요!" (도망칠 수 없을 때) — `SpeedMath.catchSeconds(RunAlert.guardSpeed, RunAlert.yourSpeed)` (nil = 도망칠 수 있음 → "추천 속도 OK!")
-- [ ] 다음 구역 경계에서 잡히면 `Caught.eggOutcome = "ReturnToNest"` + 뒤(입구 쪽)로 날아감 — "다음 구역은 속도가 더 필요해요!" 같은 안내 환영
-- [ ] 경비는 마지막 0.3초에 빨리 다가옴 (WalkSpeed ≤ 400) — 애니메이션이 이상하지 않은지 스튜디오에서 확인
+- [x] "달리기!!" 경고에 "N초 뒤 잡혀요!" (도망칠 수 없을 때) — `SpeedMath.catchSeconds(RunAlert.guardSpeed, RunAlert.yourSpeed)` (nil = 도망칠 수 있음 → "추천 속도 OK!")
+- [x] 다음 구역 경계에서 잡히면 `Caught.eggOutcome = "ReturnToNest"` + 뒤(입구 쪽)로 날아감 — "다음 구역은 속도가 더 필요해요!" 같은 안내 환영
+- [x] 경비는 마지막 0.3초에 빨리 다가옴 (WalkSpeed ≤ 400) — 애니메이션이 이상하지 않은지 스튜디오에서 확인
 
 ### 8-7. 7판 선임 체크리스트 (수석 2026-10-29 — 지금은 `[7판 수석 임시]` 로 안 깨질 만큼만)
 > **선임 완료 (2026-10-29)**: 아래 전부 됨 — `[7판 수석 임시]` 주석 없음. 자세한 모양·이름은 `docs/UI.md` 0장. 배경음 3개는 새 무료 id 를 못 골라 옛 음악을 빠르기(`Sounds[..].speed`)만 바꿔 씀 (주임·사장님 귀로 확인). 둥지 씨앗 이름표(`EggService.eggTitle`)의 등급도 영어로 바꿈 (글자만, 규칙 그대로).

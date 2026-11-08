@@ -351,6 +351,18 @@ end
 type EggPrompts = { skip: ProximityPrompt, pickUp: ProximityPrompt }
 local eggPrompts: { [BasePart]: EggPrompts } = {}
 
+-- 8판: 프롬프트 높이 = 식물 키(서버 Attr VisualHeight, 등급·자람 배율 반영)의 반쯤 — 큰 식물 속에 파묻히지 않게
+--   (파트 가운데 기준. 겉모습이 아직 없으면 0 = 씨앗 공 가운데)
+local function promptBase(part: BasePart): number
+	local h = part:GetAttribute("VisualHeight")
+	if typeof(h) ~= "number" or h <= 0 then
+		return 0
+	end
+	local mesh = part:FindFirstChildOfClass("SpecialMesh")
+	local half = part.Size.Y * (if mesh then mesh.Scale.Y else 1) / 2
+	return math.max(0, h * 0.5 - half)
+end
+
 local function makePrompt(
 	part: BasePart,
 	name: string,
@@ -375,7 +387,7 @@ local function makePrompt(
 			onTrigger(uid)
 		end
 	end)
-	WorldPrompt.stack(part, prompt, slot) -- 8판: "집기"(1칸)·"건너뛰기"(2칸) 높이·화면 자리 다르게 (사장님: 글자가 겹쳐요)
+	WorldPrompt.stack(part, prompt, slot, promptBase(part)) -- 8판: "집기"(1칸)·"건너뛰기"(2칸) 높이·화면 자리 다르게 (사장님: 글자가 겹쳐요)
 	return prompt
 end
 
@@ -395,6 +407,16 @@ local function decorate(inst: Instance)
 		Net.send(Remotes.ToServer.PickUpPlacedEgg, uid)
 	end)
 	eggPrompts[part] = { skip = skip, pickUp = pickUp }
+	-- 8판: 식물이 자라서 키(VisualHeight)가 바뀌면 프롬프트 자리도 같이 올림 (파트가 없어지면 연결도 같이 끊김)
+	part:GetAttributeChangedSignal("VisualHeight"):Connect(function()
+		local base = promptBase(part)
+		for slot = 1, 2 do
+			local attach = part:FindFirstChild("PromptSlot" .. slot)
+			if attach and attach:IsA("Attachment") then
+				attach.Position = Vector3.new(0, base + (slot - 1) * WorldPrompt.SLOT_STEP, 0)
+			end
+		end
+	end)
 end
 
 local function refreshPrompts()
@@ -423,6 +445,7 @@ end
 type Placing = {
 	uid: string,
 	size: string,
+	petId: string, -- 8판: 심을 씨앗의 식물 id (큰 등급일수록 간격이 넓음 — 서버 EggPlacement 와 같게)
 	ghost: BasePart,
 	ring: BasePart,
 	point: Vector3?,
@@ -443,20 +466,20 @@ local function placedSpots(): { EggPlacement.Spot }
 	for _, record in snapIncubators() do
 		local x, z = tonumber(record.x), tonumber(record.z)
 		if x and z then
-			table.insert(spots, { x = x, z = z, size = record.size })
+			table.insert(spots, { x = x, z = z, size = record.size, petId = record.petId })
 		end
 	end
 	for _, record in snapPlants() do
 		local x, z = tonumber(record.x), tonumber(record.z)
 		if x and z then
-			table.insert(spots, { x = x, z = z, size = record.size })
+			table.insert(spots, { x = x, z = z, size = record.size, petId = record.petId })
 		end
 	end
 	return spots
 end
 
 -- (x, z)(월드)에 지금 씨앗을 심을 수 있나 — 서버 PlaceEgg 와 같은 순서로 검사. 안 되면 안내 글
-local function canPlaceAt(sizeId: string, x: number, z: number): (boolean, string?)
+local function canPlaceAt(sizeId: string, petId: string, x: number, z: number): (boolean, string?)
 	local plotIndex = myPlot()
 	if plotIndex == 0 then
 		return false, "아직 내 베이스가 없어요! 베이스를 받으면 씨앗을 심을 수 있어요."
@@ -468,7 +491,8 @@ local function canPlaceAt(sizeId: string, x: number, z: number): (boolean, strin
 	if not l then
 		return false, EggPlacement.message("outside")
 	end
-	local ok, reason = EggPlacement.check(EggPlacement.round(l.x), EggPlacement.round(l.z), sizeId, placedSpots(), {})
+	local ok, reason =
+		EggPlacement.check(EggPlacement.round(l.x), EggPlacement.round(l.z), sizeId, placedSpots(), {}, petId)
 	if not ok then
 		return false, EggPlacement.message(reason)
 	end
@@ -499,15 +523,15 @@ local function previewPart(name: string, shape: Enum.PartType, size: Vector3): B
 	return p
 end
 
-local function makeGhost(sizeId: string): (BasePart, BasePart)
+local function makeGhost(sizeId: string, petId: string): (BasePart, BasePart)
 	local d = EggPlacement.diameter(sizeId)
 	local ghost = previewPart("EggPlacePreview", Enum.PartType.Ball, Vector3.new(d, d, d))
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
 	mesh.Scale = Vector3.new(1, 1.25, 1)
 	mesh.Parent = ghost
-	-- 바닥 동그라미 = 같은 크기 씨앗끼리 띄워야 하는 거리
-	local gap = EggPlacement.gap(sizeId, sizeId)
+	-- 바닥 동그라미 = 같은 식물·같은 크기끼리 띄워야 하는 거리 (8판: 큰 등급은 다 자란 폭만큼 넓음)
+	local gap = EggPlacement.gap(sizeId, sizeId, petId, petId)
 	local ring = previewPart("EggPlaceRing", Enum.PartType.Cylinder, Vector3.new(0.15, gap, gap))
 	ring.Transparency = 0.6
 	ring.Parent = ghost
@@ -566,7 +590,7 @@ function IncubatorController.previewAt(x: number, z: number): (boolean, string?)
 	if not state then
 		return false, nil
 	end
-	local ok, reason = canPlaceAt(state.size, x, z)
+	local ok, reason = canPlaceAt(state.size, state.petId, x, z)
 	local d = EggPlacement.diameter(state.size)
 	local floorY = MapLayout.FLOOR_Y
 	state.point = Vector3.new(x, floorY, z)
@@ -666,13 +690,22 @@ function IncubatorController.beginPlace(uid: string): boolean
 		return false
 	end
 	IncubatorController.cancelPlace()
-	local ghost, ring = makeGhost(egg.size)
-	placing = { uid = uid, size = egg.size, ghost = ghost, ring = ring, point = nil, ok = false, reason = nil }
+	local ghost, ring = makeGhost(egg.size, egg.petId)
+	placing = {
+		uid = uid,
+		size = egg.size,
+		petId = egg.petId,
+		ghost = ghost,
+		ring = ring,
+		point = nil,
+		ok = false,
+		reason = nil,
+	}
 	ghost.Transparency = 1
 	ring.Transparency = 1
 	-- 폰: 처음엔 정원 안 첫 빈자리에 미리보기 (바로 "여기 심기" 가능)
 	local plotIndex = myPlot()
-	local spot = EggPlacement.firstFreeGrid(egg.size, placedSpots())
+	local spot = EggPlacement.firstFreeGrid(egg.size, placedSpots(), egg.petId)
 	local world = if spot then MapLayout.toWorld(plotIndex, spot.x, spot.z) else nil
 	if world and touchMode() then
 		IncubatorController.previewAt(world.x, world.z)

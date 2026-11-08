@@ -549,12 +549,13 @@ othersEgg:SetAttribute("OwnerUserId", 12345)
 othersEgg:SetAttribute("Progress", 5)
 othersEgg:SetAttribute("Required", 5)
 tag(othersEgg, "IncubatingEgg")
--- 바닥에 떨어진 알 (60초 잔류, ExpiresAt = 서버 시각 1000 + 32 → "32초")
+-- 바닥에 떨어진 알 (8판: 구역 밖이면 5초 뒤 둥지로, ExpiresAt = 서버 시각 1000 + 3 → "3초 뒤 둥지로")
 local droppedEgg = worldPart("Egg_d1", roblox.Vector3.new(0, 1, 60), roblox.Vector3.new(2, 2.5, 2))
 droppedEgg:SetAttribute("EggUid", "d1")
 droppedEgg:SetAttribute("EggState", "Dropped")
-droppedEgg:SetAttribute("DroppedAt", 1000 - 28)
-droppedEgg:SetAttribute("ExpiresAt", 1000 + 32)
+droppedEgg:SetAttribute("DroppedAt", 1000 - 2)
+droppedEgg:SetAttribute("ExpiresAt", 1000 + 3)
+droppedEgg:SetAttribute("ReturnsToNest", true)
 tag(droppedEgg, "Egg")
 local nestEgg = worldPart("Egg_n1", roblox.Vector3.new(0, 1, 80), roblox.Vector3.new(2, 2.5, 2))
 nestEgg:SetAttribute("EggState", "Nest")
@@ -1308,13 +1309,30 @@ local function body()
 	local dropTimer = droppedEgg:FindFirstChild("DropTimer")
 	local dropText = dropTimer and dropTimer:FindFirstChild("Time")
 	check(
-		dropText and dropText.Text == "32초",
-		"떨어진 알 머리 위 '32초': " .. tostring(dropText and dropText.Text)
+		dropText and dropText.Text == "3초 뒤 둥지로",
+		"8판: 구역 밖에 떨어진 알 머리 위 '3초 뒤 둥지로': " .. tostring(dropText and dropText.Text)
 	)
 	check(nestEgg:FindFirstChild("DropTimer") == nil, "둥지 알은 카운트다운 없음")
+	check(nestEgg:FindFirstChild("DropStay") == nil, "둥지 알은 '여기 그대로' 도 없음")
+	-- 8판: 구역 안에 떨어짐 = ExpiresAt 없음 · ReturnsToNest false → 타이머 대신 작은 "여기 그대로"
 	droppedEgg:SetAttribute("ExpiresAt", nil)
+	droppedEgg:SetAttribute("ReturnsToNest", false)
 	sigOf(droppedEgg, "Attr_ExpiresAt"):Fire()
-	check(droppedEgg:FindFirstChild("DropTimer") == nil, "다시 주우면(ExpiresAt 없음) 카운트다운 사라짐")
+	local stayTag = droppedEgg:FindFirstChild("DropStay")
+	local stayText = stayTag and stayTag:FindFirstChild("Text")
+	check(
+		droppedEgg:FindFirstChild("DropTimer") == nil and stayText and stayText.Text == "여기 그대로",
+		"8판: 구역 안에 떨어진 알 = 카운트다운 없이 '여기 그대로': "
+			.. tostring(stayText and stayText.Text)
+	)
+	droppedEgg:SetAttribute("ReturnsToNest", nil)
+	droppedEgg:SetAttribute("EggState", "Carried")
+	sigOf(droppedEgg, "Attr_ExpiresAt"):Fire()
+	check(
+		droppedEgg:FindFirstChild("DropTimer") == nil and droppedEgg:FindFirstChild("DropStay") == nil,
+		"다시 주우면(ExpiresAt·ReturnsToNest 없음) 글 사라짐"
+	)
+	droppedEgg:SetAttribute("EggState", "Dropped") -- 아래 튜토리얼 검사가 이 알을 "가장 가까운 숲 알" 로 씀
 	-- 업그레이드 표지판 프롬프트
 	local signPrompt = upgradeSign:FindFirstChild("UpgradePrompt")
 	check(signPrompt and signPrompt.Enabled == true, "내 베이스 업그레이드 표지판 프롬프트")
@@ -1469,6 +1487,21 @@ local function body()
 		weightKg = 4740,
 	})
 	check(string.find(runBanner.SpeedWarning.Text, "속도가 부족", 1, true) ~= nil, "속도 부족 경고")
+	check(
+		string.find(runBanner.SpeedWarning.Text, "1.0초 뒤 잡혀요", 1, true) ~= nil
+			and string.find(runBanner.SpeedLine.Text, "내 속도", 1, true) ~= nil,
+		"8판: 많이 모자라면 '1.0초 뒤 잡혀요!' + 작은 속도 줄: " .. runBanner.SpeedWarning.Text
+	)
+	fire("RunAlert", { egg = { uid = "e1", petId = "puppy_grass" }, guardSpeed = 1000, yourSpeed = 900 })
+	check(
+		string.find(runBanner.SpeedWarning.Text, "2.5초 뒤 잡혀요", 1, true) ~= nil,
+		"8판: 조금 모자라면 '2.5초 뒤 잡혀요!': " .. runBanner.SpeedWarning.Text
+	)
+	fire("RunAlert", { egg = { uid = "e1", petId = "puppy_grass" }, guardSpeed = 10, yourSpeed = 5000 })
+	check(
+		string.find(runBanner.SpeedWarning.Text, "도망칠 수 있어요", 1, true) ~= nil,
+		"8판: 도망칠 수 있으면 '도망칠 수 있어요!': " .. runBanner.SpeedWarning.Text
+	)
 	fire("ChaseEnded", { biomeId = "forest", reason = "safe" })
 	player:SetAttribute("CarryingEgg", "")
 	sigOf(player, "Attr_CarryingEgg"):Fire()

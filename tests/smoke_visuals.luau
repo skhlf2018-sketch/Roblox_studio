@@ -306,7 +306,10 @@ local function body()
 			skippedAll
 		)
 	)
-	check(zoneSeen == 18 and #zoneOver == 0, "구역마다 파트 ≤ 400: " .. table.concat(zoneOver, ", "))
+	check(
+		zoneSeen == 21 and #zoneOver == 0,
+		"8판 구역 21개, 구역마다 파트 ≤ 400: " .. table.concat(zoneOver, ", ")
+	)
 	check(counts.total <= budget.map, "맵 전체 파트 ≤ 8,000: " .. counts.total)
 	check(
 		skippedAll == 0,
@@ -324,7 +327,7 @@ local function body()
 	end
 	check(nestTopOk, "둥지 태그 파트 윗면 높이 1.2 그대로 (알 놓는 높이)")
 	check(MapBuilder.plotCount() == 7, "베이스 7개")
-	check(#MapBuilder.getNests("forest") == 8, "숲 둥지 8개")
+	check(#MapBuilder.getNests("forest") == 5, "8판: 숲 둥지 5개 (둥지 무리)")
 
 	print("[2판 복도 맵]")
 	local MapLayout = requireNode(Loader.get("ReplicatedStorage/Shared/Data/MapLayout"))
@@ -345,11 +348,11 @@ local function body()
 		if not z or math.abs(z.centerZ - r.centerZ) > 0.01 or math.abs(z.halfZ * 2 - (r.zMax - r.zMin)) > 0.01 then
 			zonesOk = false
 		end
-		if #MapBuilder.getNests(b.id) ~= 8 then
+		if #MapBuilder.getNests(b.id) ~= 5 then
 			zonesOk = false
 		end
 	end
-	check(zonesOk, "구역 15개 = MapLayout z 범위, 둥지 8개씩")
+	check(zonesOk, "구역 21개 = MapLayout z 범위, 둥지 5개씩 (8판)")
 	local nestOk = true
 	for i, spot in MapLayout.nestsFor("snow") do
 		local p = MapBuilder.getNests("snow")[i].CFrame.Position
@@ -358,6 +361,140 @@ local function body()
 		end
 	end
 	check(nestOk, "둥지 자리 = MapLayout.nestsFor")
+	-- 8판 둥지 무리 (MapLayout.nestCluster): 구역마다 둥지 5개가 가운데 (x −82, zMax − 36) 둘레에 작게 모임
+	local Visuals8 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Visuals"))
+	local NC = MapLayout.NEST_CLUSTER
+	local clusterOk, gapMin, gapMax, nestDMax, clusterLine = true, math.huge, 0, 0, {}
+	for _, b in Biomes.list do
+		local range = MapLayout.biome(b.id)
+		local cluster = MapLayout.nestCluster(b.id)
+		local nests = MapBuilder.getNests(b.id)
+		if
+			not cluster
+			or math.abs(cluster.center.x - NC.x) > 0.01
+			or math.abs(cluster.center.z - (range.zMax - NC.endGap)) > 0.01
+		then
+			clusterOk = false
+			table.insert(clusterLine, b.id .. " 가운데")
+		end
+		for i, nest in nests do
+			local p = nest.CFrame.Position
+			nestDMax = math.max(nestDMax, nest.Size.Y)
+			if
+				cluster
+				and (roblox.Vector3.new(p.X, 0, p.Z) - roblox.Vector3.new(cluster.center.x, 0, cluster.center.z)).Magnitude
+					> 10
+			then
+				clusterOk = false
+				table.insert(clusterLine, b.id .. " 둥지" .. i .. " 무리 밖")
+			end
+			for j = i + 1, #nests do
+				local q = nests[j].CFrame.Position
+				local d = math.sqrt((p.X - q.X) ^ 2 + (p.Z - q.Z) ^ 2)
+				gapMin = math.min(gapMin, d)
+				gapMax = math.max(gapMax, d)
+			end
+		end
+	end
+	print(
+		string.format("  둥지 무리: 둥지끼리 %.1f ~ %.1f, 둥지 지름 최대 %.1f", gapMin, gapMax, nestDMax)
+	)
+	check(
+		clusterOk,
+		"8판: 둥지 5개 무리 = 가운데 (x −82, zMax − 36) 반경 10 안 " .. table.concat(clusterLine, ",")
+	)
+	check(
+		gapMin >= 7.9 and nestDMax <= 6 and gapMin > nestDMax + 1.5,
+		string.format(
+			"8판: 둥지가 작고(지름 %.1f ≤ 6) 서로 안 겹침 (가장 가까운 둥지 %.1f ≥ 8)",
+			nestDMax,
+			gapMin
+		)
+	)
+	-- 추천 속도 나무 표지판 (NestSpeedSign): 구역마다 1개, 무리 + (−14, −14), 입구(−z)를 바라봄, 낮은 나무 판
+	local signs, signOk, signLine = 0, true, {}
+	for _, inst in tagged.ZoneSign or {} do
+		if inst.Name == "NestSpeedSign" and inst:GetAttribute("NestSign") == true then
+			signs += 1
+			local biomeId = inst:GetAttribute("BiomeId")
+			local cluster = MapLayout.nestCluster(biomeId)
+			local p = inst.CFrame.Position
+			local look = inst.CFrame.LookVector
+			local gui = inst:FindFirstChild("SignFront")
+			local title = gui and gui:FindFirstChild("Title", true)
+			if
+				not cluster
+				or math.abs(p.X - cluster.sign.x) > 0.6
+				or math.abs(p.Z - cluster.sign.z) > 0.8
+				or look.Z > -0.99
+				or p.Y > 8
+				or inst.Material ~= roblox.Enum.Material.WoodPlanks
+				or not (title and string.find(title.Text, "추천 속도", 1, true))
+			then
+				signOk = false
+				table.insert(signLine, tostring(biomeId))
+			end
+		end
+	end
+	check(
+		signs == #Biomes.list and signOk,
+		string.format(
+			"8판: 나무 표지판 '추천 속도 N' %d개 = 무리 + (−14, −14), 입구 쪽을 봄 %s",
+			signs,
+			table.concat(signLine, ",")
+		)
+	)
+	-- 둥지 모양: 8판 새 구역 3개는 자기 모양 (다른 구역 것을 안 빌림) + 구역 테마 (무늬·아치·담장·장식)가 다른 구역과 안 겹침
+	local styleOf = MapBuilder.NEST_STYLE
+	local styleUse = {}
+	for _, b in Biomes.list do
+		local s = styleOf[b.id] or "hay"
+		styleUse[s] = (styleUse[s] or 0) + 1
+	end
+	local own, themeOwn = true, true
+	for _, id in { "robot_factory", "clock_tower", "rainbow_sky" } do
+		local s = styleOf[id]
+		if not s or styleUse[s] ~= 1 then
+			own = false
+		end
+		local t = Visuals8.biomes[id]
+		for _, other in Biomes.list do
+			local o = Visuals8.biomes[other.id]
+			if other.id ~= id and (o.pattern == t.pattern or o.arch == t.arch or o.wallDecor == t.wallDecor) then
+				themeOwn = false
+			end
+		end
+	end
+	check(
+		own,
+		"8판: 로봇 공장·시간의 탑·무지개 하늘섬 둥지 모양이 자기 것 (metal · brass · cloud)"
+	)
+	check(themeOwn, "8판: 새 구역 3개 바닥 무늬·아치·담장 장식이 다른 구역 것을 안 빌림")
+	-- 구역 입장 배너 색 (HudController.zoneBannerText = accent 를 조금 밝게) + 얼굴: 새 구역 3개가 서로·이웃 구역과 다르고 너무 어둡지 않음
+	local function lum(c)
+		return 0.299 * c[1] + 0.587 * c[2] + 0.114 * c[3]
+	end
+	local bannerOk, labels = true, {}
+	local order = {}
+	for i, b in Biomes.list do
+		order[b.id] = i
+	end
+	for id, face in { robot_factory = "🤖", clock_tower = "⏰", rainbow_sky = "🌈" } do
+		local t = Visuals8.biomes[id]
+		table.insert(labels, id .. " " .. t.label)
+		if t.label ~= face or lum(t.accent) < 90 then
+			bannerOk = false
+		end
+		local prev = Biomes.list[order[id] - 1]
+		local pa = Visuals8.biomes[prev.id].accent
+		if math.abs(pa[1] - t.accent[1]) + math.abs(pa[2] - t.accent[2]) + math.abs(pa[3] - t.accent[3]) < 60 then
+			bannerOk = false
+		end
+	end
+	check(
+		bannerOk,
+		"8판: 구역 배너 색(accent)·얼굴이 새 구역마다 다르고 밝음: " .. table.concat(labels, " · ")
+	)
 	check(MapBuilder.findBiomeAt(roblox.Vector3.new(0, 3, 250)) == "lake", "z=250 은 호수")
 	check(MapBuilder.findBiomeAt(roblox.Vector3.new(0, 3, -20)) == nil, "허브는 구역 아님")
 	check(MapBuilder.isInSafeZone(roblox.Vector3.new(0, 3, -20)), "허브 = 안전 구역")
@@ -674,13 +811,13 @@ local function petsBody()
 		return n, total
 	end
 
-	print("[식물 158종 (7판)]")
+	print("[식물 182종 (8판)]")
 	local total, maxParts, maxId, minParts, minId = 0, 0, "", math.huge, ""
 	local byForm = {}
 	local rootOk, swayOk, fruitOk, auraOk, heightOk = 0, 0, 0, 0, 0
 	local auraLine = {}
 	for _, pet in Pets.list do
-		local m = PlantVS.build(pet.id, { fx = true, fruits = 0 })
+		local m = PlantVS.build(pet.id, { fx = true, fruits = 0, sized = false }) -- 8판: 크기 1 (등급 배율은 아래에서 따로)
 		local n = count(m)
 		total += n
 		if n > maxParts then
@@ -751,7 +888,10 @@ local function petsBody()
 		)
 	)
 	print("  모양별 식물 수: " .. table.concat(forms, ", "))
-	check(#forms == 19, "식물 모양 19종(7판 circuit·blocky·glitch 추가) 모두 쓰임: " .. #forms)
+	check(
+		#forms == 22,
+		"식물 모양 22종(7판 circuit·blocky·glitch · 8판 gear·clock·cloud) 모두 쓰임: " .. #forms
+	)
 	check(maxParts <= 40 and minParts >= 8, string.format("식물 하나 파트 8~40 (평균 %.1f)", avg))
 	check(rootOk == #Pets.list, "Root(Anchored) + 나머지 용접·충돌/터치/쿼리 꺼짐: " .. rootOk)
 	check(swayOk == #Pets.list, "모델 Attr Sway = true: " .. swayOk)
@@ -850,6 +990,128 @@ local function petsBody()
 		/ Visuals.plantLook("lollipop_flower").tall
 	check(secret > common, "등급이 높을수록 큰 식물")
 
+	print("[8판 식물 크기 (GardenRules.plantScale — 등급 1 ~ 4.5 × 크기 1 ~ 1.5 × 자람 0.3 ~ 1)]")
+	local GardenRules = requireNode(Loader.get("ReplicatedStorage/Shared/GardenRules"))
+	local EggPlacement = requireNode(Loader.get("ReplicatedStorage/Shared/EggPlacement"))
+	-- 보이는 파트(뿌리·아우라 고리·숨은 열매 빼고)의 바닥 폭 (x·z 중 큰 쪽)
+	local function widthOf(m)
+		local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
+		for _, d in m:GetDescendants() do
+			if
+				d:IsA("BasePart")
+				and d.Name ~= "Root"
+				and d.Name ~= "AuraRing"
+				and d.Name ~= "Aura"
+				and d.Transparency < 1
+			then
+				local cf, s = d.CFrame, d.Size / 2
+				for _, sx in { -1, 1 } do
+					for _, sz in { -1, 1 } do
+						local p = cf * roblox.Vector3.new(sx * s.X, 0, sz * s.Z)
+						minX, maxX = math.min(minX, p.X), math.max(maxX, p.X)
+						minZ, maxZ = math.min(minZ, p.Z), math.max(maxZ, p.Z)
+					end
+				end
+			end
+		end
+		return math.max(maxX - minX, maxZ - minZ)
+	end
+	local base = PlantVS.GARDEN_BASE
+	local ratioSum, ratioMax, ratioMaxId, scaleOk, n8 = 0, 0, "", 0, 0
+	local heightTop = 0
+	for _, pet in Pets.list do
+		local unit = PlantVS.build(pet.id, { fx = false, sized = false })
+		local sized = PlantVS.build(pet.id, { fx = false, size = "huge" })
+		local want = GardenRules.plantScale(pet.id, "huge")
+		if math.abs(sized:GetAttribute("Height") / unit:GetAttribute("Height") - want) < 1e-6 then
+			scaleOk += 1
+		end
+		local garden = PlantVS.build(pet.id, { fx = false, scale = base })
+		local ratio = widthOf(garden) / EggPlacement.footprint(pet.id, "normal")
+		ratioSum += ratio
+		if ratio > ratioMax then
+			ratioMax, ratioMaxId = ratio, pet.id
+		end
+		heightTop = math.max(heightTop, garden:GetAttribute("Height"))
+		n8 += 1
+	end
+	print(
+		string.format(
+			"  정원 성체 폭 / PLANT_FOOTPRINT×배율: 평균 %.2f  최대 %.2f (%s)  가장 큰 키 %.1f",
+			ratioSum / n8,
+			ratioMax,
+			ratioMaxId,
+			heightTop
+		)
+	)
+	check(
+		scaleOk == n8,
+		"8판: 모델 키 = 크기 1 키 × GardenRules.plantScale(등급 × 크기 등급): " .. scaleOk
+	)
+	check(
+		ratioSum / n8 >= 0.75 and ratioSum / n8 <= 1.25 and ratioMax <= 1.7,
+		string.format(
+			"8판: 정원 성체 바닥 폭 ≈ PLANT_FOOTPRINT × 배율 (평균 %.2f, 최대 %.2f — 간격 계산과 맞음)",
+			ratioSum / n8,
+			ratioMax
+		)
+	)
+	local commonH = PlantVS.build("puppy_grass", { fx = false }):GetAttribute("Height")
+		/ Visuals.plantLook("puppy_grass").tall
+	local glitchH = PlantVS.build("final_boss_bloom", { fx = false }):GetAttribute("Height")
+		/ Visuals.plantLook("final_boss_bloom").tall
+	check(
+		glitchH > commonH * 2.5,
+		string.format("8판: 해커 글리치가 일반보다 훨씬 큼 (%.1f vs %.1f)", glitchH, commonH)
+	)
+	-- 아우라도 같이 커짐 (아우라 고리 = 모델 배율)
+	local auraSmall = PlantVS.build("error_rose", { fx = true, sized = false })
+	local auraBig = PlantVS.build("error_rose", { fx = true })
+	local function ringWidth(m)
+		local w = 0
+		for _, d in m:GetChildren() do
+			if d:IsA("BasePart") and d.Name == "AuraRing" then
+				w = math.max(w, math.abs(d.CFrame.Position.X), math.abs(d.CFrame.Position.Z))
+			end
+		end
+		return w
+	end
+	check(
+		ringWidth(auraBig) > ringWidth(auraSmall) * 3,
+		string.format(
+			"8판: 아우라 고리도 등급 배율만큼 큼 (%.1f → %.1f)",
+			ringWidth(auraSmall),
+			ringWidth(auraBig)
+		)
+	)
+	-- 자라는 씨앗: 자람 배율(0.3 → 1)로 점점 커짐, 성체 키 × 자람 배율에 맞음
+	local adultTop = PlantVS.ADULT_TOP * PlantVS.gardenScale("frozen_clock_lotus", "normal")
+	local prevH, growOk, growLine = 0, true, {}
+	for _, p in { 0, 5, 20, 40, 59, 70, 99 } do
+		local stage = GardenRules.stage(p, 100)
+		local vis = PlantVS.visualStage(stage, p, 100)
+		local scale, adult, step = PlantVS.seedScales("frozen_clock_lotus", "normal", vis, p, 100)
+		local m = PlantVS.buildStage("frozen_clock_lotus", vis, { scale = scale, ringScale = adult, fx = false })
+		local h = m:GetAttribute("Height")
+		table.insert(growLine, string.format("%d%% %s %.1f", p, vis, h))
+		if h + 1e-6 < prevH or math.abs(h - adultTop * step) > 0.05 then
+			growOk = false
+		end
+		prevH = h
+	end
+	print(
+		"  자라는 해커 글리치 씨앗 키: "
+			.. table.concat(growLine, " · ")
+			.. string.format(" (성체 %.1f)", adultTop)
+	)
+	check(growOk, "8판: 자라는 씨앗이 단계마다 점점 커지고 키 = 성체 키 × 자람 배율")
+	local s0 = select(3, PlantVS.seedScales("puppy_grass", "normal", "seed", 0, 100))
+	local s1 = select(3, PlantVS.seedScales("puppy_grass", "normal", "bud", 99, 100))
+	check(
+		math.abs(s0 - 0.28) < 0.05 and s1 > 0.95,
+		string.format("8판: 자람 배율 새싹 0.3 → 봉오리 끝 1 (%.2f → %.2f)", s0, s1)
+	)
+
 	print("[6판 자라는 씨앗 4단계]")
 	local heights = {}
 	for _, stage in { "seed", "sprout", "stem", "bud" } do
@@ -916,6 +1178,17 @@ local function petsBody()
 	seedPart:SetAttribute("Progress", 30)
 	PlantVS.refreshSeed(seedPart)
 	check(seedPart:FindFirstChild("SeedVisual"):GetAttribute("Stage") == "sprout", "Progress 30% → 새싹")
+	-- 8판: 같은 단계 안에서도 Progress 가 오르면 점점 커짐 (자람 배율 0.04 단위로 다시 만듦) + VisualHeight 도 올라감
+	local vh30 = seedPart:GetAttribute("VisualHeight")
+	seedPart:SetAttribute("Progress", 22)
+	PlantVS.refreshSeed(seedPart)
+	local vh22 = seedPart:GetAttribute("VisualHeight")
+	seedPart:SetAttribute("Progress", 30)
+	PlantVS.refreshSeed(seedPart)
+	check(
+		vh22 < vh30 and seedPart:FindFirstChild("SeedVisual"):GetAttribute("Growth") > 0.5,
+		string.format("8판: 새싹 22%% → 30%% 키가 커짐 (VisualHeight %.2f → %.2f)", vh22, vh30)
+	)
 	seedPart:SetAttribute("Stage", "bud")
 	PlantVS.refreshSeed(seedPart)
 	local bud = seedPart:FindFirstChild("SeedVisual")
@@ -1011,7 +1284,7 @@ local function petsBody()
 			fire(g.guard, "State") -- Idle → 잠
 		end
 	end
-	check(dressed == 18, "경비 겉모습 18구역(7판) 전부 붙음: " .. dressed)
+	check(dressed == 21, "경비 겉모습 21구역(8판) 전부 붙음: " .. dressed)
 	local guardIds = {}
 	for _, spec in Visuals.guards do
 		table.insert(guardIds, spec.model)
@@ -1055,10 +1328,10 @@ local function petsBody()
 			table.insert(dup, id)
 		end
 	end
-	check(#dup == 0, "7판: 경비 모양이 구역마다 다름 (빌린 모양 없음): " .. table.concat(dup, ","))
+	check(#dup == 0, "8판: 경비 모양이 구역마다 다름 (빌린 모양 없음): " .. table.concat(dup, ","))
 	check(
-		#guardIds == 19,
-		"경비 모양 19개 (18구역 + 악마 장미, 7판 바이러스 덩굴·디버그 선인장·글리치 장미 괴물): "
+		#guardIds == 22,
+		"경비 모양 22개 (21구역 + 악마 장미, 8판 톱니 해바라기 로봇·태엽 장미 기사·무지개 용 덩굴): "
 			.. #guardIds
 	)
 	check(
@@ -1076,8 +1349,8 @@ local function petsBody()
 	end
 	check(heightOk2, "경비 겉모습 Height = Visuals.guards[..].height (GuardianService 잡힘 거리)")
 	check(
-		tall == 18,
-		string.format("경비 키 25~40 스터드 (18구역): %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH)
+		tall == 21,
+		string.format("경비 키 25~40 스터드 (21구역): %d (최소 %.1f, 최대 %.1f)", tall, minH, maxH)
 	)
 	local forest = guards.forest
 	if forest then

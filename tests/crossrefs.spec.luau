@@ -522,10 +522,10 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"서버 코드에서 식물 모양 19종(7판), 식물 괴물 소품 20종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
+		"서버 코드에서 식물 모양 22종(8판), 식물 괴물 소품 20종 이상, 구역 장식 종류 50종 이상을 읽어 옴 (파서 점검)",
 		function()
-			T.eq(#sorted(plantForms), 19)
-			T.eq(#Visuals.PLANT_FORMS, 19)
+			T.eq(#sorted(plantForms), 22)
+			T.eq(#Visuals.PLANT_FORMS, 22)
 			T.truthy(#sorted(monsterExtras) >= 20, #sorted(monsterExtras))
 			T.truthy(#sorted(decors) >= 50, #sorted(decors))
 		end
@@ -559,7 +559,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"7판: 18구역 경비 = 식물 괴물 (Visuals.monsters) 이 다 있고 몸·머리·소품이 PetVisualService 에 구현돼 있음",
+		"8판: 21구역 경비 = 식물 괴물 (Visuals.monsters) 이 다 있고 몸·머리·소품이 PetVisualService 에 구현돼 있음",
 		function()
 			for id, look in Visuals.monsters do
 				T.truthy(look.body == "stalk" or monsterKinds[look.body], id .. " 몸 " .. look.body) -- stalk = 기본 몸
@@ -630,7 +630,7 @@ return function(T, Loader)
 	})
 
 	T.test(
-		"18개 구역 테마(7판): 구역 장식 종류가 MapBuilder 에 구현돼 있고, 재료 이름이 진짜 Enum.Material, 배경음이 있음",
+		"21개 구역 테마(8판): 구역 장식 종류가 MapBuilder 에 구현돼 있고, 재료 이름이 진짜 Enum.Material, 배경음이 있음",
 		function()
 			for _, biome in Biomes.list do
 				local theme = Visuals.biomes[biome.id]

@@ -3,11 +3,14 @@
 	ChaseController — 씨앗을 들었을 때 화면 (2판: 원작 그대로)
 	- 씨앗을 들면(플레이어 Attribute CarryingEgg ≠ ""): 위 가운데 빨간 "달리기!!" 배너 + 화면 가장자리 빨간 비네트(맥박)
 	  + 아래 가운데 빨간 "드롭" 버튼(쓰레기통) → DropEgg (그 자리에 씨앗을 내려놓고 추격 끝)
-	- RunAlert: 속도가 모자라면 배너 아래 작은 경고 ("속도가 부족해요!")
+	- RunAlert: 속도가 모자라면 배너 아래 "2.5초 뒤 잡혀요! 속도가 부족해요!" 카운트다운 (8판 SpeedMath.catchSeconds,
+	  나를 쫓는 경비가 있는 동안만 줄어듦) / 도망칠 수 있으면 초록 "도망칠 수 있어요!" + 작은 줄 "내 속도 · 식물 괴물"
+	- 8판 경비 마지막 0.3초 돌진 (서버가 WalkSpeed 를 확 올림): 경비 발밑 먼지 한 번(파티클 재사용) + "GuardRush" 휘익
 	- 허브(안전 구역)에 들어오면 씨앗 가방으로 (배달 = 안전 구역에 들어가면 자동). 경비 = 그 구역 식물 괴물
 	- Caught: "잡혔다!" + 화면 흔들림 + 빨간 번쩍 + 씨앗이 어떻게 됐는지
 ]]
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -22,6 +25,7 @@ local Net = require(Client.Net)
 local Theme = require(Client.UI.Theme)
 local Icons = require(Client.UI.Icons)
 local Ui = require(Client.UI.Ui)
+local SoundController = require(script.Parent.SoundController)
 
 local ChaseController = {}
 
@@ -97,6 +101,13 @@ function ChaseController.start()
 		Position = UDim2.new(0.5, 0, 1, 8),
 		Parent = banner,
 	})
+	-- 8판: 경고 아래 작은 줄 "내 속도 5 · 경비 1K" (잡힘 시간 계산에 쓴 두 숫자)
+	local speedLine = Ui.label("", UDim2.fromOffset(420, 22), 18, C.white, {
+		Name = "SpeedLine",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 1, 44),
+		Parent = banner,
+	})
 
 	local runVignette, runEdges = makeVignette(Ui.layer("World"), "RunVignette")
 
@@ -121,7 +132,16 @@ function ChaseController.start()
 	end
 	Icons.draw("trash", drop, 40, UDim2.new(0, 50, 0.5, 0))
 
+	-- 8판 경비 잡힘 = 시간 (SpeedMath.catchSeconds): 도망칠 수 없으면 "2.5초 뒤 잡혀요!" 카운트다운.
+	--   서버처럼 "그 씨앗을 경비가 나를 쫓는 동안"만 시간이 줄어듦 (씨앗 uid 마다 — 내려놓았다 다시 주워도 이어짐)
 	local guardSlow = false
+	local catchSecs: number? = nil -- nil = 도망칠 수 있음 / 모름
+	local chaseUid = ""
+	local chased: { [string]: number } = {} -- 씨앗 uid → 쫓긴 시간(초)
+	local function setWarn(text: string, color: Color3)
+		warnLabel.Text = text
+		warnLabel.TextColor3 = color
+	end
 	local function refresh()
 		local on = carrying()
 		banner.Visible = on
@@ -129,7 +149,9 @@ function ChaseController.start()
 		dropHolder.Visible = on
 		if not on then
 			guardSlow = false
+			catchSecs = nil
 			warnLabel.Text = ""
+			speedLine.Text = ""
 		end
 	end
 	player:GetAttributeChangedSignal(Attr.CarryingEgg):Connect(function()
@@ -142,19 +164,38 @@ function ChaseController.start()
 	end)
 	refresh()
 
+	-- 남은 시간 글 (0.1초마다·신호 받을 때)
+	local function catchText(): string
+		local total = catchSecs or 0
+		local left = math.max(0, total - (chased[chaseUid] or 0))
+		if left <= 0.05 then
+			return "곧 잡혀요! 속도가 부족해요!"
+		end
+		return string.format("%.1f초 뒤 잡혀요! 속도가 부족해요!", left)
+	end
+	function ChaseController.catchText(): string
+		return if catchSecs then catchText() else ""
+	end
+
 	Net.on(Remotes.ToClient.RunAlert, function(payload: any)
 		if typeof(payload) ~= "table" then
 			return
 		end
 		local yours = tonumber(payload.yourSpeed) or 0
 		local guard = tonumber(payload.guardSpeed) or 0
-		guardSlow = guard > 0 and not SpeedMath.canEscape(guard, yours)
-		warnLabel.Text = if guardSlow
-			then string.format(
-				"속도가 부족해요! (내 %s / 추천 %s)",
-				Format.number(yours),
-				Format.number(guard)
-			)
+		local egg = payload.egg
+		chaseUid = if typeof(egg) == "table" and typeof(egg.uid) == "string" then egg.uid else ""
+		catchSecs = if guard > 0 then SpeedMath.catchSeconds(guard, yours) else nil
+		guardSlow = catchSecs ~= nil
+		if guardSlow then
+			setWarn(catchText(), C.yellow)
+		elseif guard > 0 then
+			setWarn("도망칠 수 있어요! 안전 구역으로!", C.moneyGreen)
+		else
+			setWarn("", C.yellow)
+		end
+		speedLine.Text = if guard > 0
+			then string.format("내 속도 %s · 식물 괴물 %s", Format.number(yours), Format.number(guard))
 			else ""
 		banner.Visible = true
 		runVignette.Visible = true
@@ -163,14 +204,96 @@ function ChaseController.start()
 	end)
 	Net.on(Remotes.ToClient.ChaseEnded, function(payload: any)
 		local reason = if typeof(payload) == "table" then payload.reason else nil
+		catchSecs = nil
+		guardSlow = false
 		if banner.Visible then
-			warnLabel.Text = if reason == "safe"
-				then "안전 구역 도착! 씨앗을 정원에 심어요!"
-				elseif reason == "night" then "밤이 됐어요! 안전 구역으로!"
-				else "식물 괴물이 멈췄어요! 안전 구역으로!"
-			warnLabel.TextColor3 = C.moneyGreen
+			setWarn(
+				if reason == "safe"
+					then "안전 구역 도착! 씨앗을 정원에 심어요!"
+					elseif reason == "night" then "밤이 됐어요! 안전 구역으로!"
+					else "식물 괴물이 멈췄어요! 안전 구역으로!",
+				C.moneyGreen
+			)
 		end
 	end)
+
+	-- 나를 쫓는 경비 (State "Chase" + TargetUserId == 나) 하나
+	local function myChaser(): Model?
+		for _, inst in CollectionService:GetTagged(Tags.Guardian) do
+			if
+				inst:IsA("Model")
+				and inst:GetAttribute("State") == "Chase"
+				and inst:GetAttribute("TargetUserId") == player.UserId
+			then
+				return inst
+			end
+		end
+		return nil
+	end
+
+	-- 8판 경비 마지막 0.3초 돌진 (서버가 WalkSpeed 를 확 올림, ≤ 400): 발밑 먼지 한 번 + "휘익!" (경비마다 먼지 파티클 1개를 재사용)
+	local dusts: { [Model]: ParticleEmitter } = {}
+	local rushed: { [Model]: boolean } = {}
+	local baseSpeed: { [Model]: number } = {}
+	local function dustFor(guard: Model): ParticleEmitter?
+		local e = dusts[guard]
+		if e and e.Parent then
+			return e
+		end
+		local root = guard:FindFirstChild("HumanoidRootPart")
+		if not root or not root:IsA("BasePart") then
+			return nil
+		end
+		local new = Instance.new("ParticleEmitter")
+		new.Name = "RushDust"
+		new.Enabled = false
+		new.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		new.Color = ColorSequence.new(Color3.fromRGB(225, 205, 170))
+		new.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 2.5), NumberSequenceKeypoint.new(1, 6) })
+		new.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 1) })
+		new.Lifetime = NumberRange.new(0.5, 0.9)
+		new.Speed = NumberRange.new(8, 14)
+		new.SpreadAngle = Vector2.new(70, 20)
+		new.EmissionDirection = Enum.NormalId.Back
+		new.Acceleration = Vector3.new(0, 4, 0)
+		new.Parent = root
+		dusts[guard] = new
+		guard.Destroying:Connect(function()
+			dusts[guard] = nil
+			rushed[guard] = nil
+			baseSpeed[guard] = nil
+		end)
+		return new
+	end
+	local function watchRush(guard: Model?)
+		for g in rushed do
+			if g ~= guard then
+				rushed[g] = nil
+				baseSpeed[g] = nil
+			end
+		end
+		if not guard then
+			return
+		end
+		local humanoid = guard:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			return
+		end
+		local ws = humanoid.WalkSpeed
+		local base = baseSpeed[guard]
+		if not base or ws < base then
+			baseSpeed[guard] = ws -- 지금까지 본 추격 걸음 중 가장 느린 것
+			return
+		end
+		if not rushed[guard] and ws > base * 1.35 and ws > 40 then
+			rushed[guard] = true
+			local dust = dustFor(guard)
+			if dust then
+				dust:Emit(18)
+			end
+			SoundController.play("GuardRush")
+		end
+	end
 
 	-- 배너 흔들림 + 비네트 맥박 + 허브 안내
 	local t = 0
@@ -186,14 +309,26 @@ function ChaseController.start()
 		end
 	end)
 	task.spawn(function()
+		local last = os.clock()
 		while true do
-			task.wait(0.2)
+			task.wait(0.1)
+			local now = os.clock()
+			local dt = math.min(0.5, now - last)
+			last = now
 			if banner.Visible then
 				local inSafe = player:GetAttribute(Attr.InSafeZone) == true
 				banner.Text = if inSafe then "안전 구역!" else "달리기!!"
-				if not guardSlow and warnLabel.TextColor3 ~= C.moneyGreen then
-					warnLabel.TextColor3 = C.yellow
+				local chaser = if carrying() and not inSafe then myChaser() else nil
+				if catchSecs and chaser then
+					chased[chaseUid] = (chased[chaseUid] or 0) + dt
 				end
+				if catchSecs then
+					local left = (catchSecs or 0) - (chased[chaseUid] or 0)
+					setWarn(catchText(), if left < 1 and math.floor(now * 6) % 2 == 0 then C.red else C.yellow)
+				end
+				watchRush(chaser)
+			else
+				watchRush(nil)
 			end
 		end
 	end)
@@ -260,6 +395,9 @@ function ChaseController.start()
 			elseif cause == "player" then "맞았다!"
 			else "잡혔다!"
 		local outcome = payload.eggOutcome
+		if outcome == "ReturnToNest" then
+			chased[chaseUid] = nil -- 서버도 씨앗이 둥지로 가면 추격 시간 0
+		end
 		local by = tostring(payload.by or "")
 		local how = if cause == "player" or cause == "trap" then by .. "의 공격!" else by .. "에게 잡혔어요!"
 		local egg = if outcome == "ReturnToNest"

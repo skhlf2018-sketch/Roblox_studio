@@ -1,4 +1,4 @@
-# 화면·소리·생김새 (UI.md) — 8판 "씨앗을 훔치세요" (등급 16개 · 7판 구역 18개 + 8판 화면 4가지)
+# 화면·소리·생김새 (UI.md) — 8판 "씨앗을 훔치세요" (등급 16개 · 구역 21개 · 식물 182종 · 8판 화면)
 
 작성: 선임 (2026-10-18 처음 · 2판 원작 스타일 · 5판 2026-10-22 · **7차 전면 갱신 = 6판 "씨앗을 훔치세요", 2026-10-27**).
 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다. 이전 기록(알·펫·퓨전·제단·우리 펫 걷기)은 git 이력에.
@@ -21,6 +21,26 @@
 - **구역 입장 배너** (`HudController`, Alerts 층 Frame **"ZoneBanner"** > `Title`·`Sub`, 기준 560×80): 새 구역에 들어가면 위 가운데에 큰 **한국어 이름**(구역 `accent` 색, 52px) + 작은 **영어 이름·얼굴** "Jungle 😬"(22px), **1.5초** 보이고 0.35초 동안 사라짐. 허브·베이스 = 초록 **"안전 구역" / "Safe Zone"**. 접속 직후 첫 구역은 안 띄움, 같은 구역은 한 번만(서버 `ZoneEntered` 와 `ZoneController.changed` 둘 다 들음). 튜토리얼 패널이 보이면 아래로 밀림(전과 같음). `HudController.zoneBannerText(zone)` · `showZoneBanner(zone)`.
 - **속도 획득 배지** (`SpeedFxController.popGain(amount)`, Alerts 층 **"SpeedPop"** 240×60 분홍 알약 + 신발 그림 + "+4B"): 러닝머신 걸음 `TreadmillStep`(전의 캐릭터 옆 분홍 "+500" `StepPop` 을 이걸로 통일) · 도감 보상 `IndexRewarded.speed`. 처음 한 번만 만들고 글자·위치만 바꿈, 마지막으로 오른 뒤 1.2초 보임. 구역 배너가 떠 있으면 그 바로 아래, 아니면 그 자리.
 - 폰(750×381 · 844×390)·PC(1428×750): 구역 배너·속도 배지(혼자 / 배너 아래)가 화면 안이고 속도·코인 줄·시간·오른쪽 버튼·핫바·메뉴·튜토리얼 패널과 안 겹침, 러닝머신 창 392×224 · 버튼 46px (smoke).
+
+## 0-8b. 8판 2차 (선임 2026-11-08) — 새 구역 3개 · 새 경비 3마리 · 둥지 무리 · 식물 크기 · 떨어진 씨앗 글 · 잡힘 경고
+
+수석 8판 데이터·서버(REMOTES 8-8장)에 맞춘 모양·화면. `[8판 수석 임시]` 주석 없음. 맵 파트 **7,710** / 상한 8,000 (구역 21개, 새 구역 323~334).
+
+| 구역 | 바닥 무늬 | 아치 (머리 · 가운데) | 담장 | 장식 (담장 쪽 · 가운데 흩기) | 둥지 | 분위기 · 배경음 |
+|---|---|---|---|---|---|---|
+| 19 로봇 공장 🤖 (주황 배너) | `hazard` 쇠판 이음매 40 격자 + 입구·끝에 노랑·검정 경고 줄무늬 | `factory` 철판 기둥 + 노랑 띠 (`beacon` 주황 경고등 · `cog` 큰 노랑 톱니) | `pipes` 쇠 파이프 + 밸브 + 노랑 경고판 | conveyor(벨트 + 상자) · biggear · robotarm · welder(파란 불빛 + 주황 불꽃) / bolts · cables | `metal` 쇠판 + 노랑 + 주황 볼트 빛 | `sparks` 떨어지는 불꽃 · 선사시대 북 ×1.3 |
+| 20 시간의 탑 ⏰ (놋쇠 배너) | `clockface` 바닥 큰 시계 판 (놋쇠 테 · 눈금 12 · 바늘 2) | `clock` 남색 돌 기둥 + 놋쇠 보 (`bell` 종 · `clockface` 빛나는 큰 시계) | `clockgears` 놋쇠 톱니 / 빛나는 작은 시계 | grandclock(괘종시계 + 기운 추) · pendulum · hourglass(떠 있음) · gearstairs(밟고 오름) · goldpillar / cogbits · stars | `brass` 놋쇠 판 + 상아 톱니 | `sand` 금빛 모래 · 벚꽃 현악기 ×0.82 |
+| 21 무지개 하늘섬 🌈 (하늘 배너) | `clouds` 흰·옅은 하늘 구름 얼룩 | `rainbow` 구름 기둥 + 보 아래 무지개 6줄 (`cloudpuff` · `rainbowarc` 반원) | `cloudwall` 솜 구름 | rainbowbridge(복도 위 큰 무지개 6색 × 7마디, buildDecor 따로) · floatisland(떠 있는 섬 + 가는 폭포) · rainbowfall · cloud / stardust · cloudpuff | `cloud` 솜 구름 + 분홍 별 | `rainbow` 무지개 반짝이 · 마법의 숲 ×1.12 |
+
+- 서버 맵은 고정 — 추·톱니는 기울인 채 서 있음(움직임 없음). 새 파티클 없음(분위기 파티클은 기존처럼 내가 있는 구역만 클라가 켬). 빛(PointLight)은 용접 불빛 절반·아치 가운데·벽 시계 한 칸만.
+- **새 경비** (`Visuals.monsters`, scale·height 수석 값 그대로, 자는 얼굴 ↔ 추격 눈썹 그대로): `gear_sunflower_bot` (몸 `piston` 로봇 팔 마디 줄기 + 머리 `gearflower` 쇠 원판 얼굴 + 노랑 톱니 꽃잎 10 + `lens` 렌즈 테(눈 = 주황 빛) + `clawarms` · `rivets` · `antenna`) · `clockwork_rose_knight` (몸 `armor` 놋쇠 갑옷 + 머리 `rose` + `roseplates` 어깨 장미 꽃잎 · `windkey` 등 태엽 열쇠 · `clockspear` 시곗바늘 창 · `visor`) · `rainbow_dragon_vine` (몸 `serpent` S자 덩굴 마디 6 + 머리 `dragon` 주둥이·턱 + `rainbowscales` 무지개 비늘 잎 · `cloudbreath` 구름 입김 · `dragonhorns`). 파트 44 · 32 · 33.
+- **식물 모양 22종** (`PLANT_FORMS` + 8판 `gear` 쇠 마디 줄기 + 볼트 잎 + 앞을 보는 원판 + 톱니 꽃잎 / `clock` 놋쇠 줄기 + 시계 판(상아 + 놋쇠 테) + 바늘 2 + 둘레 꽃잎 / `cloud` 솜 구름 3 + 무지개 반원 꽃잎). 이름 낱말: gear·bolt·overclock·windup → gear, clock·sundial·second_hand·midnight → clock, cloud → cloud (6판 `cloud_cotton` 도 구름 모양이 됨). 테마 forms: 로봇 공장 gear/circuit · 시간의 탑 clock/cup · 무지개 하늘섬 cloud/flower.
+- **둥지 무리** (`MapLayout.nestCluster`): 둥지 지름 7 → **4.6** (씨앗 하나 크기, 다발 5 + 장식 1, 태그 파트 두께·윗면 1.2 그대로), 무리 바닥 흙·풀 깔개 1장 + 둘레(반지름 13) 돌·풀 6 (`nestClusterBase` — 경비 집 +x · 표지판 · 장식 식물 쪽은 비움), 무리 앞 **나무 표지판** `NestSpeedSign` (말뚝 2 + 판자(WoodPlanks, 태그 ZoneSign · Attr NestSign) + 지붕 판 + 테마 색 띠 + 풀, 회전 없음 = 앞면이 입구 −z), 글 "추천 속도 N" + "○○ 둥지". 장식 식물(둥지 옆)은 등급 배율 2.2 까지만.
+- **식물 크기** (`PlantVisualService`, 7판 `RARITY_SCALE`·`SIZE_SCALE` 표 없앰): 성체 = `GARDEN_BASE`(1.35) × `GardenRules.plantScale`(등급 1 ~ 4.5 × 크기 1 ~ 1.5) — 정원 폭 평균 0.92 × `EggPlacement.footprint` (간격 계산과 맞음, 해커 글리치 키 약 16 ~ 21). 자라는 씨앗 = 같은 성체 배율 × `GardenRules.growthScale`(0.3 → 0.55 → 0.8 → 1) 키에 맞춘 단계 모양, 자람 배율 0.04 단위가 바뀔 때만 다시 만듦(1초마다 오는 Progress 로 **점점** 커짐, 모델 Attr `Growth`), 흙 둔덕·받침 고리는 성체 크기 그대로, 아우라 = 성체 배율 × 자람. 이름표·`VisualHeight` 가 모델 키를 따라감 → 자라는 씨앗 "집기·건너뛰기" 프롬프트 높이 = 키의 반(`IncubatorController.promptBase`, VisualHeight 바뀌면 같이 올림), 성체 "열매 따기" = 키의 60%(그대로). 도감·성체 카드 뷰포트용 `PetModels` 는 크기 1(`sized = false`) + `PetViewport` 카메라 거리 자동.
+- **심기 미리보기** (`IncubatorController`): `placedSpots` 에 `petId`, `EggPlacement.check(..., {}, petId)` · 바닥 동그라미 `gap(size, size, petId, petId)` · 폰 첫 자리 `firstFreeGrid(size, spots, petId)` — 서버 PlaceEgg 와 같은 간격.
+- **떨어진 씨앗 글** (`WorldFxController`): 구역 밖(Attr `ExpiresAt` + `ReturnsToNest` true) = 빨간 **"3초 뒤 둥지로"** (`DropTimer`/`Time`, 2초부터 노랑 ↔ 빨강), 구역 안(`EggState` Dropped + `ReturnsToNest` false) = 작은 흰 **"여기 그대로"** (`DropStay`/`Text` 92×24, 60 스터드 안), 주우면 둘 다 지움.
+- **러닝머신 창** (`TreadmillController`): 1차 창 그대로 + 서버 `TreadmillTouched` payload 의 `level` 이 Attr `TreadmillLevel` 보다 높으면 1초 동안 그 레벨로 보여 줌 (복제가 늦을 때 옛 가격이 안 보이게). 숫자는 `Economy.nextTreadmillCost`·`treadmillGainPerSecond` (= `TreadmillService.touchInfo` 와 같은 식), 산 뒤에는 Attr `TreadmillLevel`·`Money` 로 갱신.
+- **잡힘 경고** (`ChaseController`, RunAlert): `SpeedMath.catchSeconds(guardSpeed, yourSpeed)` → 노랑 **"2.5초 뒤 잡혀요! 속도가 부족해요!"** (`SpeedWarning`, 0.1초마다, **나를 쫓는 경비(State Chase · TargetUserId = 나)가 있는 동안만** 줄어듦 — 씨앗 uid 마다 이어짐, 둥지로 돌아가면 0, 1초 아래면 빨강 깜빡) / 도망칠 수 있으면 초록 **"도망칠 수 있어요! 안전 구역으로!"** + 작은 줄 `SpeedLine` "내 속도 N · 식물 괴물 M". **경비 돌진** = 쫓는 경비 Humanoid.WalkSpeed 가 추격 걸음의 1.35배 넘게 뛰면 한 번: 경비 HumanoidRootPart 의 `RushDust` 먼지(경비마다 1개 재사용, Emit 18) + 소리 `GuardRush`(방망이 소리 id).
 
 ## 0. 7판 (선임 2026-10-29) — 등급 16개 · 구역 18개 · 식물 158종 · 성장 3배
 

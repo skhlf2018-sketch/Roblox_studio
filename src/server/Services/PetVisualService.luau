@@ -359,6 +359,19 @@ local function sm(
 	return p
 end
 
+-- 8판 무지개 용 덩굴: S자 몸 마디 자리 (t = 0 바닥 ~ 1 목, 크기 1 기준) — 몸(serpent)과 비늘(rainbowscales)이 같이 씀
+local function serpentPoint(t: number): Vector3
+	return Vector3.new(0.42 * math.sin(t * math.pi * 2), 0.5 + t * 2.05, 0.3 * (1 - t))
+end
+local RAINBOW_SCALES = {
+	Color3.fromRGB(255, 80, 90),
+	Color3.fromRGB(255, 160, 60),
+	Color3.fromRGB(255, 230, 80),
+	Color3.fromRGB(110, 220, 110),
+	Color3.fromRGB(90, 170, 255),
+	Color3.fromRGB(180, 120, 255),
+}
+
 local function monsterEmitter(ctx: Ctx, host: BasePart, kind: string, color: Color3)
 	local e = emitter(host, if kind == "mist" then "smoke" else "sparkle", color, ctx.s * 0.8)
 	e.Name = "MonsterFx"
@@ -473,6 +486,69 @@ local function monsterBody(ctx: Ctx, kind: string): Shape
 			bodySize = Vector3.new(1.45, 2.5, 1.45),
 			top = 2.6,
 			hy = 2.45,
+			faceOnBody = false,
+		}
+	elseif kind == "piston" then
+		-- 8판 톱니 해바라기 로봇: 로봇 팔 같은 줄기 (받침 원판 + 두 마디 쇠 막대 + 관절 공)
+		local steel = c1:Lerp(BLACK, 0.25)
+		sm(ctx, "Cyl", Vector3.new(1.5, 0.35, 1.5), at(0, 0.18, 0), steel, Enum.Material.Metal)
+		local body = sm(ctx, "Block", Vector3.new(0.5, 1.15, 0.5), at(0, 0.95, 0, 8), c1, Enum.Material.Metal)
+		ctx.body = body
+		sm(ctx, "Ball", Vector3.one * 0.62, at(0, 1.6, 0.08), steel, Enum.Material.Metal)
+		sm(ctx, "Block", Vector3.new(0.42, 1.0, 0.42), at(0, 2.12, 0.02, -10), c1, Enum.Material.Metal)
+		sm(ctx, "Ball", Vector3.one * 0.48, at(0, 2.62, -0.05), steel, Enum.Material.Metal)
+		return {
+			head = at(0, 2.7, 0),
+			headSize = Vector3.new(1, 0.9, 1.1),
+			body = at(0, 1.3, 0),
+			bodySize = Vector3.new(0.6, 2.6, 0.6),
+			top = 2.7,
+			hy = 2.7,
+			faceOnBody = false,
+		}
+	elseif kind == "armor" then
+		-- 8판 태엽 장미 기사: 놋쇠 갑옷 몸 (다리 2 + 가슴판 + 금 허리띠 + 목)
+		for _, side in SIDES do
+			sm(ctx, "Block", Vector3.new(0.36, 0.95, 0.42), at(side * 0.26, 0.48, 0), c1:Lerp(BLACK, 0.2), FOIL)
+		end
+		local body = sm(ctx, "Block", Vector3.new(1.1, 1.15, 0.72), at(0, 1.55, 0), c1, FOIL)
+		ctx.body = body
+		sm(ctx, "Block", Vector3.new(1.16, 0.18, 0.78), at(0, 1.02, 0), ctx.c3, FOIL)
+		sm(ctx, "Cyl", Vector3.new(0.5, 0.3, 0.5), at(0, 2.2, 0), c1:Lerp(BLACK, 0.2), FOIL)
+		return {
+			head = at(0, 2.45, 0),
+			headSize = Vector3.new(1, 0.9, 1.1),
+			body = at(0, 1.55, 0),
+			bodySize = Vector3.new(1.1, 2.1, 0.72),
+			top = 2.35,
+			hy = 2.15,
+			faceOnBody = false,
+		}
+	elseif kind == "serpent" then
+		-- 8판 무지개 용 덩굴: 땅에 감긴 덩굴 + S자로 솟아오른 몸 (마디 공 6개, 위로 갈수록 가늘게)
+		for _, side in SIDES do
+			sm(ctx, "Ell", Vector3.new(1.5, 0.4, 0.6), at(side * 0.4, 0.2, 0.25, 0, side * 30, 0), c1:Lerp(BLACK, 0.15))
+		end
+		for i = 0, 5 do
+			local p = serpentPoint(i / 5)
+			local part = sm(
+				ctx,
+				"Ball",
+				Vector3.one * (1.0 - i * 0.08),
+				CFrame.new(p),
+				if i % 2 == 0 then c1 else c1:Lerp(WHITE, 0.12)
+			)
+			if i == 0 then
+				ctx.body = part
+			end
+		end
+		return {
+			head = at(0, 2.7, 0),
+			headSize = Vector3.new(1, 0.9, 1.1),
+			body = at(0, 1.2, 0),
+			bodySize = Vector3.new(1.0, 2.6, 1.0),
+			top = 2.7,
+			hy = 2.7,
 			faceOnBody = false,
 		}
 	elseif kind == "kelp" then
@@ -602,6 +678,39 @@ local function monsterHead(ctx: Ctx, kind: string, sh: Shape): Shape
 		sh.head = at(0, cy, 0)
 		sh.headSize = Vector3.new(1.15, 1.1, 1.55)
 		sh.top = cy + 1.25
+	elseif kind == "gearflower" then
+		-- 8판 톱니 해바라기 로봇 머리: 앞을 보는 쇠 원판(얼굴) + 둘레 톱니 꽃잎 10개 (노랑) + 뒤 받침 원판
+		local cy = hy + 0.35
+		local face =
+			sm(ctx, "Cyl", Vector3.new(1.3, 0.3, 1.3), at(0, cy, 0, 90), ctx.c1:Lerp(BLACK, 0.35), Enum.Material.Metal)
+		ctx.body = face
+		sm(ctx, "Cyl", Vector3.new(1.75, 0.16, 1.75), at(0, cy, 0.14, 90), c2:Lerp(BLACK, 0.2), Enum.Material.Metal)
+		for i = 1, 10 do
+			local a = i / 10 * math.pi * 2
+			sm(
+				ctx,
+				"Block",
+				Vector3.new(0.34, 0.5, 0.18),
+				at(0, cy, 0.08) * CFrame.Angles(0, 0, a) * at(0, 0.98, 0),
+				c2,
+				Enum.Material.Metal
+			)
+		end
+		sh.head = at(0, cy, 0)
+		sh.headSize = Vector3.new(0.95, 0.95, 0.5)
+		sh.top = cy + 1.25
+	elseif kind == "dragon" then
+		-- 8판 무지개 용 덩굴 머리: 둥근 머리통 + 앞으로 나온 주둥이 + 아래턱 + 콧구멍 2
+		local skull = sm(ctx, "Ball", Vector3.one * 1.0, at(0, hy + 0.5, 0.15), c2)
+		ctx.body = skull
+		sm(ctx, "Ell", Vector3.new(0.8, 0.55, 1.3), at(0, hy + 0.28, -0.45), c2:Lerp(WHITE, 0.1))
+		sm(ctx, "Block", Vector3.new(0.7, 0.18, 1.0), at(0, hy - 0.02, -0.4, 14), c2:Lerp(BLACK, 0.2))
+		for _, side in SIDES do
+			sm(ctx, "Block", Vector3.new(0.1, 0.08, 0.06), at(side * 0.18, hy + 0.45, -1.08), BLACK)
+		end
+		sh.head = at(0, hy + 0.7, 0.05)
+		sh.headSize = Vector3.new(0.95, 0.6, 1.0)
+		sh.top = hy + 1.0
 	elseif kind == "lily" then
 		local head = sm(ctx, "Ball", Vector3.one * 0.9, at(0, hy + 0.25, 0), c2)
 		ctx.body = head
@@ -893,6 +1002,127 @@ MONSTER_EXTRAS.ghostlayer = function(ctx, sh)
 	end
 end
 
+-- 8판 톱니 해바라기 로봇: 눈 둘레 검은 렌즈 테 (눈 = 주황 빛 glowEyes)
+MONSTER_EXTRAS.lens = function(ctx, sh)
+	local hs = sh.headSize
+	local e = math.max(0.14, math.min(hs.X, hs.Y) * 0.22)
+	for _, side in SIDES do
+		local pos = sh.head * CFrame.new(side * hs.X * 0.24, hs.Y * 0.1, -hs.Z * 0.5 + 0.03)
+		sm(
+			ctx,
+			"Cyl",
+			Vector3.new(e * 2.1, 0.05, e * 2.1),
+			pos * CFrame.Angles(rad(90), 0, 0),
+			BLACK,
+			Enum.Material.Metal
+		)
+	end
+end
+-- 8판 톱니 해바라기 로봇: 줄기 양옆 로봇 집게 팔 (어깨 공 + 팔 + 팔꿈치 + 아래팔 + 집게 2)
+MONSTER_EXTRAS.clawarms = function(ctx, _sh)
+	local steel = ctx.c1:Lerp(BLACK, 0.25)
+	for _, side in SIDES do
+		local shoulder = at(side * 0.35, 1.6, 0.05)
+		sm(ctx, "Ball", Vector3.one * 0.36, shoulder, steel, Enum.Material.Metal)
+		sm(
+			ctx,
+			"Block",
+			Vector3.new(0.85, 0.22, 0.22),
+			shoulder * at(side * 0.45, 0.1, 0, 0, 0, side * 15),
+			ctx.c1,
+			Enum.Material.Metal
+		)
+		local elbow = shoulder * at(side * 0.88, 0.24, 0)
+		sm(ctx, "Ball", Vector3.one * 0.3, elbow, steel, Enum.Material.Metal)
+		sm(ctx, "Block", Vector3.new(0.2, 0.7, 0.2), elbow * at(0, 0.35, -0.08, -15), ctx.c1, Enum.Material.Metal)
+		local hand = elbow * at(0, 0.72, -0.18)
+		for _, k in SIDES do
+			sm(ctx, "Block", Vector3.new(0.08, 0.3, 0.14), hand * at(k * 0.09, 0.12, 0, 0, 0, k * -22), ctx.c3, NEON)
+		end
+	end
+end
+-- 8판 톱니 해바라기 로봇: 받침·마디에 박힌 볼트 4개
+MONSTER_EXTRAS.rivets = function(ctx, _sh)
+	for i = 1, 4 do
+		local a = i / 4 * math.pi * 2 + 0.4
+		sm(ctx, "Ball", Vector3.one * 0.16, CFrame.Angles(0, a, 0) * at(0, 0.36, -0.62), ctx.c2, Enum.Material.Metal)
+	end
+end
+-- 8판 톱니 해바라기 로봇: 머리 위 안테나 + 깜빡 빛 공
+MONSTER_EXTRAS.antenna = function(ctx, sh)
+	sm(ctx, "Cyl", Vector3.new(0.06, 0.5, 0.06), at(0.2, sh.top + 0.15, 0.1, 0, 0, -12), DARK, Enum.Material.Metal)
+	sm(ctx, "Ball", Vector3.one * 0.18, at(0.25, sh.top + 0.42, 0.1), ctx.c3, NEON)
+end
+-- 8판 태엽 장미 기사: 어깨에 장미 꽃잎 갑옷 (꽃잎 2겹 × 양쪽)
+MONSTER_EXTRAS.roseplates = function(ctx, sh)
+	local y = sh.bodySize.Y * 0.95
+	for _, side in SIDES do
+		sm(ctx, "Ell", Vector3.new(0.7, 0.36, 0.85), at(side * 0.66, y, 0, 0, 0, side * -22), ctx.c2)
+		sm(
+			ctx,
+			"Ell",
+			Vector3.new(0.5, 0.3, 0.6),
+			at(side * 0.74, y - 0.18, -0.05, 0, 0, side * -35),
+			ctx.c2:Lerp(BLACK, 0.18)
+		)
+	end
+end
+-- 8판 태엽 장미 기사: 등에 꽂힌 큰 태엽 열쇠 (축 + 금 고리 2)
+MONSTER_EXTRAS.windkey = function(ctx, sh)
+	local y = sh.bodySize.Y * 0.75
+	local back = sh.bodySize.Z / 2
+	sm(ctx, "Cyl", Vector3.new(0.16, 0.7, 0.16), at(0, y, back + 0.3, 90), DARK, Enum.Material.Metal)
+	for _, side in SIDES do
+		sm(ctx, "Ell", Vector3.new(0.55, 0.5, 0.12), at(side * 0.3, y, back + 0.68, 0, 0, side * 10), ctx.c3, FOIL)
+	end
+end
+-- 8판 태엽 장미 기사: 오른손에 시곗바늘 창 (긴 자루 + 금 바늘 날 + 작은 시계 고리) + 쇠 장갑
+MONSTER_EXTRAS.clockspear = function(ctx, sh)
+	local x = sh.bodySize.X / 2 + 0.3
+	sm(ctx, "Ball", Vector3.one * 0.32, at(x, 1.35, -0.15), ctx.c1:Lerp(BLACK, 0.2), FOIL)
+	sm(ctx, "Cyl", Vector3.new(0.1, 3.4, 0.1), at(x, 1.75, -0.15), DARK, Enum.Material.Metal)
+	sm(ctx, "Block", Vector3.new(0.3, 0.9, 0.07), at(x, 3.85, -0.15), GOLD, FOIL)
+	sm(ctx, "Cyl", Vector3.new(0.5, 0.06, 0.5), at(x, 3.3, -0.15, 90), GOLD, FOIL)
+end
+-- 8판 태엽 장미 기사: 장미 머리 아래 놋쇠 투구 테
+MONSTER_EXTRAS.visor = function(ctx, sh)
+	sm(ctx, "Cyl", Vector3.new(1.2, 0.16, 1.2), sh.head * CFrame.new(0, -0.5, 0), ctx.c1, FOIL)
+end
+-- 8판 무지개 용 덩굴: 몸 마디마다 바깥으로 난 무지개 비늘 잎 (빨주노초파보)
+MONSTER_EXTRAS.rainbowscales = function(ctx, _sh)
+	for i = 0, 5 do
+		local p = serpentPoint(i / 5)
+		local out = Vector3.new(p.X, 0, p.Z)
+		local yaw = if out.Magnitude > 0.05 then math.atan2(-out.X, -out.Z) else i * 1.1
+		sm(
+			ctx,
+			"Ell",
+			Vector3.new(0.5, 0.1, 0.75),
+			CFrame.new(p) * CFrame.Angles(0, yaw, 0) * at(0, 0.1, -0.5, 20),
+			RAINBOW_SCALES[i + 1]
+		)
+	end
+end
+-- 8판 무지개 용 덩굴: 입 앞에 뭉게뭉게 구름 입김 (흰 공 3, 점점 작게)
+MONSTER_EXTRAS.cloudbreath = function(ctx, sh)
+	for i = 1, 3 do
+		sm(
+			ctx,
+			"Ball",
+			Vector3.one * (0.62 - i * 0.12),
+			at((i % 2) * 0.12, sh.hy + 0.25 + i * 0.12, -1.2 - i * 0.42),
+			WHITE,
+			Enum.Material.SmoothPlastic,
+			0.15
+		)
+	end
+end
+-- 8판 무지개 용 덩굴: 머리 뒤 뿔 2개
+MONSTER_EXTRAS.dragonhorns = function(ctx, sh)
+	for _, side in SIDES do
+		sm(ctx, "Wedge", Vector3.new(0.16, 0.55, 0.32), at(side * 0.3, sh.top - 0.05, 0.4, -25, 0, side * -14), ctx.c3)
+	end
+end
 -- 괴물 하나 만들기 (경비 겉모습). Height Attribute = 꼭대기 높이 × scale (GuardianService 잡힘 거리)
 function PetVisualService.buildMonster(id: string, scale: number, _opts: BuildOptions?): Model
 	local look = Visuals.monsters[id] or Visuals.monsters.flytrap_monster

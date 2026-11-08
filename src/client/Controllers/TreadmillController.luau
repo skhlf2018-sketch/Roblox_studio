@@ -113,14 +113,26 @@ local function myMoney(): number
 	return if typeof(m) == "number" then m else 0
 end
 
+-- 8판: 서버 TreadmillTouched payload (Types.TreadmillTouch) 를 받은 시각·레벨 — Attr 이 아직 안 왔을 때 잠깐 씀
+local lastTouchAt = -math.huge
+local lastTouchLevel: number? = nil
+
 local function treadLevel(): number
+	local level = 0
 	local a = Players.LocalPlayer:GetAttribute(Attr.TreadmillLevel)
 	if typeof(a) == "number" then
-		return math.max(0, math.floor(a))
+		level = math.max(0, math.floor(a))
+	else
+		local snap = State.get()
+		local saved = if snap then tonumber(snap.treadmillLevel) else nil
+		level = if saved then math.max(0, math.floor(saved)) else 0
 	end
-	local snap = State.get()
-	local level = if snap then tonumber(snap.treadmillLevel) else nil
-	return if level then math.max(0, math.floor(level)) else 0
+	-- 신호 레벨이 더 높으면(Attr 복제가 늦음) 신호를 믿음 — 산 뒤에는 Attr 이 올라가서 그쪽이 큼
+	local touched = lastTouchLevel
+	if touched and os.clock() - lastTouchAt < 1 and touched > level then
+		level = touched
+	end
+	return level
 end
 
 -- 내 베이스 러닝머신 벨트 파트들 (태그 Treadmill + Attr PlotIndex)
@@ -380,8 +392,16 @@ function TreadmillController.start()
 	--   → 둘 다 같은 함수(setTouching)로. 옛 서버(신호 없음)면 0.25초 클라 판정만
 	local touchedRemote = (Remotes.ToClient :: any).TreadmillTouched
 	if typeof(touchedRemote) == "string" then
-		Net.onLater(touchedRemote, function()
+		Net.onLater(touchedRemote, function(payload: any)
+			-- payload = Types.TreadmillTouch { level, nextLevel, nextCost, maxed, gainPerSecond, nextGainPerSecond }
+			--   창 숫자는 Economy 로 다시 계산 (TreadmillService.touchInfo 와 같은 식) — level 만 Attr 이 늦을 때 씀
+			local level = if typeof(payload) == "table" then tonumber(payload.level) else nil
+			if level then
+				lastTouchLevel = math.max(0, math.floor(level))
+				lastTouchAt = os.clock()
+			end
 			TreadmillController.setTouching(true)
+			refreshDialog()
 		end)
 	end
 	player:GetAttributeChangedSignal(Attr.TreadmillTouching):Connect(TreadmillController.checkBelt)

@@ -7,12 +7,14 @@
 
 	1) 자라는 씨앗 (태그 IncubatingEgg): 모델 "SeedVisual" — 단계 4 모양
 	     씨앗(땅에 반쯤 묻힘, 처음 10%) → 새싹(떡잎 2장) → 줄기(잎 4장) → 봉오리(등급 색)
-	     Attr Stage("sprout"/"stem"/"bud") + Progress/Required 로 고르고, 모양이 바뀔 때만 다시 만듦.
+	     Attr Stage("sprout"/"stem"/"bud") + Progress/Required 로 고르고, 모양이 바뀔 때 + 8판 자람 배율(GardenRules.growthScale)이
+	     0.04 바뀔 때만 다시 만듦 → 키 = 성체 키 × 자람 배율 (점점 커짐).
 	2) 성체 식물 (태그 GardenPlant): 모델 "PlantVisual" — 절차적 식물 (Visuals.plantLook: 구역 테마 + 이름 낱말 + id 해시)
-	     모양 19종(PLANT_FORMS, 7판 circuit·blocky·glitch 추가) · 등급별 크기·받침 고리 색 · 크기 등급(Size) · 돌연변이 색(Visuals.mutationLooks)
+	     모양 22종(PLANT_FORMS, 7판 circuit·blocky·glitch · 8판 gear·clock·cloud) · 8판 크기 = GARDEN_BASE × GardenRules.plantScale(등급 1 ~ 4.5 × 크기 등급) ·
+	     받침 고리 색 · 돌연변이 색(Visuals.mutationLooks)
 	     열매 파트 Fruit1~FruitMax 를 미리 만들고 Attr Fruits 개수만큼만 보임 (바뀌면 Transparency 만 바꿈).
 	3) 둥지 옆 장식 식물 (태그 ParentAnimalSpot 자리 → 모델 태그 ParentAnimal): 그 구역 식물 작게 + 이름표.
-	4) ReplicatedStorage.PetModels: 식물 158종 (7판) 모델 (크기 1, 아우라 없음, 열매 3개) → 클라 UI 뷰포트 (PetViewport)
+	4) ReplicatedStorage.PetModels: 식물 182종 (8판) 모델 (크기 1 = sized false, 아우라 없음, 열매 3개) → 클라 UI 뷰포트 (PetViewport, 카메라 거리 자동)
 
 	모델 구조: PrimaryPart "Root"(Anchored, 바닥 가운데) + 나머지 파트는 Root 에 WeldConstraint (Anchored = false).
 	  CanCollide/CanTouch/CanQuery = false. 모델 Attr Sway = true (클라가 가까운 식물만 Root 를 살짝 흔듦),
@@ -33,6 +35,7 @@ local Biomes = require(Shared.Data.Biomes)
 local Rarities = require(Shared.Data.Rarities)
 local Visuals = require(Shared.Data.Visuals)
 local Tags = require(Shared.Tags)
+local GardenRules = require(Shared.GardenRules)
 
 local PlantVisualService = {}
 PlantVisualService.started = false
@@ -47,9 +50,15 @@ local NEON = Enum.Material.Neon
 local SMOOTH = Enum.Material.SmoothPlastic
 local FRUIT_MAX = 5
 
--- 등급 순서(1~16, 7판) → 크기. 11번 위로는 정원 칸을 넘지 않게 조금씩만 커짐
-local RARITY_SCALE = { 1, 1.08, 1.16, 1.25, 1.35, 1.45, 1.55, 1.65, 1.75, 1.85, 2, 2.04, 2.08, 2.12, 2.16, 2.2 }
-local SIZE_SCALE: { [string]: number } = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 }
+-- 8판 (사장님 2026-11-08 "등급이 높을수록 크게, 자라면서 점점 크게"): 크기 숫자는 Config 한 곳 (GardenRules.plantScale =
+--   RARITY_PLANT_SCALE 1 ~ 4.5 × PLANT_SIZE_SCALE 1 ~ 1.5 × 자람 growthScale 0.3 → 1). 7판 RARITY_SCALE·SIZE_SCALE 표는 없앰.
+--   GARDEN_BASE = 배율 1 성체(일반·보통)를 정원에 놓을 때의 모델 배율 — 모델 바닥 폭이 Config.PLANT_FOOTPRINT(2.6) 근처
+--   (정원 간격 EggPlacement.gap 이 이 폭을 씀 → 큰 등급끼리도 안 겹침, smoke_visuals 가 폭을 잼)
+local GARDEN_BASE = 1.35 -- (7판 보통 성체와 같은 크기 · 정원 폭 평균 ≈ 0.93 × 간격 폭)
+-- 자라는 씨앗 단계 모양의 크기 1 꼭대기 높이 (buildStage 의 top) — 단계 모델을 "성체 키 × 자람 배율" 에 맞추는 데 씀
+local STAGE_TOP: { [string]: number } = { seed = 0.52, sprout = 0.72, stem = 1.26, bud = 2.02 }
+local ADULT_TOP = 3 -- 배율 1 성체 꼭대기 (모양마다 키 3 × tall 근처)
+local GROWTH_STEP = 0.04 -- 자람 배율이 이만큼 바뀔 때마다 씨앗 모델을 다시 만듦 (1초마다 오는 Progress 로 점점 커짐)
 local NATURAL: { [string]: boolean } = { silver = true, golden = true, rainbow = true }
 
 local RAINBOW = ColorSequence.new({
@@ -542,7 +551,7 @@ local function auraParts(b: Builder, rarityId: string, height: number, mutations
 end
 
 ------------------------------------------------------------------
--- 식물 모양 19종 (7판: 맨 아래 circuit·blocky·glitch) (크기 1: 키 약 3 × tall). 각 함수가 열매 자리(최대 5개)를 돌려줌
+-- 식물 모양 22종 (7판 circuit·blocky·glitch · 8판 gear·clock·cloud) (크기 1: 키 약 3 × tall). 각 함수가 열매 자리(최대 5개)를 돌려줌
 ------------------------------------------------------------------
 
 type Paint = {
@@ -1111,6 +1120,117 @@ FORMS.glitch = function(b, p)
 	return aroundSpots(H * 0.12, H * 0.32, 0.7, p.look.twist), H * 0.82 + 0.55
 end
 
+-- 8판 로봇 공장: 톱니 꽃 — 쇠 마디 줄기(관절 공) + 볼트 잎(네모 판 + 볼트) + 앞을 보는 원판 꽃 + 둘레 톱니 꽃잎
+FORMS.gear = function(b, p)
+	local H = p.H
+	local metal = Enum.Material.Metal
+	piece(b, "Cyl", Vector3.new(0.16, H * 0.36, 0.16), CFrame.new(0, H * 0.18, 0), p.stem, metal, "Stem")
+	piece(b, "Ball", Vector3.one * 0.24, CFrame.new(0, H * 0.37, 0), p.stem:Lerp(BLACK, 0.3), metal, "Joint")
+	piece(
+		b,
+		"Cyl",
+		Vector3.new(0.14, H * 0.36, 0.14),
+		CFrame.new(0, H * 0.55, 0) * CFrame.Angles(0, 0, rad(-8)),
+		p.stem,
+		metal,
+		"Stem"
+	)
+	for i = 1, p.look.leaves do
+		local a = rad(p.look.twist + i * 130)
+		local leaf = CFrame.Angles(0, a, 0) * CFrame.new(0, H * (0.16 + i * 0.1), -0.36) * CFrame.Angles(rad(18), 0, 0)
+		piece(b, "Block", Vector3.new(0.42, 0.06, 0.5), leaf, p.leaf, metal, "Leaf")
+		piece(b, "Cyl", Vector3.new(0.1, 0.08, 0.1), leaf * CFrame.new(0, 0.05, -0.1), p.center, p.centerMat, "Bolt")
+	end
+	local head = CFrame.new(0, H * 0.76, 0) * CFrame.Angles(rad(-25), 0, 0)
+	piece(b, "Cyl", Vector3.new(0.62, 0.16, 0.62), head * CFrame.Angles(rad(90), 0, 0), p.center, p.centerMat, "Center")
+	local n = p.look.petals + 2
+	for i = 1, n do
+		petal(
+			b,
+			p,
+			"Block",
+			Vector3.new(0.2, 0.3, 0.1),
+			head * CFrame.new(0, 0, 0.03) * CFrame.Angles(0, 0, i / n * math.pi * 2) * CFrame.new(0, 0.42, 0)
+		)
+	end
+	return aroundSpots(H * 0.26, H * 0.56, 0.4, p.look.twist), H * 0.76 + 0.55
+end
+
+-- 8판 시간의 탑: 시계 꽃 — 놋쇠 줄기 + 잎 + 앞을 보는 시계 판(상아 + 놋쇠 테) + 시곗바늘 2 + 둘레 꽃잎 + 위 종(꽃봉오리)
+FORMS.clock = function(b, p)
+	local H = p.H
+	stem(b, p, 0.14, H * 0.72, 0)
+	leaves(b, p, p.look.leaves, H * 0.14, H * 0.4, 0.75)
+	local y = H * 0.76
+	local face = CFrame.new(0, y, 0) * CFrame.Angles(rad(-15), rad(p.look.twist), 0)
+	local disc = face * CFrame.Angles(rad(90), 0, 0)
+	piece(
+		b,
+		"Cyl",
+		Vector3.new(0.86, 0.1, 0.86),
+		disc * CFrame.new(0, 0.02, 0),
+		p.stem:Lerp(WHITE, 0.15),
+		Enum.Material.Foil,
+		"Rim"
+	)
+	piece(b, "Cyl", Vector3.new(0.72, 0.12, 0.72), disc, Color3.fromRGB(250, 242, 214), SMOOTH, "Center")
+	piece(b, "Block", Vector3.new(0.05, 0.3, 0.04), face * CFrame.new(0, 0.12, -0.07), BLACK, SMOOTH, "Hand")
+	piece(
+		b,
+		"Block",
+		Vector3.new(0.05, 0.22, 0.04),
+		face * CFrame.new(0.08, -0.05, -0.07) * CFrame.Angles(0, 0, rad(-110)),
+		BLACK,
+		SMOOTH,
+		"Hand"
+	)
+	local n = p.look.petals
+	for i = 1, n do
+		petal(
+			b,
+			p,
+			"Ell",
+			Vector3.new(0.26, 0.36, 0.08),
+			face * CFrame.new(0, 0, 0.06) * CFrame.Angles(0, 0, i / n * math.pi * 2) * CFrame.new(0, 0.5, 0)
+		)
+	end
+	return aroundSpots(H * 0.28, H * 0.58, 0.4, p.look.twist), y + 0.6
+end
+
+-- 8판 무지개 하늘섬: 구름 꽃 — 가는 줄기 + 잎 + 꼭대기 솜 구름(흰 공 3) + 구름 위로 무지개 꽃잎 띠(꽃잎 색 반원)
+FORMS.cloud = function(b, p)
+	local H = p.H
+	stem(b, p, 0.12, H * 0.66, 0)
+	leaves(b, p, p.look.leaves, H * 0.14, H * 0.38, 0.7)
+	local y = H * 0.72
+	local white = Color3.fromRGB(255, 255, 255)
+	piece(b, "Ball", Vector3.one * 0.7, CFrame.new(0, y, 0), white, SMOOTH, "Cloud")
+	piece(b, "Ball", Vector3.one * 0.5, CFrame.new(0.42, y - 0.08, 0.05), white, SMOOTH, "Cloud")
+	piece(
+		b,
+		"Ball",
+		Vector3.one * 0.48,
+		CFrame.new(-0.42, y - 0.06, -0.05),
+		Color3.fromRGB(236, 244, 255),
+		SMOOTH,
+		"Cloud"
+	)
+	local n = p.look.petals
+	local arc = CFrame.new(0, y + 0.1, 0) * CFrame.Angles(0, rad(p.look.twist), 0)
+	for i = 1, n do
+		local a = (i - 0.5) / n * math.pi
+		petal(
+			b,
+			p,
+			"Ell",
+			Vector3.new(0.2, 0.34, 0.14),
+			arc * CFrame.new(math.cos(a) * 0.55, math.sin(a) * 0.5, 0) * CFrame.Angles(0, 0, a - math.pi / 2)
+		)
+	end
+	piece(b, "Ball", Vector3.one * 0.18, CFrame.new(0, y + 0.42, 0.1), p.center, p.centerMat, "Center")
+	return aroundSpots(H * 0.26, H * 0.55, 0.36, p.look.twist), y + 0.7
+end
+
 ------------------------------------------------------------------
 -- 성체 식물 모델
 ------------------------------------------------------------------
@@ -1121,6 +1241,9 @@ export type BuildOptions = {
 	fx: boolean?, -- 아우라 파티클·빛 (기본 true)
 	fruits: number?, -- 처음에 보이는 열매 수 (기본 0)
 	scale: number?, -- 전체 배율 (기본 1)
+	sized: boolean?, -- 8판: false 면 등급·크기 배율(GardenRules.plantScale)을 안 곱함 (UI 도서관 = 크기 1). 기본 true
+	ringScale: number?, -- (단계 모양) 흙 둔덕·받침 고리 배율 — 성체와 같은 크기로 (없으면 scale)
+	auraScale: number?, -- (단계 모양) 아우라 배율 (없으면 scale)
 }
 
 local function fruitPiece(
@@ -1161,7 +1284,7 @@ function PlantVisualService.build(plantId: string, opts: BuildOptions?): Model
 	local look = Visuals.plantLook(plantId)
 	local rarity = rarityOf(plantId)
 	local order = rarityOrder(rarity)
-	local scale = (o.scale or 1) * (RARITY_SCALE[order] or 1) * (SIZE_SCALE[o.size or "normal"] or 1)
+	local scale = (o.scale or 1) * (if o.sized == false then 1 else GardenRules.plantScale(plantId, o.size))
 	local b = newBuilder(plantId, scale)
 	local mutations: { string } = o.mutations or {}
 
@@ -1249,6 +1372,8 @@ end
 ------------------------------------------------------------------
 
 PlantVisualService.SEED_ONLY_FRACTION = 0.1 -- 새싹 단계 처음 10% 는 씨앗만 (땅에 반쯤 묻힘)
+PlantVisualService.GARDEN_BASE = GARDEN_BASE -- (테스트용) 배율 1 성체의 정원 모델 배율
+PlantVisualService.ADULT_TOP = ADULT_TOP
 
 function PlantVisualService.visualStage(stage: string?, progress: number?, required: number?): string
 	if stage == "bud" or stage == "stem" then
@@ -1278,8 +1403,10 @@ function PlantVisualService.buildStage(plantId: string, stage: string, opts: Bui
 			shell = rgb(m.color)
 		end
 	end
-	piece(b, "Ell", Vector3.new(1.5, 0.36, 1.5), CFrame.new(0, 0.06, 0), DIRT, Enum.Material.Ground, "Mound")
-	piece(b, "Cyl", Vector3.new(1.65, 0.07, 1.65), CFrame.new(0, 0.03, 0), tint, SMOOTH, "RarityRing")
+	-- 8판: 흙 둔덕·받침 고리는 다 자란 성체와 같은 크기 (단계 모양만 자람 배율로 커짐)
+	local k = if o.ringScale and b.s > 0 then o.ringScale / b.s else 1
+	piece(b, "Ell", Vector3.new(1.5, 0.36, 1.5) * k, CFrame.new(0, 0.06 * k, 0), DIRT, Enum.Material.Ground, "Mound")
+	piece(b, "Cyl", Vector3.new(1.65, 0.07, 1.65) * k, CFrame.new(0, 0.03 * k, 0), tint, SMOOTH, "RarityRing")
 	local top = 0.3
 	if stage == "seed" then
 		piece(
@@ -1375,7 +1502,7 @@ function PlantVisualService.buildStage(plantId: string, stage: string, opts: Bui
 	if o.fx ~= false then
 		local host = piece(b, "Block", Vector3.one * 0.2, CFrame.new(0, top * 0.6, 0), WHITE, SMOOTH, "Aura")
 		host.Transparency = 1
-		if PlantVisualService.addAura(host, rarity, b.s, { mutations = o.mutations }) == 0 then
+		if PlantVisualService.addAura(host, rarity, o.auraScale or b.s, { mutations = o.mutations }) == 0 then
 			host:Destroy()
 		end
 	end
@@ -1430,6 +1557,27 @@ end
 type SeedState = { key: string, model: Model? }
 local seeds: { [BasePart]: SeedState } = {}
 
+-- 8판: 정원 성체의 모델 배율 (등급 × 크기 등급, GARDEN_BASE 기준) — 성체·자라는 씨앗이 같은 값을 씀
+function PlantVisualService.gardenScale(petId: string, sizeId: string?): number
+	return GARDEN_BASE * GardenRules.plantScale(petId, sizeId)
+end
+
+-- 8판: 자라는 씨앗 단계 모양 배율 — 단계 모델 키가 "다 자란 성체 키 × 자람 배율(GardenRules.growthScale 0.3 → 1)" 이 되게.
+--   자람 배율은 GROWTH_STEP 단위로 끊음 (그 단위가 바뀔 때만 다시 만듦). 반환: 단계 모델 배율, 성체 배율(둔덕·고리), 끊은 자람 배율
+function PlantVisualService.seedScales(
+	petId: string,
+	sizeId: string?,
+	stage: string,
+	progress: number?,
+	required: number?
+): (number, number, number)
+	local adult = PlantVisualService.gardenScale(petId, sizeId)
+	local grow = GardenRules.growthScale(progress or 0, required or 1)
+	local step = math.max(GROWTH_STEP, math.floor(grow / GROWTH_STEP + 0.5) * GROWTH_STEP)
+	local top = STAGE_TOP[stage] or 1
+	return adult * step * ADULT_TOP / top, adult, step
+end
+
 local function refreshSeed(part: BasePart)
 	local state = seeds[part]
 	if not state or part.Parent == nil then
@@ -1439,25 +1587,26 @@ local function refreshSeed(part: BasePart)
 	if petId == "" then
 		return
 	end
-	local stage = PlantVisualService.visualStage(
-		stringAttr(part, "Stage"),
-		numberAttr(part, "Progress"),
-		numberAttr(part, "Required")
-	)
+	local progress, required = numberAttr(part, "Progress"), numberAttr(part, "Required")
+	local stage = PlantVisualService.visualStage(stringAttr(part, "Stage"), progress, required)
 	local mutations = stringAttr(part, "Mutations")
-	local key = stage .. "|" .. mutations
+	local sizeId = stringAttr(part, "Size")
+	local scale, adult, step = PlantVisualService.seedScales(petId, sizeId, stage, progress, required)
+	local key = stage .. "|" .. mutations .. "|" .. string.format("%.2f", step)
 	if state.key == key and state.model and state.model.Parent then
 		return
 	end
 	if state.model then
 		state.model:Destroy()
 	end
-	local d = math.min(part.Size.X, part.Size.Z)
 	local model = PlantVisualService.buildStage(petId, stage, {
-		scale = 2.4 * (d / 2) ^ 0.65,
+		scale = scale,
+		ringScale = adult,
+		auraScale = adult * step,
 		mutations = split(mutations),
 		fx = true,
 	})
+	model:SetAttribute("Growth", step)
 	mount(part, model, stringAttr(part, "EggUid"))
 	state.key = key
 	state.model = model
@@ -1483,9 +1632,6 @@ end
 type PlantState = { key: string, model: Model? }
 local adults: { [BasePart]: PlantState } = {}
 
--- 정원 성체 크기: 공 파트 지름(크기 등급 반영) 기준
-local GARDEN_SCALE = 1.35 -- 보통 크기 성체 배율 (공 지름 3.2). 큰 크기 등급은 (지름 / 3.2)^0.65 배 (초거대 약 1.8배)
-
 local function refreshPlant(part: BasePart)
 	local state = adults[part]
 	if not state or part.Parent == nil then
@@ -1504,9 +1650,11 @@ local function refreshPlant(part: BasePart)
 	if state.model then
 		state.model:Destroy()
 	end
-	local d = math.min(part.Size.X, part.Size.Z)
+	-- 8판: 크기 = GARDEN_BASE × GardenRules.plantScale(등급 × 크기 등급) — 공 파트 지름은 안 씀
+	local sizeId = stringAttr(part, "Size")
 	local model = PlantVisualService.build(petId, {
-		scale = GARDEN_SCALE * (d / 3.2) ^ 0.65,
+		scale = GARDEN_BASE,
+		size = if sizeId ~= "" then sizeId else nil,
 		mutations = split(mutations),
 		fx = true,
 		fruits = fruits,
@@ -1515,7 +1663,6 @@ local function refreshPlant(part: BasePart)
 	state.key = mutations
 	state.model = model
 end
-
 local function onPlant(part: BasePart)
 	if adults[part] then
 		return
@@ -1543,6 +1690,7 @@ PlantVisualService.attachPlant = onPlant
 ------------------------------------------------------------------
 
 local NEST_SCALE = 1.1
+local NEST_MAX_SCALE = 2.2
 local nestModels: { [BasePart]: Model } = {}
 
 local function currentSide(): string
@@ -1611,7 +1759,12 @@ local function buildNestPlant(spot: BasePart)
 		return
 	end
 	local plant = list[((index - 1) % #list) + 1]
-	local model = PlantVisualService.build(plant.id, { scale = NEST_SCALE, fx = false, fruits = 2 })
+	-- 8판: 등급 배율은 NEST_MAX_SCALE 까지만 (둥지 무리 바로 뒤라 거대한 식물이 둥지를 덮지 않게)
+	local ps = GardenRules.plantScale(plant.id, nil)
+	local model = PlantVisualService.build(
+		plant.id,
+		{ scale = NEST_SCALE * math.min(ps, NEST_MAX_SCALE) / ps, fx = false, fruits = 2 }
+	)
 	local ground = spot.CFrame.Position - Vector3.new(0, spot.Size.Y / 2, 0)
 	model:PivotTo(CFrame.new(ground) * spot.CFrame.Rotation)
 	local root = model.PrimaryPart
@@ -1645,7 +1798,8 @@ function PlantVisualService.buildLibrary(): Folder
 	local folder = Instance.new("Folder")
 	folder.Name = "PetModels"
 	for i, plant in Plants.list do
-		local ok, model = pcall(PlantVisualService.build, plant.id, { fx = false, fruits = 3 })
+		-- 8판: UI 뷰포트용은 크기 1 (sized = false) — PetViewport 가 모델 크기에 맞춰 카메라 거리를 정함
+		local ok, model = pcall(PlantVisualService.build, plant.id, { fx = false, fruits = 3, sized = false })
 		if ok then
 			model.Parent = folder
 		else

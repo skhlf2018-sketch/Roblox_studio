@@ -6,7 +6,7 @@
 	- 머리 위에 든 씨앗 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 등급 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
-	- 바닥에 떨어진 씨앗(Egg, Attribute ExpiresAt) 머리 위 빨간 "32초" 카운트다운 (2판 수정, 10초부터 깜빡)
+	- 바닥에 떨어진 씨앗(Egg): 8판 구역 밖 = 빨간 "5초 뒤 둥지로" 카운트다운 (Attr ExpiresAt · ReturnsToNest) / 구역 안 = 작은 "여기 그대로"
 	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 자는 경비 Z 둥실둥실 / 성체가 됨: 반짝 / 잡힘: 머리 위 "퍽!" + 별
 	- 6판 열매 따기: FruitPicked { plantUid, count, value } → 그 성체(GardenPlant 파트, Attr PlantUid + OwnerUserId == 나) 위
 	  "+열매 3" 주황 글씨 + 작은 코인 값 (popFruit). 식물 살랑살랑·아우라 켜기는 PlantFxController.
@@ -120,53 +120,81 @@ local function popText(adornee: BasePart, text: string, color: Color3)
 end
 
 ------------------------------------------------------------------
--- 떨어진 씨앗 카운트다운 "32초" (2판 수정: 씨앗 파트 Attribute ExpiresAt, workspace:GetServerTimeNow 기준)
+-- 떨어진 씨앗 머리 위 글 (8판, 씨앗 파트 Attr ExpiresAt · ReturnsToNest · EggState, workspace:GetServerTimeNow 기준)
+--   구역 밖에 떨어짐 (ExpiresAt 있음, ReturnsToNest = true): 빨간 "3초 뒤 둥지로" 카운트다운 (2초부터 노랑 ↔ 빨강 깜빡)
+--   구역 안에 떨어짐 (ExpiresAt 없음, ReturnsToNest = false): 타이머 없이 작은 흰 "여기 그대로" (누구나 다시 주움)
 ------------------------------------------------------------------
 
-local dropTimers: { [BasePart]: TextLabel } = {}
+type DropTag = { gui: BillboardGui, label: TextLabel, mode: string }
+local dropTimers: { [BasePart]: DropTag } = {}
+
+local function dropMode(egg: BasePart): string?
+	if egg.Parent == nil then
+		return nil
+	end
+	if typeof(egg:GetAttribute("ExpiresAt")) == "number" then
+		return "return"
+	end
+	if egg:GetAttribute("EggState") == "Dropped" and egg:GetAttribute("ReturnsToNest") == false then
+		return "stay"
+	end
+	return nil
+end
+
+local function makeDropTag(egg: BasePart, mode: string): DropTag
+	local stay = mode == "stay"
+	local gui = Instance.new("BillboardGui")
+	gui.Name = if stay then "DropStay" else "DropTimer"
+	gui.Size = if stay then UDim2.fromOffset(92, 24) else UDim2.fromOffset(150, 40)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, egg.Size.Y / 2 + (if stay then 1.6 else 2.4), 0)
+	gui.LightInfluence = 0
+	gui.MaxDistance = if stay then 60 else 140
+	gui.Adornee = egg
+	local text = Instance.new("TextLabel")
+	text.Name = if stay then "Text" else "Time"
+	text.Size = UDim2.fromScale(1, 1)
+	text.BackgroundTransparency = 1
+	text.Font = Enum.Font.FredokaOne
+	text.TextScaled = true
+	text.TextStrokeTransparency = 0
+	if stay then
+		text.Text = "여기 그대로"
+		text.TextColor3 = Color3.fromRGB(235, 255, 235)
+		text.TextStrokeColor3 = Color3.fromRGB(20, 80, 30)
+		text.TextTransparency = 0.1
+	else
+		text.TextColor3 = Color3.fromRGB(255, 55, 55)
+		text.TextStrokeColor3 = Color3.fromRGB(60, 0, 0)
+	end
+	text.Parent = gui
+	gui.Parent = egg
+	return { gui = gui, label = text, mode = mode }
+end
 
 local function refreshDropTimer(egg: BasePart)
-	local expires = egg:GetAttribute("ExpiresAt")
-	local label = dropTimers[egg]
-	if typeof(expires) ~= "number" or egg.Parent == nil then
-		if label then
-			local gui = label.Parent
-			if gui then
-				gui:Destroy()
-			end
-			dropTimers[egg] = nil
-		end
+	local mode = dropMode(egg)
+	local tag: DropTag? = dropTimers[egg]
+	if tag and (tag.mode ~= mode or tag.gui.Parent == nil) then
+		tag.gui:Destroy()
+		dropTimers[egg] = nil
+		tag = nil
+	end
+	if not mode then
 		return
 	end
-	if not label or label.Parent == nil then
-		local gui = Instance.new("BillboardGui")
-		gui.Name = "DropTimer"
-		gui.Size = UDim2.fromOffset(110, 46)
-		gui.StudsOffsetWorldSpace = Vector3.new(0, egg.Size.Y / 2 + 2.4, 0)
-		gui.LightInfluence = 0
-		gui.MaxDistance = 140
-		gui.Adornee = egg
-		local text = Instance.new("TextLabel")
-		text.Name = "Time"
-		text.Size = UDim2.fromScale(1, 1)
-		text.BackgroundTransparency = 1
-		text.Font = Enum.Font.FredokaOne
-		text.TextScaled = true
-		text.TextColor3 = Color3.fromRGB(255, 55, 55)
-		text.TextStrokeTransparency = 0
-		text.TextStrokeColor3 = Color3.fromRGB(60, 0, 0)
-		text.Parent = gui
-		gui.Parent = egg
-		label = text
-		dropTimers[egg] = text
+	if not tag then
+		tag = makeDropTag(egg, mode)
+		dropTimers[egg] = tag
 	end
-	local left = math.max(0, math.ceil(expires - Workspace:GetServerTimeNow()))
-	local shown = label :: TextLabel
-	shown.Text = tostring(left) .. "초"
-	-- 10초 남으면 노랑 ↔ 빨강 깜빡
-	shown.TextColor3 = if left <= 10 and left % 2 == 0
-		then Color3.fromRGB(255, 220, 60)
-		else Color3.fromRGB(255, 55, 55)
+	local shown = tag :: DropTag
+	if mode == "return" then
+		local expires = egg:GetAttribute("ExpiresAt") :: number
+		local left = math.max(0, math.ceil(expires - Workspace:GetServerTimeNow()))
+		shown.label.Text = tostring(left) .. "초 뒤 둥지로"
+		shown.label.TextColor3 = if left <= 2 and left % 2 == 0
+			then Color3.fromRGB(255, 220, 60)
+			else Color3.fromRGB(255, 55, 55)
+	end
 end
 
 -- 2판: 배달 패드가 없어서 내 베이스 스폰 자리(앞마당 가운데)에서 반짝
@@ -308,13 +336,16 @@ function WorldFxController.start()
 			dropTimers[inst] = nil
 		end
 	end)
-	-- 바닥에 떨어진 씨앗 머리 위 "32초" 카운트다운 (Attribute ExpiresAt = 서버 시각)
+	-- 바닥에 떨어진 씨앗 머리 위 "5초 뒤 둥지로" / "여기 그대로" (Attribute ExpiresAt = 서버 시각, ReturnsToNest, EggState)
 	watchTag(Tags.Egg, function(inst)
 		if inst:IsA("BasePart") then
 			refreshDropTimer(inst)
-			inst:GetAttributeChangedSignal("ExpiresAt"):Connect(function()
+			local function refresh()
 				refreshDropTimer(inst)
-			end)
+			end
+			inst:GetAttributeChangedSignal("ExpiresAt"):Connect(refresh)
+			inst:GetAttributeChangedSignal("ReturnsToNest"):Connect(refresh)
+			inst:GetAttributeChangedSignal("EggState"):Connect(refresh)
 		end
 	end)
 	task.spawn(function()

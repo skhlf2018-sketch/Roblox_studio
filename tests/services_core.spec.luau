@@ -400,25 +400,28 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("러닝머신: 해금 1K 코인, 레벨마다 정해진 가격, 최대 20레벨 (6판: 1초 1M)", function()
-		local w = world()
-		local UpgradeService = w.H.server("Services/UpgradeService")
-		local Upgrades = w.H.shared("Data/Upgrades")
-		w.data.money = 1e21
-		for level = 1, 20 do
+	T.test(
+		"러닝머신: 해금 500 코인(8판 ÷2), 레벨마다 정해진 가격, 최대 20레벨 (6판: 1초 1M)",
+		function()
+			local w = world()
+			local UpgradeService = w.H.server("Services/UpgradeService")
+			local Upgrades = w.H.shared("Data/Upgrades")
+			w.data.money = 1e21
+			for level = 1, 20 do
+				UpgradeService.purchase(w.player, "Treadmill")
+				T.eq(w.data.treadmillLevel, level)
+			end
+			local expected = 1e21
+			for _, row in Upgrades.Treadmill do
+				expected -= row.cost
+			end
+			T.near(w.data.money, expected, 1e6, "가격표 합계만큼만 빠짐")
 			UpgradeService.purchase(w.player, "Treadmill")
-			T.eq(w.data.treadmillLevel, level)
+			T.eq(w.data.treadmillLevel, 20)
+			T.truthy(w.H.hasNotify(w.player, "info", "최대 레벨"))
+			w.H.uninstall()
 		end
-		local expected = 1e21
-		for _, row in Upgrades.Treadmill do
-			expected -= row.cost
-		end
-		T.near(w.data.money, expected, 1e6, "가격표 합계만큼만 빠짐")
-		UpgradeService.purchase(w.player, "Treadmill")
-		T.eq(w.data.treadmillLevel, 20)
-		T.truthy(w.H.hasNotify(w.player, "info", "최대 레벨"))
-		w.H.uninstall()
-	end)
+	)
 
 	T.test(
 		"트레일: 사면 바로 장착 (장착한 것 하나만 적용), 중복 구매 불가, 모르는 id 무시",
@@ -613,7 +616,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"안 타는 경우: 잠긴 러닝머신(0레벨, 5초에 한 번 안내) / 알을 든 사람 / 기절 / 다른 사람 베이스 러닝머신",
+		"안 타는 경우: 잠긴 러닝머신(0레벨 — 8판: 안내 글 대신 TreadmillTouched 창 신호 1번) / 알을 든 사람 / 기절 / 다른 사람 베이스 러닝머신",
 		function()
 			local w = treadWorld(0)
 			local startSpeed = w.data.speed
@@ -621,13 +624,17 @@ return function(T, Loader)
 			w.H.advance(3)
 			T.falsy(w.player.attrs.OnTreadmill)
 			T.eq(w.data.speed, startSpeed)
-			local locked = 0
 			for _, n in w.H.notifications(w.player) do
-				if string.find(n.text, "러닝머신이 잠겨 있어요", 1, true) then
-					locked += 1
-				end
+				T.falsy(
+					string.find(n.text, "러닝머신이 잠겨 있어요", 1, true),
+					"8판: 먼저 사세요 안내 없음"
+				)
 			end
-			T.eq(locked, 1, "5초에 한 번")
+			local touched = w.H.sent(w.player, "TreadmillTouched")
+			T.eq(#touched, 1, "올라선 순간 1번 (3초 서 있어도)")
+			T.eq(touched[1][1].level, 0)
+			T.eq(touched[1][1].nextCost, 500)
+			T.eq(w.player.attrs.TreadmillTouching, true)
 			w.data.treadmillLevel = 1
 			w.session.carryingUid = "e1"
 			w.H.advance(1)

@@ -4,8 +4,19 @@
 	6판 "씨앗을 훔치세요": 경비 = 구역 테마 **식물 괴물** (이름은 Data/Biomes.guardName — 덥석 파리지옥 · 연꽃 개구리풀 …,
 	  모양은 선임 PetVisualService/Visuals.guards). 로직·속도 숫자는 5판 그대로 (아래 "알" = 씨앗).
 
+	8판 (사장님 2026-11-08) — **잡히는 규칙 = 시간** (물리 거리 판정 없앰, 추격 WalkSpeed 공식은 그대로):
+	  - 집 = 둥지 무리 바로 옆 (MapLayout.guardHome — 구역 끝 오른쪽 귀퉁이)
+	  - 내 실효 속도로 도망칠 수 없으면(SpeedMath.catchSeconds ≠ nil) 그 씨앗·그 사람의 추격 시간(egg.chaseSeconds,
+	    이 경비가 쫓는 동안만 쌓임)이 2.5초(조금 모자람, 추격 기준의 70% 이상) / 1초(많이 모자람)가 되는 순간 잡힘.
+	    마지막 GUARD_CATCH_RUSH_SECONDS(0.3초)는 남은 거리 ÷ 남은 시간으로 빠르게 다가감 (≤ RUSH_MAX_WALKSPEED).
+	    가까우면 바로 뒤(잡힘 거리 절반)에 붙어 따라감. 씨앗은 놓친 규칙대로 (구역 안 → 둥지, 밖 → 그 자리).
+	  - 도망칠 수 없는 채로 **다음 구역 경계(그 씨앗 구역 zMax)** 에 닿으면 그 즉시 잡힘 + 씨앗은 둥지로
+	    (쫓기는 사람이 아니어도 — 이 구역 씨앗을 든 느린 사람은 다음 구역에 절대 못 감). 날려 보내는 방향 = 뒤(-z).
+	  - 도망칠 수 있으면 자유: 경비는 쫓아오기만 하고 못 잡음.
+	  - 여러 명이면 도망칠 수 없는 사람을 먼저 쫓음 (그중 가장 가까운 사람), 없으면 가장 가까운 사람.
+
 	2판 (설계 2판 B — 원작 관찰):
-	  - 평소: 집(MapLayout.guardHome = 구역 중앙, 둥지들 사이)에서 잠잠 → State "Sleeping" (클라가 Z 표시)
+	  - 평소: 집(MapLayout.guardHome — 8판: 둥지 무리 옆, 7판까지 구역 중앙)에서 잠잠 → State "Sleeping" (클라가 Z 표시)
 	  - 누가 이 구역 알을 들면 깨어나 쫓아감 → State "Chase", TargetUserId
 	  - 추격 포기 거리 없음: 알 든 사람이 허브(z < SAFE_ZONE_Z)에 들어가거나(= 배달, reason "safe") / 잡히거나 /
 	    알을 놓거나(DropEgg) / 밤이 될 때까지 계속 쫓음 → 끝나면 State "Return" 으로 집에 걸어가서 다시 "Sleeping"
@@ -14,10 +25,8 @@
 	    (추천 속도 이상이면 0.85 ~ 0.99배라 못 잡음, 모자라면 최소 1.2배로 반드시 따라잡음)
 	  - 추격 목표 (2판 수정): 플레이어 위치 + 서버가 본 이동 속도 × GUARD_LEAD_SECONDS(0.25) (GuardLogic.leadPoint)
 	    → 걷기 150 으로 도망가도 0.1초 전 자리에 먼저 도착해 멈추지 않고 계속 달림
-	  - 잡힘 판정: 서버에서 경비 몸통과 플레이어 HumanoidRootPart 수평 거리 ≤ 6 + 경비 키 × 0.25 (최대 16), 높이 차 ≤ 10
-	    수평 거리는 지난 틱 → 이번 틱 사이 가장 가까웠던 거리 (GuardLogic.closestApproach — 한 틱에 지나쳐도 잡힘)
-	    (GUARD_CATCH_DISTANCE · GUARD_CATCH_HEIGHT_FACTOR · GUARD_CATCH_DISTANCE_MAX, 모델 Attribute "CatchDistance" 에 적어 둠)
-	    (둥지에서 줍고 GUARD_CATCH_GRACE_SECONDS 동안은 안 잡힘 — egg.graceUntil)
+	  - (7판까지 잡힘 판정: 수평 거리 ≤ 6 + 경비 키 × 0.25 (최대 16) + 줍기 유예 1.5초 → 8판: 위 "시간" 규칙.
+	    거리는 경비가 따라붙어 멈추는 거리로만 씀 — 모델 Attribute "CatchDistance")
 	  - 경비끼리 겹치지 않게: 서로 안 부딪히는 CollisionGroup + 가까우면 옆으로 비켜 감 (Logic/GuardLogic)
 
 	모델: 단순 몸통 파트 + 머리 + Humanoid. 선임(PetVisualService)이 겉모습을 HumanoidRootPart 에 용접해 붙임.
@@ -349,20 +358,55 @@ local function canChase(player: Player, root: BasePart): boolean
 	return not MapLayout.isInHub(root.Position)
 end
 
+-- 8판: 이 사람이 이 경비한테서 도망칠 수 없으면 잡히기까지 추격 시간(초), 도망칠 수 있으면 nil
+function GuardianService.catchAfter(biomeId: string, player: Player): number?
+	local biome = Biomes.get(biomeId)
+	if not biome then
+		return nil
+	end
+	return SpeedMath.catchSeconds(biome.guardSpeed, SpeedService.getCarrySpeed(player))
+end
+
+local function guardName(guard: Guard): string
+	local name = guard.model:GetAttribute("GuardName")
+	return if typeof(name) == "string" then name else "경비"
+end
+
 local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg }, isDay: boolean)
 	refreshHeight(guard)
 	local now = os.clock()
+	local range = MapLayout.biome(guard.biomeId)
 	local best: Player? = nil
 	local bestRoot: BasePart? = nil
 	local bestDistance = math.huge
+	local bestForced = false
 	if isDay then
 		for player, egg in carriers do
 			if egg.biomeId == guard.biomeId then
 				local root = Character.getRoot(player)
 				if root and canChase(player, root) then
-					local d = (root.Position - guard.root.Position).Magnitude
-					if d < bestDistance then
-						best, bestRoot, bestDistance = player, root, d
+					local forced = GuardianService.catchAfter(guard.biomeId, player) ~= nil
+					if forced and range and GuardLogic.crossedForward(root.Position.Z, range.zMax) then
+						-- 8판: 도망칠 수 없는 채로 다음 구역 경계에 닿음 → 즉시 잡힘, 씨앗은 둥지로, 뒤(-z)로 날아감
+						local p = root.Position
+						EggService.knockOut(
+							player,
+							Vector3.new(p.X, p.Y, p.Z + 10),
+							"guard",
+							guardName(guard),
+							nil,
+							"ReturnToNest"
+						)
+						if guard.target == player then
+							setTarget(guard, nil, "caught")
+							guard.chase = nil
+						end
+					else
+						-- 도망칠 수 없는 사람을 먼저 (그중 가장 가까운 사람), 없으면 가장 가까운 사람
+						local d = (root.Position - guard.root.Position).Magnitude
+						if (forced and not bestForced) or (forced == bestForced and d < bestDistance) then
+							best, bestRoot, bestDistance, bestForced = player, root, d, forced
+						end
 					end
 				end
 			end
@@ -385,12 +429,30 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 	if best and bestRoot then
 		-- 4판: 추격 속도는 구역마다 고정 (플레이어 속도와 무관). 플레이어 WalkSpeed 는 앞 지점 예측에만 씀
 		local walkSpeed = SpeedService.getWalkSpeed(best)
-		guard.humanoid.WalkSpeed = SpeedMath.guardChaseSpeed(guard.biome.guardSpeed)
+		local chaseSpeed = SpeedMath.guardChaseSpeed(guard.biome.guardSpeed)
 
 		local p = bestRoot.Position
 		local g = guard.root.Position
 		local track = guard.chase
 		local prev = if track and track.target == best then track else nil
+		local egg = carriers[best]
+
+		-- 8판: 추격 시간 (그 씨앗·그 사람, 도망칠 수 없는 동안 이 경비가 쫓은 시간만 쌓임)
+		local after = GuardianService.catchAfter(guard.biomeId, best)
+		local remaining: number? = nil
+		if egg then
+			if egg.chaseBy ~= best then
+				egg.chaseBy = best
+				egg.chaseSeconds = 0
+			end
+			if after then
+				if prev and now > prev.time then
+					egg.chaseSeconds = (egg.chaseSeconds or 0) + (now - prev.time)
+				end
+				remaining = after - (egg.chaseSeconds or 0)
+			end
+		end
+
 		-- 서버가 본 플레이어 이동 속도 (지난 틱 → 이번 틱). 순간이동처럼 튀면 WalkSpeed × 1.5 까지만 앞을 봄
 		local vx, vz = 0, 0
 		if prev and now > prev.time then
@@ -399,21 +461,30 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 		end
 		local aimX, aimZ =
 			GuardLogic.leadPoint(p.X, p.Z, vx, vz, Config.GUARD_LEAD_SECONDS, math.max(walkSpeed, 16) * 1.5)
+		local reach = GuardianService.catchDistance(guard.height)
+		local relX, relZ = p.X - g.X, p.Z - g.Z
+		local distance = math.sqrt(relX * relX + relZ * relZ)
+		if remaining and distance <= reach and distance > 1e-6 then
+			-- 곧 잡힐 사람에게 바짝 붙음: 바로 뒤(잡힘 거리 절반)에서 따라감 (밀치지 않게)
+			aimX = p.X - relX / distance * reach * 0.5
+			aimZ = p.Z - relZ / distance * reach * 0.5
+		end
+		-- 마지막 0.3초는 남은 거리 ÷ 남은 시간으로 빠르게 다가감 (순간이동처럼 안 보이게)
+		guard.humanoid.WalkSpeed = if remaining and remaining <= Config.GUARD_CATCH_RUSH_SECONDS
+			then GuardLogic.rushWalkSpeed(
+				distance - reach * 0.5,
+				remaining,
+				chaseSpeed,
+				Config.GUARD_CATCH_RUSH_MAX_WALKSPEED
+			)
+			else chaseSpeed
 		local wall = MapLayout.HALF_WIDTH - 2
 		moveTo(guard, steer(guard, Vector3.new(math.clamp(aimX, -wall, wall), p.Y, aimZ)))
-
-		-- 잡힘: 틱 사이 가장 가까웠던 수평 거리 (빠른 추격에서 한 틱에 지나쳐도 잡힘) + 지금 높이 차
-		local relX, relZ = p.X - g.X, p.Z - g.Z
-		local closest = if prev
-			then GuardLogic.closestApproach(prev.px - prev.gx, prev.pz - prev.gz, relX, relZ)
-			else math.sqrt(relX * relX + relZ * relZ)
 		guard.chase = { target = best, px = p.X, pz = p.Z, gx = g.X, gz = g.Z, time = now }
-		local egg = carriers[best]
-		local dy = math.abs(p.Y - g.Y)
-		local reach = GuardianService.catchDistance(guard.height)
-		if egg and now >= egg.graceUntil and closest <= reach and dy <= 10 then
-			local name = guard.model:GetAttribute("GuardName")
-			EggService.knockOut(best, guard.root.Position, "guard", if typeof(name) == "string" then name else "경비")
+
+		-- 8판 잡힘: 도망칠 수 없는 사람의 추격 시간이 다 차면 (거리와 상관없이). 씨앗은 놓친 규칙대로
+		if egg and remaining and remaining <= 1e-6 then
+			EggService.knockOut(best, guard.root.Position, "guard", guardName(guard))
 			setTarget(guard, nil, "caught")
 			guard.chase = nil
 		end

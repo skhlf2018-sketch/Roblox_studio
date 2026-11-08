@@ -617,7 +617,7 @@ function ServerHarness.install(Loader, T, options)
 		end,
 	})
 
-	-- 구역·둥지: MapLayout 그대로 (구역 = 복도 폭 220 × 240, 둥지 8개 = nestsFor 자리, 둥지 파트 윗면 1.4)
+	-- 구역·둥지: MapLayout 그대로 (구역 = 복도 폭 220 × 240, 8판 둥지 5개 = nestsFor 무리 자리, 둥지 파트 윗면 1.4)
 	do
 		for _, b in MapLayout.biomes do
 			H.map.zones[b.id] = { centerX = 0, centerZ = b.centerZ, halfX = MapLayout.HALF_WIDTH, halfZ = 120 }
@@ -748,7 +748,7 @@ function ServerHarness.install(Loader, T, options)
 				lose(player, had)
 				return if had then "DropHere" else nil
 			end,
-			knockOut = function(player, fromPosition, cause, byName, power)
+			knockOut = function(player, fromPosition, cause, byName, power, forceOutcome)
 				local had = H.eggs.carried[player]
 				H.eggs.carried[player] = nil -- 진짜처럼 알을 놓침
 				lose(player, had)
@@ -758,6 +758,7 @@ function ServerHarness.install(Loader, T, options)
 					cause = cause,
 					by = byName,
 					power = power,
+					outcome = forceOutcome, -- 8판: "ReturnToNest" = 다음 구역 경계를 넘다 잡힘
 				})
 			end,
 		})
@@ -769,7 +770,7 @@ function ServerHarness.install(Loader, T, options)
 		egg.pickedPosition = egg.pickedPosition or vec(0, 0, 100)
 		egg.originAt = egg.originAt or nowClock() - 1000 -- 한참 전에 주움 (너무 빠른 배달로 안 걸리게)
 		egg.pickedAt = egg.pickedAt or nowClock() - 1000 -- 경비 유예(1.5초)가 이미 지남
-		egg.graceUntil = egg.graceUntil or egg.pickedAt + 1.5 -- 둥지에서 주운 것처럼 (EggService 와 같은 규칙)
+		-- (8판: 경비 줍기 유예 graceUntil 없앰 — 잡힘은 추격 시간 egg.chaseSeconds, GuardianService 가 채움)
 		H.eggs.carried[player] = egg
 		if H.eggs.pickedUp then
 			H.eggs.pickedUp:fire(player, egg) -- 진짜 EggService.tryPickup 처럼 (튜토리얼 1 → 2)

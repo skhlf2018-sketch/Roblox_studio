@@ -104,7 +104,17 @@ export type TutorialView = {
 	text: string, -- 큰 글씨 ("숲에서 씨앗 훔치기" ...)
 	hint: string, -- 작은 설명 (끝나면 "")
 	done: boolean,
-	reward: number?, -- 끝내는 순간의 TutorialUpdate 에만: 받은 코인 (500)
+	reward: number?, -- 끝내는 순간의 TutorialUpdate 에만: 받은 코인 (8판: 1,000)
+}
+
+-- 8판: 내 러닝머신 벨트에 올라섬 (TreadmillTouched — 0레벨(잠김)이어도) → 클라가 "다음 레벨로 올리기" 창을 엶
+export type TreadmillTouch = {
+	level: number, -- 지금 러닝머신 레벨 (0 = 잠김)
+	nextLevel: number?, -- 다음 레벨 (최대 레벨이면 nil)
+	nextCost: number?, -- 다음 레벨 가격 (코인, 0레벨이면 해금 가격 500) — 최대면 nil
+	maxed: boolean, -- 20레벨 끝
+	gainPerSecond: number, -- 지금 1초 속도 (트레일 전, 0레벨이면 0)
+	nextGainPerSecond: number?, -- 다음 레벨 1초 속도 (트레일 전)
 }
 
 -- 5판: 랭킹판 한 줄 (LeaderboardUpdate)

@@ -41,9 +41,9 @@ return function(T, Loader)
 		{ "super", "Super", 8 * DAY, 500, 100, 4600, 5, 9, 10, 10e9, 15e9 },
 		{ "hacker", "Hacker", 14 * DAY, 800, 150, 5800, 4, 8, 9, 120e9, 180e9 },
 		{ "original", "Original", 20 * DAY, 1200, 220, 7200, 4, 7, 8, 1.5e12, 2.2e12 },
-		{ "developer", "Developer", 30 * DAY, 2000, 320, 9000, 6, 6, 7, 18e12, 27e12 },
-		{ "ultradivine", "Ultradivine", 45 * DAY, 3000, 480, 11000, 5, 5, 6, 220e12, 330e12 },
-		{ "hacker_glitch", "H?a.(cke_r!#", 60 * DAY, 5000, 700, 14000, 2, 4, 5, 2.7e15, 3.3e15 },
+		{ "developer", "Developer", 30 * DAY, 2000, 320, 9000, 11, 6, 7, 18e12, 27e12 }, -- 8판: 6 → 11
+		{ "ultradivine", "Ultradivine", 45 * DAY, 3000, 480, 11000, 17, 5, 6, 220e12, 330e12 }, -- 8판: 5 → 17
+		{ "hacker_glitch", "H?a.(cke_r!#", 60 * DAY, 5000, 700, 14000, 9, 4, 5, 2.7e15, 3.3e15 }, -- 8판: 2 → 9
 	}
 	local SKIP_MULT = {}
 	for _, r in SEED_RARITIES do
@@ -70,6 +70,15 @@ return function(T, Loader)
 		{ "hacker_lab", 700e9, "바이러스 덩굴", { super = 55, hacker = 40, original = 5 } },
 		{ "developer_room", 900e9, "디버그 선인장", { original = 55, developer = 40, ultradivine = 5 } },
 		{ "bug_dimension", 1.2e12, "글리치 장미 괴물", { developer = 40, ultradivine = 55, hacker_glitch = 5 } },
+		-- 8판 새 구역 3개
+		{
+			"robot_factory",
+			1.22e12,
+			"톱니 해바라기 로봇",
+			{ developer = 40, ultradivine = 52, hacker_glitch = 8 },
+		},
+		{ "clock_tower", 1.24e12, "태엽 장미 기사", { developer = 25, ultradivine = 63, hacker_glitch = 12 } },
+		{ "rainbow_sky", 1.26e12, "무지개 용 덩굴", { ultradivine = 80, hacker_glitch = 20 } },
 	}
 
 	local function withWorld(fn)
@@ -113,16 +122,16 @@ return function(T, Loader)
 	local function taken(data)
 		local list = {}
 		for _, r in data.pets do
-			table.insert(list, { x = r.x, z = r.z, size = r.size })
+			table.insert(list, { x = r.x, z = r.z, size = r.size, petId = r.petId }) -- 8판: 성체 폭 간격
 		end
 		for _, r in data.incubators do
-			table.insert(list, { x = r.x, z = r.z, size = r.size })
+			table.insert(list, { x = r.x, z = r.z, size = r.size, petId = r.petId })
 		end
 		return list
 	end
 
 	local function addPlant(w, player, data, petId, fruits)
-		local spot = w.EggPlacement.firstFreeGrid("normal", taken(data))
+		local spot = w.EggPlacement.firstFreeGrid("normal", taken(data), petId)
 		local record = {
 			uid = w.DataSchema.newUid(data, "p"),
 			petId = petId,
@@ -143,7 +152,7 @@ return function(T, Loader)
 		w.H.spawn(player, x, 3, z)
 		assert(w.BaseService.grantEgg(player, petId, "normal", {}, "sakura"), "grantEgg 실패")
 		local egg = data.eggs[#data.eggs]
-		local l = w.EggPlacement.firstFreeGrid(egg.size, taken(data))
+		local l = w.EggPlacement.firstFreeGrid(egg.size, taken(data), egg.petId)
 		local spot = w.H.MapLayout.toWorld(plotIndex, l.x, l.z)
 		assert(w.BaseService.placeEgg(player, egg.uid, spot.x, spot.z), "plantSeed 실패")
 		return data.incubators[#data.incubators], egg
@@ -226,9 +235,9 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"식물 158종: 등급이 16개 중 하나, 등급별 수·열매 간격·열매 값 범위가 SEED 11장과 같고 성장 시간은 기준 ×0.75~1.25",
+		"식물 182종(8판): 등급이 16개 중 하나, 등급별 수·열매 간격·열매 값 범위가 SEED 11장과 같고 성장 시간은 기준 ×0.75~1.25",
 		function()
-			T.eq(#Plants.list, 158)
+			T.eq(#Plants.list, 182)
 			local stats = {}
 			local ids = {}
 			for _, p in Plants.list do
@@ -297,14 +306,14 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("7판 주임 검수: 구역 18개")
+	T.suite("7판 주임 검수: 구역 18개 (8판: 21개)")
 
 	T.test(
-		"18구역: id·추천 속도·경비 이름·가중치 합 100 = SEED 12장, zMin 간격 240, 맵 끝 4320, 둥지 식물 8종",
+		"21구역(8판): id·추천 속도·경비 이름·가중치 합 100 = SEED 12장, zMin 간격 240, 맵 끝 5040, 둥지 5개 무리, 둥지 식물 8종",
 		function()
-			T.eq(#Biomes.list, 18)
-			T.eq(#MapLayout.biomes, 18)
-			T.eq(MapLayout.MAP_END_Z, 4320)
+			T.eq(#Biomes.list, 21)
+			T.eq(#MapLayout.biomes, 21)
+			T.eq(MapLayout.MAP_END_Z, 5040)
 			for i, row in SEED_ZONES do
 				local b = Biomes.list[i]
 				T.eq(b.id, row[1], "순서 " .. i)
@@ -326,16 +335,16 @@ return function(T, Loader)
 				T.eq(range.zMax, i * 240)
 				T.eq(MapLayout.zoneAt(range.zMin), row[1])
 				T.eq(MapLayout.zoneAt(range.zMax - 0.01), row[1])
-				-- 둥지 8개: 구역 앞뒤 20 이상, 벽 20 이상, 경비 집 60 이상 떨어짐
+				-- 8판 둥지 5개 무리: 구역 앞뒤 20 이상, 벽 20 이상, 경비 집은 무리 바로 옆 (둥지 5개 다 35 안)
 				local nests = MapLayout.nestsFor(row[1])
-				T.eq(#nests, 8)
+				T.eq(#nests, 5)
 				local home = MapLayout.guardHome(row[1])
 				for _, n in nests do
 					T.truthy(n.z >= range.zMin + 20 and n.z <= range.zMax - 20, row[1] .. " 둥지 z")
 					T.truthy(math.abs(n.x) <= 90, row[1] .. " 둥지 x")
 					T.truthy(
-						math.sqrt((n.x - home.x) ^ 2 + (n.z - home.z) ^ 2) >= 60,
-						row[1] .. " 경비 집과 가까움"
+						math.sqrt((n.x - home.x) ^ 2 + (n.z - home.z) ^ 2) <= 35,
+						row[1] .. " 경비 집은 둥지 무리 옆"
 					)
 				end
 				-- 둥지 식물: 구역마다 8종(천사&악마는 쪽마다 8종), 가중치 있는 등급은 전부 식물이 있음
@@ -355,8 +364,9 @@ return function(T, Loader)
 					end
 				end
 			end
-			T.eq(MapLayout.zoneAt(4320), nil)
+			T.eq(MapLayout.zoneAt(5040), nil)
 			T.eq(MapLayout.zoneAt(4319.99), "bug_dimension")
+			T.eq(MapLayout.zoneAt(4320), "robot_factory")
 			T.falsy(MapLayout.isInHub({ X = 0, Z = 4200 }))
 			T.truthy(MapLayout.isInHub({ X = 0, Z = -0.01 }))
 			T.eq(MapLayout.NIGHT_WALL.z, 0, "밤 벽은 허브 경계 한 장 (맵 길이와 무관)")
@@ -364,7 +374,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"1~15구역 좌표·추천 속도·경비 속도·둥지는 6판 코드로 뽑은 값과 같음 (해시 1089747796)",
+		"1~15구역 좌표·추천 속도·경비 속도는 6판 코드로 뽑은 값과 같음 (8판: 둥지·경비 집은 사장님 지시로 무리 모양이 되어 해시에서 뺌)",
 		function()
 			local parts = {}
 			local function f(n)
@@ -382,13 +392,7 @@ return function(T, Loader)
 					f(bio.recommendedSpeed),
 					f(bio.guardSpeed),
 					bio.guardName,
-					bio.nests,
 				}
-				for _, n in MapLayout.nestsFor(b.id) do
-					table.insert(s, f(n.x) .. "," .. f(n.z))
-				end
-				local g = MapLayout.guardHome(b.id)
-				table.insert(s, "g" .. f(g.x) .. "," .. f(g.z))
 				table.insert(parts, table.concat(s, ";"))
 			end
 			local text = table.concat(parts, "\n")
@@ -396,8 +400,8 @@ return function(T, Loader)
 			for i = 1, #text do
 				h = (h * 33 + string.byte(text, i)) % 4294967296
 			end
-			T.eq(#text, 2034)
-			T.eq(h, 1089747796)
+			T.eq(#text, 906, "40a55a4(7판) 코드로 뽑은 값")
+			T.eq(h, 1639619940)
 		end
 	)
 
@@ -495,14 +499,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"도감 보상 전부(158종): 속도·코인이 유한하고 상한 안, 큰 숫자 표시가 깨지지 않음",
+		"도감 보상 전부(182종, 8판): 속도·코인이 유한하고 상한 안, 큰 숫자 표시가 깨지지 않음",
 		function()
 			local discovered = {}
 			for _, p in Plants.list do
 				discovered[p.id] = true
 			end
 			local ids, speed, money = Progression.pendingRewards(discovered, {})
-			T.eq(#ids, 158)
+			T.eq(#ids, 182)
 			T.truthy(finite(speed) and speed < Config.SPEED_MAX, "도감 속도 합 " .. tostring(speed))
 			T.truthy(finite(money) and money < Config.MONEY_MAX, "도감 코인 합 " .. tostring(money))
 			local Format = Loader.require(S .. "Format")
@@ -821,7 +825,7 @@ return function(T, Loader)
 					T.eq(session.currentZone, Biomes.list[n].id)
 				end
 				local z = p.Character.root.Position.Z
-				for _, bad in { "/zone 19", "/zone 0", "/zone -1", "/zone nan", "/zone 1e999", "/zone abc", "/zone" } do
+				for _, bad in { "/zone 22", "/zone 0", "/zone -1", "/zone nan", "/zone 1e999", "/zone abc", "/zone" } do
 					p.Chatted:Fire(bad)
 					T.eq(p.Character.root.Position.Z, z, bad .. " 은 무시")
 				end
@@ -861,7 +865,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"진짜 GuardianService: 18구역 경비 모두 알 든 느린 사람을 쫓고, 쫓는 속도 = 구역 고정 추격 속도 (230 이하)",
+		"진짜 GuardianService: 21구역(8판) 경비 모두 알 든 느린 사람을 쫓고, 쫓는 속도 = 구역 고정 추격 속도 (230 이하)",
 		function()
 			inWorld(nil, function(H)
 				local SpeedService = H.server("Services/SpeedService")
@@ -870,7 +874,7 @@ return function(T, Loader)
 				local session, data = H.login(p)
 				session.plotIndex = 1
 				H.spawn(p, 0, 3, 0)
-				T.eq(#H.map.folders.Guardians.children, 18)
+				T.eq(#H.map.folders.Guardians.children, 21)
 				for _, b in Biomes.list do
 					data.speed = b.recommendedSpeed * 0.5
 					session.carryingUid = "e1"

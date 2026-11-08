@@ -5,6 +5,7 @@
 	(문서를 직접 파싱 — 표를 테스트에 옮겨 적은 게 아니라서 문서가 "진짜 기준"입니다.)
 
 	7판: 식물 158종 · 등급 16개(화면 이름 영어 · 실제 성장 ÷3 칸) · 구역 18개 · 14장 "성장 속도 ×3"
+	8판: 식물 182종 · 구역 21개 · 둥지 5개(무리) · 러닝머신 해금 $500 · 튜토리얼 1,000 코인
 	- docs/SEED_GAME_DESIGN.md 9~14장 ↔ Plants · Rarities · Biomes(식물 괴물 경비) · EggSpawn(구역 등급 가중치·공지 씨앗)
 	  · Mutations · Config(정원·열매·건너뛰기·사쿠라 씨앗·러닝머신)
 	- docs/GAME_DESIGN.md 2·4·7·9장 ↔ 시간 주기 · 구역 추천 속도·도감 무기 · Sizes · Upgrades(정원 칸·러닝머신·트레일) · 도감 보상
@@ -200,14 +201,14 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("GAME_DESIGN 4장 · SEED 12장 ↔ Biomes · EggSpawn (구역 18개, 7판)")
+	T.suite("GAME_DESIGN 4장 · SEED 12장 ↔ Biomes · EggSpawn (구역 21개, 8판)")
 
 	T.test(
 		"GAME_DESIGN 4장: 순서·이름·추천 속도·경비(식물 괴물)·도감 무기가 문서 표와 같음",
 		function()
 			local rows = tableRows(sections["4"], "^%d+$")
-			T.eq(#rows, 18, "표 줄 수")
-			T.eq(#Biomes.list, 18)
+			T.eq(#rows, 21, "표 줄 수")
+			T.eq(#Biomes.list, 21)
 			for i, row in rows do
 				local biome = Biomes.list[i]
 				T.eq(tonumber(row[1]), biome.order, i .. "번 순서")
@@ -244,7 +245,7 @@ return function(T, Loader)
 		"SEED 12장: 이름·추천 속도·경비 한국어/영어 이름·둥지 등급 가중치(%)가 같음",
 		function()
 			local rows = tableRows(seed["12"], "^%d+$")
-			T.eq(#rows, 18, "표 줄 수")
+			T.eq(#rows, 21, "표 줄 수")
 			T.eq(#rows, #Biomes.list)
 			for i, row in rows do
 				local biome = Biomes.list[i]
@@ -293,7 +294,7 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("SEED 10장 ↔ Plants (식물 158종의 이름·등급·출처·성장 시간(표)·열매)")
+	T.suite("SEED 10장 ↔ Plants (식물 182종의 이름·등급·출처·성장 시간(표)·열매)")
 
 	local SOURCES = {
 		["둥지"] = { "nest", nil },
@@ -304,9 +305,9 @@ return function(T, Loader)
 	}
 	local plantRows = tableRows(seed["10"], "^%d+$")
 
-	T.test("문서 10장 식물 줄 수 = 코드 식물 수 (158), 번호가 1부터 차례대로", function()
+	T.test("문서 10장 식물 줄 수 = 코드 식물 수 (182), 번호가 1부터 차례대로", function()
 		T.eq(#plantRows, Plants.count)
-		T.eq(#plantRows, 158)
+		T.eq(#plantRows, 182)
 		for i, row in plantRows do
 			T.eq(tonumber(row[1]), i, "번호")
 		end
@@ -656,7 +657,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"9-2 러닝머신: 20단계 비용·걸음당 속도·1초 속도가 같음 (1단계 = 해금 $1,000, 20단계 1,000,000)",
+		"9-2 러닝머신: 20단계 비용·걸음당 속도·1초 속도가 같음 (1단계 = 해금 $500 (8판), 20단계 1,000,000)",
 		function()
 			local rows = tableRows(subsection(sections["9"], "9-2"), "^%d+$")
 			T.eq(#rows, #Upgrades.Treadmill)
@@ -670,7 +671,7 @@ return function(T, Loader)
 			end
 			T.truthy(hasText(rows[#rows][3], "(최대)"))
 			T.eq(parseNumber(rows[#rows][4]), 1000000)
-			T.truthy(hasText(DOC, "정원 업그레이드 **$1,000** 으로 러닝머신 해금"))
+			T.truthy(hasText(DOC, "정원 업그레이드 **$500** 으로 러닝머신 해금"))
 		end
 	)
 
@@ -756,11 +757,11 @@ return function(T, Loader)
 		T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.divine, 0.002)
 	end)
 
-	T.test("GAME_DESIGN 4장: 구역마다 둥지 8개", function()
-		T.truthy(hasText(DOC, "둥지 8개"))
-		T.eq(Config.NESTS_PER_BIOME, 8)
+	T.test("GAME_DESIGN 4장: 구역마다 둥지 5개 (8판 무리)", function()
+		T.truthy(hasText(DOC, "둥지 5개"))
+		T.eq(Config.NESTS_PER_BIOME, 5)
 		for _, biome in Biomes.list do
-			T.eq(biome.nests, 8, biome.id)
+			T.eq(biome.nests, 5, biome.id)
 		end
 	end)
 end

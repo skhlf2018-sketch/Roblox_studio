@@ -15,7 +15,7 @@ local Tags = {
 	-- 구역 (판정은 MapLayout.zoneAt(z). 태그 파트는 겉모습용)
 	Zone = "Zone", -- 구역 바닥. Attr: BiomeId, Order, RecommendedSpeed
 	ZoneSign = "ZoneSign", -- 구역 표지판. Attr: BiomeId
-	Nest = "Nest", -- 둥지(씨앗 주머니) (MapLayout.nestsFor 자리). Attr: BiomeId, NestIndex(1~8) — 서버가 씨앗을 이 파트 위에 놓음
+	Nest = "Nest", -- 둥지(씨앗 주머니) (MapLayout.nestsFor 자리, 8판: 구역마다 5개 무리). Attr: BiomeId, NestIndex(1~5) — 서버가 씨앗을 이 파트 위에 놓음
 	ParentAnimalSpot = "ParentAnimalSpot", -- 둥지 옆 장식 자리. Attr: BiomeId, NestIndex
 	GuardSpawn = "GuardSpawn", -- [2판: 서버는 안 읽음 — 경비 집 = MapLayout.guardHome] Attr: BiomeId
 	NightWall = "NightWall", -- 밤에 켜지는 벽 (2판: 허브 경계 z = 0 에 1장, MapLayout.NIGHT_WALL)
@@ -79,6 +79,8 @@ Tags.PlayerAttributes = {
 	-- 6판
 	FruitCount = "FruitCount", -- 열매 가방 속 열매 수 (HUD 배지)
 	FruitBagValue = "FruitBagValue", -- 열매 가방을 다 팔면 받는 코인 (판매 가판대 미리보기)
+	-- 8판
+	TreadmillTouching = "TreadmillTouching", -- 내 러닝머신 벨트 위에 서 있음 (bool, 0레벨이어도 — 업그레이드 창 열기/닫기)
 }
 
 -- ReplicatedStorage.GameState 폴더 Attribute

@@ -1,6 +1,7 @@
 --!strict
 --[[
-	Biomes — 구역 18개 (설계문서 4장). 모든 구역 처음부터 열림(해금 비용 없음).
+	Biomes — 구역 21개 (설계문서 4장). 모든 구역 처음부터 열림(해금 비용 없음).
+	8판 (사장님 2026-11-08): 19 로봇 공장 · 20 시간의 탑 · 21 무지개 하늘섬 추가 (맵 끝 z 4320 → 5040, MapLayout 자동)
 	7판 (사장님 2026-10-28): 16 해커 연구소 · 17 개발자의 방 · 18 버그 차원 추가 (1~15 는 그대로, 맵은 MapLayout 이 자동으로 늘어남)
 
 	6판 "씨앗을 훔치세요": 구역 이름·추천 속도·경비 속도는 그대로, 경비는 구역 테마 **식물 괴물** (이름만 여기 —
@@ -11,7 +12,7 @@
 	- (2판) 경비는 추격 포기 거리 없이 허브까지 쫓아옴 → 1판 guardPersistence(포기 거리 배율) 삭제
 	- weapon: 구역 도감 완성 시 받는 무기 (nil = 없음)
 	- sides: 천사&악마처럼 주기마다 둥지 풀이 바뀌는 구역 ("light"/"dark")
-	- nests: 둥지 수 (설계문서: 각 구역 8개)
+	- nests: 둥지 수 (8판: 각 구역 5개가 끝쪽 오른쪽 귀퉁이에 무리 — MapLayout.nestCluster. 7판까지 8개)
 ]]
 
 local Config = require(script.Parent.Config)
@@ -59,7 +60,7 @@ local list: { Biome } = {
 		guardName = "덥석 파리지옥",
 		guardNameEn = "Snapjaw Flytrap",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 90, 170, 70 },
 	},
 	{
@@ -72,7 +73,7 @@ local list: { Biome } = {
 		guardNameEn = "Lotus Frogweed",
 		guardSpeed = 0,
 		weapon = { id = "water_bat", name = "물 방망이", nameEn = "Water Bat" },
-		nests = 8,
+		nests = 5,
 		color = { 70, 150, 220 },
 	},
 	{
@@ -84,7 +85,7 @@ local list: { Biome } = {
 		guardName = "가시 선인장 대장",
 		guardNameEn = "Spiky Cactus Boss",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 225, 195, 120 },
 	},
 	{
@@ -96,7 +97,7 @@ local list: { Biome } = {
 		guardName = "덩굴 호랑이꽃",
 		guardNameEn = "Vine Tigerbloom",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 40, 120, 50 },
 	},
 	{
@@ -108,7 +109,7 @@ local list: { Biome } = {
 		guardName = "서리 가시나무",
 		guardNameEn = "Frost Thornbush",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 235, 245, 255 },
 	},
 	{
@@ -120,7 +121,7 @@ local list: { Biome } = {
 		guardName = "용암 머리꽃",
 		guardNameEn = "Magma Bloomhead",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 120, 40, 30 },
 	},
 	{
@@ -132,7 +133,7 @@ local list: { Biome } = {
 		guardName = "심해 해초 괴물",
 		guardNameEn = "Deep Kelp Monster",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 20, 40, 110 },
 	},
 	{
@@ -144,7 +145,7 @@ local list: { Biome } = {
 		guardName = "공룡 고사리",
 		guardNameEn = "Dino Fern",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 140, 100, 60 },
 	},
 	{
@@ -156,7 +157,7 @@ local list: { Biome } = {
 		guardName = "우주 버섯 거인",
 		guardNameEn = "Cosmic Mushroom Giant",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 60, 30, 110 },
 	},
 	{
@@ -169,7 +170,7 @@ local list: { Biome } = {
 		guardNameEn = "Blossom Fox Tree",
 		guardSpeed = 0,
 		weapon = { id = "katana", name = "카타나", nameEn = "Katana" },
-		nests = 8,
+		nests = 5,
 		color = { 255, 180, 210 },
 	},
 	{
@@ -182,7 +183,7 @@ local list: { Biome } = {
 		guardNameEn = "Stone Giant Tree",
 		guardSpeed = 0,
 		weapon = { id = "axe", name = "도끼", nameEn = "Axe" },
-		nests = 8,
+		nests = 5,
 		color = { 150, 140, 110 },
 	},
 	{
@@ -197,7 +198,7 @@ local list: { Biome } = {
 		guardSpeed = 0,
 		weapon = { id = "angel_spear", name = "천사의 창", nameEn = "Angel Spear" },
 		sides = { "light", "dark" },
-		nests = 8,
+		nests = 5,
 		color = { 245, 235, 200 },
 	},
 	{
@@ -210,7 +211,7 @@ local list: { Biome } = {
 		guardNameEn = "Spirit Shroom",
 		guardSpeed = 0,
 		weapon = { id = "hammer", name = "망치", nameEn = "Hammer" },
-		nests = 8,
+		nests = 5,
 		color = { 60, 200, 170 },
 	},
 	{
@@ -223,7 +224,7 @@ local list: { Biome } = {
 		guardNameEn = "Sugarcane Giant",
 		guardSpeed = 0,
 		weapon = { id = "candy_cane", name = "사탕 지팡이", nameEn = "Candy Cane" },
-		nests = 8,
+		nests = 5,
 		color = { 255, 150, 200 },
 		isNew = true,
 	},
@@ -237,7 +238,7 @@ local list: { Biome } = {
 		guardNameEn = "Pumpkinhead Vine",
 		guardSpeed = 0,
 		weapon = { id = "scythe", name = "낫", nameEn = "Scythe" },
-		nests = 8,
+		nests = 5,
 		color = { 80, 50, 100 },
 		isNew = true,
 	},
@@ -253,7 +254,7 @@ local list: { Biome } = {
 		guardName = "바이러스 덩굴",
 		guardNameEn = "Virus Vine",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 30, 200, 90 },
 		isNew = true,
 	},
@@ -266,7 +267,7 @@ local list: { Biome } = {
 		guardName = "디버그 선인장",
 		guardNameEn = "Debug Cactus",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 60, 110, 220 },
 		isNew = true,
 	},
@@ -279,8 +280,51 @@ local list: { Biome } = {
 		guardName = "글리치 장미 괴물",
 		guardNameEn = "Glitch Rose Monster",
 		guardSpeed = 0,
-		nests = 8,
+		nests = 5,
 		color = { 200, 40, 220 },
+		isNew = true,
+	},
+	-- 8판 (사장님 2026-11-08 "구역 3개 추가"): 등급은 맨 위 쪽(개발자·울트라디바인·해커 글리치)을 섞음, 도감 무기 없음.
+	--   추천 속도는 경비 추격 WalkSpeed 상한(230, SpeedMath 그대로) 안 — 약 1.267T 를 넘으면 경비 추격이 230 에 붙음 →
+	--   1.22T · 1.24T · 1.26T (경비 추격 229.69 · 229.82 · 229.95). 8판부터 잡힘은 거리 대신 시간(canEscape)이라
+	--   걷기 차이가 아주 작아도 "추천 속도면 안전 / 모자라면 반드시 잡힘" 은 그대로 (SEED 9장 37번)
+	{
+		id = "robot_factory",
+		order = 19,
+		name = "로봇 공장",
+		nameEn = "Robot Factory",
+		recommendedSpeed = 1.22 * T,
+		guardName = "톱니 해바라기 로봇",
+		guardNameEn = "Gear Sunflower Bot",
+		guardSpeed = 0,
+		nests = 5,
+		color = { 150, 160, 175 },
+		isNew = true,
+	},
+	{
+		id = "clock_tower",
+		order = 20,
+		name = "시간의 탑",
+		nameEn = "Clock Tower",
+		recommendedSpeed = 1.24 * T,
+		guardName = "태엽 장미 기사",
+		guardNameEn = "Clockwork Rose Knight",
+		guardSpeed = 0,
+		nests = 5,
+		color = { 200, 160, 70 },
+		isNew = true,
+	},
+	{
+		id = "rainbow_sky",
+		order = 21,
+		name = "무지개 하늘섬",
+		nameEn = "Rainbow Sky Islands",
+		recommendedSpeed = 1.26 * T,
+		guardName = "무지개 용 덩굴",
+		guardNameEn = "Rainbow Dragon Vine",
+		guardSpeed = 0,
+		nests = 5,
+		color = { 140, 210, 255 },
 		isNew = true,
 	},
 }

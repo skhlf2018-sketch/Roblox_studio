@@ -12,6 +12,10 @@
 	  사쿠라 해금(SAKURA_UNLOCK_PET)·블룸(SAKURA_APPLY_COST)·우리에 놓는 알 상한(PLACED_EGG_MAX → 정원 칸 수 = 정원 업그레이드)
 	7판: 등급 16개(SKIP_RARITY_MULTIPLIER·SAKURA_OFFER_CRYSTALS 칸 6개 추가, super_ultradivine 없앰), 성장 속도 3배
 	  (GROWTH_SPEED_MULTIPLIER — 성장 시간에만. 5판 GROWTH_MULTIPLIER 처럼 열매 값·러닝머신에 곱하지 않음), 저장 스키마 7
+	8판 (사장님 2026-11-08): 떨어진 씨앗(DROPPED_EGG_RETURN_SECONDS 5 — 그 씨앗 구역 밖이면 5초 뒤 둥지로, 안이면 그대로),
+	  둥지 무리(NESTS_PER_BIOME 8 → 5), 경비 잡힘 시간(GUARD_CATCH_CLOSE/FAR_SECONDS · CLOSE_RATIO · RUSH), 식물 크기 배율
+	  한 곳(RARITY_PLANT_SCALE · STAGE_SCALE · PLANT_SIZE_SCALE · PLANT_FOOTPRINT · PLANT_GAP_MAX).
+	  없앰: DROPPED_EGG_LIFETIME(60초 뒤 사라짐), GUARD_CATCH_GRACE_SECONDS(잡힘은 이제 거리 대신 시간으로 정함)
 ]]
 
 local Config = {
@@ -24,6 +28,7 @@ local Config = {
 	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 씨앗 수 (가득 차면 배달·선물 씨앗을 못 받음)
 	-- 정원 칸 수 = 정원 업그레이드(Upgrades.Pen) 칸 수 (7 → 18). 자라는 씨앗 + 성체 식물 합이 이 수까지 (Economy.penSlots)
 	EGG_PLACE_SPACING = 4, -- 심는 씨앗 ↔ 다른 씨앗·성체 식물 최소 간격(스터드). 큰 씨앗끼리는 두 씨앗 지름 평균까지 늘어남
+	--   8판: 두 자리가 다 자랐을 때 성체 폭 평균(EggPlacement.footprint, 아래 식물 크기 배율)까지 늘어남 — 최대 PLANT_GAP_MAX
 	EGG_PLACE_FENCE_MARGIN = 2, -- 씨앗 가운데가 정원 울타리에서 이만큼 안쪽이어야 함
 	EGG_PLACE_RADIUS = 14, -- 내 베이스 밖에 서 있으면 심을 자리에서 이 거리 안이어야 PlaceEgg 가능
 	ALLOW_EGG_PICKUP = true, -- PickUpPlacedEgg(심은 씨앗을 다시 가방으로, 자란 만큼 유지) 허용
@@ -38,6 +43,34 @@ local Config = {
 		{ id = "bud", name = "봉오리", from = 0.60 },
 		{ id = "adult", name = "성체", from = 1 },
 	} :: { { id: string, name: string, from: number } },
+	-- 8판 (사장님 2026-11-08 "등급 높을수록 성체가 3~5배 크게, 자라면서 점점 커지게") — 식물 크기 배율은 **여기 한 곳**.
+	--   보이는 크기 = RARITY_PLANT_SCALE[등급] × PLANT_SIZE_SCALE[크기] × 자람 배율(GardenRules.growthScale: STAGE_SCALE 사이를
+	--   자란 비율로 이어 줌 — 새싹 0.3 → 줄기 0.55 → 봉오리 0.8 → 성체 1). 모양은 선임 PlantVisualService 가 이 숫자로.
+	--   정원 간격: 성체 폭(지름) = PLANT_FOOTPRINT × 등급 배율 × 크기 배율 (EggPlacement.footprint) — 씨앗을 심을 때부터
+	--   다 자란 폭만큼 띄움 (큰 식물끼리 안 겹치게). 간격은 PLANT_GAP_MAX(14)까지만 → 14 간격 4 × 5 = 20칸이 정원
+	--   (울타리 2 안쪽: 42 × 56)에 들어가서 정원 칸 최대 18 이 맨 위 등급 식물로도 다 들어감 (tests/holes_v8)
+	RARITY_PLANT_SCALE = {
+		common = 1,
+		uncommon = 1.1,
+		rare = 1.22,
+		epic = 1.35,
+		legendary = 1.49,
+		mythic = 1.65,
+		cosmic = 1.82,
+		secret = 2,
+		eternity = 2.2,
+		divine = 2.45,
+		super = 2.7,
+		hacker = 3,
+		original = 3.3,
+		developer = 3.65,
+		ultradivine = 4.05,
+		hacker_glitch = 4.5,
+	} :: { [string]: number },
+	STAGE_SCALE = { sprout = 0.3, stem = 0.55, bud = 0.8, adult = 1 } :: { [string]: number },
+	PLANT_SIZE_SCALE = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 } :: { [string]: number }, -- 씨앗 크기 등급(Sizes) → 식물 크기
+	PLANT_FOOTPRINT = 2.6, -- 배율 1 성체의 바닥 폭(지름, 스터드) — PlantVisualService 나무 잎 1.6 + 옆 잎 ≈ 2.6
+	PLANT_GAP_MAX = 14, -- 정원 간격 상한 (위 설명: 18칸이 다 들어가게)
 	PASSIVE_INCOME_PER_SECOND = 0, -- 6판(사장님 결정 1): 자동 수입 없음 — 코인은 열매를 따서 팔아야 들어옴
 	EARLY_COIN_MULTIPLIER = { common = 2, uncommon = 2 } :: { [string]: number }, -- 사장님(2026-10-28): 초반 코인 수급 2배 — 초반 구역 등급(일반·고급) 열매 값 ×2 (성체 팔기 값도 따라 ×2)
 	FRUIT_SPEED_MULTIPLIER = 1.8, -- 사장님(2026-10-28): 열매가 1.8배 더 빨리 맺힘 (Economy.fruitInterval = 표 간격 ÷ 1.8)
@@ -88,11 +121,15 @@ local Config = {
 	------------------------------------------------------------------
 	-- 둥지 / 알
 	------------------------------------------------------------------
-	NESTS_PER_BIOME = 8,
+	-- 8판 (사장님 2026-11-08, 원작처럼): 구역마다 둥지 5개가 끝쪽 오른쪽 귀퉁이에 바짝 모여 있음 (MapLayout.nestsFor).
+	--   씨앗 종류(구역마다 8종)는 그대로 추첨 — 둥지 수만 8 → 5
+	NESTS_PER_BIOME = 5,
 	NEST_RESPAWN_SECONDS = 30, -- [추정] 낮 동안 빈 둥지가 다시 채워지는 시간 (0이면 다시 안 채움)
-	-- [추정] 바닥에 떨어진 알이 사라지는 시간(초). 2판 수정: 120 → 60 (사장님 "짧은 편이 좋음").
-	-- 알 파트 Attribute ExpiresAt 으로 클라가 머리 위 카운트다운. 그 둥지는 알이 사라진 뒤에야 다시 채움
-	DROPPED_EGG_LIFETIME = 60,
+	-- 8판 떨어진 씨앗 규칙 (사장님 2026-11-08, EggRules.groundFate):
+	--   그 씨앗 구역 **안**에 떨어지면 → 둥지로 안 가고 그 자리에 그대로 (누구나 줍기, 다음 초기화까지. 카운트다운 없음)
+	--   그 구역 **밖**(다른 구역·허브 쪽)에 떨어지면 → 이 초 뒤 둥지로 돌아감 (알 파트 Attr ExpiresAt = 돌아가는 시각 →
+	--   클라 머리 위 "5초" 카운트다운, ReturnsToNest = true). 7판까지는 60초 뒤 사라짐(DROPPED_EGG_LIFETIME)
+	DROPPED_EGG_RETURN_SECONDS = 5,
 	PICKUP_DISTANCE = 12, -- 서버에서 확인하는 줍기 최대 거리(스터드)
 	PROMPT_DISTANCE = 10, -- ProximityPrompt 표시 거리
 	EGG_BASE_DIAMETER = 2, -- 보통 크기 알 지름(스터드), 크기 등급의 eggScale 을 곱함
@@ -132,11 +169,24 @@ local Config = {
 	GUARD_CHASE_MAX_RATIO = 3.0,
 	GUARD_CHASE_SLOW_MIN_RATIO = 1.2, -- [추정] 속도가 모자라면 경비는 최소 이 배율 (1.01배면 허브까지 못 따라잡음)
 	GUARD_MAX_WALKSPEED = 250,
-	GUARD_CATCH_DISTANCE = 6, -- 잡힘 판정 기본 거리(스터드). 실제 = 이 값 + 경비 키 × 아래 배율 (GuardLogic.catchDistance)
+	-- 잡힘 거리 (8판: 잡힘 판정은 시간 — 이 거리는 경비가 따라붙어 멈추는 거리·모델 Attr CatchDistance 표시용)
+	GUARD_CATCH_DISTANCE = 6, -- 기본 거리(스터드). 실제 = 이 값 + 경비 키 × 아래 배율 (GuardLogic.catchDistance)
 	GUARD_CATCH_HEIGHT_FACTOR = 0.25, -- 거대 경비일수록 손이 길게: 키 1스터드당 +0.25
 	GUARD_CATCH_DISTANCE_MAX = 16, -- 잡힘 거리 상한
 	GUARD_DEFAULT_HEIGHT = 8, -- 경비 키를 모를 때 (겉모습 모델 Height Attribute → Visuals.guards[..].height → 이 값)
-	GUARD_CATCH_GRACE_SECONDS = 1.5, -- 둥지에서 줍자마자 바로 잡히지 않도록 주는 유예 (바닥 알 다시 줍기는 유예 없음)
+	-- 8판 (사장님 2026-11-08) 잡히는 규칙 = **시간** (GuardianService, SpeedMath.catchSeconds) — 물리 거리로는 안 잡음:
+	--   도망칠 수 없으면(SpeedMath.canEscape false) 추격 시간이 이만큼 쌓이는 순간 잡힘 (씨앗은 놓친 규칙대로):
+	--     내 실효 속도 ≥ 경비 추격 기준(경비 속도 × MARGIN)의 CLOSE_RATIO(70%) → CLOSE_SECONDS(2.5초), 그보다 느리면 FAR_SECONDS(1초)
+	--     추격 시간은 그 씨앗·그 사람마다 쌓임 (내려놓았다 다시 주워도 이어서 — 버렸다 줍기로 못 버팀, 둥지로 돌아가면 0)
+	--     마지막 RUSH_SECONDS(0.3초)는 경비가 빠르게 다가감 (WalkSpeed ≤ RUSH_MAX_WALKSPEED, 순간이동처럼 안 보이게)
+	--   도망칠 수 없는 채로 **다음 구역 경계(그 구역 zMax)** 를 넘으면 즉시 잡힘 + 씨앗은 둥지로 (다음 구역 절대 못 감)
+	--   도망칠 수 있으면 자유 (경비는 쫓아오기만 하고 못 잡음 — 경비가 둥지 바로 옆에서 자고 뒤 구역은 걷기 차이가 0.1 이라
+	--   거리로 잡으면 추천 속도를 넘어도 억울하게 잡힘)
+	GUARD_CATCH_CLOSE_SECONDS = 2.5,
+	GUARD_CATCH_FAR_SECONDS = 1,
+	GUARD_CATCH_CLOSE_RATIO = 0.7,
+	GUARD_CATCH_RUSH_SECONDS = 0.3,
+	GUARD_CATCH_RUSH_MAX_WALKSPEED = 400,
 	GUARD_TICK_SECONDS = 0.1,
 	-- 2판 수정: 추격 목표 = 플레이어 위치 + 서버가 본 이동 속도 × 이 초 (150 스터드/초면 틱당 15 스터드 →
 	-- 0.1초 전 자리를 목표로 주면 경비가 거기 먼저 도착해 멈췄다 달렸다 함). 잡힘은 틱 사이 가장 가까웠던 거리로 판정

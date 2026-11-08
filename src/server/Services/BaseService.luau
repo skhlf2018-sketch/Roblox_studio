@@ -553,22 +553,22 @@ function BaseService.grantEgg(
 	return "bag"
 end
 
--- 정원에서 차지한 자리 (EggPlacement 용, 로컬 좌표): 자라는 씨앗 + 성체 식물
+-- 정원에서 차지한 자리 (EggPlacement 용, 로컬 좌표): 자라는 씨앗 + 성체 식물 (8판: petId 로 다 자란 폭만큼 띄움)
 local function gardenSpots(data: Types.PlayerData): { EggPlacement.Spot }
 	local spots: { EggPlacement.Spot } = {}
 	for _, record in data.incubators do
-		table.insert(spots, { x = record.x, z = record.z, size = record.size })
+		table.insert(spots, { x = record.x, z = record.z, size = record.size, petId = record.petId })
 	end
 	for _, record in data.pets do
-		table.insert(spots, { x = record.x, z = record.z, size = record.size })
+		table.insert(spots, { x = record.x, z = record.z, size = record.size, petId = record.petId })
 	end
 	return spots
 end
 
--- 정원의 빈 격자 자리 (개발 명령 /plant 등)
-function BaseService.freeGardenSpot(player: Player, sizeId: string): MapLayout.XZ?
+-- 정원의 빈 자리 (개발 명령 /plant 등). 8판: petId 를 주면 그 식물 성체 폭만큼 띄운 자리
+function BaseService.freeGardenSpot(player: Player, sizeId: string, petId: string?): MapLayout.XZ?
 	local _, data = Sessions.getLoaded(player)
-	return if data then EggPlacement.firstFreeGrid(sizeId, gardenSpots(data)) else nil
+	return if data then EggPlacement.firstFreeGrid(sizeId, gardenSpots(data), petId) else nil
 end
 
 -- PlaceEgg: 가방의 씨앗을 내 정원 (x, z)(월드)에 심음 → 자라기 시작. 성공하면 true
@@ -608,7 +608,7 @@ function BaseService.placeEgg(player: Player, uid: string, x: number, z: number)
 	end
 	local egg = data.eggs[index]
 	local lx, lz = EggPlacement.round(l.x), EggPlacement.round(l.z)
-	local ok, reason = EggPlacement.check(lx, lz, egg.size, gardenSpots(data))
+	local ok, reason = EggPlacement.check(lx, lz, egg.size, gardenSpots(data), nil, egg.petId)
 	if not ok then
 		Net.notify(player, "error", EggPlacement.message(reason))
 		return false

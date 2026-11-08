@@ -208,15 +208,17 @@ local function finiteOrNil(value: unknown): number?
 	return n
 end
 
--- 정원 자리 (저장된 x, z 가 쓸 수 있으면 그것, 아니면 빈 격자 자리, 없으면 nil)
+-- 정원 자리 (저장된 x, z 가 쓸 수 있으면 그것, 아니면 빈 자리, 없으면 nil)
+-- 8판: 저장된 자리는 7판 간격(EggPlacement.checkSaved)으로만 봄 — 큰 식물 간격 때문에 옛 정원 식물이 팔리지 않게.
+--   깨진 자리만 새 간격(petId 성체 폭)으로 빈 자리를 찾음
 type XZ = { x: number, z: number }
 
-local function gardenSpot(e: { [string]: unknown }, size: string, taken: { EggPlacement.Spot }): XZ?
+local function gardenSpot(e: { [string]: unknown }, size: string, petId: string, taken: { EggPlacement.Spot }): XZ?
 	local lx, lz = finiteOrNil(e.x), finiteOrNil(e.z)
-	if lx and lz and EggPlacement.check(lx, lz, size, taken) then
+	if lx and lz and EggPlacement.checkSaved(lx, lz, size, taken) then
 		return { x = lx, z = lz }
 	end
-	return EggPlacement.firstFreeGrid(size, taken)
+	return EggPlacement.firstFreeGrid(size, taken, petId)
 end
 ------------------------------------------------------------------
 -- reconcile: 아무 값이나 받아 올바른 PlayerData 로 (버전 6 모양)
@@ -254,7 +256,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 					maxUid = math.max(maxUid, uidNumber(uid :: string))
 					local size = cleanSize(e.size)
 					local mutations = DataSchema.cleanMutations(e.mutations)
-					local spot = if #data.pets < capacity then gardenSpot(e, size, taken) else nil
+					local spot = if #data.pets < capacity then gardenSpot(e, size, plant.id, taken) else nil
 					if spot then
 						local record: PetRecord = {
 							uid = uid :: string,
@@ -270,7 +272,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 							),
 						}
 						table.insert(data.pets, record)
-						table.insert(taken, { x = spot.x, z = spot.z, size = size })
+						table.insert(taken, { x = spot.x, z = spot.z, size = size, petId = plant.id })
 					else
 						soldCoins += GardenRules.sellPrice({ petId = plant.id, size = size, mutations = mutations })
 					end
@@ -321,7 +323,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 			if egg then
 				maxUid = math.max(maxUid, uidNumber(egg.uid))
 				local spot = if #data.pets + #data.incubators < capacity
-					then gardenSpot(entry :: { [string]: unknown }, egg.size, taken)
+					then gardenSpot(entry :: { [string]: unknown }, egg.size, egg.petId, taken)
 					else nil
 				if spot then
 					local record: IncubatorRecord = {
@@ -337,7 +339,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 						required = egg.required,
 					}
 					table.insert(data.incubators, record)
-					table.insert(taken, { x = spot.x, z = spot.z, size = egg.size })
+					table.insert(taken, { x = spot.x, z = spot.z, size = egg.size, petId = egg.petId })
 				else
 					table.insert(toBag, egg)
 				end

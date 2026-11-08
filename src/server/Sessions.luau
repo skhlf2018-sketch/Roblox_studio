@@ -39,6 +39,8 @@ export type Session = {
 	currentZone: string, -- 지금 있는 곳 (MapLayout.zoneAt: 구역 id | "hub" | "")
 	onTreadmill: boolean, -- 러닝머신 위에 고정됨 (WalkSpeed 0, 서버가 위치 고정)
 	treadmillArmed: boolean, -- false = 방금 내림 → 러닝머신 밖으로 한 번 나가야 다시 탈 수 있음
+	-- 8판
+	treadmillTouching: boolean, -- 내 러닝머신 벨트 위에 서 있음 (Attr TreadmillTouching, 올라서는 순간 TreadmillTouched)
 }
 
 local Sessions = {}
@@ -76,6 +78,7 @@ function Sessions.create(player: Player): Session
 		currentZone = "",
 		onTreadmill = false,
 		treadmillArmed = true,
+		treadmillTouching = false,
 	}
 	sessions[player] = session
 	return session

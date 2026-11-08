@@ -8,7 +8,8 @@
 	3) 잡힘 거리: 거대 경비일수록 조금 멀리서 잡음 (catchDistance) · 이름표 높이 (labelOffset)
 	4) 빠른 추격 (2판 수정, 걷기 최대 150 → 0.1초 틱마다 15 스터드씩 움직임):
 	   - leadPoint: 목표를 "플레이어 위치 + 이동 속도 × 몇 초" 앞으로 → MoveTo 가 0.1초 전 자리에 먼저 도착해 멈추지 않음
-	   - closestApproach: 틱 사이 (플레이어 - 경비) 상대 위치가 가장 가까웠던 거리 → 한 틱에 지나쳐도 잡힘
+	   - closestApproach: 틱 사이 (플레이어 - 경비) 상대 위치가 가장 가까웠던 거리 (8판: 잡힘 판정은 시간이라 참고용)
+	5) 8판 잡힘 시간: crossedForward(다음 구역 경계를 넘었나) · rushWalkSpeed(마지막 0.3초 따라붙는 속도)
 ]]
 
 export type Point = { x: number, z: number }
@@ -80,6 +81,21 @@ function GuardLogic.leadPoint(
 	end
 	local scale = math.min(speed, math.max(0, maxSpeed)) / speed * lead
 	return px + vx * scale, pz + vz * scale
+end
+
+-- 8판: 다음 구역 경계를 넘었나 (z ≥ 그 구역 zMax). 도망칠 수 없는 사람이 넘으면 즉시 잡힘
+function GuardLogic.crossedForward(z: number, zoneZMax: number): boolean
+	return z == z and z >= zoneZMax
+end
+
+-- 8판: 잡히기 마지막 순간(남은 remaining 초) 경비가 따라붙는 WalkSpeed = 남은 거리 ÷ 남은 시간 (base ~ maxSpeed 사이).
+-- 이상한 값(NaN·음수)이면 base
+function GuardLogic.rushWalkSpeed(distance: number, remaining: number, base: number, maxSpeed: number): number
+	if distance ~= distance or remaining ~= remaining or distance <= 0 then
+		return base
+	end
+	local needed = distance / math.max(remaining, 0.05)
+	return math.clamp(needed, base, math.max(base, maxSpeed))
 end
 
 -- 상대 위치가 (ax, az) → (bx, bz) 로 곧게 움직였을 때 원점(경비)에 가장 가까웠던 거리

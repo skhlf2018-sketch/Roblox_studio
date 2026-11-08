@@ -50,7 +50,7 @@ local list: { Mutation } = {
 		source = "nest",
 		naturalChance = 0.02,
 		feedChance = 0.04,
-		feedBiomes = { "titan_temple", "angels_demons", "developer_room" }, -- 7판: + 개발자의 방
+		feedBiomes = { "titan_temple", "angels_demons", "developer_room", "clock_tower" }, -- 7판: + 개발자의 방 · 8판: + 시간의 탑
 		color = { 255, 200, 50 },
 	},
 	{
@@ -63,7 +63,7 @@ local list: { Mutation } = {
 		source = "nest",
 		naturalChance = 0.005,
 		feedChance = 0.01,
-		feedBiomes = { "enchanted_forest", "candy_kingdom", "haunted_castle", "bug_dimension" }, -- 7판: + 버그 차원
+		feedBiomes = { "enchanted_forest", "candy_kingdom", "haunted_castle", "bug_dimension", "rainbow_sky" }, -- 7판: + 버그 차원 · 8판: + 무지개 하늘섬
 		color = { 255, 90, 200 },
 	},
 	{
@@ -102,7 +102,7 @@ local list: { Mutation } = {
 		source = "fruit",
 		naturalChance = 0,
 		feedChance = 0.03,
-		feedBiomes = { "jungle", "cosmic", "cherry_blossom", "hacker_lab" }, -- 7판: + 해커 연구소
+		feedBiomes = { "jungle", "cosmic", "cherry_blossom", "hacker_lab", "robot_factory" }, -- 7판: + 해커 연구소 · 8판: + 로봇 공장
 		color = { 255, 240, 90 },
 	},
 }

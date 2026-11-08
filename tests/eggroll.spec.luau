@@ -158,7 +158,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (7판: 해커 글리치는 버그 차원에서만)",
+		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (해커 글리치는 그 등급이 풀에 있는 18~21구역에서만)",
 		function()
 			local specials = EggRoll.rollSpecials("haunted_castle", nil, T.constant(0))
 			T.eq(#specials, EggSpawn.MAX_SPECIALS_PER_BIOME)
@@ -174,7 +174,7 @@ return function(T, Loader)
 			for _, b in Biomes.list do
 				for _, pet in EggRoll.rollSpecials(b.id, Biomes.sideForCycle(b, 1), T.constant(0)) do
 					if pet.rarity == "hacker_glitch" then
-						T.eq(b.id, "bug_dimension", "해커 글리치 공지는 버그 차원에서만")
+						T.truthy(b.order >= 18, "해커 글리치 공지는 18~21구역에서만: " .. b.id)
 					end
 				end
 			end

@@ -287,6 +287,31 @@ Visuals.plantThemes = {
 		fruits = { { 255, 0, 200 }, { 0, 255, 90 }, { 60, 160, 255 } },
 		glow = true,
 	},
+	-- [8판 수석 임시] 새 구역 3개 (선임이 다시 꾸밀 자리): 로봇 공장 = 은회색 쇠 + 주황 불꽃 · 시간의 탑 = 놋쇠 금색 + 짙은 남색 ·
+	--   무지개 하늘섬 = 흰 구름 + 무지개 색. 모양은 지금 있는 것만 빌림
+	robot_factory = {
+		forms = { "circuit", "blocky" },
+		leaf = { 120, 130, 140 },
+		stem = { 80, 84, 92 },
+		petals = { { 255, 150, 40 }, { 200, 210, 220 }, { 90, 200, 255 } },
+		fruits = { { 255, 170, 50 }, { 210, 220, 230 }, { 90, 200, 255 } },
+		glow = true,
+	},
+	clock_tower = {
+		forms = { "cup", "tree" },
+		leaf = { 120, 140, 90 },
+		stem = { 150, 110, 50 },
+		petals = { { 230, 190, 80 }, { 40, 50, 110 }, { 250, 240, 210 } },
+		fruits = { { 240, 200, 80 }, { 60, 70, 140 }, { 250, 245, 220 } },
+	},
+	rainbow_sky = {
+		forms = { "flower", "crystal" },
+		leaf = { 150, 220, 200 },
+		stem = { 230, 240, 255 },
+		petals = { { 255, 120, 160 }, { 255, 230, 110 }, { 130, 200, 255 }, { 200, 150, 255 } },
+		fruits = { { 255, 140, 180 }, { 140, 220, 255 }, { 255, 240, 140 } },
+		glow = true,
+	},
 } :: { [string]: PlantTheme }
 
 local DEFAULT_THEME: PlantTheme = Visuals.plantThemes.forest
@@ -584,6 +609,11 @@ Visuals.guards = {
 	hacker_lab = { model = "virus_vine", scale = 12, height = 38 }, -- 바이러스 덩굴
 	developer_room = { model = "debug_cactus", scale = 14, height = 38 }, -- 디버그 선인장
 	bug_dimension = { model = "glitch_rose_monster", scale = 13, height = 40 }, -- 글리치 장미 괴물
+	-- [8판 수석 임시] 새 경비 3마리 — 옛 괴물 모양을 빌림 (선임이 Visuals.monsters 에 새로):
+	--   톱니 해바라기 로봇 = 디버그 선인장 · 태엽 장미 기사 = 글리치 장미 괴물 · 무지개 용 덩굴 = 바이러스 덩굴
+	robot_factory = { model = "debug_cactus", scale = 14, height = 38 }, -- 톱니 해바라기 로봇
+	clock_tower = { model = "glitch_rose_monster", scale = 13, height = 40 }, -- 태엽 장미 기사
+	rainbow_sky = { model = "virus_vine", scale = 12, height = 40 }, -- 무지개 용 덩굴
 } :: { [string]: { model: string, darkModel: string?, scale: number, height: number? } }
 
 ------------------------------------------------------------------
@@ -1323,6 +1353,71 @@ Visuals.biomes = {
 		atmosphere = { color = { 255, 120, 230 }, decay = { 60, 0, 90 }, density = 0.3, haze = 1.8 },
 		music = "Bgm_bug_dimension",
 		label = "👾",
+	},
+	-- [8판 수석 임시] 새 구역 3개 (GAME_DESIGN 4장 "8판 새 구역") — 지금 있는 장식·무늬·아치만 빌림, 선임이 새로 꾸밀 자리
+	--   로봇 공장 = 쇠 바닥 · 컨베이어 · 톱니 · 용접 불꽃 / 시간의 탑 = 놋쇠·남색 · 큰 시계 · 톱니 계단 · 모래시계 /
+	--   무지개 하늘섬 = 구름 바닥 · 떠 있는 섬 · 무지개 다리 · 폭포
+	robot_factory = {
+		floor = { 120, 124, 132 },
+		floor2 = { 108, 112, 120 },
+		floorMaterial = "Plastic",
+		wall = { 70, 74, 82 },
+		wallGlow = { 255, 150, 40 },
+		trim = { 255, 150, 40 },
+		accent = { 200, 210, 220 },
+		accent2 = { 255, 150, 40 },
+		pattern = "grid",
+		path = { color = { 90, 94, 102 }, kind = "road" },
+		arch = "terminal",
+		wallDecor = "screens",
+		pilaster = { 90, 94, 102 },
+		decor = decor({ { "serverrack", 10 }, { "toyblock", 8 }, { "satellite", 2 } }),
+		scatter = decor({ { "cables", 14 } }),
+		ambient = "dust",
+		music = "Bgm_robot_factory",
+		label = "🤖",
+	},
+	clock_tower = {
+		floor = { 60, 66, 110 },
+		floor2 = { 52, 58, 98 },
+		floorMaterial = "Plastic",
+		wall = { 40, 44, 80 },
+		wallGlow = { 240, 200, 90 },
+		trim = { 220, 180, 80 },
+		accent = { 240, 200, 90 },
+		accent2 = { 250, 240, 210 },
+		pattern = "tiles",
+		path = { color = { 200, 170, 90 }, kind = "stones" },
+		arch = "marble",
+		wallDecor = "windows",
+		pilaster = { 150, 110, 50 },
+		decor = decor({ { "goldpillar", 8 }, { "giantmug", 3 }, { "crystal", 6 } }),
+		scatter = decor({ { "stars", 10 } }),
+		ambient = "sparkle",
+		atmosphere = { color = { 200, 190, 255 }, decay = { 40, 40, 90 }, density = 0.22, haze = 1 },
+		music = "Bgm_clock_tower",
+		label = "⏰",
+	},
+	rainbow_sky = {
+		floor = { 236, 244, 255 },
+		floor2 = { 222, 234, 250 },
+		floorMaterial = "Plastic",
+		wall = { 170, 210, 255 },
+		wallCap = { 255, 255, 255 },
+		trim = { 255, 140, 200 },
+		accent = { 140, 210, 255 },
+		accent2 = { 255, 140, 200 },
+		pattern = "patches",
+		path = { color = { 255, 230, 140 }, kind = "stones", glow = true },
+		arch = "crystal",
+		wallDecor = "crystals",
+		pilaster = { 200, 225, 255 },
+		decor = decor({ { "crystal", 8 }, { "magictree", 5 }, { "fairylights", 6 } }),
+		scatter = decor({ { "stars", 12 }, { "glowmoss", 6 } }),
+		ambient = "sparkle",
+		atmosphere = { color = { 230, 240, 255 }, decay = { 160, 200, 255 }, density = 0.2, haze = 0.8 },
+		music = "Bgm_rainbow_sky",
+		label = "🌈",
 	},
 } :: { [string]: BiomeTheme }
 

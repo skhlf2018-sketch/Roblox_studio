@@ -21,6 +21,9 @@
 	     작으면 경비가 더 빠름 = 언젠가 잡힘 (추격 포기 없음, 허브까지).
 	   경비가 집으로 돌아갈 때(평소) 속도는 toWalkSpeed(경비 속도) (guardBaseWalkSpeed).
 	   guardChaseRatio 는 옛 2판(플레이어 속도 비례) 식 — 지금 게임은 안 쓰고 "얼마나 모자란가" 참고용으로만 남김.
+
+	5) 8판 (사장님 2026-11-08) 잡히는 시간 (catchSeconds): 위 공식은 그대로 두고, 잡힘만 시간으로 정함 —
+	   canEscape 면 nil (자유), 아니면 escapeRatio(내 속도 ÷ 추격 기준) ≥ 0.7 → 2.5초, < 0.7 → 1초 (Config.GUARD_CATCH_*)
 ]]
 
 local Config = require(script.Parent.Data.Config)
@@ -91,6 +94,31 @@ function SpeedMath.canEscape(guardSpeed: number, carrierSpeed: number): boolean
 		return false
 	end
 	return carrierSpeed > math.max(0, guardSpeed) * Config.GUARD_CHASE_MARGIN
+end
+
+-- 8판: 내 실효 속도 ÷ 경비 추격 기준(경비 속도 × MARGIN = canEscape 의 기준). 1 보다 크면 도망칠 수 있음
+function SpeedMath.escapeRatio(guardSpeed: number, carrierSpeed: number): number
+	local threshold = math.max(0, guardSpeed) * Config.GUARD_CHASE_MARGIN
+	if carrierSpeed ~= carrierSpeed then -- NaN
+		return 0
+	end
+	if threshold <= 0 then
+		return math.huge
+	end
+	return math.max(0, carrierSpeed) / threshold
+end
+
+-- 8판 (사장님 2026-11-08) 잡히는 시간: 도망칠 수 있으면 nil (안 잡힘), 없으면 추격이 이만큼(초) 쌓일 때 잡힘
+--   비율(escapeRatio) ≥ GUARD_CATCH_CLOSE_RATIO(0.7) = 조금 모자람 → GUARD_CATCH_CLOSE_SECONDS(2.5초)
+--   그보다 느림 = 많이 모자람 → GUARD_CATCH_FAR_SECONDS(1초). 추격 WalkSpeed 공식(guardChaseSpeed)은 그대로
+function SpeedMath.catchSeconds(guardSpeed: number, carrierSpeed: number): number?
+	if SpeedMath.canEscape(guardSpeed, carrierSpeed) then
+		return nil
+	end
+	if SpeedMath.escapeRatio(guardSpeed, carrierSpeed) >= Config.GUARD_CATCH_CLOSE_RATIO then
+		return Config.GUARD_CATCH_CLOSE_SECONDS
+	end
+	return Config.GUARD_CATCH_FAR_SECONDS
 end
 
 -- 구역 추천 속도 → 경비 속도 (보통 알 무게 감소를 기준에 포함: 추천 속도면 보통 알은 안전)

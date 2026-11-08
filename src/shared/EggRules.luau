@@ -11,6 +11,11 @@
 	2판: "구역 안" 은 MapLayout.zoneAt(z) 로 판정 (일자 복도라 z 범위만 봄).
 	     dropOutcome(cause, 알의 구역 id, 지금 있는 곳의 구역 id)
 	Zone 사각형 함수(isInsideZone 등)는 1판 MapBuilder 가 쓰던 것 — 서버 로직은 이제 안 씀.
+
+	8판 (사장님 2026-11-08) 바닥에 떨어진("DropHere") 씨앗이 그 뒤에 어떻게 되나 — groundFate(알의 구역, 떨어진 곳의 구역):
+	  - 그 씨앗을 얻은 구역 **안** → "Stay"   : 둥지로 안 가고 그 자리에 그대로 (누구나 줍기, 다음 초기화까지 — 카운트다운 없음)
+	  - 그 구역 **밖**(다른 구역·허브·맵 밖) → "Return" : Config.DROPPED_EGG_RETURN_SECONDS(5초) 뒤 둥지로 돌아감
+	  (7판까지: 어디든 60초 뒤 사라지고 그 둥지는 30초 뒤 새 씨앗)
 ]]
 
 export type Zone = {
@@ -22,6 +27,7 @@ export type Zone = {
 
 export type CatchCause = "guard" | "player" | "death" | "leave" | "drop"
 export type EggOutcome = "ReturnToNest" | "DropHere"
+export type GroundFate = "Stay" | "Return"
 
 local EggRules = {}
 
@@ -48,6 +54,14 @@ function EggRules.dropOutcome(cause: CatchCause, eggBiomeId: string?, zoneHere: 
 		return "ReturnToNest"
 	end
 	return "DropHere"
+end
+
+-- 8판: 바닥에 떨어진 씨앗의 운명. 그 씨앗 구역 안이면 그대로("Stay"), 밖이면 잠시 뒤 둥지로("Return")
+function EggRules.groundFate(eggBiomeId: string?, zoneHere: string?): GroundFate
+	if eggBiomeId ~= nil and zoneHere ~= nil and zoneHere == eggBiomeId then
+		return "Stay"
+	end
+	return "Return"
 end
 
 return EggRules

@@ -18,10 +18,10 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"구역 18개(7판): Biomes 순서, 240씩 이어짐, 0 에서 시작 — 1~15 자리는 6판 그대로",
+		"구역 21개(8판): Biomes 순서, 240씩 이어짐, 0 에서 시작 — 1~18 자리는 7판 그대로",
 		function()
-			T.eq(#MapLayout.biomes, 18)
-			T.eq(MapLayout.BIOME_COUNT, 18)
+			T.eq(#MapLayout.biomes, 21)
+			T.eq(MapLayout.BIOME_COUNT, 21)
 			for i, b in MapLayout.biomes do
 				T.eq(b.id, Biomes.list[i].id, "순서 " .. i)
 				T.eq(b.index, i)
@@ -37,9 +37,14 @@ return function(T, Loader)
 			T.eq(MapLayout.biomes[17].id, "developer_room")
 			T.eq(MapLayout.biomes[18].id, "bug_dimension")
 			T.eq(MapLayout.biomes[18].centerZ, 4200)
-			T.eq(MapLayout.MAP_END_Z, 4320)
-			T.eq(MapLayout.guardHome("bug_dimension").z, 4200)
-			T.eq(#MapLayout.nestsFor("developer_room"), 8)
+			T.eq(MapLayout.biomes[18].zMax, 4320, "7판 맵 끝")
+			T.eq(MapLayout.biomes[19].id, "robot_factory")
+			T.eq(MapLayout.biomes[20].id, "clock_tower")
+			T.eq(MapLayout.biomes[21].id, "rainbow_sky")
+			T.eq(MapLayout.biomes[21].zMax, 5040)
+			T.eq(MapLayout.MAP_END_Z, 5040, "8판: 구역 21개")
+			T.eq(MapLayout.guardHome("bug_dimension").z, 4320 - 36, "8판: 둥지 무리 옆 (구역 끝에서 36)")
+			T.eq(#MapLayout.nestsFor("developer_room"), 5)
 		end
 	)
 
@@ -55,7 +60,9 @@ return function(T, Loader)
 		T.eq(MapLayout.zoneAt(3600), "hacker_lab", "7판: 유령 성 뒤에 해커 연구소")
 		T.eq(MapLayout.zoneAt(3840), "developer_room")
 		T.eq(MapLayout.zoneAt(4319.9), "bug_dimension")
-		T.eq(MapLayout.zoneAt(4320), nil, "맵 끝")
+		T.eq(MapLayout.zoneAt(4320), "robot_factory", "8판: 버그 차원 뒤에 로봇 공장")
+		T.eq(MapLayout.zoneAt(5039.9), "rainbow_sky")
+		T.eq(MapLayout.zoneAt(5040), nil, "맵 끝")
 		T.eq(MapLayout.zoneAt(0 / 0), nil)
 		T.eq(MapLayout.zoneAtPos({ X = 50, Z = 500 }), "desert")
 		T.eq(MapLayout.zoneAtPos({ x = 50, z = 500 }), "desert")
@@ -255,44 +262,86 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("firstFreeGrid: 빈 격자 첫 자리, 다 차면 nil / 안내 글", function()
-		local placed = {}
-		for i = 1, MapLayout.EGG_GRID_COUNT do
-			local s = EggPlacement.firstFreeGrid("giant", placed)
-			T.eq(s.x, MapLayout.eggGridLocal(i).x, "칸 " .. i)
-			T.eq(s.z, MapLayout.eggGridLocal(i).z)
-			table.insert(placed, { x = s.x, z = s.z, size = "giant" })
+	T.test(
+		"firstFreeGrid: 빈 격자 첫 자리 → 격자가 다 차면 1 스터드씩 훑은 빈자리 → 정말 없으면 nil / 안내 글",
+		function()
+			local placed = {}
+			for i = 1, MapLayout.EGG_GRID_COUNT do
+				local s = EggPlacement.firstFreeGrid("giant", placed)
+				T.eq(s.x, MapLayout.eggGridLocal(i).x, "칸 " .. i)
+				T.eq(s.z, MapLayout.eggGridLocal(i).z)
+				table.insert(placed, { x = s.x, z = s.z, size = "giant" })
+			end
+			-- 8판: 격자가 다 차도 사이에 빈자리가 있으면 찾음 (늘 규칙 check 를 지킴), 끝까지 채우면 nil
+			local extra = 0
+			while extra < 200 do
+				local s = EggPlacement.firstFreeGrid("normal", placed)
+				if not s then
+					break
+				end
+				T.truthy(EggPlacement.check(s.x, s.z, "normal", placed), "훑은 자리도 규칙 지킴")
+				table.insert(placed, { x = s.x, z = s.z, size = "normal" })
+				extra += 1
+			end
+			T.truthy(extra > 0 and extra < 200, "격자 사이 빈자리 " .. extra .. "개 뒤 nil")
+			T.eq(EggPlacement.firstFreeGrid("normal", placed), nil)
+			T.truthy(string.find(EggPlacement.message("full"), "정원이 가득 찼어요", 1, true))
+			T.truthy(string.find(EggPlacement.message("outside"), "정원", 1, true))
+			T.truthy(string.find(EggPlacement.message("tooClose"), "가까워요", 1, true))
+			T.truthy(#EggPlacement.message(nil) > 0)
 		end
-		T.eq(EggPlacement.firstFreeGrid("normal", placed), nil)
-		T.truthy(string.find(EggPlacement.message("full"), "정원이 가득 찼어요", 1, true))
-		T.truthy(string.find(EggPlacement.message("outside"), "정원", 1, true))
-		T.truthy(string.find(EggPlacement.message("tooClose"), "가까워요", 1, true))
-		T.truthy(#EggPlacement.message(nil) > 0)
-	end)
+	)
 
 	T.test(
-		"nestsFor: 구역마다 8개, 구역 안, 벽·경계에서 20 이상, 서로 20 이상, 경비 집에서 60 이상",
+		"8판 nestCluster: 구역마다 둥지 5개가 구역 끝 오른쪽(x < 0) 귀퉁이에 바짝 (이웃 5~10, 벽·경계에서 20 이상), 경비 집은 바로 옆(가장 가까운 둥지 10~25), 표지판도 옆",
 		function()
+			T.eq(Config.NESTS_PER_BIOME, 5)
 			for _, b in MapLayout.biomes do
+				local cluster = MapLayout.nestCluster(b.id)
+				T.truthy(cluster, b.id)
 				local nests = MapLayout.nestsFor(b.id)
-				T.eq(#nests, 8, b.id)
+				T.eq(#nests, Config.NESTS_PER_BIOME, b.id)
+				for i, n in nests do
+					T.eq(n.x, cluster.nests[i].x)
+					T.eq(n.z, cluster.nests[i].z)
+				end
 				local home = MapLayout.guardHome(b.id)
+				T.eq(home.x, cluster.guard.x)
+				T.eq(home.z, cluster.guard.z)
 				T.eq(MapLayout.zoneAt(home.z), b.id)
-				T.truthy(math.abs(home.z - b.centerZ) <= 30, "경비 집 중앙 근처")
+				T.truthy(home.z > b.centerZ, "경비 집은 구역 끝쪽 " .. b.id)
+				local nearestGuard = math.huge
 				for a, n in nests do
 					T.eq(MapLayout.zoneAt(n.z), b.id, b.id .. " 둥지 구역")
+					T.truthy(n.x < 0, "오른쪽 벽(x < 0) 쪽 " .. b.id)
 					T.truthy(110 - math.abs(n.x) >= 20, "벽에서 20 " .. b.id)
 					T.truthy(n.z - b.zMin >= 20 and b.zMax - n.z >= 20, "경계에서 20 " .. b.id)
-					T.truthy(math.sqrt((n.x - home.x) ^ 2 + (n.z - home.z) ^ 2) >= 60, "경비 집과 거리")
+					T.truthy(n.z > b.centerZ + 60, "구역 끝쪽 (가운데·입구 쪽엔 둥지 없음) " .. b.id)
+					nearestGuard = math.min(nearestGuard, math.sqrt((n.x - home.x) ^ 2 + (n.z - home.z) ^ 2))
+					local nearest = math.huge
 					for c, m in nests do
 						if a ~= c then
-							T.truthy(math.sqrt((n.x - m.x) ^ 2 + (n.z - m.z) ^ 2) >= 20, "둥지 간격")
+							local d = math.sqrt((n.x - m.x) ^ 2 + (n.z - m.z) ^ 2)
+							T.truthy(d >= 6.5, "둥지 파트(지름 6)가 안 겹침 " .. d)
+							nearest = math.min(nearest, d)
 						end
 					end
+					T.truthy(nearest >= 5 and nearest <= 10, "이웃 둥지 5~10: " .. nearest)
 				end
+				T.truthy(nearestGuard >= 10 and nearestGuard <= 25, "경비는 바로 옆: " .. nearestGuard)
+				local sign = MapLayout.nestSign(b.id)
+				T.eq(sign.x, cluster.sign.x)
+				T.eq(sign.z, cluster.sign.z)
+				local d = math.sqrt((sign.x - cluster.center.x) ^ 2 + (sign.z - cluster.center.z) ^ 2)
+				T.truthy(d <= 25, "표지판도 무리 옆 " .. d)
+				T.eq(MapLayout.zoneAt(sign.z), b.id)
+				T.truthy(math.abs(sign.x) <= 104, "표지판 복도 안")
+				T.eq(#cluster.decor, 2)
 			end
 			T.eq(#MapLayout.nestsFor("nope"), 0)
 			T.eq(MapLayout.guardHome("nope"), nil)
+			T.eq(MapLayout.nestSign("nope"), nil)
+			T.eq(MapLayout.nestCluster("nope"), nil)
 		end
 	)
 

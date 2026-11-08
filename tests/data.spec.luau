@@ -138,11 +138,11 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역 18개(7판), 순서·추천 속도 오름차순, 경비 속도 = 추천 속도 × (1 - 보통 무게 감소), 경비는 식물 괴물 이름",
+		"구역 21개(8판), 순서·추천 속도 오름차순, 경비 속도 = 추천 속도 × (1 - 보통 무게 감소), 경비는 식물 괴물 이름",
 		function()
 			local SpeedMath = Loader.require("ReplicatedStorage/Shared/SpeedMath")
-			T.eq(#Biomes.list, 18)
-			T.eq(Biomes.count, 18)
+			T.eq(#Biomes.list, 21)
+			T.eq(Biomes.count, 21)
 			local prev = 0
 			for i, b in Biomes.list do
 				T.eq(b.order, i, b.id .. " order")
@@ -155,7 +155,7 @@ return function(T, Loader)
 					b.id .. " guardSpeed"
 				)
 				T.near(b.guardSpeed, SpeedMath.guardSpeedFor(b.recommendedSpeed), b.recommendedSpeed * 1e-12, b.id)
-				T.eq(b.nests, 8, b.id .. " 둥지 8개")
+				T.eq(b.nests, 5, b.id .. " 둥지 5개 (8판 무리)")
 				T.truthy(#b.guardName > 0 and #b.guardNameEn > 0, b.id .. " 경비 이름")
 			end
 			T.eq(Biomes.get("candy_kingdom").recommendedSpeed, 150e9)
@@ -173,7 +173,9 @@ return function(T, Loader)
 			T.eq(Biomes.get("hacker_lab").guardName, "바이러스 덩굴")
 			T.eq(Biomes.get("developer_room").guardName, "디버그 선인장")
 			T.eq(Biomes.get("bug_dimension").guardName, "글리치 장미 괴물")
-			for _, id in { "hacker_lab", "developer_room", "bug_dimension" } do
+			for _, id in
+				{ "hacker_lab", "developer_room", "bug_dimension", "robot_factory", "clock_tower", "rainbow_sky" }
+			do
 				T.eq(Biomes.get(id).weapon, nil, id .. " 도감 무기 없음 (SEED 9장 24번)")
 				T.eq(Biomes.get(id).isNew, true, id)
 			end
@@ -184,10 +186,10 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("식물 158종 (7판: 구역 15개 × 8 + 벚꽃 10 + 천사&악마 18 + 마법의 숲 10)", function()
-		T.eq(Plants.count, 158)
-		T.eq(#Plants.list, 158)
-		for _, id in { "hacker_lab", "developer_room", "bug_dimension" } do
+	T.test("식물 182종 (8판: 구역 18개 × 8 + 벚꽃 10 + 천사&악마 18 + 마법의 숲 10)", function()
+		T.eq(Plants.count, 182)
+		T.eq(#Plants.list, 182)
+		for _, id in { "hacker_lab", "developer_room", "bug_dimension", "robot_factory", "clock_tower", "rainbow_sky" } do
 			T.eq(#Plants.inBiome(id), 8, id .. " 식물 8종")
 		end
 		T.eq(#Plants.inBiome("cherry_blossom"), 10)
@@ -368,17 +370,18 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"7판 해커 글리치: 버그 차원에만 (2종), 특별 추첨 0.5% (하루 약 1~2개, 6판 슈퍼 울트라디바인 자리)",
+		"해커 글리치: 7판 버그 차원 2종 + 8판 새 구역 3개 7종 = 9종 (전부 둥지), 특별 추첨 0.5% (구역마다 하루 약 1~2개)",
 		function()
 			local n = 0
+			local where = { bug_dimension = true, robot_factory = true, clock_tower = true, rainbow_sky = true }
 			for _, p in Plants.list do
 				if p.rarity == "hacker_glitch" then
 					n += 1
-					T.eq(p.biome, "bug_dimension", p.id)
+					T.truthy(where[p.biome], p.id .. " 구역 " .. p.biome)
 					T.eq(p.source, "nest", p.id)
 				end
 			end
-			T.eq(n, 2)
+			T.eq(n, 9)
 			T.eq(EggSpawn.SPECIAL_RARITIES[1], "hacker_glitch", "가장 희귀한 것부터")
 			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.super_ultradivine, nil)
 			for _, id in EggSpawn.SPECIAL_RARITIES do
@@ -419,7 +422,8 @@ return function(T, Loader)
 		T.eq(Upgrades.TREADMILL_MAX_LEVEL, 20)
 		T.eq(Upgrades.Treadmill[10].perStep, 2000)
 		T.eq(Upgrades.Treadmill[20].perStep, 250000)
-		T.eq(Upgrades.Treadmill[1].cost, 1000)
+		T.eq(Upgrades.Treadmill[1].cost, 500, "8판: 해금 1,000 → 500")
+		T.eq(Upgrades.Treadmill[20].cost, 30e18, "8판: 60Qi → 30Qi")
 		for i = 2, #Upgrades.Treadmill do
 			T.truthy(Upgrades.Treadmill[i].cost > Upgrades.Treadmill[i - 1].cost, "러닝머신 비용 증가 " .. i)
 			T.truthy(Upgrades.Treadmill[i].perStep > Upgrades.Treadmill[i - 1].perStep, "걸음당 속도 증가 " .. i)

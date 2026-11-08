@@ -12,7 +12,12 @@
 	    서버도 0.2초마다 확인해서 벨트 위를 벗어났거나(높이 TREADMILL_MAX_HEIGHT 위로 떴거나) 알을 들었거나
 	    기절·죽음이면 자동으로 내림. 내린 뒤에는 벨트 밖으로 한 번 나가야 다시 탈 수 있음 (점프 착지로 바로 다시 타지 않게).
 	- 벨트 위에서 밀려나면(물리) 가운데로 되돌림 (TREADMILL_PIN_TOLERANCE). 서버 순간이동이라 위치 검증(AntiCheat)은 잠깐 쉼.
-	- 러닝머신 0레벨(잠김)이면 안 탐 → 5초에 한 번 "러닝머신을 먼저 사세요" 안내.
+	- 러닝머신 0레벨(잠김)이면 안 탐 (8판: "먼저 사세요" 회색 안내는 없앰).
+	- 8판 (사장님 2026-11-08, 원작처럼 "올라서면 다음 레벨로 올리기"): 벨트에 **올라서는 순간**(0레벨이어도) 서버가
+	    TreadmillTouched { level, nextLevel, nextCost, maxed, gainPerSecond, nextGainPerSecond } 를 그 사람에게 1번 보냄
+	    → 클라(선임)가 "레벨 n → n+1 올리기 (가격)" 창을 열고, 버튼은 기존 PurchaseUpgrade("Treadmill").
+	    벨트 위에 서 있는 동안 플레이어 Attr TreadmillTouching = true (내려오면 false → 창 닫기). 다시 올라서면 또 보냄.
+	    0레벨에서 해금하면 내려왔다 올라올 필요 없이 다음 틱에 바로 탐.
 	- 다른 사람 베이스 러닝머신은 못 씀 (허브 = 안전 구역이라 방해도 못 함).
 ]]
 
@@ -22,9 +27,9 @@ local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local MapLayout = require(Shared.Data.MapLayout)
 local Economy = require(Shared.Economy)
-local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local Types = require(Shared.Types)
 local Server = script.Parent.Parent
 local Net = require(Server.Net)
 local Sessions = require(Server.Sessions)
@@ -95,6 +100,31 @@ local function standingOn(root: BasePart, plotIndex: number): boolean
 		and root.Position.Y - MapLayout.FLOOR_Y < Config.TREADMILL_MAX_HEIGHT
 end
 
+-- 8판: 이 레벨의 러닝머신 업그레이드 창 정보 (TreadmillTouched payload)
+function TreadmillService.touchInfo(level: number): Types.TreadmillTouch
+	local nextCost = Economy.nextTreadmillCost(level)
+	return {
+		level = level,
+		nextLevel = if nextCost then level + 1 else nil,
+		nextCost = nextCost,
+		maxed = nextCost == nil,
+		gainPerSecond = if level >= 1 then Economy.treadmillGainPerSecond(level) else 0,
+		nextGainPerSecond = if nextCost then Economy.treadmillGainPerSecond(level + 1) else nil,
+	}
+end
+
+-- 8판: 벨트 위에 서 있는지 (Attr TreadmillTouching). 올라서는 순간 TreadmillTouched 1번
+local function setTouching(player: Player, session: Sessions.Session, touching: boolean, level: number)
+	if session.treadmillTouching == touching then
+		return
+	end
+	session.treadmillTouching = touching
+	player:SetAttribute(Attr.TreadmillTouching, touching)
+	if touching then
+		Net.fire(player, Remotes.ToClient.TreadmillTouched, TreadmillService.touchInfo(level))
+	end
+end
+
 -- 0.2초마다: 타기 / 내리기 / 가운데 고정
 local function positionTick(): ...any
 	local now = os.clock()
@@ -107,6 +137,11 @@ local function positionTick(): ...any
 				or Sessions.isStunned(session, now)
 				or not Character.isAlive(player)
 				or data.treadmillLevel < 1
+			-- 8판: 벨트 위(수평만 — 벨트 위에서 점프해도 창이 깜빡이지 않게)면 업그레이드 창 신호 (0레벨도)
+			local touching = MapLayout.isOnTreadmill(root.Position, session.plotIndex, Config.TREADMILL_PAD_MARGIN)
+				and session.carryingUid == nil
+				and Character.isAlive(player)
+			setTouching(player, session, touching, data.treadmillLevel)
 			if session.onTreadmill then
 				if not on or blocked then
 					TreadmillService.leave(player, false)
@@ -124,19 +159,13 @@ local function positionTick(): ...any
 				session.treadmillArmed = true
 			elseif session.treadmillArmed and not blocked then
 				mount(player, session)
-			elseif data.treadmillLevel < 1 and session.treadmillArmed then
-				if Sessions.useCooldown(session, "treadmillLockedNotice", 5, now) then
-					local cost = Economy.nextTreadmillCost(0)
-					Net.notify(
-						player,
-						"info",
-						"러닝머신이 잠겨 있어요! 상점에서 먼저 사세요"
-							.. (if cost then " (" .. Format.money(cost) .. ")" else "")
-					)
-				end
 			end
-		elseif session.onTreadmill then
-			TreadmillService.leave(player, false)
+			-- (8판: 0레벨이면 안 타고 TreadmillTouched 창만 — 7판 "러닝머신이 잠겨 있어요! 먼저 사세요" 안내 없앰)
+		else
+			if session.onTreadmill then
+				TreadmillService.leave(player, false)
+			end
+			setTouching(player, session, false, 0)
 		end
 	end
 end
@@ -163,7 +192,9 @@ function TreadmillService.onCharacterAdded(player: Player, _character: Model)
 	if session then
 		session.onTreadmill = false
 		session.treadmillArmed = true
+		session.treadmillTouching = false
 		player:SetAttribute(Attr.OnTreadmill, false)
+		player:SetAttribute(Attr.TreadmillTouching, false)
 	end
 end
 

@@ -15,6 +15,7 @@
 	                       ShrineFuse, SakuraApply(→ SakuraDraw), SellPet(→ SellPlant)
 	  새것 — 서버→클라: PlantGrown, FruitPicked, FruitsSold, FeedResult
 	         클라→서버: PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw
+	  8판 새것 — 서버→클라: TreadmillTouched (러닝머신 벨트에 올라섬 → 업그레이드 창, 0레벨도)
 ]]
 
 local Remotes = {
@@ -45,6 +46,8 @@ local Remotes = {
 		FruitPicked = "FruitPicked", -- { plantUid, petId, count, value } 열매를 따서 가방에 넣음 (식물마다 1번, "all" 이면 여러 번)
 		FruitsSold = "FruitsSold", -- { count, coins } 판매 가판대에서 열매를 팜
 		FeedResult = "FeedResult", -- { plantUid, fruitId, mutation: string? } 열매 먹이기 결과 (nil = 아무것도 안 붙음)
+		-- 8판
+		TreadmillTouched = "TreadmillTouched", -- Types.TreadmillTouch 내 러닝머신 벨트에 올라선 순간 (0레벨도) → 업그레이드 창
 	},
 
 	-- 클라 → 서버 (전부 서버에서 인자 검증 + 레이트 리밋)

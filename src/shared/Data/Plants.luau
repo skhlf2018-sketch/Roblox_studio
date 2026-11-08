@@ -1,7 +1,7 @@
 --!strict
 --[[
-	Plants — 식물 158종 (7판, docs/SEED_GAME_DESIGN.md 10장 표와 같아야 함 — tests/design_doc.spec)
-	6판 134종(5판 Pets 자리) + 7판 새 구역 3개 × 8종. 이름·모양은 우리가 새로 지은 것 (유명 게임 이름·캐릭터 안 씀).
+	Plants — 식물 182종 (8판, docs/SEED_GAME_DESIGN.md 10장 표와 같아야 함 — tests/design_doc.spec)
+	6판 134종(5판 Pets 자리) + 7판 새 구역 3개 × 8종 + 8판 새 구역 3개 × 8종. 이름·모양은 우리가 새로 지은 것.
 
 	- growSeconds: 씨앗을 심어서 성체가 될 때까지의 **표 시간** (낮 기준 초). 설계 3장 등급 기준(Rarities.baseGrowSeconds)에서
 	    등급 안에서 ×0.8 / ×1 / ×1.25 정도로 조금씩 다름.
@@ -353,6 +353,42 @@ plant("missing_lotus", "사라진 연꽃", "Missing Lotus", "ultradivine", days(
 plant("error_rose", "오류 장미", "Error Rose", "ultradivine", days(56) + hours(6), 5, 330 * T)
 plant("glitch_hacker_bloom", "글리치 해커 꽃", "Glitch Hacker Bloom", "hacker_glitch", days(48), 5, 2.7 * Qa)
 plant("static_world_tree", "지지직 세계수", "Static World Tree", "hacker_glitch", days(60), 4, 3.3 * Qa)
+
+-- 8판 (사장님 2026-11-08 "구역 3개 추가"): 맨 위 등급 쪽을 섞음. 숫자는 7판 등급 범위 안 (SEED 11장 범위 그대로,
+--   식물 수만 늘어남): 개발자 6~7초 · 18T~27T / 울트라디바인 5~6초 · 220T~330T / 해커 글리치 4~5초 · 2.7Qa~3.3Qa
+
+-- 19. 로봇 공장 Robot Factory — 개발자·울트라디바인, 가끔 해커 글리치 (8판)
+biome("robot_factory")
+plant("bolt_sprout", "볼트 새싹", "Bolt Sprout", "developer", days(24), 7, 19 * T)
+plant("gear_daisy", "기어 데이지", "Gear Daisy", "developer", days(30), 7, 21 * T)
+plant("battery_cactus", "배터리 선인장", "Battery Cactus", "developer", days(36), 6, 26 * T)
+plant("laser_lily", "레이저 백합", "Laser Lily", "ultradivine", days(40), 6, 240 * T)
+plant("robot_arm_vine", "로봇 팔 덩굴", "Robot Arm Vine", "ultradivine", days(45), 6, 260 * T)
+plant("welding_spark_flower", "용접 불꽃꽃", "Welding Spark Flower", "ultradivine", days(50), 5, 290 * T)
+plant("supercomputer_tree", "슈퍼컴퓨터 나무", "Supercomputer Tree", "hacker_glitch", days(52), 5, 2.8 * Qa)
+plant("overclock_rose", "오버클럭 장미", "Overclock Rose", "hacker_glitch", days(64), 4, 3.1 * Qa)
+
+-- 20. 시간의 탑 Clock Tower — 울트라디바인 많이, 개발자·해커 글리치 (8판)
+biome("clock_tower")
+plant("second_hand_grass", "초침 풀", "Second Hand Grass", "developer", days(27), 7, 20 * T)
+plant("cuckoo_tulip", "뻐꾸기 튤립", "Cuckoo Tulip", "developer", days(33), 6, 24 * T)
+plant("hourglass_cactus", "모래시계 선인장", "Hourglass Cactus", "ultradivine", days(38), 6, 230 * T)
+plant("sundial_sunflower", "해시계 해바라기", "Sundial Sunflower", "ultradivine", days(42), 6, 250 * T)
+plant("windup_fern", "태엽 고사리", "Wind-up Fern", "ultradivine", days(48), 5, 280 * T)
+plant("midnight_bellflower", "자정 종꽃", "Midnight Bellflower", "ultradivine", days(54), 5, 320 * T)
+plant("time_travel_tree", "시간 여행 나무", "Time Travel Tree", "hacker_glitch", days(56), 5, 2.9 * Qa)
+plant("frozen_clock_lotus", "멈춘 시계 연꽃", "Frozen Clock Lotus", "hacker_glitch", days(68), 4, 3.2 * Qa)
+
+-- 21. 무지개 하늘섬 Rainbow Sky Islands — 울트라디바인·해커 글리치 (8판 맨 끝 구역)
+biome("rainbow_sky")
+plant("cloud_puff_flower", "구름 솜꽃", "Cloud Puff Flower", "ultradivine", days(36), 6, 225 * T)
+plant("rainbow_bridge_vine", "무지개 다리 덩굴", "Rainbow Bridge Vine", "ultradivine", days(42), 6, 245 * T)
+plant("sky_whale_kelp", "하늘 고래 해초", "Sky Whale Kelp", "ultradivine", days(46), 5, 270 * T)
+plant("shooting_star_lily", "별똥별 백합", "Shooting Star Lily", "ultradivine", days(50), 5, 300 * T)
+plant("aurora_rose", "오로라 장미", "Aurora Rose", "ultradivine", days(55), 5, 325 * T)
+plant("thundercloud_mushroom", "천둥 구름 버섯", "Thundercloud Mushroom", "hacker_glitch", days(50), 5, 2.75 * Qa)
+plant("rainbow_crown_tree", "무지개 왕관 나무", "Rainbow Crown Tree", "hacker_glitch", days(60), 4, 3 * Qa)
+plant("final_boss_bloom", "끝판왕 꽃", "Final Boss Bloom", "hacker_glitch", days(72), 4, 3.3 * Qa)
 
 ------------------------------------------------------------------
 -- 색인

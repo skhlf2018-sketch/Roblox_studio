@@ -46,6 +46,8 @@ local specs = {
 	{ "holes_garden.spec", require("./holes_garden.spec") },
 	-- 7판 주임 검수 (등급 16개 · 구역 18개 · 성장 3배 · 스키마 7)
 	{ "holes_v7.spec", require("./holes_v7.spec") },
+	-- 8판 (떨어진 씨앗 5초 · 튜토리얼 1,000 · 러닝머신 ÷2 · 터치 신호 · 둥지 무리 · 구역 21 · 식물 크기 · 경비 잡힘 시간)
+	{ "holes_v8.spec", require("./holes_v8.spec") },
 }
 
 local filters: { string } = {}

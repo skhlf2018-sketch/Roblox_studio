@@ -165,7 +165,7 @@ return function(T, Loader)
 	T.suite("6판 구멍 찾기: 튜토리얼 — 진짜 EggService 로 끝까지")
 
 	T.test(
-		"접속(1단계) → 줍기 2 → 허브 배달 3 → 심기 4 → 성체 5 → 열매 따서 팔기 끝 500 코인 (진짜 줍기·배달·성장·열매 코드)",
+		"접속(1단계) → 줍기 2 → 허브 배달 3 → 심기 4 → 성체 5 → 열매 따서 팔기 끝 1,000 코인(8판) (진짜 줍기·배달·성장·열매 코드)",
 		function()
 			local w = world()
 			local player, session, data = join(w, 1001, "Newbie")
@@ -188,12 +188,12 @@ return function(T, Loader)
 			local value = data.pets[1].fruits * w.H.shared("FruitRules").fruitValue(data.pets[1])
 			pickAndSell(w, player)
 			T.eq(data.tutorialStep, 6, "팔기 → 끝")
-			T.near(data.money, value + Tutorial.REWARD_MONEY, 1e-9, "열매 값 + 500 코인")
+			T.near(data.money, value + Tutorial.REWARD_MONEY, 1e-9, "열매 값 + 1,000 코인 (8판)")
 			T.near(player.attrs.Money, data.money, 1e-9, "Money Attribute 도 같이")
 			T.eq(table.concat(steps(w, player), ","), "1,2,3,4,5,6")
 			local done = lastView(w, player)
 			T.truthy(done.done)
-			T.eq(done.reward, 500)
+			T.eq(done.reward, 1000)
 			w.H.uninstall()
 		end
 	)
@@ -567,7 +567,7 @@ return function(T, Loader)
 			w.H.teleport(player, stall.x, 3, stall.z)
 			w.H.client(player, "SellFruits")
 			T.eq(data.tutorialStep, 6)
-			T.eq(data.money, 10 + 500, "보상은 한 번")
+			T.eq(data.money, 10 + 1000, "보상은 한 번")
 			w.H.uninstall()
 		end
 	)

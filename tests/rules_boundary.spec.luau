@@ -186,7 +186,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"성장 시간이 가장 긴 씨앗(7판 지지직 세계수: 표 60일 → 성장 3배로 실제 20일)은 몇 바퀴 만에 성체가 되나",
+		"성장 시간이 가장 긴 씨앗(8판 끝판왕 꽃: 표 72일 → 성장 3배로 실제 24일)은 몇 바퀴 만에 성체가 되나",
 		function()
 			local longest, id = 0, nil
 			for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
@@ -195,13 +195,13 @@ return function(T, Loader)
 					longest, id = seconds, plant.id
 				end
 			end
-			T.eq(id, "static_world_tree")
-			T.eq(longest, 20 * 86400)
-			-- 한 바퀴(298초)에 자라는 양 = 588초 → 약 2939바퀴 = 접속한 채로 약 10일 (밤 30배 덕분에 절반쯤)
+			T.eq(id, "final_boss_bloom", "8판 무지개 하늘섬")
+			T.eq(longest, 24 * 86400)
+			-- 한 바퀴(298초)에 자라는 양 = 588초 → 약 3527바퀴 = 접속한 채로 약 12일 (밤 30배 덕분에 절반쯤)
 			local cycles = longest / (285 + 300 + 3)
-			T.truthy(cycles > 2930 and cycles < 2945, "실제 " .. cycles)
+			T.truthy(cycles > 3520 and cycles < 3535, "실제 " .. cycles)
 			local days = cycles * 298 / 86400
-			T.truthy(days > 10 and days < 10.3, "약 10일: " .. days)
+			T.truthy(days > 12 and days < 12.3, "약 12일: " .. days)
 		end
 	)
 
@@ -466,8 +466,10 @@ return function(T, Loader)
 		end
 		T.truthy(MapLayout.isInHub({ X = 0, Z = -0.001 }))
 		T.falsy(MapLayout.isInHub({ X = 0, Z = 0 }))
-		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z - 0.001), "bug_dimension", "7판: 맨 끝 = 18 버그 차원")
-		T.eq(MapLayout.MAP_END_Z, 4320)
+		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z - 0.001), "rainbow_sky", "8판: 맨 끝 = 21 무지개 하늘섬")
+		T.eq(MapLayout.MAP_END_Z, 5040)
+		T.eq(MapLayout.zoneAt(4320 - 0.001), "bug_dimension", "18 버그 차원 자리는 그대로")
+		T.eq(MapLayout.zoneAt(4320), "robot_factory")
 		T.eq(MapLayout.zoneAt(3600 - 0.001), "haunted_castle", "15 유령 성 자리는 그대로")
 		T.eq(MapLayout.zoneAt(3600), "hacker_lab")
 		T.eq(MapLayout.zoneAt(MapLayout.MAP_END_Z), nil)

@@ -1,4 +1,13 @@
-# Remote 목록 (서버 ↔ 클라) — 7판 "씨앗을 훔치세요"
+# Remote 목록 (서버 ↔ 클라) — 8판 "씨앗을 훔치세요"
+> **[8판] 떨어진 씨앗 5초 · 튜토리얼 1,000 · 러닝머신 ÷2 · 러닝머신 터치 · 둥지 무리 · 구역 21개 · 식물 크기 · 경비 잡힘 시간 (수석, 2026-11-08 — 사장님 지시 2026-11-08)** — 설계: `docs/SEED_GAME_DESIGN.md` 9장 33~44번. 저장 스키마 7 그대로.
+> - **새 Remote** 서버 → 클라 **`TreadmillTouched`** (`Types.TreadmillTouch` = `{ level, nextLevel?, nextCost?, maxed, gainPerSecond, nextGainPerSecond? }`): 내 러닝머신 벨트에 **올라서는 순간 1번** (0레벨 = 잠김이어도 — 그때 `nextCost` = 해금 500). → 클라가 "레벨 n → n+1 올리기 (가격)" 창, 버튼은 기존 **`PurchaseUpgrade("Treadmill")`**. 최대(20)면 `maxed = true`. 0레벨 "러닝머신이 잠겨 있어요! 먼저 사세요" `Notify` 는 **없앰**.
+> - **새 플레이어 Attr `TreadmillTouching`** (bool): 내 벨트 위(수평)에 서 있는 동안 true → 내려오면 false (창 닫기). 벨트 위에서 점프해도 안 깜빡임. 0레벨에서 사면 다음 틱(0.2초)에 바로 탐 (`OnTreadmill`).
+> - **떨어진 씨앗** (`Egg` 파트, `EggState "Dropped"`): 그 씨앗 구역 **안** = 그 자리에 그대로 (`DroppedAt` 만, **`ExpiresAt` 없음** → 카운트다운 안 보임, `ReturnsToNest = false`) / **밖** = 5초 뒤 둥지로 (`ExpiresAt` = 돌아가는 시각 = 떨어진 시각 + 5, **`ReturnsToNest = true`** — 타이머 글 "5초 뒤 둥지로"). 7판 "60초 뒤 사라짐" 없음. `Config.DROPPED_EGG_RETURN_SECONDS`.
+> - **둥지 무리** (`MapLayout.nestCluster(biomeId)` → `{ center, nests(5), guard, sign, decor(2) }`, `nestsFor`·`guardHome`·`nestSign`): 구역마다 둥지 5개(`NestIndex` 1~5)가 구역 끝 오른쪽 귀퉁이(x −82, zMax − 36 둘레)에, 경비 집은 그 옆(+24), 추천 속도 표지판 자리(−14, −14). 맵 둥지 105개.
+> - **구역 21개**: 19 `robot_factory` 로봇 공장 (경비 톱니 해바라기 로봇) · 20 `clock_tower` 시간의 탑 (태엽 장미 기사) · 21 `rainbow_sky` 무지개 하늘섬 (무지개 용 덩굴). 맵 끝 `MAP_END_Z` = 5040. 식물 182종. 도감 무기 없음.
+> - **경비 잡힘 = 시간** (`SpeedMath.catchSeconds`): 도망칠 수 없으면 쫓긴 지 2.5초(조금 모자람) / 1초(많이 모자람) 뒤 `Caught`, 다음 구역 경계를 넘으면 즉시 `Caught`(eggOutcome `"ReturnToNest"`). 도망칠 수 있으면 안 잡힘. `Caught`·`ChaseEnded`·`RunAlert` 모양은 그대로 → 클라 경고 화면에 남은 시간을 보여 주려면 `RunAlert.yourSpeed`·`guardSpeed` 로 `SpeedMath.catchSeconds(guardSpeed, yourSpeed)`.
+> - **식물 크기** (`Config.RARITY_PLANT_SCALE`·`STAGE_SCALE`·`PLANT_SIZE_SCALE`, `GardenRules.plantScale/growthScale`), **정원 간격** (`EggPlacement.check(..., pets?, petId?)`·`gap(sizeA, sizeB, petA?, petB?)`·`footprint(petId, size)` — `Spot` 에 `petId`). 선임 할 일: **8-8장**.
+
 > **[7판] 등급 16개 · 구역 18개 · 성장 속도 3배 (수석, 2026-10-29 — 사장님 지시 2026-10-28)** — **Remote·Attribute·Snapshot 모양은 그대로** (새 Remote 없음). 설계: `docs/SEED_GAME_DESIGN.md` 9장 21~32번.
 > - **등급** (`Data/Rarities`): 16개 = common … divine · **super · hacker · original · developer · ultradivine · hacker_glitch** (`super_ultradivine` 없앰 → 유령 성 2종은 `super`). 새 칸 **`displayName`** = 화면에 보일 영어 이름 (`Rarities.displayName(id)`, 16번은 `"H?a.(cke_r!#"`). `Rarity` Attribute·`EggInfo.rarity`·`Announce.rarity` 에 새 id 가 옴. 아우라 id 5개 추가 (`code_rain` · `first_light` · `build_grid` · `ultra_halo` · `glitch_static`).
 > - **구역** (`Data/Biomes`): 18개 = … 15 유령 성 · **16 `hacker_lab` 해커 연구소 · 17 `developer_room` 개발자의 방 · 18 `bug_dimension` 버그 차원**. `ZoneEntered`·`CurrentZone`·`RunAlert.guardName`(바이러스 덩굴 · 디버그 선인장 · 글리치 장미 괴물)에 새 id·이름이 옴. 맵 끝 `MapLayout.MAP_END_Z` = 4320. 새 구역 도감 무기 없음.
@@ -46,7 +55,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 위에서 본 모습 (+z 가 "멀리"). 바닥 윗면 `FLOOR_Y = 0`, 복도 벽 안쪽 면 `x = ±110`, 벽 높이 `WALL_HEIGHT = 60`.
 
 ```
- z = 4320  ── 맵 끝 벽 ──────────────────────────  MAP_END_Z (7판: 구역 18개, 6판까지 3600)
+ z = 5040  ── 맵 끝 벽 ──────────────────────────  MAP_END_Z (8판: 구역 21개, 7판 4320, 6판까지 3600)
+ z = 4320~5040  19 로봇 공장 · 20 시간의 탑 · 21 무지개 하늘섬 (8판)
  z = 4080~4320  18 버그 차원 (7판)   · 3840~4080 17 개발자의 방 · 3600~3840 16 해커 연구소
  z = 3360~3600  15 유령 성
    ...          (구역 하나 = 복도 폭 220 × 길이 240, 사이에 벽·문 없음)
@@ -64,8 +74,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `CORRIDOR_WIDTH`, `HALF_WIDTH`, `WALL_HEIGHT`, `FLOOR_Y` | 220, 110, 60, 0 | 바닥·벽 |
 | `HUB` | `{ zMin = -290, zMax = 0 }` | 허브 바닥·뒤 벽 |
 | `SAFE_ZONE_Z` | 0 | 허브 경계 (z < 0 = 안전) |
-| `BIOME_LENGTH`, `MAP_END_Z` | 240, 4320 (7판, 구역 18개) | 구역 바닥 |
-| `biomes[i]` | `{ id, index, zMin, zMax, centerZ, name, nameEn }` 18개 (Biomes.list 순서, 7판) | 구역 바닥·표지판 |
+| `BIOME_LENGTH`, `MAP_END_Z` | 240, 5040 (8판, 구역 21개) | 구역 바닥 |
+| `biomes[i]` | `{ id, index, zMin, zMax, centerZ, name, nameEn }` 21개 (Biomes.list 순서, 8판) | 구역 바닥·표지판 |
 | `NIGHT_WALL` | `{ z = 0, xMin = -110, xMax = 110, height = 60, thickness = 2 }` | NightWall 태그 파트 |
 | `plots[i]` (`plot(i)`) | `{ index, side "left"/"right", center {x,z}, size {w=60(z 방향), d=70(x 방향)}, facing (+1 = +x 를 봄 / -1), rect, penRect, yardRect, spawn, treadmill, sellStall, signs = { owner, penUpgrade, treadmillUpgrade } }` | 베이스 전부 |
 | `penRect(i)` | 정원(5판 우리) = 뒤쪽 46 (벽 쪽) | 울타리·정원 바닥 · **6판: 씨앗을 심는 곳 (PlaceEgg) = 성체 식물이 서 있는 곳**, 열매 따기·먹이기·성체 팔기·물 주기 거리(20)도 이 사각형 기준 |
@@ -75,8 +85,9 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `eggGridLocal(n)` (1~20) | 정원 안 격자 (울타리 쪽부터 4칸씩, 줄 7·칸 14 간격). 1~8 = 옛 부화 슬롯 자리 | 저장 변환·깨진 자리 보정 (서버) |
 | `incubatorSpots(i)` | **[옛 받침 — 서버는 안 씀]** `eggGridLocal(1~8)` 의 월드 자리 | MapBuilder 가 아직 받침(IncubatorSlot)을 지음 → 받침 지우면 같이 지움 |
 | `TREADMILL_PAD`, `treadmillRect(i)` | `{ sizeX = 12, sizeZ = 8 }` (x 방향으로 달림), plot.treadmill 중심 | **러닝머신 벨트 파트는 정확히 이 크기·자리** |
-| `nestsFor(biomeId)` | 8개 `{x,z}` (벽·구역 경계에서 20 이상, 경비 집에서 60 이상, 짝수 구역은 좌우 뒤집힘) | Nest 태그 파트 (NestIndex = 순서) |
-| `guardHome(biomeId)` | `{ x = 0, z = centerZ }` | 경비가 자는 자리 (서버가 경비를 여기 만듦) |
+| **`nestCluster(biomeId)`** (8판) | `{ center, nests, guard, sign, decor }` — 둥지 5개 무리 (가운데 x −82, z = 구역 zMax − 36, 이웃 8 ~ 8.6, 벽에서 20, 다음 구역 경계에서 29), 경비 집 = 가운데 + (24, 0), 추천 속도 표지판 = 가운데 + (−14, −14) (입구 −z 를 바라봄), 장식 식물 2개 = 가운데 + (±12, 12). 숫자 `MapLayout.NEST_CLUSTER` | 둥지·경비·표지판 (MapBuilder) |
+| `nestsFor(biomeId)` | 8판: 5개 `{x,z}` = `nestCluster(..).nests` (7판까지 8개가 흩어져 있었음) | Nest 태그 파트 (NestIndex = 순서 1~5) |
+| `guardHome(biomeId)` / `nestSign(biomeId)` | 8판: 둥지 무리 옆 (`nestCluster(..).guard` / `.sign`) — 7판까지 구역 가운데 | 경비가 자는 자리 (서버가 경비를 여기 만듦) / `NestSpeedSign` (ZoneSign 태그, Attr `NestSign`) |
 | `hubSpots` | `mainSpawn (0,-140)`, `sellStall (60,-232)` (판매 가판대: 열매 팔기·성체 팔기), `trailShop (60,-268)`, `eventPortal (92,-250)`, `safeLine (0,0)` | 허브 시설 |
 | `specials` | `sakuraIncubator` (벚꽃 구역 **사쿠라 나무**, 6판 씨앗 버전) `{ biomeId, x, z }` 하나뿐 (6판: 제단 `altarLight`·`altarDark`·비밀 통로 `shrine` 없앰, 5판: `questGate` 없앰) | 특수 장소 (같은 태그로 지으면 서버 임시 파트 안 생김) |
 
@@ -112,12 +123,13 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `SakuraResult` | 사쿠라 나무에 성체를 바침 / 특별 씨앗을 뽑음 | 바치기: `{ kind: "offered", consumed: plantUid, petId, gained: number, crystals: number }` · 뽑기: `{ kind: "draw", petId, egg: BagEgg, crystals: number }` (뽑은 씨앗은 `EggGranted` 로도 옴) |
 | **`ZoneEntered`** (2판) | 새 구역(z 범위)에 들어갈 때 1번 (서버 0.2초 틱). 허브는 안 보냄 | `{ biomeId: string, name: string, nameEn: string }` → 화면 위 가운데 구역 이름 배너 |
 | **`TreadmillStep`** (2판) | 러닝머신 위에서 걸음(1초)마다 | `{ amount: number }` — 오른 속도 (= `Economy.treadmillGainPerSecond(레벨)`, 20레벨이면 1,000,000) → "+1M" 분홍 팝업 |
-| **`TutorialUpdate`** (5판) | 나에게만: 접속 준비 때(튜토리얼이 안 끝난 사람만) · 단계가 바뀔 때 · `/tutorial reset` | `TutorialView = { step, total, text, hint, done, reward? }` — 6판 단계 글: 1 "숲에서 씨앗 훔치기" · 2 "안전 구역으로 돌아오기" · 3 "핫바에서 씨앗을 골라 정원에 심기" · 4 "성체가 될 때까지 기다리기" · 5 "열매 따서 팔기". 끝 = step 6·done true·`reward = 500`(코인, 끝내는 순간 한 번만) |
+| **`TutorialUpdate`** (5판) | 나에게만: 접속 준비 때(튜토리얼이 안 끝난 사람만) · 단계가 바뀔 때 · `/tutorial reset` | `TutorialView = { step, total, text, hint, done, reward? }` — 6판 단계 글: 1 "숲에서 씨앗 훔치기" · 2 "안전 구역으로 돌아오기" · 3 "핫바에서 씨앗을 골라 정원에 심기" · 4 "성체가 될 때까지 기다리기" · 5 "열매 따서 팔기". 끝 = step 6·done true·`reward = 1000`(코인, 끝내는 순간 한 번만 — 8판 1,000, 7판 500) |
 | **`LeaderboardUpdate`** (5판) | 10초마다 서버 전체 + 새로 온 사람에게 한 번 | `{ money: { LeaderboardEntry }, speed: { LeaderboardEntry } }` — `LeaderboardEntry = { name, value, userId }`, 큰 값부터 최대 10줄. money = 코인 |
 | **`PlantGrown`** (6판) | 정원에 심은 씨앗이 **그 자리에서 성체가 됨** (1초 틱 · 건너뛰기 · 물 주기 다음 틱 · 접속 때 오프라인 성장 — 접속 때는 `Notify` 는 한 번에 모아서 1줄) | `{ plant: PetRecord, isNew: boolean (도감 첫 발견), fruitValue: number (열매 1개 값), fruitInterval: number (초) }` — 같은 uid 의 `IncubatingEgg` 파트가 없어지고 `GardenPlant` 파트가 생김. 열매 `Config.FRUITS_ON_ADULT`(1)개 달린 채 |
 | **`FruitPicked`** (6판) | `PickFruit` 로 열매를 따서 열매 가방에 넣음 — **식물마다 1번** (`"all"` 이면 여러 번) | `{ plantUid: string, petId: string, count: number, value: number (이번에 딴 열매 값 합, 코인) }` → 그 식물(`GardenPlant` Attr `PlantUid`) 위 "+열매 3" 팝업 |
 | **`FruitsSold`** (6판) | 판매 가판대에서 `SellFruits` 로 열매를 팜 | `{ count: number, coins: number }` (코인 2배 게임패스면 이미 × 2) — `Notify` success 도 같이 옴 |
 | **`FeedResult`** (6판) | `FeedFruit` 결과 (열매는 먹었음) | `{ plantUid: string, fruitId: string, mutation: string? }` — `mutation` = 새로 붙은(또는 더 좋은 것으로 바뀐) 돌연변이 id, nil = 이번엔 안 붙음. `Notify` 도 같이 옴 |
+| **`TreadmillTouched`** (8판) | 내 러닝머신 벨트에 **올라서는 순간** 1번 (0레벨 = 잠김이어도, 내려왔다 다시 올라서면 또). 서 있는 동안은 Attr `TreadmillTouching` | `Types.TreadmillTouch` = `{ level: number (0 = 잠김), nextLevel: number?, nextCost: number? (코인 — 0레벨이면 해금 500), maxed: boolean (20레벨), gainPerSecond: number (지금 1초 속도, 트레일 전), nextGainPerSecond: number? }` → "레벨 n → n+1 올리기 (가격)" 창, 버튼 `PurchaseUpgrade("Treadmill")` |
 
 `EggInfo` = `{ uid, petId, biomeId, rarity, size, mutations: {string}, special: boolean }` (`petId` = 식물 id)
 
@@ -135,7 +147,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `UseTool` | `kind`: `"Bat"\|"BearTrap"\|"WaterBat"\|"Katana"\|"Axe"\|"AngelSpear"\|"Hammer"\|"CandyCane"\|"Scythe"` (`Remotes.ToolKinds`) | 그 도구를 손에 들고 있는지, 구역 무기는 해금했는지, 근접 무기 공용 쿨다운, **허브(안전 구역)가 아닌지**, 곰덫 개수. 대상·위치는 서버가 찾음 | 4 / 2 |
 | `ClaimIndexReward` | `"all"` 또는 식물 id | 발견했고(= 한 번이라도 성체가 됨) 아직 안 받았는지 | 5 / 1 |
 | `SakuraOffer` | `plantUid: string` (내 정원의 **성체** uid) | 사쿠라 나무(`SakuraIncubator` 파트 표면) 14 스터드 안, 내 정원의 성체인지 (자라는 씨앗은 안 됨). 통과: 그 성체가 없어지고(정원 자리가 빔) 크리스탈 +등급별(`Config.SAKURA_OFFER_CRYSTALS`: 일반 1 … 비밀 20 … 슈퍼 100 … 해커 글리치 700, 7판) → `SakuraResult` offered + `Notify` + `DataUpdate("pets")`·`DataUpdate("special")` | 3 / 1 |
-| **`DropEgg`** (2판) | 없음 | 씨앗을 들고 있는지. 씨앗은 그 자리에 떨어짐 → 경비 추격 끝(`ChaseEnded` dropped), 60초 뒤 사라짐 | 2 / 1 |
+| **`DropEgg`** (2판) | 없음 | 씨앗을 들고 있는지. 씨앗은 그 자리에 떨어짐 → 경비 추격 끝(`ChaseEnded` dropped). 8판: 그 씨앗 구역 **안**이면 그대로 (다음 초기화까지), **밖**이면 5초 뒤 둥지로 (`ExpiresAt`·`ReturnsToNest`) + `Notify` info | 2 / 1 |
 | **`TreadmillLeave`** (2판) | 없음 | 러닝머신 위인지. 내려서 벨트 앞으로 옮겨 줌. **클라가 러닝머신 위에서 점프할 때 보내세요** (`OnTreadmill` 이 true 일 때) | 3 / 2 |
 | **`EquipTrail`** (2판 마무리) | `trailId: string` 또는 `"none"` | 허용 목록, 가진 트레일인지. 바꾸면 저장 + 속도 다시 계산 + `DataUpdate("upgrades")` + `Notify` | 5 / 2 |
 | **`PlaceEgg`** (6판: 씨앗 심기) | `eggUid: string`, `x: number`, `z: number` (심을 자리 = **월드** x, z — 정원 바닥을 클릭/터치한 점) | uid 형식·x·z 유한한 숫자, **가방에 그 씨앗**, 내 베이스가 있음, **정원에 빈칸** (자라는 씨앗 + 성체 < 정원 칸 수 `Economy.penSlots(penLevel)`, `GardenRules.hasRoom`), 내가 내 베이스 안에 서 있거나 그 자리 14 안, 그 자리가 내 정원 안(울타리에서 2 안쪽), **다른 자라는 씨앗·성체 식물과 간격** (`EggPlacement`, 크기별 지름). 성공: 가방 → `incubators`, 그 자리에 `IncubatingEgg` 파트(Stage `"sprout"`), `DataUpdate("eggs")` + `DataUpdate("incubators")`. 실패: `Notify` error (`EggPlacement.message`, 예 "정원이 가득 찼어요") | 5 / 3 |
@@ -152,7 +164,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 - **배달**도 Remote 없음: 씨앗을 든 채 **허브(안전 구역, `MapLayout.isInHub` = z < 0)에 들어오는 순간** 서버가 자동 처리 → 씨앗 가방으로 (`EggDelivered`). 가방이 가득 차면 씨앗은 손에 그대로 + 3초에 한 번 안내.
 - **정원에 씨앗 심기**: 클라가 할 일 = 씨앗 창(핫바/가방, `snap.eggs`)에서 씨앗 고르기 → 심기 모드 → 내 정원 바닥 클릭/터치 → `PlaceEgg(uid, hit.X, hit.Z)`. 미리보기는 `EggPlacement.check(MapLayout.toLocal(PlotIndex, hit).x, ...z, egg.size, 정원 자리들, nil)` 로 초록/빨강 (자리 = 자라는 씨앗 + 성체 `x, z`).
 - **성체 되기는 Remote 없음**: 다 자라면 서버가 저절로 바꿈 (`PlantGrown`). 5판 `HatchEgg`·"부화" 버튼은 없어짐.
-- **러닝머신**: 내 베이스 러닝머신 벨트에 올라서면 서버가 자동으로 태움 (`OnTreadmill`). 내릴 때만 `TreadmillLeave`.
+- **러닝머신**: 내 베이스 러닝머신 벨트에 올라서면 서버가 자동으로 태움 (`OnTreadmill`, 1레벨 이상). 내릴 때만 `TreadmillLeave`. 8판: 올라서는 순간 `TreadmillTouched`(0레벨도) → 업그레이드 창 → `PurchaseUpgrade("Treadmill")`.
 - 도구: 서버가 Backpack 에 `Tool`(이름 = kind, `RequiresHandle = false`, Attribute `ToolKind`, 무기는 `WeaponId`·`Range`, 곰덫은 `Count`)을 넣어 줌. `ToolController` 가 `Activated` 때 `UseTool` 을 보냄.
 
 ## 3. Attribute 로 복제되는 값 (자주 바뀌는 숫자)
@@ -174,6 +186,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `Stunned` | 래그돌·곰덫 중 |
 | `InSafeZone`, `CurrentZone` | 허브(z < 0) 안 / 지금 있는 곳 (구역 id \| `"hub"` \| `""`) |
 | `OnTreadmill` | 러닝머신 위에 고정돼 달리는 중 |
+| **`TreadmillTouching`** (8판) | 내 러닝머신 벨트 위(수평)에 서 있음 — 0레벨이어도 (업그레이드 창 열기/닫기) |
 | `DataLoaded`, `SaveEnabled` | 데이터 로딩 끝났는지, 저장되는 세션인지 |
 | `SakuraCrystals` | 사쿠라 크리스탈 개수 (6판: `SakuraUnlocked` 없앰 — 나무는 처음부터 씀) |
 | **`FruitCount`** (6판) | 열매 가방 속 열매 수 → HUD 배지 "열매 12 / 300" (`snap.fruitBagMax`) |
@@ -195,7 +208,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 ### 월드 오브젝트 Attribute / 태그 (UI·연출용, 이름은 `Tags`)
 
 - **경비 모델**(`Guardian` 태그, 6판: 식물 괴물 — 이름만 바뀌고 규칙 그대로): `BiomeId`, `GuardName`(예 "덥석 파리지옥"), `State` = `"Sleeping"` / `"Chase"` / `"Return"`, `TargetUserId`, `CatchDistance`.
-- 씨앗 파트(`Egg` 태그 — 둥지·들고 있는·떨어진 씨앗): `EggUid, PetId(식물 id), BiomeId, Rarity, Size, Mutations("golden,frozen" 식), Special, EggState("Nest"/"Carried"/"Dropped"), WeightKg`, 떨어진 씨앗은 `DroppedAt, ExpiresAt`.
+- 씨앗 파트(`Egg` 태그 — 둥지·들고 있는·떨어진 씨앗): `EggUid, PetId(식물 id), BiomeId, Rarity, Size, Mutations("golden,frozen" 식), Special, EggState("Nest"/"Carried"/"Dropped"), WeightKg`, 떨어진 씨앗은 `DroppedAt` + 8판: 그 구역 밖이면 `ExpiresAt`(둥지로 돌아가는 시각, 5초) · `ReturnsToNest = true` / 안이면 `ExpiresAt` 없음 · `ReturnsToNest = false` (그 자리에 그대로).
 - **자라는 씨앗**(`IncubatingEgg` 태그): 내 정원 바닥, 심은 자리 (`MapLayout.toWorld(PlotIndex, record.x, record.z)`). `EggUid, OwnerUserId, PlotIndex, PetId, Size, Mutations, Special, Progress, Required, Ready`, **`Stage`**(6판: `"sprout"`/`"stem"`/`"bud"`) — 1초마다 갱신. 머리 위 남은 시간 = `(Required - Progress) / 성장 속도`(밤 30배). 서버는 단순한 공 + 이름표만 만듦 → **씨앗·새싹·줄기·봉오리 모양은 선임**. 다 자라면 이 파트는 지워지고 같은 자리에 `GardenPlant` 가 생김.
 - **성체 식물**(`GardenPlant` 태그, 6판): `PlantUid, OwnerUserId, PlotIndex, PetId, Size, Mutations, Stage("adult"), Fruits, FruitMax, FruitValue(열매 1개 값), FruitInterval(초), FruitProgress` — 1초마다 갱신. 다음 열매까지 = `FruitInterval - FruitProgress` 초 (Fruits == FruitMax 면 멈춤). 서버는 단순한 파트 + 이름표만 → **식물 모양·열매 달린 모습·아우라는 선임**.
 - **특수 장소** — 자리는 `MapLayout.specials`. 맵에 같은 태그 파트가 있으면 그걸 쓰고, 없으면 서버가 임시 파트(`Placeholder = true`)를 만듦. 6판에는 **`SakuraIncubator`(사쿠라 나무) 하나뿐**. `SakuraCrystal`(서버가 만듦): 초기화 때 벚꽃 둥지 근처 3개, 안에 `CrystalPrompt`.
@@ -260,13 +273,14 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 | 도감(인덱스) + 모두 획득 | `indexDiscovered/indexClaimed` (식물 id), `Progression.biomeProgress`, `ClaimIndexReward("all")`. 보상 코인 = 열매 1개 값 × 10 |
 | 상점 (정원/러닝머신/트레일) | `Upgrades` + `Economy.nextPenCost/nextTreadmillCost`, `PurchaseUpgrade(kind, id)`. 러닝머신 **20레벨**, 1초 속도 `Economy.treadmillGainPerSecond(level)` |
 | 사쿠라 나무 | 근처(14)에서 "성체 바치기" → 정원 성체 고르기 → `SakuraOffer(plantUid)` / "씨앗 뽑기 (크리스탈 10)" → `SakuraDraw()`, 결과 `SakuraResult`, Attr `SakuraCrystals` |
-| 튜토리얼 패널 | `TutorialUpdate` / `State.get().tutorial`: "n / 5" + `text` + `hint`, `done` 이면 숨김, 끝내는 순간 `reward`(500 코인) 축하. 화살표: 1 숲 둥지 · 2 허브 경계 · 3 핫바 씨앗 + 내 정원 · 4 자라는 씨앗 · 5 성체 열매 → 판매 가판대 |
+| 튜토리얼 패널 | `TutorialUpdate` / `State.get().tutorial`: "n / 5" + `text` + `hint`, `done` 이면 숨김, 끝내는 순간 `reward`(8판 1,000 코인) 축하. 화살표: 1 숲 둥지 · 2 허브 경계 · 3 핫바 씨앗 + 내 정원 · 4 자라는 씨앗 · 5 성체 열매 → 판매 가판대 |
 | 랭킹판 | `LeaderboardUpdate { money, speed }` (money = 코인) |
 | 채팅 공지 / 잡힘 | `Announce`("ALL SEED RESET!", 공지 씨앗), `Caught` |
 
 ## 7. 6판 규칙 요약 (자세한 건 코드 맨 위 주석)
 
 - **속도 → 걷기·경비·잡힘·떨어진 씨앗·배달·밤 귀가·치트 방지**: 5판 그대로 (`SpeedMath`, `GuardianService`, `EggRules`, `BaseService`, `AntiCheatService`). 경비는 이름만 식물 괴물.
+- **8판 잡힘·떨어진 씨앗** (`GuardianService`, `SpeedMath.catchSeconds`, `EggRules.groundFate`): 도망칠 수 없으면 2.5초(추격 기준의 70% 이상) / 1초 뒤 잡힘, 다음 구역 경계를 넘으면 즉시(씨앗은 둥지로), 도망칠 수 있으면 안 잡힘. 바닥 씨앗은 그 구역 안이면 그대로, 밖이면 5초 뒤 둥지로.
 - **둥지 씨앗** (`EggService`, `EggRoll`, `Data/EggSpawn`): 구역마다 등급 가중치(`BIOME_RARITY_WEIGHTS`, SEED 12장) → 그 등급 식물 중 고르게. 초기화 때 특별 추첨(7판: 해커 글리치 0.5% · 울트라디바인·개발자·오리지널·해커·슈퍼 각 1% · 신성 0.2% · 영원 2% · 비밀 8%)과 공지 씨앗(춤추는 버섯·세계수·황혼 꽃·균형의 나무)은 전체 공지. 자연 돌연변이 실버 5% · 황금 2% · 무지개 0.5%.
 - **정원** (`BaseService`, `shared/GardenRules`, `shared/EggPlacement`): 칸 = 정원 업그레이드 칸 수(7 → 18) = 자라는 씨앗 + 성체. 심은 씨앗만 자람(밤 30배, 게임패스 2배, 오프라인 24시간까지). 단계 새싹 0% · 줄기 25% · 봉오리 60% · 성체 100%. 다 자라면 그 자리에서 성체 + 도감 발견 + 열매 1개.
 - **열매** (`FruitService`, `shared/FruitRules`): 성체마다 `fruitIntervalSeconds`(Data/Plants, 일반 30초 … 슈퍼 9초)마다 +1, 최대 5. 밤에도 빠르기 그대로, 오프라인에도 맺음. 열매 1개 값 = 식물 열매 값 × 크기(보통 1 · 큼 1.5 · 거대 3 · 초거대 6) × 돌연변이(곱). 가방 300개. **자동 수입 없음**.
@@ -275,10 +289,48 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 - **열매 먹이기 돌연변이** (`Data/Mutations` + `FruitRules`): 자연(황금 4% · 무지개 1% — 더 좋은 것으로만) · 원소(얼음 5% · 불 5% · 번개 3% — 하나만). 그 구역 열매 ×3, 열매 등급 보너스 1 + (등급 순서 - 1) × 0.1, 합 상한 90%.
 - **사쿠라 나무** (`SakuraService`, `shared/SakuraRules`): 성체 바치기 → 크리스탈, 10개 → 특별 씨앗 뽑기 (97.5% / 2.5%).
 - **러닝머신** (`TreadmillService`): 1초마다 속도 += 걸음당 속도 × 4 (`Config.TREADMILL_MULTIPLIER`) + `TreadmillStep`. 20레벨 = 1초 1,000,000.
-- **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+500 코인). 튜토리얼 씨앗 = 숲 강아지풀(1초).
+- **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+1,000 코인, 8판). 튜토리얼 씨앗 = 숲 강아지풀(1초).
 - **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id`.
 
 ## 8. 선임 할 일
+
+### 8-8. 8판 선임 체크리스트 (수석 2026-11-08 — 지금은 `[8판 수석 임시]` 로 안 깨질 만큼만)
+
+**러닝머신 터치 업그레이드** (사장님 4번, 원작: 러닝머신에 올라서면 "다음 레벨로 올리기")
+- [ ] `TreadmillTouched` 받으면 "러닝머신 레벨 n → n+1 · 1초 속도 a → b · 가격 (코인)" 창 (0레벨이면 "러닝머신 열기 500 코인"), 버튼 = `PurchaseUpgrade("Treadmill")`. 코인이 모자라면 회색, `maxed` 면 "최대 레벨!". 산 뒤에도 벨트 위면 `DataUpdate("upgrades")`·Attr `TreadmillLevel` 로 창 숫자 갱신 (`TreadmillService.touchInfo` 와 같은 계산 = `Economy.nextTreadmillCost`·`treadmillGainPerSecond`)
+- [ ] Attr `TreadmillTouching` 이 false 가 되면 창 닫기. 폰 터치·PC 클릭 둘 다. 0레벨 벨트에 서 있으면 서버가 안 태움(창만) → 사면 0.2초 안에 바로 탐
+- [ ] 7판까지 뜨던 "러닝머신이 잠겨 있어요! 상점에서 먼저 사세요" 회색 글은 서버가 더 안 보냄 — 클라에 같은 글이 있으면 지우기
+
+**떨어진 씨앗** (사장님 1번)
+- [ ] 머리 위 카운트다운(`WorldFxController` DropTimer)은 `ExpiresAt` 이 있을 때만 = 구역 밖에 떨어진 씨앗 "5초" (지금 코드 그대로 동작). 글을 "5초 뒤 둥지로" 처럼 바꾸려면 Attr `ReturnsToNest`. 구역 안에 떨어진 씨앗은 카운트다운 없음 (그대로 남음)
+- [ ] `tests/smoke_client.luau` 552줄의 "60초 잔류 · 32초" 예시 → 5초 기준으로
+
+**둥지 무리 · 경비 · 표지판** (사장님 5번 — 좌표 규칙은 `MapLayout.nestCluster`, 숫자는 `MapLayout.NEST_CLUSTER`)
+- [ ] 구역마다 둥지 5개 = 가운데 (x −82, 구역 zMax − 36) + (0,0) · (8,−3) · (−8,−3) · (4,7) · (−4,7). 이웃 8 ~ 8.6 (둥지 지름 6). 원작처럼 한 무더기로 보이게 둥지 받침·풀·돌을 무리 둘레에 (MapBuilder 가 무리 둘레 반경 9 는 장식을 비움)
+- [ ] 경비 잠자리 = 가운데 + (24, 0) (`guardBed` 가 이미 그 자리). 거대한 경비(키 25~40)가 둥지를 덮지 않게 모델 크기 확인
+- [ ] 추천 속도 표지판 = 가운데 + (−14, −14), 입구(−z)를 바라봄 — 지금은 `[8판 수석 임시]` 기둥 + 판 `NestSpeedSign` (ZoneSign 태그, Attr `NestSign = true`, "추천 속도 1.2T" + 경비 이름). 원작 느낌으로 꾸미기. 입구 담장 `ZoneSign` 2장은 그대로 둠 (이름판)
+- [ ] 장식 식물 자리(`ParentAnimalSpot`) 2개 = 가운데 + (12, 12) · (−12, 12) (무리 뒤, 다음 구역 경계 쪽). 구역 가운데·입구 쪽은 장식만 (둥지 없음)
+- [ ] 튜토리얼 1단계 화살표·빔이 숲 둥지(이제 z ≈ 204, x ≈ −82)를 제대로 가리키는지
+
+**새 구역 3개** (19 `robot_factory` · 20 `clock_tower` · 21 `rainbow_sky`, 테마는 GAME_DESIGN 4장 "8판 새 구역")
+- [ ] 구역 테마 `Visuals.biomes` (지금 임시: 로봇 공장 = 서버 랙·스터드 블록·위성 + grid · 시간의 탑 = 금 기둥·큰 컵·수정 + tiles · 무지개 하늘섬 = 수정·마법 나무·요정 전구 + patches). 새 장식 아이디어: 로봇 공장 = 컨베이어 벨트·큰 톱니·로봇 팔·용접 불꽃·노랑 검정 줄무늬 / 시간의 탑 = 큰 시계 판·태엽·흔들리는 추·떠 있는 모래시계·톱니 계단 / 무지개 하늘섬 = 구름 바닥·떠 있는 작은 섬·무지개 다리·무지개 폭포·별가루
+- [ ] 둥지 모양 `MapBuilder.NEST_STYLE` (임시: circuit · pot · candy)
+- [ ] **새 경비 3마리** (`Visuals.guards` 임시: 톱니 해바라기 로봇 = `debug_cactus` · 태엽 장미 기사 = `glitch_rose_monster` · 무지개 용 덩굴 = `virus_vine`) → `Visuals.monsters` 에 새로: 톱니 해바라기 로봇(톱니바퀴 꽃잎 + 로봇 팔 줄기 + 주황 렌즈 눈) · 태엽 장미 기사(장미 갑옷 + 등에 태엽 열쇠 + 시곗바늘 창) · 무지개 용 덩굴(무지개 비늘 잎 용 모양 덩굴 + 구름 입김)
+- [ ] 식물 24종 모양·색 (`Visuals.plantThemes` 새 3개 임시, SEED 10장 159~182번 — 볼트 새싹 · 기어 데이지 · 슈퍼컴퓨터 나무 · 모래시계 선인장 · 해시계 해바라기 · 무지개 왕관 나무 · 끝판왕 꽃 …)
+- [ ] 배경음 `Sounds.Bgm_robot_factory` · `Bgm_clock_tower` · `Bgm_rainbow_sky` (임시: 정글 1.2배 · 타이탄 0.9배 · 마법의 숲 1.1배)
+- [ ] 구역 배너 이모지(`label` 🤖 ⏰ 🌈)·조명(`LightingController`)·도감 구역 탭 21개·입구 표지판 추천 속도 1.22T · 1.24T · 1.26T
+- [ ] 맵 파트 상한 `MapBuilder.PART_BUDGET.map` 8,000 그대로 (지금 맵 7,446 — 새 구역 각 약 200) — 꾸민 뒤 다시 확인 (`tests/smoke_visuals.luau`)
+
+**식물 크기** (사장님 7번 — 숫자는 `Config` 한 곳)
+- [ ] `PlantVisualService` 의 `RARITY_SCALE`(1 ~ 2.2)·`SIZE_SCALE` 을 지우고 `Config.RARITY_PLANT_SCALE[등급]`(1 ~ 4.5) × `Config.PLANT_SIZE_SCALE[크기]` 로 (= `GardenRules.plantScale(petId, size)`). 성체 바닥 폭이 `Config.PLANT_FOOTPRINT`(2.6) × 배율 근처가 되게 (정원 간격 계산이 이 폭을 씀)
+- [ ] 자라는 씨앗(`SeedVisual`)도 자람 배율 `GardenRules.growthScale(Progress, Required)` (새싹 0.3 → 줄기 0.55 → 봉오리 0.8 → 성체 1, 그 사이는 자란 비율로 점점) × 등급 × 크기로 — 1초마다 오는 `Progress` 로 부드럽게
+- [ ] 클라 심기 미리보기(`IncubatorController.placedSpots`)에 `petId = record.petId` 를 넣고 `EggPlacement.check(lx, lz, size, spots, {}, egg.petId)`, 바닥 동그라미 `EggPlacement.gap(size, size, petId, petId)`, 폰 첫 자리 `EggPlacement.firstFreeGrid(size, spots, petId)` — 안 넣으면 미리보기는 초록인데 서버가 "너무 가까워요" 로 거부할 수 있음
+- [ ] 도감·성체 카드 뷰포트(`PetViewport`, `ReplicatedStorage.PetModels`)는 크기 1 로 두거나 화면에 맞게 줄이기 (큰 등급이 4.5배라 창 밖으로 나가지 않게)
+
+**경비 잡힘 시간** (사장님 추가 지시 8번)
+- [ ] "달리기!!" 경고에 "N초 뒤 잡혀요!" (도망칠 수 없을 때) — `SpeedMath.catchSeconds(RunAlert.guardSpeed, RunAlert.yourSpeed)` (nil = 도망칠 수 있음 → "추천 속도 OK!")
+- [ ] 다음 구역 경계에서 잡히면 `Caught.eggOutcome = "ReturnToNest"` + 뒤(입구 쪽)로 날아감 — "다음 구역은 속도가 더 필요해요!" 같은 안내 환영
+- [ ] 경비는 마지막 0.3초에 빨리 다가옴 (WalkSpeed ≤ 400) — 애니메이션이 이상하지 않은지 스튜디오에서 확인
 
 ### 8-7. 7판 선임 체크리스트 (수석 2026-10-29 — 지금은 `[7판 수석 임시]` 로 안 깨질 만큼만)
 > **선임 완료 (2026-10-29)**: 아래 전부 됨 — `[7판 수석 임시]` 주석 없음. 자세한 모양·이름은 `docs/UI.md` 0장. 배경음 3개는 새 무료 id 를 못 골라 옛 음악을 빠르기(`Sounds[..].speed`)만 바꿔 씀 (주임·사장님 귀로 확인). 둥지 씨앗 이름표(`EggService.eggTitle`)의 등급도 영어로 바꿈 (글자만, 규칙 그대로).

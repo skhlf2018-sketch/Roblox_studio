@@ -104,6 +104,7 @@ MapBuilder.PART_BUDGET = {
 	zone = 400, -- 구역 하나 (Zones/<id> 아래 BasePart 전부: 바닥·담장·아치·둥지·특수 장소·장식)
 	-- Workspace.Map 전체 (허브 + 구역 18 + 베이스 7, 러닝머신 모양 포함).
 	-- 7판: 구역 15 → 18 이라 7,000 → 8,000. 선임이 새 구역 3개를 꾸민 뒤 맵 약 7,240 (새 구역 각 약 300) — 8,000 그대로
+	-- 8판: 구역 18 → 21 이어도 둥지가 8 → 5 개라 맵 약 7,450 (수석 임시 꾸밈 기준) — 8,000 그대로. 선임이 새 구역을 꾸민 뒤 다시 확인
 	map = 8000,
 }
 -- 장식은 구역이 이 수에 닿으면 더 안 놓음 (분위기 파티클 상자 1 + 여유를 남김)
@@ -3157,6 +3158,10 @@ local NEST_STYLE: { [string]: string } = {
 	hacker_lab = "circuit",
 	developer_room = "toy",
 	bug_dimension = "pixel",
+	-- [8판 수석 임시] 새 구역 3개 — 선임이 어울리는 둥지 모양으로 (로봇 공장 · 시간의 탑 · 무지개 하늘섬)
+	robot_factory = "circuit",
+	clock_tower = "pot",
+	rainbow_sky = "candy",
 }
 
 -- 스타일 → 다발 색 A, 다발 색 B, 삐죽 나온 짚 색, 둥지 안쪽(태그 파트) 색, 다발 재질
@@ -3810,9 +3815,11 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 		})
 	end
 
-	-- 경비 집 (구역 가운데) — 서버는 MapLayout.guardHome 을 쓰지만 표시·호환용 파트
+	local holes: { Hole } = {}
+	-- 경비 집 (8판: 둥지 무리 바로 옆) — 서버는 MapLayout.guardHome 을 쓰지만 표시·호환용 파트
 	local home = MapLayout.guardHome(biome.id)
 	if home then
+		table.insert(holes, { x = home.x, z = home.z, r = 12 })
 		makePart({
 			name = "GuardSpawn",
 			size = Vector3.new(4, 0.2, 4),
@@ -3827,31 +3834,58 @@ local function buildZone(biome: Biomes.Biome, parent: Instance)
 		guardBed(zoneFolder, theme, home.x, home.z)
 	end
 
-	-- 둥지 8개 + 장식 식물 자리 2개 (1번·8번 둥지 옆, 담장 쪽)
-	local holes: { Hole } = {}
+	-- 8판: 둥지 5개 무리 (구역 끝 오른쪽 귀퉁이, MapLayout.nestCluster) + 장식 식물 자리 2개 (무리 뒤) + 추천 속도 표지판
 	local nestSpots = MapLayout.nestsFor(biome.id)
 	for i, spot in nestSpots do
 		buildNest(biome.id, i, Vector3.new(spot.x, FLOOR_TOP, spot.z), zoneFolder)
 		table.insert(holes, { x = spot.x, z = spot.z, r = L.NEST_CLEAR })
 	end
-	for _, i in { 1, #nestSpots } do
-		local spot = nestSpots[i]
-		if spot then
-			local side = if spot.x < 0 then -1 else 1
-			local px = math.clamp(spot.x + side * 11, -(L.HALF - 6), L.HALF - 6)
-			local spotPos = Vector3.new(px, FLOOR_TOP + 0.5, spot.z)
+	local cluster = MapLayout.nestCluster(biome.id)
+	if cluster then
+		for k, spot in cluster.decor do
+			local i = if k == 1 then 1 else #nestSpots -- 장식 식물이 고르는 둥지 번호 (PlantVisualService)
+			local spotPos = Vector3.new(spot.x, FLOOR_TOP + 0.5, spot.z)
 			makePart({
 				name = "ParentAnimal" .. i,
 				size = Vector3.new(1, 1, 1),
-				cframe = CFrame.lookAt(spotPos, Vector3.new(spot.x, spotPos.Y, spot.z)),
+				cframe = CFrame.lookAt(spotPos, Vector3.new(cluster.center.x, spotPos.Y, cluster.center.z)),
 				parent = zoneFolder,
 				transparency = 1,
 				canCollide = false,
 				tag = Tags.ParentAnimalSpot,
 				attributes = { BiomeId = biome.id, NestIndex = i },
 			})
-			table.insert(holes, { x = px, z = spot.z, r = 6 })
+			table.insert(holes, { x = spot.x, z = spot.z, r = 6 })
 		end
+		-- [8판 수석 임시] 둥지 옆 "추천 속도" 표지판 (기둥 + 판, 입구 -z 쪽을 바라봄) — 선임이 꾸밀 자리
+		local s = cluster.sign
+		B(
+			zoneFolder,
+			Vector3.new(0.8, 9, 0.8),
+			CFrame.new(s.x, FLOOR_TOP + 4.5, s.z),
+			rgb(theme.pilaster or theme.trim),
+			true
+		)
+		local signPos = Vector3.new(s.x, FLOOR_TOP + 10, s.z - 0.6)
+		local board = makePart({
+			name = "NestSpeedSign",
+			size = Vector3.new(12, 5, 0.5),
+			cframe = CFrame.lookAt(signPos, signPos + Vector3.new(0, 0, -1)),
+			parent = zoneFolder,
+			color = rgb(theme.accent),
+			material = Enum.Material.SmoothPlastic,
+			canCollide = false,
+			tag = Tags.ZoneSign,
+			attributes = { BiomeId = biome.id, NestSign = true },
+		})
+		Gui.sign(board, Enum.NormalId.Front, {
+			badge = tostring(biome.order),
+			title = "추천 속도 " .. Format.number(biome.recommendedSpeed),
+			subtitle = biome.guardName,
+			background = rgb(theme.accent):Lerp(BLACK, 0.15),
+			titleColor = WHITE,
+		})
+		table.insert(holes, { x = s.x, z = s.z, r = 5 })
 	end
 	-- 입구 아치 기둥 자리
 	for _, side in { -1, 1 } do

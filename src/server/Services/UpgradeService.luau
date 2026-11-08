@@ -5,7 +5,7 @@
 
 	Remote: PurchaseUpgrade(kind: "Pen" | "Treadmill" | "Trail", trailId: string?)
 	  - 가격·효과는 shared/Data/Upgrades.luau (설계문서 9장 표)
-	  - 러닝머신 0레벨 = 잠김, 1레벨 구매(1K 코인) = 해금
+	  - 러닝머신 0레벨 = 잠김, 1레벨 구매(8판: 500 코인) = 해금. 8판: 벨트에 올라서면 TreadmillTouched → 클라 업그레이드 창 → 이 Remote
 	  - 트레일은 순서 상관없이 아무거나 살 수 있음, **장착한 트레일 하나**만 적용 (사면 바로 장착)
 
 	Remote: EquipTrail(trailId | "none") — 가진 트레일로 바꿔 끼기, "none" 이면 해제 (data.equippedTrail)

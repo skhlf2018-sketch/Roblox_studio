@@ -161,7 +161,8 @@ return function(T, Loader)
 			--      +4 (PlantGrown, FruitPicked, FruitsSold, FeedResult) → 21, 물 주기 삭제 -1 (PetPetted) → 20
 			--      클라→서버 -9 (HatchEgg, EquipPet, UnequipPet, EquipBest, FuseRequest, AltarOffer, ShrineFuse, SakuraApply, SellPet)
 			--      +6 (PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw) → 17, 물 주기 삭제 -1 (PetPet) → 16
-			T.eq(#sorted(codeClient), 20)
+			-- 8판: +1 (TreadmillTouched) → 21
+			T.eq(#sorted(codeClient), 21)
 			T.eq(#sorted(codeServer), 16)
 		end
 	)

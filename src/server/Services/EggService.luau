@@ -7,16 +7,20 @@
 	알 상태:
 	  "Nest"    둥지 위 (ProximityPrompt E 로 줍기)
 	  "Carried" 누군가 머리 위에 들고 있음 (Weld)
-	  "Dropped" 바닥에 떨어짐 (누구나 다시 주울 수 있음, DROPPED_EGG_LIFETIME(60초) 뒤 사라짐)
-	            알 파트 Attribute DroppedAt / ExpiresAt (workspace:GetServerTimeNow() 기준) → 클라가 "32초" 카운트다운
+	  "Dropped" 바닥에 떨어짐 (누구나 다시 주울 수 있음). 8판 (사장님 2026-11-08, EggRules.groundFate):
+	            그 씨앗 구역 **안**이면 그 자리에 그대로 (다음 초기화까지, Attr DroppedAt 만 · ReturnsToNest = false)
+	            구역 **밖**이면 DROPPED_EGG_RETURN_SECONDS(5초) 뒤 **둥지로 돌아감** (Attr ExpiresAt = 돌아가는 시각
+	            (workspace:GetServerTimeNow() 기준) → 클라 "5초" 카운트다운, ReturnsToNest = true).
+	            돌아갈 둥지: 예약 둥지 → 같은 구역 빈 둥지 → 없으면 사라짐(예약 풀고 30초 뒤 새 씨앗). 7판: 어디든 60초 뒤 사라짐
 
 	둥지 예약 규칙 (잡힘 규칙을 지키기 위해):
 	  둥지에서 알을 들면 그 둥지는 "예약" 상태로 비어 있음 (다시 채워지지 않음).
 	  들고 있는 사람이 알의 구역 밖으로 나가면 예약이 풀리고 NEST_RESPAWN_SECONDS 뒤 새 알이 놓임.
-	  구역 안에서 경비에게 잡히면 → 예약된 원래 둥지로 돌아감 (EggRules.dropOutcome = "ReturnToNest") — 둥지 복귀는 이때만.
-	  그 밖(구역 밖에서 잡힘·DropEgg·방망이·곰덫·나감)은 → 그 자리에 떨어짐.
-	  2판 수정 (사장님): 떨어진 알이 예약 둥지를 갖고 있으면(구역 안에서 떨어짐) 그 둥지는 떨어진 알이 사라질 때까지
-	    계속 비어 있음 → 사라진 뒤에야 NEST_RESPAWN_SECONDS(30초) 다시 채우기, 아니면 다음 초기화(대기)에 새 알.
+	  구역 안에서 경비에게 잡히면 → 예약된 원래 둥지로 돌아감 (EggRules.dropOutcome = "ReturnToNest").
+	  8판: 도망칠 수 없는 채로 다음 구역 경계를 넘어 잡혀도 둥지로 (GuardianService → knockOut(..., "ReturnToNest")).
+	  그 밖(구역 밖에서 잡힘·DropEgg·방망이·곰덫·나감)은 → 그 자리에 떨어짐 (위 "Dropped": 구역 안이면 그대로, 밖이면 5초 뒤 둥지로).
+	  2판 수정 (사장님): 떨어진 알이 예약 둥지를 갖고 있으면(구역 안에서 떨어짐) 그 둥지는 떨어진 알이 없어질 때까지
+	    계속 비어 있음 → 8판: 구역 안에 떨어진 씨앗은 다음 초기화(대기)까지 그대로라 그 둥지도 그때 새 씨앗.
 	    떨어진 알을 누가 다시 주우면 예약도 그대로 넘어감 (그 구역 안에서 경비에게 잡히면 둥지로).
 
 	대기(Intermission) 때: 둥지·바닥 알 전부 지우고 새로 놓음 + "ALL EGG RESET!" + 희귀 알 추첨/공지.
@@ -36,7 +40,8 @@
 	  - 둥지 자리 = 맵의 Nest 태그 파트(MapBuilder.getNests) 윗면, 없으면 MapLayout.nestsFor 자리 바닥.
 	  - "구역 안" = MapLayout.zoneAt(z) == 알의 구역 (일자 복도라 z 범위만 봄).
 	  - DropEgg(): 스스로 알을 버림 → 항상 그 자리에 떨어짐 (경비 추격 끝). 다시 주우면 경비가 또 쫓음.
-	  - 경비 잡힘 유예(GUARD_CATCH_GRACE_SECONDS)는 둥지에서 주울 때만 (바닥 알 다시 줍기는 유예 없음 → 버렸다 줍기 반복으로 못 버팀)
+	  - 8판: 경비 잡힘은 추격 시간으로 정함 (GuardianService) — 알마다 chaseBy/chaseSeconds 에 쌓이고 둥지로 돌아가면 0.
+	    같은 사람이 버렸다 다시 주우면 이어서 쌓임 (버렸다 줍기 반복으로 못 버팀). 7판 줍기 유예(GRACE)는 없앰
 	  - 플레이어 Attr CarryWeightKg = 든 알 무게 (Sizes.carryKg, 표시용), 알 파트 Attr WeightKg 도 같음.
 
 	5판 신호 (튜토리얼): pickedUp(player, EggInfo) = 알을 들었음 / lost(player) = 든 알을 놓침
@@ -93,10 +98,13 @@ export type Egg = {
 	nestIndex: number?,
 	carrier: Player?,
 	pickedAt: number,
-	graceUntil: number, -- 이 시각(os.clock)까지 경비가 못 잡음 (둥지에서 주울 때만 GUARD_CATCH_GRACE_SECONDS)
 	pickedPosition: Vector3?, -- 마지막으로 주운(또는 서버가 순간이동시킨) 위치
 	originAt: number, -- pickedPosition 을 기록한 시각 (os.clock)
 	droppedAt: number,
+	-- 8판
+	returnAt: number?, -- 바닥 씨앗이 둥지로 돌아가는 시각 (os.clock, 구역 밖에 떨어졌을 때만). nil = 그 자리에 그대로
+	chaseBy: Player?, -- 이 씨앗으로 쫓긴 사람 (GuardianService 가 씀)
+	chaseSeconds: number, -- chaseBy 가 도망칠 수 없는 채로 쫓긴 시간 합 (초) — 둥지로 돌아가면 0
 }
 
 export type SpecialEggOptions = {
@@ -275,15 +283,18 @@ local function setState(egg: Egg, state: EggState)
 	egg.part:SetAttribute("EggState", state)
 end
 
--- 바닥 알 카운트다운 Attribute (DroppedAt / ExpiresAt, 서버 시각). 다시 주우면 지움(nil)
-local function setDropClock(egg: Egg, dropped: boolean)
+-- 바닥 알 Attribute (서버 시각): DroppedAt = 떨어진 시각, 8판 ExpiresAt = 둥지로 돌아가는 시각(구역 밖일 때만 → 클라
+-- "5초" 카운트다운) + ReturnsToNest. returnSeconds = nil 이면 그 자리에 그대로(카운트다운 없음). 다시 주우면 전부 지움
+local function setDropClock(egg: Egg, dropped: boolean, returnSeconds: number?)
 	if dropped then
 		local now = Workspace:GetServerTimeNow()
 		egg.part:SetAttribute("DroppedAt", now)
-		egg.part:SetAttribute("ExpiresAt", now + Config.DROPPED_EGG_LIFETIME)
+		egg.part:SetAttribute("ExpiresAt", if returnSeconds then now + returnSeconds else nil)
+		egg.part:SetAttribute("ReturnsToNest", returnSeconds ~= nil)
 	else
 		egg.part:SetAttribute("DroppedAt", nil)
 		egg.part:SetAttribute("ExpiresAt", nil)
+		egg.part:SetAttribute("ReturnsToNest", nil)
 	end
 end
 
@@ -306,6 +317,9 @@ local function placeOnNest(egg: Egg, slot: NestSlot)
 	egg.carrier = nil
 	egg.nestBiome = slot.biomeId
 	egg.nestIndex = slot.index
+	egg.returnAt = nil
+	egg.chaseBy = nil -- 8판: 둥지로 돌아오면 추격 시간 처음부터
+	egg.chaseSeconds = 0
 	slot.eggUid = egg.uid
 	slot.respawnAt = nil
 	setDropClock(egg, false)
@@ -349,10 +363,12 @@ local function spawnEgg(slot: NestSlot, pet: Pets.Plant, traits: EggRoll.EggTrai
 		nestIndex = slot.index,
 		carrier = nil,
 		pickedAt = 0,
-		graceUntil = 0,
 		pickedPosition = nil,
 		originAt = 0,
 		droppedAt = 0,
+		returnAt = nil,
+		chaseBy = nil,
+		chaseSeconds = 0,
 	}
 	eggs[egg.uid] = egg
 	placeOnNest(egg, slot)
@@ -594,14 +610,13 @@ function EggService.tryPickup(player: Player, uid: string)
 		return
 	end
 
-	local fromNest = egg.state == "Nest"
 	egg.prompt.Enabled = false
 	egg.carrier = player
 	egg.pickedAt = now
-	-- 경비 유예는 둥지에서 주울 때만 (바닥 알을 버렸다 다시 줍기로 유예를 계속 받지 못하게)
-	egg.graceUntil = if fromNest then now + Config.GUARD_CATCH_GRACE_SECONDS else now
 	egg.pickedPosition = root.Position
 	egg.originAt = now
+	egg.returnAt = nil
+	-- 8판: 추격 시간(chaseSeconds)은 같은 사람이 다시 주우면 이어서 쌓임 (다른 사람이 주우면 0부터 — GuardianService)
 	setDropClock(egg, false)
 	setState(egg, "Carried")
 	-- 둥지 예약은 유지 (구역을 벗어날 때 풀림). 바닥 알도 예약 둥지가 남아 있으면 그대로 넘어감.
@@ -667,7 +682,8 @@ local function returnToNest(egg: Egg): boolean
 	return false
 end
 
--- 2판 수정: 예약 둥지는 풀지 않음 → 떨어진 알이 사라질 때까지(또는 다음 초기화까지) 그 둥지는 비어 있음
+-- 2판 수정: 예약 둥지는 풀지 않음 → 떨어진 알이 없어질 때까지(또는 다음 초기화까지) 그 둥지는 비어 있음
+-- 8판: 그 씨앗 구역 안이면 그대로, 밖이면 DROPPED_EGG_RETURN_SECONDS 뒤 둥지로 (EggRules.groundFate)
 local function placeDropped(egg: Egg, position: Vector3, ignore: { Instance })
 	local weld = egg.part:FindFirstChild("CarryWeld")
 	if weld then
@@ -681,18 +697,26 @@ local function placeDropped(egg: Egg, position: Vector3, ignore: { Instance })
 	egg.prompt.Enabled = true
 	egg.carrier = nil
 	egg.droppedAt = os.clock()
-	setDropClock(egg, true)
+	local fate = EggRules.groundFate(egg.biomeId, MapLayout.zoneAt(position.Z))
+	local returnSeconds = if fate == "Return" then Config.DROPPED_EGG_RETURN_SECONDS else nil
+	egg.returnAt = if returnSeconds then egg.droppedAt + returnSeconds else nil
+	setDropClock(egg, true, returnSeconds)
 	setState(egg, "Dropped")
 end
 
--- 떨어진 알 시간이 다 됨: 예약 둥지가 있으면 이제부터 30초 뒤 다시 채움 (releaseNest), 알은 사라짐
-local function expireDropped(egg: Egg)
+-- 8판: 구역 밖에 떨어진 씨앗의 5초가 다 됨 → 둥지로 (예약 둥지 → 같은 구역 빈 둥지). 둥지가 다 차 있으면 사라지고
+-- 예약을 풀어 30초 뒤 다시 채움 (7판 "60초 뒤 사라짐" 자리)
+local function returnDropped(egg: Egg)
+	if returnToNest(egg) then
+		return
+	end
 	releaseNest(egg)
 	destroyEgg(egg)
 end
 
 -- 들고 있던 알을 놓침. cause 에 따라 둥지로 돌아가거나 그 자리에 떨어짐.
-function EggService.dropCarried(player: Player, cause: CatchCause): EggOutcome?
+-- 8판: forceOutcome = "ReturnToNest" 면 어디서든 둥지로 (도망칠 수 없는 채로 다음 구역 경계를 넘어 잡힘 — GuardianService)
+function EggService.dropCarried(player: Player, cause: CatchCause, forceOutcome: EggOutcome?): EggOutcome?
 	local egg = EggService.getCarried(player)
 	if not egg then
 		return nil
@@ -704,7 +728,7 @@ function EggService.dropCarried(player: Player, cause: CatchCause): EggOutcome?
 	ensurePart(egg)
 
 	EggService.lost:fire(player)
-	local outcome = EggRules.dropOutcome(cause, egg.biomeId, MapLayout.zoneAt(position.Z))
+	local outcome = forceOutcome or EggRules.dropOutcome(cause, egg.biomeId, MapLayout.zoneAt(position.Z))
 	if outcome == "ReturnToNest" and returnToNest(egg) then
 		return "ReturnToNest"
 	end
@@ -750,8 +774,16 @@ function EggService.resetCarryOrigin(player: Player, position: Vector3)
 end
 
 -- 잡힘/맞음: 알 놓치기 + 래그돌 + Caught 알림. power = 무기 넉백 배율 (기본 1)
-function EggService.knockOut(player: Player, fromPosition: Vector3?, cause: CatchCause, byName: string, power: number?)
-	local outcome = EggService.dropCarried(player, cause)
+-- 8판: forceOutcome = "ReturnToNest" 면 어디서 잡히든 씨앗은 둥지로 (다음 구역 경계를 넘다 잡힘)
+function EggService.knockOut(
+	player: Player,
+	fromPosition: Vector3?,
+	cause: CatchCause,
+	byName: string,
+	power: number?,
+	forceOutcome: EggOutcome?
+)
+	local outcome = EggService.dropCarried(player, cause, forceOutcome)
 	local velocity = Ragdoll.apply(player, fromPosition, nil, power)
 	Net.fire(player, Remotes.ToClient.Caught, {
 		cause = cause,
@@ -807,8 +839,10 @@ local function tick(): ...any
 				end
 			end
 		elseif egg.state == "Dropped" then
-			if now - egg.droppedAt > Config.DROPPED_EGG_LIFETIME then
-				expireDropped(egg)
+			-- 8판: 구역 밖에 떨어진 씨앗만 5초 뒤 둥지로 (구역 안이면 returnAt = nil → 다음 초기화까지 그대로)
+			local returnAt = egg.returnAt
+			if returnAt and now >= returnAt then
+				returnDropped(egg)
 			end
 		end
 	end
@@ -849,7 +883,19 @@ function EggService.dropEgg(player: Player): boolean
 		return false
 	end
 	EggService.dropCarried(player, "drop")
-	Net.notify(player, "info", "씨앗을 내려놓았어요.")
+	-- 8판: 그 씨앗 구역 밖이면 5초 뒤 둥지로, 안이면 그 자리에 그대로
+	if egg.state == "Dropped" and egg.returnAt then
+		Net.notify(
+			player,
+			"info",
+			string.format(
+				"씨앗을 내려놓았어요. 이 씨앗의 구역 밖이라 %d초 뒤 둥지로 돌아가요!",
+				Config.DROPPED_EGG_RETURN_SECONDS
+			)
+		)
+	else
+		Net.notify(player, "info", "씨앗을 내려놓았어요. 누구나 다시 주울 수 있어요!")
+	end
 	return true
 end
 

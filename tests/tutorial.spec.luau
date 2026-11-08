@@ -1,7 +1,7 @@
 --!nocheck
 --[[
 	6판 튜토리얼 (사장님 지시): 숲에서 씨앗 훔치기 → 안전 구역으로 돌아오기 → 핫바에서 씨앗을 골라 정원에 심기
-	  → 성체가 될 때까지 기다리기(강아지풀 씨앗 3초) → 열매 따서 팔기 → 500 코인
+	  → 성체가 될 때까지 기다리기(강아지풀 씨앗 3초) → 열매 따서 팔기 → 1,000 코인 (8판, 6·7판 500)
 	  1) 순수 규칙 shared/TutorialRules (advance / normalize / view / clean)
 	  2) 진짜 TutorialService + BaseService + PetService + FruitService 를 ServerHarness 위에서 (가짜 EggService 신호)
 ]]
@@ -22,10 +22,10 @@ return function(T, Loader)
 	------------------------------------------------------------------
 	T.suite("6판 튜토리얼: 규칙 (TutorialRules)")
 
-	T.test("단계 5개 + 끝(6), 보상 500 코인, 사장님 지시 문장 그대로", function()
+	T.test("단계 5개 + 끝(6), 보상 1,000 코인(8판), 사장님 지시 문장 그대로", function()
 		T.eq(Tutorial.TOTAL, 5)
 		T.eq(Tutorial.DONE, 6)
-		T.eq(Tutorial.REWARD_MONEY, 500)
+		T.eq(Tutorial.REWARD_MONEY, 1000, "8판 사장님: 500 → 1,000")
 		local texts = {}
 		for i, step in Tutorial.steps do
 			texts[i] = step.text
@@ -128,11 +128,11 @@ return function(T, Loader)
 			T.truthy(#v.hint > 0)
 			T.falsy(v.done)
 			T.eq(v.reward, nil)
-			local done = TutorialRules.view(6, 500)
+			local done = TutorialRules.view(6, 1000)
 			T.truthy(done.done)
 			T.eq(done.step, 6)
-			T.eq(done.reward, 500)
-			T.truthy(string.find(done.text, "500 코인", 1, true), done.text)
+			T.eq(done.reward, 1000)
+			T.truthy(string.find(done.text, "1K 코인", 1, true), done.text)
 			T.falsy(string.find(done.text, "$", 1, true), done.text)
 			T.eq(TutorialRules.view(6).reward, nil)
 			T.eq(TutorialRules.view(99).step, 6, "이상한 큰 값은 끝으로")
@@ -198,7 +198,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"처음부터 끝까지: 훔치기 → (잡혀서 1로) → 다시 → 배달 → 심기 → (다시 주워 3으로) → 심기 → 1초 뒤 성체(7판) → 열매 따서 팔기 → 500 코인",
+		"처음부터 끝까지: 훔치기 → (잡혀서 1로) → 다시 → 배달 → 심기 → (다시 주워 3으로) → 심기 → 1초 뒤 성체(7판) → 열매 따서 팔기 → 1,000 코인(8판)",
 		function()
 			local w = world(1)
 			w.BaseService.start()
@@ -246,16 +246,16 @@ return function(T, Loader)
 			T.eq(w.data.fruits.puppy_grass.count, 1)
 			T.eq(w.data.tutorialStep, 5, "따기만 하면 아직")
 			local moneyBefore = w.data.money
-			-- 5 → 끝: 판매 가판대에서 팔기 → 열매 값 + 500 코인
+			-- 5 → 끝: 판매 가판대에서 팔기 → 열매 값 + 1,000 코인 (8판)
 			goToStall(w)
 			w.H.client(w.player, "SellFruits")
 			T.eq(w.data.tutorialStep, 6)
-			T.eq(w.data.money, moneyBefore + 8 * 2 + 500, "강아지풀 열매 8 × 초반 2배 + 보상 500")
+			T.eq(w.data.money, moneyBefore + 8 * 2 + 1000, "강아지풀 열매 8 × 초반 2배 + 보상 1,000")
 			local done, count = lastUpdate(w)
 			T.truthy(done.done)
-			T.eq(done.reward, 500)
+			T.eq(done.reward, 1000)
 			T.truthy(w.H.hasNotify(w.player, "success", "튜토리얼 끝"))
-			T.truthy(w.H.hasNotify(w.player, "success", "500 코인"))
+			T.truthy(w.H.hasNotify(w.player, "success", "1K 코인"))
 			-- 끝난 뒤에는 아무 일에도 더 안 보내고 코인도 다시 안 줌
 			w.H.advance(1)
 			w.data.fruits.puppy_grass = { count = 1, value = 8 }
@@ -264,7 +264,7 @@ return function(T, Loader)
 			w.BaseService.deliver(w.player)
 			local _, after = lastUpdate(w)
 			T.eq(after, count, "끝난 뒤 TutorialUpdate 없음")
-			T.eq(w.data.money, moneyBefore + 8 * 2 + 500 + 8, "열매 8 × 초반 2배 + 보상 500 + 배달 8")
+			T.eq(w.data.money, moneyBefore + 8 * 2 + 1000 + 8, "열매 8 × 초반 2배 + 보상 1,000 + 배달 8")
 			local sawSection = false
 			for _, args in w.H.sent(w.player, "DataUpdate") do
 				if args[1] == "tutorial" then
@@ -329,7 +329,7 @@ return function(T, Loader)
 		w.data.fruits.sprout_daisy = { count = 2, value = 20 }
 		goToStall(w)
 		w.H.client(w.player, "SellFruits")
-		T.eq(w.data.money, 20 + 500)
+		T.eq(w.data.money, 20 + 1000)
 		w.TutorialService.reset(w.player)
 		T.eq(w.data.tutorialStep, 1)
 		T.eq(lastUpdate(w).step, 1)

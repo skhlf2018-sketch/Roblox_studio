@@ -327,41 +327,76 @@ MapLayout.hubSpots = {
 }
 
 ------------------------------------------------------------------
--- 둥지·경비 (구역마다 8개 둥지, 경비 집 = 구역 중앙)
---   둥지는 벽(x ±110)에서 20 이상, 구역 앞뒤 경계에서도 20 이상, 경비 집에서 60 이상.
+-- 둥지 무리·경비·추천 속도 표지판 (8판, 사장님 2026-11-08 — 본부장이 원작을 보고 확인한 모양)
+--   원작: 구역마다 둥지 3~5개가 **한 곳에 바짝 모여**(서로 5~10) 구역 **끝쪽 한 귀퉁이**(오른쪽 벽 근처, 다음 구역 경계
+--   가까이)에 있고, **경비가 바로 옆에서 자며**, 옆에 "추천 속도" 표지판. 구역 가운데·입구 쪽은 장식만.
+--   우리: 둥지 5개(Config.NESTS_PER_BIOME) — 복도 끝(+z)을 바라보는 사람의 오른쪽 = x < 0 쪽 벽(x = -110).
+--     무리 가운데 = (NEST_CLUSTER.x, 구역 zMax - NEST_CLUSTER.endGap) → 둥지는 벽에서 20, 다음 구역 경계에서 29 떨어짐
+--     (도망칠 수 없는 사람이 다음 구역 경계를 넘으면 즉시 잡히므로 줍는 자리가 경계에 너무 붙지 않게)
+--     경비 집 = 무리 가운데에서 복도 가운데 쪽으로 guardDx (가장 가까운 둥지와 약 16) — 표지판 = 무리 앞(입구 쪽)
+--   모든 구역이 같은 모양 (좌우 뒤집기 없음). 구역 18 → 21 이 되어도 Biomes.list 에서 자동.
 ------------------------------------------------------------------
-local NEST_PATTERN: { { number } } = {
-	{ -80, -78 },
-	{ -32, -92 },
-	{ 30, -70 },
-	{ 82, -88 },
-	{ -84, 74 },
-	{ -30, 90 },
-	{ 34, 72 },
-	{ 80, 92 },
+MapLayout.NEST_CLUSTER = {
+	x = -82, -- 무리 가운데 x (오른쪽 벽 x = -110 에서 28)
+	endGap = 36, -- 무리 가운데 ~ 다음 구역 경계(구역 zMax)
+	-- 무리 안 둥지 자리 (가운데 기준 dx, dz). 이웃 둥지끼리 8 ~ 8.6 (둥지 파트 지름 6 이라 안 겹침)
+	offsets = { { 0, 0 }, { 8, -3 }, { -8, -3 }, { 4, 7 }, { -4, 7 } } :: { { number } },
+	guardDx = 24, -- 경비가 자는 자리 = 가운데 + (24, 0) → 복도 가운데 쪽
+	sign = { dx = -14, dz = -14 }, -- "추천 속도" 표지판 = 가운데 + (-14, -14) → 무리 앞 벽 쪽, 입구(-z)를 바라봄
+	decor = { { 12, 12 }, { -12, 12 } } :: { { number } }, -- 둥지 옆 장식 식물 2개 (무리 뒤, 경계 쪽)
 }
 
--- 구역마다 살짝 다르게 (짝수 구역은 좌우 뒤집고, z 를 조금 흔듦) — 결정적(랜덤 아님)
-function MapLayout.nestsFor(biomeId: string): { XZ }
-	local b = biomeById[biomeId]
-	if not b then
-		return {}
-	end
-	local mirror = if b.index % 2 == 0 then -1 else 1
-	local result: { XZ } = {}
-	for i, offset in NEST_PATTERN do
-		local wobble = ((b.index * 7 + i * 3) % 5 - 2) * 2 -- -4 ~ 4
-		table.insert(result, { x = offset[1] * mirror, z = b.centerZ + offset[2] + wobble })
-	end
-	return result
-end
+export type NestCluster = {
+	center: XZ, -- 무리 가운데
+	nests: { XZ }, -- 둥지 5개 (NestIndex 순서)
+	guard: XZ, -- 경비가 자는 자리 (= guardHome)
+	sign: XZ, -- 추천 속도 표지판 (입구 -z 쪽을 바라봄)
+	decor: { XZ }, -- 둥지 옆 장식 식물 자리 2개 (MapBuilder ParentAnimalSpot)
+}
 
-function MapLayout.guardHome(biomeId: string): XZ?
+function MapLayout.nestCluster(biomeId: string): NestCluster?
 	local b = biomeById[biomeId]
 	if not b then
 		return nil
 	end
-	return { x = 0, z = b.centerZ }
+	local c = MapLayout.NEST_CLUSTER
+	local cx, cz = c.x, b.zMax - c.endGap
+	local function at(dx: number, dz: number): XZ
+		return { x = cx + dx, z = cz + dz }
+	end
+	local nests: { XZ } = {}
+	for _, o in c.offsets do
+		table.insert(nests, at(o[1], o[2]))
+	end
+	local decor: { XZ } = {}
+	for _, o in c.decor do
+		table.insert(decor, at(o[1], o[2]))
+	end
+	return {
+		center = at(0, 0),
+		nests = nests,
+		guard = at(c.guardDx, 0),
+		sign = at(c.sign.dx, c.sign.dz),
+		decor = decor,
+	}
+end
+
+-- 둥지 자리 (NestIndex 순서, 8판: 구역 끝 오른쪽 귀퉁이에 5개 무리)
+function MapLayout.nestsFor(biomeId: string): { XZ }
+	local cluster = MapLayout.nestCluster(biomeId)
+	return if cluster then cluster.nests else {}
+end
+
+-- 경비가 자는 자리 (8판: 둥지 무리 바로 옆 — 7판까지는 구역 가운데)
+function MapLayout.guardHome(biomeId: string): XZ?
+	local cluster = MapLayout.nestCluster(biomeId)
+	return if cluster then cluster.guard else nil
+end
+
+-- "추천 속도" 표지판 자리 (8판: 둥지 무리 옆, 입구 쪽을 바라봄)
+function MapLayout.nestSign(biomeId: string): XZ?
+	local cluster = MapLayout.nestCluster(biomeId)
+	return if cluster then cluster.sign else nil
 end
 
 ------------------------------------------------------------------

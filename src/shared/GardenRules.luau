@@ -10,6 +10,7 @@
 	    (일반 1 … 슈퍼 500 … 해커 글리치 5000, Config.SKIP_RARITY_MULTIPLIER — 7판 등급 16개). "all" = 남은 시간 전부, "half" = 절반
 	    남은 시간 = required - progress ("성장 시간" — 밤에 30배 빨리 줄어드는 그 숫자, 씨앗 위 타이머와 같음)
 	- 성체 뽑아서 팔기 (SellPlant): 값 = 그 식물 열매 1개 값 × Config.PLANT_SELL_FRUIT_MULTIPLIER(20)
+	- 8판 식물 크기 (plantScale = 등급 × 크기 등급 × 자람): rarityScale · sizeScale · stageScale · growthScale (Config 한 곳)
 ]]
 
 local Data = script.Parent.Data
@@ -42,6 +43,49 @@ function GardenRules.stage(progress: number, required: number): StageId
 		end
 	end
 	return current
+end
+
+------------------------------------------------------------------
+-- 8판 (사장님 2026-11-08) 식물 크기: 등급이 높을수록 성체가 크고(×1 ~ ×4.5), 자라면서 점점 커짐. 숫자는 Config 한 곳
+--   (RARITY_PLANT_SCALE · PLANT_SIZE_SCALE · STAGE_SCALE). 모양 적용은 선임 PlantVisualService
+------------------------------------------------------------------
+
+-- 등급 → 성체 크기 배율 (모르는 등급 1)
+function GardenRules.rarityScale(rarityId: string?): number
+	return if rarityId then Config.RARITY_PLANT_SCALE[rarityId] or 1 else 1
+end
+
+-- 씨앗 크기 등급(normal/big/huge/giant) → 식물 크기 배율 (모르는 크기 1)
+function GardenRules.sizeScale(sizeId: string?): number
+	return if sizeId then Config.PLANT_SIZE_SCALE[sizeId] or 1 else 1
+end
+
+-- 성장 단계 → 크기 배율 (Config.STAGE_SCALE: 새싹 0.3 · 줄기 0.55 · 봉오리 0.8 · 성체 1, 모르는 단계 1)
+function GardenRules.stageScale(stageId: string): number
+	return Config.STAGE_SCALE[stageId] or 1
+end
+
+-- 자람 배율 (자라면서 **점점** 커지게): 단계 시작점 사이를 자란 비율로 이어 줌
+--   0% 0.3 → 25% 0.55 → 60% 0.8 → 100% 1 (그 사이는 곧은 선). 이상한 값이면 새싹 크기
+function GardenRules.growthScale(progress: number, required: number): number
+	local f = if progress == progress and required == required then GardenRules.fraction(progress, required) else 0
+	local stages = Config.GROWTH_STAGES
+	for i = #stages - 1, 1, -1 do
+		local a, b = stages[i], stages[i + 1]
+		if f >= a.from then
+			local sa, sb = GardenRules.stageScale(a.id), GardenRules.stageScale(b.id)
+			local t = if b.from > a.from then math.clamp((f - a.from) / (b.from - a.from), 0, 1) else 1
+			return sa + (sb - sa) * t
+		end
+	end
+	return GardenRules.stageScale(stages[1].id)
+end
+
+-- 식물 하나의 보이는 크기 배율 = 등급 × 크기 등급 × 자람 (progress/required 를 안 주면 성체 = 자람 1)
+function GardenRules.plantScale(petId: string, sizeId: string?, progress: number?, required: number?): number
+	local plant = Plants.get(petId)
+	local grow = if progress and required then GardenRules.growthScale(progress, required) else 1
+	return GardenRules.rarityScale(if plant then plant.rarity else nil) * GardenRules.sizeScale(sizeId) * grow
 end
 
 -- 단계 한국어 이름 ("새싹" ...). 모르는 id 면 id 그대로

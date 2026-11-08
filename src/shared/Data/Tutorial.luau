@@ -11,7 +11,7 @@
 	                                            (심은 씨앗을 다시 가방으로 주워 정원에 자라는 씨앗이 없으면 → 3 으로)
 	  5 열매 따서 팔기                        ← SellFruits 로 열매를 1개 이상 팜 (FruitService.sold)
 	                                            (성체가 되는 순간 열매가 Config.FRUITS_ON_ADULT(1)개 달려 있어 바로 할 수 있음)
-	  끝 → 보상 REWARD_MONEY (500 코인) + TutorialUpdate { done = true, reward = 500 }
+	  끝 → 보상 REWARD_MONEY (8판: 1,000 코인) + TutorialUpdate { done = true, reward = 1000 }
 	6판은 새 게임이라 옛 데이터를 가진 사람도 스키마 6 마이그레이션 때 1단계부터 (DataSchema).
 ]]
 
@@ -53,7 +53,7 @@ local Tutorial = {
 	steps = steps,
 	TOTAL = #steps, -- 5
 	DONE = #steps + 1, -- 6 = 다 끝남
-	REWARD_MONEY = 500, -- 다 끝내면 받는 코인 (사장님 지시)
+	REWARD_MONEY = 1000, -- 다 끝내면 받는 코인 (5판 사장님 500 → 8판 사장님 2026-11-08 "1,000 코인")
 }
 
 function Tutorial.get(step: number): Step?

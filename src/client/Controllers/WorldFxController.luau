@@ -6,6 +6,7 @@
 	- 머리 위에 든 씨앗 흔들흔들 (CarryWeld.C0 를 내 화면에서만 살짝 돌림)
 	- 등급 Highlight 는 한 화면에 31개까지만 그려져서, 카메라에 가까운 26개만 켬
 	- 내가 있는 구역의 분위기 파티클만 켬
+	- 8판 둥지 씨앗 이름표(서버 Label): 내 캐릭터 12 스터드 안 가장 가까운 2개만 보이고 계단처럼 높이를 다르게 (둥지 5개가 모여 겹치지 않게)
 	- 바닥에 떨어진 씨앗(Egg): 8판 구역 밖 = 빨간 "5초 뒤 둥지로" 카운트다운 (Attr ExpiresAt · ReturnsToNest) / 구역 안 = 작은 "여기 그대로"
 	- 배달 성공: 내 베이스 스폰 자리에서 반짝 / 자는 경비 Z 둥실둥실 / 성체가 됨: 반짝 / 잡힘: 머리 위 "퍽!" + 별
 	- 6판 열매 따기: FruitPicked { plantUid, count, value } → 그 성체(GardenPlant 파트, Attr PlantUid + OwnerUserId == 나) 위
@@ -197,6 +198,72 @@ local function refreshDropTimer(egg: BasePart)
 	end
 end
 
+------------------------------------------------------------------
+-- 8판 둥지 씨앗 이름표 (서버 BillboardGui "Label") — 둥지 5개가 8 스터드 간격으로 모여서 이름표가 겹쳐 읽을 수 없음
+--   → 내 캐릭터에서 NEST_LABEL_RANGE 안의 가장 가까운 둥지 씨앗 NEST_LABEL_COUNT 개만 보이고(나머지는 Enabled = false),
+--     보이는 것끼리도 가까운 순서대로 NEST_LABEL_STEP 씩 계단처럼 높임 (폰에서도 안 겹침). 둥지 밖(들고 있음·떨어짐)은 그대로
+------------------------------------------------------------------
+
+local NEST_LABEL_RANGE = 12
+local NEST_LABEL_COUNT = 2
+local NEST_LABEL_STEP = 1.6
+local labelBaseY: { [BillboardGui]: number } = {} -- 서버가 정한 원래 높이
+
+local function nestLabel(egg: BasePart): BillboardGui?
+	local gui = egg:FindFirstChild("Label")
+	return if gui and gui:IsA("BillboardGui") then gui else nil
+end
+
+-- eggs = Egg 태그 파트들, from = 내 위치 (없으면 둥지 이름표 전부 숨김)
+function WorldFxController.refreshNestLabels(eggs: { [BasePart]: boolean }, from: Vector3?)
+	type Near = { gui: BillboardGui, d: number }
+	local near: { Near } = {}
+	local all: { BillboardGui } = {}
+	for egg in eggs do
+		local gui = if egg.Parent then nestLabel(egg) else nil
+		if gui then
+			if labelBaseY[gui] == nil then
+				labelBaseY[gui] = gui.StudsOffsetWorldSpace.Y
+				gui.Destroying:Connect(function()
+					labelBaseY[gui] = nil
+				end)
+			end
+			if egg:GetAttribute("EggState") == "Nest" then
+				table.insert(all, gui)
+				if from then
+					local p = egg.Position
+					local d = math.sqrt((p.X - from.X) ^ 2 + (p.Z - from.Z) ^ 2)
+					if d <= NEST_LABEL_RANGE then
+						table.insert(near, { gui = gui, d = d })
+					end
+				end
+			elseif not gui.Enabled then
+				gui.Enabled = true -- 둥지를 떠난 씨앗 이름표는 서버 그대로
+				gui.StudsOffsetWorldSpace = Vector3.new(0, labelBaseY[gui] or gui.StudsOffsetWorldSpace.Y, 0)
+			end
+		end
+	end
+	table.sort(near, function(a: Near, b: Near): boolean
+		return a.d < b.d
+	end)
+	local shown: { [BillboardGui]: number } = {}
+	for i = 1, math.min(NEST_LABEL_COUNT, #near) do
+		shown[near[i].gui] = i
+	end
+	for _, gui in all do
+		local rank = shown[gui]
+		local on = rank ~= nil
+		if gui.Enabled ~= on then
+			gui.Enabled = on
+		end
+		if rank then
+			local y = (labelBaseY[gui] or 0) + (rank - 1) * NEST_LABEL_STEP
+			if gui.StudsOffsetWorldSpace.Y ~= y then
+				gui.StudsOffsetWorldSpace = Vector3.new(0, y, 0)
+			end
+		end
+	end
+end
 -- 2판: 배달 패드가 없어서 내 베이스 스폰 자리(앞마당 가운데)에서 반짝
 local function myPad(): BasePart?
 	local index = Players.LocalPlayer:GetAttribute(Tags.PlayerAttributes.PlotIndex)
@@ -353,6 +420,8 @@ function WorldFxController.start()
 			for egg in dropTimers do
 				refreshDropTimer(egg)
 			end
+			local head = myHead()
+			WorldFxController.refreshNestLabels(eggs, if head then head.Position else nil)
 			task.wait(0.25)
 		end
 	end)

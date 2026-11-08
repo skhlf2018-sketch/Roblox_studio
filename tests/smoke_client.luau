@@ -1333,6 +1333,48 @@ local function body()
 		"다시 주우면(ExpiresAt·ReturnsToNest 없음) 글 사라짐"
 	)
 	droppedEgg:SetAttribute("EggState", "Dropped") -- 아래 튜토리얼 검사가 이 알을 "가장 가까운 숲 알" 로 씀
+	-- 8판 둥지 무리 이름표: 둥지 5개(8 간격)의 서버 Label 중 내 캐릭터 12 안 가장 가까운 2개만, 높이 계단
+	do
+		local WFx = ctrl("WorldFxController")
+		local set, labels = {}, {}
+		for i, o in { { 0, 0 }, { 8, -3 }, { -8, -3 }, { 4, 7 }, { -4, 7 } } do
+			local e =
+				worldPart("Egg_nl" .. i, roblox.Vector3.new(-82 + o[1], 1.2, 600 + o[2]), roblox.Vector3.new(2, 2, 2))
+			e:SetAttribute("EggState", "Nest")
+			local gui = Instance.new("BillboardGui")
+			gui.Name = "Label"
+			gui.StudsOffsetWorldSpace = roblox.Vector3.new(0, 3, 0)
+			gui.Parent = e
+			set[e] = true
+			labels[i] = gui
+		end
+		WFx.refreshNestLabels(set, roblox.Vector3.new(-80, 3, 590)) -- 무리 앞 (둥지 1·2 가 가까움)
+		local on = 0
+		for _, g in labels do
+			on += if g.Enabled then 1 else 0
+		end
+		check(
+			on == 2
+				and labels[1].Enabled
+				and labels[2].Enabled
+				and math.abs(labels[2].StudsOffsetWorldSpace.Y - labels[1].StudsOffsetWorldSpace.Y) >= 1.5,
+			string.format(
+				"8판: 둥지 무리 이름표는 가까운 2개만 + 계단 높이 (켜짐 %d, 높이 %.1f / %.1f)",
+				on,
+				labels[1].StudsOffsetWorldSpace.Y,
+				labels[2].StudsOffsetWorldSpace.Y
+			)
+		)
+		WFx.refreshNestLabels(set, roblox.Vector3.new(-82, 3, 400)) -- 멀리 → 하나도 안 보임
+		local far = 0
+		for _, g in labels do
+			far += if g.Enabled then 1 else 0
+		end
+		check(far == 0, "8판: 둥지 무리에서 12 스터드 밖이면 이름표 안 보임 (" .. far .. ")")
+		for e in set do
+			e:Destroy()
+		end
+	end
 	-- 업그레이드 표지판 프롬프트
 	local signPrompt = upgradeSign:FindFirstChild("UpgradePrompt")
 	check(signPrompt and signPrompt.Enabled == true, "내 베이스 업그레이드 표지판 프롬프트")

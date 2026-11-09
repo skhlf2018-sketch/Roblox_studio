@@ -16,6 +16,8 @@
 	  둥지 무리(NESTS_PER_BIOME 8 → 5), 경비 잡힘 시간(GUARD_CATCH_CLOSE/FAR_SECONDS · CLOSE_RATIO · RUSH), 식물 크기 배율
 	  한 곳(RARITY_PLANT_SCALE · STAGE_SCALE · PLANT_SIZE_SCALE · PLANT_FOOTPRINT · PLANT_GAP_MAX).
 	  없앰: DROPPED_EGG_LIFETIME(60초 뒤 사라짐), GUARD_CATCH_GRACE_SECONDS(잡힘은 이제 거리 대신 시간으로 정함)
+	8판 추가 (사장님 2026-11-09): 크기 곡선 1 → 6 (RARITY_PLANT_SCALE), 맨 위 등급 거대 크기(LOBBY_FILL_RARITY · LOBBY_FILL_SCALE ·
+	  LOBBY_FILL_MAX_PER_GARDEN), 정원 프롬프트 높이 상한(PLANT_PROMPT_MAX_HEIGHT). 특별 추첨 확률은 Data/EggSpawn
 ]]
 
 local Config = {
@@ -49,28 +51,44 @@ local Config = {
 	--   정원 간격: 성체 폭(지름) = PLANT_FOOTPRINT × 등급 배율 × 크기 배율 (EggPlacement.footprint) — 씨앗을 심을 때부터
 	--   다 자란 폭만큼 띄움 (큰 식물끼리 안 겹치게). 간격은 PLANT_GAP_MAX(14)까지만 → 14 간격 4 × 5 = 20칸이 정원
 	--   (울타리 2 안쪽: 42 × 56)에 들어가서 정원 칸 최대 18 이 맨 위 등급 식물로도 다 들어감 (tests/holes_v8)
+	-- 8판 추가 (사장님 2026-11-09 "등급이 높을수록 3~6배"): 매끄러운 로그 곡선 = 1 + 2.876 × ln(1 + 0.335 × (등급 순서 - 1))
+	--   → 일반 1 · 희귀 2.47 · 에픽 3 · 신성 5 · 울트라디바인 6 (등급마다 커지는 폭이 조금씩 줄어듦, 단조 증가).
+	--   16번 해커 글리치 칸(6.16 = 곡선 그대로)은 **정원 간격용** — 모양은 아래 LOBBY_FILL_SCALE(베이스를 덮는 거대 크기)
 	RARITY_PLANT_SCALE = {
 		common = 1,
-		uncommon = 1.1,
-		rare = 1.22,
-		epic = 1.35,
-		legendary = 1.49,
-		mythic = 1.65,
-		cosmic = 1.82,
-		secret = 2,
-		eternity = 2.2,
-		divine = 2.45,
-		super = 2.7,
-		hacker = 3,
-		original = 3.3,
-		developer = 3.65,
-		ultradivine = 4.05,
-		hacker_glitch = 4.5,
+		uncommon = 1.83,
+		rare = 2.47,
+		epic = 3,
+		legendary = 3.44,
+		mythic = 3.83,
+		cosmic = 4.17,
+		secret = 4.47,
+		eternity = 4.75,
+		divine = 5,
+		super = 5.23,
+		hacker = 5.44,
+		original = 5.64,
+		developer = 5.83,
+		ultradivine = 6,
+		hacker_glitch = 6.16, -- 간격용 (모양 = LOBBY_FILL_SCALE)
 	} :: { [string]: number },
+	-- 8판 추가 (사장님 2026-11-09): 맨 위 등급 "H?a.(cke_r!#" 성체는 **내 베이스 전체를 덮는 거대 크기** (모양만 — 간격은 위 표 값)
+	--   모양 등급 배율 = LOBBY_FILL_SCALE (GardenRules.rarityScale/plantScale), 크기 등급·자람 배율은 똑같이 곱함.
+	--   16 이유: 정원 모델(PlantVisualService GARDEN_BASE 1.35) 배율 1 의 해커 글리치 9종 키 3.6 ~ 4.6 (평균 4.2) · 잎 폭 1.6 ~ 3.3
+	--   → × 16 = 키 57 ~ 74 (평균 67) · 폭 26 ~ 52 (나무 모양 52) ≈ 베이스 PLOT_SIZE 60 × 70 (초거대 씨앗이면 × 1.5 = 키 약 100)
+	--   정원 간격·심기(EggPlacement)는 표 값 6.16 으로 계산해서 PLANT_GAP_MAX 14 에 묶임 → 심을 수 있음. 정원에 **1그루만**
+	--   (자라는 씨앗 + 성체 합, LOBBY_FILL_MAX_PER_GARDEN — 이미 있으면 PlaceEgg 거절 "거대 식물은 정원에 하나만").
+	--   모양 파트는 전부 CanCollide/CanTouch/CanQuery false 라 옆 베이스·복도를 덮어도 막히지 않음.
+	LOBBY_FILL_RARITY = "hacker_glitch",
+	LOBBY_FILL_SCALE = 16,
+	LOBBY_FILL_MAX_PER_GARDEN = 1,
 	STAGE_SCALE = { sprout = 0.3, stem = 0.55, bud = 0.8, adult = 1 } :: { [string]: number },
 	PLANT_SIZE_SCALE = { normal = 1, big = 1.15, huge = 1.3, giant = 1.5 } :: { [string]: number }, -- 씨앗 크기 등급(Sizes) → 식물 크기
 	PLANT_FOOTPRINT = 2.6, -- 배율 1 성체의 바닥 폭(지름, 스터드) — PlantVisualService 나무 잎 1.6 + 옆 잎 ≈ 2.6
 	PLANT_GAP_MAX = 14, -- 정원 간격 상한 (위 설명: 18칸이 다 들어가게)
+	-- 8판 추가 (2026-11-09): 정원 프롬프트(집기·건너뛰기 = 키의 50%, 열매 따기 = 키의 60%) 높이 상한(바닥에서, 스터드).
+	--   큰 식물(울트라디바인 키 약 24 · 거대 식물 67)도 프롬프트가 손 닿는 높이(MaxActivationDistance 10 ~ 12)에 있게 (GardenRules.promptHeight)
+	PLANT_PROMPT_MAX_HEIGHT = 7,
 	PASSIVE_INCOME_PER_SECOND = 0, -- 6판(사장님 결정 1): 자동 수입 없음 — 코인은 열매를 따서 팔아야 들어옴
 	EARLY_COIN_MULTIPLIER = { common = 2, uncommon = 2 } :: { [string]: number }, -- 사장님(2026-10-28): 초반 코인 수급 2배 — 초반 구역 등급(일반·고급) 열매 값 ×2 (성체 팔기 값도 따라 ×2)
 	FRUIT_SPEED_MULTIPLIER = 1.8, -- 사장님(2026-10-28): 열매가 1.8배 더 빨리 맺힘 (Economy.fruitInterval = 표 간격 ÷ 1.8)

@@ -48,13 +48,13 @@ return function(T, Loader)
 		opts = opts or {}
 		local taken = {}
 		for _, r in data.pets do
-			table.insert(taken, { x = r.x, z = r.z, size = r.size })
+			table.insert(taken, { x = r.x, z = r.z, size = r.size, petId = r.petId }) -- 8판: 성체 폭 간격
 		end
 		for _, r in data.incubators do
-			table.insert(taken, { x = r.x, z = r.z, size = r.size })
+			table.insert(taken, { x = r.x, z = r.z, size = r.size, petId = r.petId }) -- 8판: 성체 폭 간격
 		end
 		local size = opts.size or "normal"
-		local spot = w.EggPlacement.firstFreeGrid(size, taken)
+		local spot = w.EggPlacement.firstFreeGrid(size, taken, petId)
 		local record = {
 			uid = w.DataSchema.newUid(data, "p"),
 			petId = petId,
@@ -76,12 +76,12 @@ return function(T, Loader)
 		local egg = data.eggs[#data.eggs]
 		local spots = {}
 		for _, r in data.incubators do
-			table.insert(spots, { x = r.x, z = r.z, size = r.size })
+			table.insert(spots, { x = r.x, z = r.z, size = r.size, petId = r.petId }) -- 8판: 성체 폭 간격
 		end
 		for _, r in data.pets do
-			table.insert(spots, { x = r.x, z = r.z, size = r.size })
+			table.insert(spots, { x = r.x, z = r.z, size = r.size, petId = r.petId }) -- 8판: 성체 폭 간격
 		end
-		local l = w.EggPlacement.firstFreeGrid(egg.size, spots)
+		local l = w.EggPlacement.firstFreeGrid(egg.size, spots, egg.petId)
 		local spot = w.H.MapLayout.toWorld(plotIndex, l.x, l.z)
 		assert(w.BaseService.placeEgg(player, egg.uid, spot.x, spot.z), "plantSeed 실패")
 	end

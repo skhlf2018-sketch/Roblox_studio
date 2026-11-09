@@ -990,9 +990,12 @@ local function petsBody()
 		/ Visuals.plantLook("lollipop_flower").tall
 	check(secret > common, "등급이 높을수록 큰 식물")
 
-	print("[8판 식물 크기 (GardenRules.plantScale — 등급 1 ~ 4.5 × 크기 1 ~ 1.5 × 자람 0.3 ~ 1)]")
+	print(
+		"[8판 식물 크기 (GardenRules.plantScale — 등급 1 ~ 6 · 거대 식물 16 × 크기 1 ~ 1.5 × 자람 0.3 ~ 1)]"
+	)
 	local GardenRules = requireNode(Loader.get("ReplicatedStorage/Shared/GardenRules"))
 	local EggPlacement = requireNode(Loader.get("ReplicatedStorage/Shared/EggPlacement"))
+	local Config = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Config"))
 	-- 보이는 파트(뿌리·아우라 고리·숨은 열매 빼고)의 바닥 폭 (x·z 중 큰 쪽)
 	local function widthOf(m)
 		local minX, maxX, minZ, maxZ = math.huge, -math.huge, math.huge, -math.huge
@@ -1017,8 +1020,11 @@ local function petsBody()
 		return math.max(maxX - minX, maxZ - minZ)
 	end
 	local base = PlantVS.GARDEN_BASE
-	local ratioSum, ratioMax, ratioMaxId, scaleOk, n8 = 0, 0, "", 0, 0
+	local ratioSum, ratioMax, ratioMaxId, scaleOk, n8, nAll = 0, 0, "", 0, 0, 0
 	local heightTop = 0
+	-- 8판 추가 (2026-11-09): 거대 식물(해커 글리치 9종)은 모양 × LOBBY_FILL_SCALE — 간격 폭 비교에서 빼고 따로 잼
+	local lobby = { n = 0, wMin = math.huge, wMax = 0, hMin = math.huge, hMax = 0, hSum = 0, wSum = 0, mound = 0 }
+	local collideBad = 0
 	for _, pet in Pets.list do
 		local unit = PlantVS.build(pet.id, { fx = false, sized = false })
 		local sized = PlantVS.build(pet.id, { fx = false, size = "huge" })
@@ -1026,26 +1032,57 @@ local function petsBody()
 		if math.abs(sized:GetAttribute("Height") / unit:GetAttribute("Height") - want) < 1e-6 then
 			scaleOk += 1
 		end
+		nAll += 1
 		local garden = PlantVS.build(pet.id, { fx = false, scale = base })
-		local ratio = widthOf(garden) / EggPlacement.footprint(pet.id, "normal")
-		ratioSum += ratio
-		if ratio > ratioMax then
-			ratioMax, ratioMaxId = ratio, pet.id
+		local h = garden:GetAttribute("Height")
+		if GardenRules.isLobbyFill(pet.id) then
+			local w = widthOf(garden)
+			lobby.n += 1
+			lobby.wMin, lobby.wMax = math.min(lobby.wMin, w), math.max(lobby.wMax, w)
+			lobby.hMin, lobby.hMax = math.min(lobby.hMin, h), math.max(lobby.hMax, h)
+			lobby.wSum += w
+			lobby.hSum += h
+			local mound = garden:FindFirstChild("Mound")
+			lobby.mound = math.max(lobby.mound, if mound then mound.Size.X else 0)
+			for _, d in garden:GetDescendants() do
+				if d:IsA("BasePart") and (d.CanCollide or d.CanTouch or d.CanQuery) then
+					collideBad += 1
+				end
+			end
+		else
+			local ratio = widthOf(garden) / EggPlacement.footprint(pet.id, "normal")
+			ratioSum += ratio
+			if ratio > ratioMax then
+				ratioMax, ratioMaxId = ratio, pet.id
+			end
+			n8 += 1
 		end
-		heightTop = math.max(heightTop, garden:GetAttribute("Height"))
-		n8 += 1
+		heightTop = math.max(heightTop, h)
 	end
 	print(
 		string.format(
-			"  정원 성체 폭 / PLANT_FOOTPRINT×배율: 평균 %.2f  최대 %.2f (%s)  가장 큰 키 %.1f",
+			"  정원 성체 폭 / PLANT_FOOTPRINT×배율 (거대 식물 빼고): 평균 %.2f  최대 %.2f (%s)  가장 큰 키 %.1f",
 			ratioSum / n8,
 			ratioMax,
 			ratioMaxId,
 			heightTop
 		)
 	)
+	print(
+		string.format(
+			"  거대 식물(해커 글리치 %d종, 보통 크기): 키 %.1f ~ %.1f (평균 %.1f) · 잎 폭 %.1f ~ %.1f (평균 %.1f) · 흙 둔덕 %.1f",
+			lobby.n,
+			lobby.hMin,
+			lobby.hMax,
+			lobby.hSum / lobby.n,
+			lobby.wMin,
+			lobby.wMax,
+			lobby.wSum / lobby.n,
+			lobby.mound
+		)
+	)
 	check(
-		scaleOk == n8,
+		scaleOk == nAll,
 		"8판: 모델 키 = 크기 1 키 × GardenRules.plantScale(등급 × 크기 등급): " .. scaleOk
 	)
 	check(
@@ -1055,6 +1092,28 @@ local function petsBody()
 			ratioSum / n8,
 			ratioMax
 		)
+	)
+	-- 거대 식물: 베이스(PLOT_SIZE 60 × 70)를 덮는 크기, 흙 둔덕은 간격 크기, 전부 안 부딪힘
+	check(
+		lobby.n == 9 and lobby.hMin >= 50 and lobby.hMax <= 90 and lobby.wMax >= 45 and lobby.wMin >= 20,
+		string.format(
+			"8판 추가: 거대 식물 키 %.0f ~ %.0f · 폭 %.0f ~ %.0f (베이스 60 × 70 정도)",
+			lobby.hMin,
+			lobby.hMax,
+			lobby.wMin,
+			lobby.wMax
+		)
+	)
+	check(
+		lobby.mound <= 1.3 * base * Config.RARITY_PLANT_SCALE.hacker_glitch + 1e-3,
+		string.format(
+			"8판 추가: 거대 식물 흙 둔덕은 간격 크기 (%.1f — 옆 식물을 덮지 않음)",
+			lobby.mound
+		)
+	)
+	check(
+		collideBad == 0,
+		"8판 추가: 거대 식물 파트는 전부 CanCollide/CanTouch/CanQuery false: " .. collideBad
 	)
 	local commonH = PlantVS.build("puppy_grass", { fx = false }):GetAttribute("Height")
 		/ Visuals.plantLook("puppy_grass").tall
@@ -1239,6 +1298,79 @@ local function petsBody()
 		"Mutations golden → 다시 만들고 꽃잎이 금빛 네온: " .. neonPetals
 	)
 	check(#plantPart:GetChildren() == 3, "옛 식물 모델은 지움 (메시·이름표·모델)")
+	-- 8판 추가 (2026-11-09): 거대 식물(해커 글리치) 정원 파트 — VisualHeight·이름표 높이·이름표 보이는 거리·아우라가 크기를 따라감
+	local giantPart = ball("Plant_p9", 3.2, 1.6, {
+		PlantUid = "p9",
+		OwnerUserId = 77,
+		PetId = "final_boss_bloom",
+		Size = "normal",
+		Mutations = "",
+		Stage = "adult",
+		Fruits = 1,
+		FruitMax = 5,
+	})
+	giantPart.Label.MaxDistance = 60 -- BaseService Gui.billboard 와 같게
+	PlantVS.attachPlant(giantPart)
+	local giantModel = giantPart:FindFirstChild("final_boss_bloom")
+	local gvh = giantPart:GetAttribute("VisualHeight")
+	check(
+		giantModel ~= nil
+			and type(gvh) == "number"
+			and gvh >= 50
+			and math.abs(gvh - giantModel:GetAttribute("Height")) < 1e-6,
+		"8판 추가: 거대 식물 VisualHeight = 모델 키 " .. tostring(gvh)
+	)
+	check(
+		giantPart.Label.StudsOffsetWorldSpace.Y >= gvh - 1.25 and giantPart.Label.MaxDistance >= gvh + 40 - 1e-6,
+		string.format(
+			"8판 추가: 거대 식물 이름표가 꼭대기(%.1f) 위 · 보이는 거리 %.0f",
+			giantPart.Label.StudsOffsetWorldSpace.Y,
+			giantPart.Label.MaxDistance
+		)
+	)
+	local giantAura = giantModel and giantModel:FindFirstChild("Aura")
+	local pixelR = 0
+	for _, d in (giantModel and giantModel:GetChildren() or {}) do
+		if d:IsA("BasePart") and d.Name == "AuraRing" then
+			local p = d.CFrame.Position - giantPart.CFrame.Position
+			pixelR = math.max(pixelR, math.sqrt(p.X * p.X + p.Z * p.Z))
+		end
+	end
+	check(
+		giantAura ~= nil and giantAura.CFrame.Position.Y > gvh * 0.4 and pixelR > 10,
+		string.format(
+			"8판 추가: 거대 식물 아우라(가운데 높이·깨진 픽셀 둘레 %.1f)도 크기를 따라감",
+			pixelR
+		)
+	)
+	-- 자라는 거대 식물 씨앗: 흙 둔덕은 간격 크기 (모양 × 16 이 아님)
+	local giantSeed = ball("Incubating_i9", 2, 1.25, {
+		EggUid = "i9",
+		OwnerUserId = 77,
+		PetId = "final_boss_bloom",
+		Size = "normal",
+		Mutations = "",
+		Progress = 50,
+		Required = 100,
+		Stage = "stem",
+	})
+	PlantVS.attachSeed(giantSeed)
+	local gsv = giantSeed:FindFirstChild("SeedVisual")
+	local gMound = gsv and gsv:FindFirstChild("Mound")
+	local wantMound = 1.5 * PlantVS.groundScale("final_boss_bloom", "normal")
+	check(
+		gMound ~= nil
+			and math.abs(gMound.Size.X - wantMound) < 1e-6
+			and wantMound < 1.5 * PlantVS.gardenScale("final_boss_bloom", "normal") / 2,
+		string.format(
+			"8판 추가: 자라는 거대 식물 흙 둔덕 %.1f (간격 크기, 모양 크기의 절반 아래)",
+			gMound and gMound.Size.X or -1
+		)
+	)
+	check(
+		math.abs(PlantVS.groundScale("error_rose", "giant") - PlantVS.gardenScale("error_rose", "giant")) < 1e-12,
+		"8판 추가: 거대 식물이 아니면 둔덕 배율 = 모양 배율"
+	)
 	garden.Parent = nil
 
 	print("[경비 = 식물 괴물]")

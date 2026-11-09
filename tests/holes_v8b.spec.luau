@@ -1121,7 +1121,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역 19~21: 식물 8종씩·가중치 합 100·맵 끝 5040·zoneAt 경계·isInHub 범위(허브 -300~0)·마지막 구역 끝, 해커 글리치 특별 추첨은 18~21구역에서만 약 0.5%",
+		"구역 19~21: 식물 8종씩·가중치 합 100·맵 끝 5040·zoneAt 경계·isInHub 범위(허브 -300~0)·마지막 구역 끝, 해커 글리치 특별 추첨은 18~21구역에서만 (8판 추가: 0.00012%)",
 		function()
 			T.eq(MapLayout.MAP_END_Z, 5040)
 			T.eq(MapLayout.BIOME_COUNT, 21)
@@ -1167,7 +1167,8 @@ return function(T, Loader)
 					T.truthy(weights[rarity] ~= nil, id .. " 에서 나오면 안 되는 등급 " .. rarity)
 				end
 			end
-			-- 해커 글리치 특별 추첨 (구역마다 4만 번): 풀에 해커 글리치가 있는 18~21 만 약 0.5% (기대 200)
+			-- 해커 글리치 특별 추첨 (구역마다 4만 번): 풀에 해커 글리치가 있는 18~21 만
+			--   8판 추가 (사장님 2026-11-09): 0.5% → 0.00012% — 4만 번이면 기대 0.048번 (경계·1e7번은 eggroll.spec)
 			for _, b in Biomes.list do
 				local hits = 0
 				for _ = 1, 40000 do
@@ -1180,10 +1181,9 @@ return function(T, Loader)
 					end
 				end
 				if b.order >= 18 then
-					T.truthy(
-						hits >= 120 and hits <= 290,
-						b.id .. " 해커 글리치 특별 씨앗 " .. hits .. " (기대 200)"
-					)
+					T.truthy(hits <= 2, b.id .. " 해커 글리치 특별 씨앗 " .. hits .. " (기대 0.048)")
+					local first = EggRoll.rollSpecials(b.id, "light", T.constant(0))[1]
+					T.eq(first and first.rarity, "hacker_glitch", b.id .. " 난수 0 이면 해커 글리치")
 				else
 					T.eq(hits, 0, b.id .. " 에는 해커 글리치가 없음")
 				end
@@ -1255,7 +1255,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"등급 16개 × 크기 4가지 전부: 서버 PlaceEgg 를 18번 해서 정원 18칸이 다 들어가고, 나란히 심은 식물끼리 간격(gap) 이상 떨어져 있음, 18번째 다음은 '가득 참'",
+		"등급 16개 × 크기 4가지 전부: 서버 PlaceEgg 를 18번 해서 정원 18칸이 다 들어가고(8판 추가: 거대 식물은 1그루 + 둘째 거부, 나머지 17 은 울트라디바인), 나란히 심은 식물끼리 간격(gap) 이상 떨어져 있음, 18번째 다음은 '가득 참'",
 		function()
 			inWorld(nil, function(H)
 				local BaseService = H.server("Services/BaseService")
@@ -1275,18 +1275,30 @@ return function(T, Loader)
 						data.pets = {}
 						data.eggs = {}
 						local placed = {}
+						-- 8판 추가 (2026-11-09): 거대 식물(해커 글리치)은 정원에 1그루 → 2번째부터는 울트라디바인(같은 크기)
+						local lobby = GardenRules.isLobbyFill(petId)
 						for i = 1, 18 do
+							local thisPet = if lobby and i > 1 then firstPlantOf.ultradivine else petId
 							T.truthy(
-								BaseService.grantEgg(p, petId, size, {}, "dev") ~= nil,
+								BaseService.grantEgg(p, thisPet, size, {}, "dev") ~= nil,
 								rarity.id .. " " .. size .. " 씨앗 받기"
 							)
 							local egg = data.eggs[#data.eggs]
-							local spot = EggPlacement.firstFreeGrid(size, placed, petId)
+							local spot = EggPlacement.firstFreeGrid(size, placed, thisPet)
 							T.truthy(spot ~= nil, string.format("%s %s: %d번째 자리가 없음", rarity.id, size, i))
 							if not spot then
 								break
 							end
 							local w = MapLayout.toWorld(1, spot.x, spot.z)
+							if lobby and i == 2 then
+								BaseService.grantEgg(p, petId, size, {}, "dev")
+								local second = data.eggs[#data.eggs]
+								T.falsy(
+									BaseService.placeEgg(p, second.uid, w.x, w.z),
+									rarity.id .. " " .. size .. " 둘째 거대 식물"
+								)
+								T.truthy(H.hasNotify(p, "error", "거대 식물은 정원에 하나만"))
+							end
 							T.truthy(
 								BaseService.placeEgg(p, egg.uid, w.x, w.z),
 								string.format(
@@ -1297,7 +1309,7 @@ return function(T, Loader)
 									tostring(H.lastNotify(p) and H.lastNotify(p).text)
 								)
 							)
-							table.insert(placed, { x = spot.x, z = spot.z, size = size, petId = petId })
+							table.insert(placed, { x = spot.x, z = spot.z, size = size, petId = thisPet })
 						end
 						T.eq(#data.incubators, 18, rarity.id .. " " .. size)
 						-- 19번째는 정원이 가득 차서 거부
@@ -1307,9 +1319,9 @@ return function(T, Loader)
 						T.falsy(BaseService.placeEgg(p, extra.uid, w.x, w.z), "19번째")
 						T.eq(#data.incubators, 18)
 						-- 서로 간격(gap) 이상
-						local gap = EggPlacement.gap(size, size, petId, petId)
 						for i = 1, #placed do
 							for j = i + 1, #placed do
+								local gap = EggPlacement.gap(size, size, placed[i].petId, placed[j].petId)
 								local d = math.sqrt((placed[i].x - placed[j].x) ^ 2 + (placed[i].z - placed[j].z) ^ 2)
 								T.truthy(
 									d >= gap - 1e-9,
@@ -1382,7 +1394,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"겹침: 두 식물이 안 겹치는 간격(gap ≥ 성체 폭 평균) — 겹칠 수 있는 건 성체 폭 평균이 상한 14 를 넘는 큰 등급 조합뿐이고 겹침은 3.6 이하 (해커 글리치 초거대끼리가 최대)",
+		"겹침: 두 식물이 안 겹치는 간격(gap ≥ 성체 폭 평균) — 겹칠 수 있는 건 성체 폭 평균이 상한 14 를 넘는 큰 등급 조합뿐 (8판 추가 곡선 1 → 6: 함께 심을 수 있는 조합 중 최대 겹침 = 울트라디바인 초거대 ↔ 해커 글리치 초거대 약 9.7, 일반 등급은 안 겹침)",
 		function()
 			local combos = {}
 			for _, r in Rarities.list do
@@ -1426,7 +1438,10 @@ return function(T, Loader)
 							)
 						)
 						T.near(gap, Config.PLANT_GAP_MAX, 1e-9)
-						worst = math.max(worst, avg - gap)
+						-- 8판 추가: 거대 식물끼리는 한 정원에 같이 못 심음 (1그루) → 최대 겹침에서 뺌
+						if not (GardenRules.isLobbyFill(a.petId) and GardenRules.isLobbyFill(b.petId)) then
+							worst = math.max(worst, avg - gap)
+						end
 						overlapping[a.rarity .. ":" .. a.size] = true
 						overlapping[b.rarity .. ":" .. b.size] = true
 					end
@@ -1438,12 +1453,23 @@ return function(T, Loader)
 			end
 			table.sort(names)
 			print(
-				"      (참고) 겹칠 수 있는 크기 조합: "
-					.. table.concat(names, ", ")
-					.. string.format(" — 최대 겹침 %.2f 스터드", worst)
+				"      (참고) 겹칠 수 있는 크기 조합 "
+					.. #names
+					.. "개 (일반 등급 4개만 빼고) — 함께 심을 수 있는 것 중 최대 겹침 "
+					.. string.format("%.2f 스터드 (모양만, CanCollide false)", worst)
 			)
-			T.truthy(worst <= 3.6, "겹침 최대 " .. worst)
-			T.truthy(#names <= 16, "겹치는 조합이 " .. #names .. "개")
+			local P, R, S = Config.PLANT_FOOTPRINT, Config.RARITY_PLANT_SCALE, Config.PLANT_SIZE_SCALE
+			local expectWorst = (P * R.ultradivine * S.giant + P * R.hacker_glitch * S.giant) / 2 - Config.PLANT_GAP_MAX
+			T.near(
+				worst,
+				expectWorst,
+				1e-9,
+				"최대 겹침 = 울트라디바인 초거대 ↔ 해커 글리치 초거대"
+			)
+			T.truthy(worst <= 10, "겹침 최대 " .. worst)
+			for _, size in SIZE_IDS do
+				T.falsy(overlapping["common:" .. size], "일반 " .. size .. " 은 누구와도 안 겹침")
+			end
 		end
 	)
 
@@ -1539,7 +1565,7 @@ return function(T, Loader)
 					local full = GardenRules.plantScale(plant.id, size)
 					T.near(
 						full,
-						Config.RARITY_PLANT_SCALE[plant.rarity] * Config.PLANT_SIZE_SCALE[size],
+						GardenRules.rarityScale(plant.rarity) * Config.PLANT_SIZE_SCALE[size], -- 8판 추가: 모양용 (거대 식물 = LOBBY_FILL_SCALE)
 						1e-9,
 						plant.id
 					)
@@ -1548,7 +1574,7 @@ return function(T, Loader)
 						local s = GardenRules.plantScale(plant.id, size, step, 100)
 						T.truthy(s >= prev - 1e-12, plant.id .. " " .. size .. " 줄어듦 " .. step)
 						T.truthy(
-							s >= 0.3 * Config.RARITY_PLANT_SCALE[plant.rarity] * Config.PLANT_SIZE_SCALE[size] - 1e-9
+							s >= 0.3 * GardenRules.rarityScale(plant.rarity) * Config.PLANT_SIZE_SCALE[size] - 1e-9
 						)
 						T.truthy(s <= full + 1e-9)
 						prev = s
@@ -1569,14 +1595,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"참고: 사람이 손으로(아무 데나 눌러서) 해커 글리치 보통/초거대를 심으면 18칸 중 몇 그루나 들어가나 (firstFreeGrid 자동 자리는 18칸 다 됨)",
+		"참고: 사람이 손으로(아무 데나 눌러서) 가장 큰 보통 등급(울트라디바인 — 8판 추가: 해커 글리치는 1그루만) 보통/초거대를 심으면 18칸 중 몇 그루나 들어가나 (firstFreeGrid 자동 자리는 18칸 다 됨)",
 		function()
 			local rng = T.rng(4242)
 			local penXMin = MapLayout.PEN_LOCAL.xMin + Config.EGG_PLACE_FENCE_MARGIN
 			local penXMax = MapLayout.PEN_LOCAL.xMax - Config.EGG_PLACE_FENCE_MARGIN
 			local penZMin = MapLayout.PEN_LOCAL.zMin + Config.EGG_PLACE_FENCE_MARGIN
 			local penZMax = MapLayout.PEN_LOCAL.zMax - Config.EGG_PLACE_FENCE_MARGIN
-			local glitch = firstPlantOf.hacker_glitch
+			local glitch = firstPlantOf.ultradivine -- 8판 추가: 거대 식물은 정원에 1그루라 울트라디바인으로
 			for _, size in { "normal", "giant" } do
 				local total, best, worst = 0, 0, 99
 				local trials = 100
@@ -1599,7 +1625,7 @@ return function(T, Loader)
 				end
 				print(
 					string.format(
-						"      (참고) 해커 글리치 %s 를 아무 데나 눌러 심으면 평균 %.1f그루 (최소 %d · 최대 %d) / 18칸 — 자동 자리(firstFreeGrid)는 18",
+						"      (참고) 울트라디바인 %s 를 아무 데나 눌러 심으면 평균 %.1f그루 (최소 %d · 최대 %d) / 18칸 — 자동 자리(firstFreeGrid)는 18",
 						size,
 						total / trials,
 						worst,
@@ -1992,7 +2018,7 @@ return function(T, Loader)
 				for _, id in { "sprout_daisy", "owl_oak", "puppy_grass" } do
 					addPlant(A, dataA, id, 2)
 				end
-				plantSeed(A, dataA, 1, "static_world_tree")
+				plantSeed(A, dataA, 1, "error_rose") -- 8판 추가: 거대 식물은 정원에 1그루 (이미 성체 2그루 = 옛 저장처럼)
 				plantSeed(A, dataA, 1, "owl_oak")
 				for _ = 1, 4 do
 					w.BaseService.grantEgg(A, "static_world_tree", "normal", {}, "sakura")

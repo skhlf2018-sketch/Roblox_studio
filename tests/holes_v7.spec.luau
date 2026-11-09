@@ -441,7 +441,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지 추첨 분포(구역마다 3만 번)가 가중치와 ±1.5%p 안이고 새 구역은 새 등급을 뽑음 / 특별 추첨 해커 글리치는 버그 차원에서만 약 0.5%",
+		"둥지 추첨 분포(구역마다 3만 번)가 가중치와 ±1.5%p 안이고 새 구역은 새 등급을 뽑음 / 특별 추첨 해커 글리치는 버그 차원에서만 (8판 추가: 0.00012%)",
 		function()
 			local rand = T.rng(7070)
 			local seen = {}
@@ -491,10 +491,16 @@ return function(T, Loader)
 					break
 				end
 			end
+			-- 8판 추가 (사장님 2026-11-09): 0.5% → 0.00012% — 20,000번이면 기대 0.024번 (경계는 eggroll.spec 이 봄)
 			T.truthy(
-				glitchHits > 40 and glitchHits < 180,
-				"해커 글리치 특별 씨앗 20,000번 중 " .. glitchHits .. " (기대 100)"
+				glitchHits <= 2,
+				"해커 글리치 특별 씨앗 20,000번 중 " .. glitchHits .. " (기대 0.024)"
 			)
+			T.truthy(
+				#EggRoll.rollSpecials("bug_dimension", nil, T.constant(0)) > 0,
+				"난수 0 이면 버그 차원에서 나옴"
+			)
+			T.eq(EggRoll.rollSpecials("bug_dimension", nil, T.constant(0))[1].rarity, "hacker_glitch")
 		end
 	)
 
@@ -989,7 +995,7 @@ return function(T, Loader)
 				}
 				local oldPlants = { "sprout_daisy", "owl_oak", "rune_rose", "puppy_grass", "crystal_snowdrop" }
 				local seedPool = {
-					"static_world_tree",
+					"circuit_sprout", -- 8판 추가: 거대 식물(해커 글리치)은 정원에 1그루 — 정원에 이미 성체 2그루라 씨앗은 다른 7판 새 등급
 					"upside_down_tree",
 					"rune_rose",
 					"owl_oak",

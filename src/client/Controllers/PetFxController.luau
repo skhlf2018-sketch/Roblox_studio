@@ -2,7 +2,8 @@
 --[[
 	판정은 전부 서버 (FruitService · PetService.petPet). 여기는 내 화면의 프롬프트와 연출만.
 
-	- 내 정원 파트(Attr OwnerUserId == 나)에만 클라 ProximityPrompt (Attachment "GardenPromptAttach", 높이 = Attr VisualHeight 의 60%):
+	- 내 정원 파트(Attr OwnerUserId == 나)에만 클라 ProximityPrompt (Attachment "GardenPromptAttach", 높이 = Attr VisualHeight 의 60%,
+	  8판 추가: 최대 Config.PLANT_PROMPT_MAX_HEIGHT 7 — GardenRules.promptHeight):
 	    성체 식물(GardenPlant): "PickFruitPrompt" 열매 따기 (E, 열매 0개면 꺼짐) → PickFruit(PlantUid)
 	  남의 정원 파트에는 프롬프트를 안 만듦 (서버가 어차피 거절).
 	  파트가 없어지면(태그 빠짐·Destroying) 연결·프롬프트 정리 (5판 B-3 처럼 연결이 쌓이지 않게 파트마다 한 번만).
@@ -17,6 +18,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage.Shared
+local GardenRules = require(Shared.GardenRules)
 local Mutations = require(Shared.Data.Mutations)
 local Pets = require(Shared.Data.Pets)
 local Remotes = require(Shared.Remotes)
@@ -101,7 +103,8 @@ local function newPrompt(
 end
 
 local function refreshHooked(part: BasePart, h: Hooked)
-	h.attach.Position = Vector3.new(0, -part.Size.Y / 2 + math.max(1, heightOf(part) * 0.6), 0)
+	-- 8판 추가: 키의 60%, 단 Config.PLANT_PROMPT_MAX_HEIGHT 까지 (거대 식물·울트라디바인도 손이 닿게)
+	h.attach.Position = Vector3.new(0, -part.Size.Y / 2 + math.max(1, GardenRules.promptHeight(heightOf(part), 0.6)), 0)
 	local objectText = plantName(part)
 	local pick = h.pick
 	if pick then

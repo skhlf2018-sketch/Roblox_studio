@@ -263,15 +263,44 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"firstFreeGrid: 빈 격자 첫 자리 → 격자가 다 차면 1 스터드씩 훑은 빈자리 → 정말 없으면 nil / 안내 글",
+		"firstFreeGrid: 넓은 격자(14 간격 20칸, 8판 추가) 첫 자리 → 7 격자 → 1 스터드씩 훑은 빈자리 → 정말 없으면 nil / 안내 글",
 		function()
+			-- 8판 추가 (2026-11-09): 넓은 격자 = 울타리 2 안쪽 (9, -28) 부터 14 간격 4 × 5 = 20칸, 전부 정원 안·서로 14 이상
+			local wide = EggPlacement.WIDE_GRID
+			T.eq(#wide, 20)
+			T.eq(wide[1].x, 9)
+			T.eq(wide[1].z, -28)
+			for i, a in wide do
+				T.truthy(
+					MapLayout.isInPenLocal(a.x, a.z, Config.EGG_PLACE_FENCE_MARGIN),
+					"넓은 격자 " .. i .. " 정원 안"
+				)
+				for j = i + 1, #wide do
+					local b = wide[j]
+					T.truthy(math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2) >= Config.PLANT_GAP_MAX - 1e-9)
+				end
+			end
 			local placed = {}
-			for i = 1, MapLayout.EGG_GRID_COUNT do
+			for i = 1, #wide do
 				local s = EggPlacement.firstFreeGrid("giant", placed)
-				T.eq(s.x, MapLayout.eggGridLocal(i).x, "칸 " .. i)
-				T.eq(s.z, MapLayout.eggGridLocal(i).z)
+				T.eq(s.x, wide[i].x, "칸 " .. i)
+				T.eq(s.z, wide[i].z)
 				table.insert(placed, { x = s.x, z = s.z, size = "giant" })
 			end
+			-- 그다음 작은 씨앗은 7 격자(eggGridLocal)에서 들어갈 수 있는 첫 자리
+			local s7 = EggPlacement.firstFreeGrid("giant", placed)
+			local firstGrid
+			for i = 1, MapLayout.EGG_GRID_COUNT do
+				local g = MapLayout.eggGridLocal(i)
+				if EggPlacement.check(g.x, g.z, "giant", placed) then
+					firstGrid = g
+					break
+				end
+			end
+			T.truthy(
+				firstGrid ~= nil and s7.x == firstGrid.x and s7.z == firstGrid.z,
+				"넓은 격자 다음은 7 격자"
+			)
 			-- 8판: 격자가 다 차도 사이에 빈자리가 있으면 찾음 (늘 규칙 check 를 지킴), 끝까지 채우면 nil
 			local extra = 0
 			while extra < 200 do

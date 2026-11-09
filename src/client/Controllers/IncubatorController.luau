@@ -360,7 +360,7 @@ local function promptBase(part: BasePart): number
 	end
 	local mesh = part:FindFirstChildOfClass("SpecialMesh")
 	local half = part.Size.Y * (if mesh then mesh.Scale.Y else 1) / 2
-	return math.max(0, h * 0.5 - half)
+	return math.max(0, GardenRules.promptHeight(h, 0.5) - half) -- 8판 추가: 높이 상한 (Config.PLANT_PROMPT_MAX_HEIGHT)
 end
 
 local function makePrompt(

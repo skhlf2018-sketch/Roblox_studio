@@ -462,13 +462,14 @@ return function(T, Loader)
 			T.falsy(try(0, 3.9), "4 안")
 			T.truthy(w.H.hasNotify(w.player, "error", "너무 가까워요"))
 			T.truthy(try(0, 4), "딱 4 는 됨")
-			-- 큰 알: 초거대(지름 4.8)끼리는 4.8 — 8판: 다 자란 폭이 더 크면 그만큼 (에픽 파라오 야자 초거대 = 2.6 × 1.35 × 1.5 ≈ 5.27)
+			-- 큰 알: 초거대(지름 4.8)끼리는 4.8 — 8판: 다 자란 폭이 더 크면 그만큼
+			--   (8판 추가 2026-11-09 곡선: 에픽 파라오 야자 초거대 = 2.6 × 3 × 1.5 = 11.7, 8판은 2.6 × 1.35 × 1.5 ≈ 5.27)
 			B.grantEgg(w.player, "pharaoh_palm", "giant", {}, "sakura")
 			B.grantEgg(w.player, "pharaoh_palm", "giant", {}, "sakura")
 			local g1, g2 = w.data.eggs[#w.data.eggs - 1].uid, w.data.eggs[#w.data.eggs].uid
 			T.truthy(try(-20, 0, g1))
-			T.falsy(try(-20, 5.2, g2), "에픽 초거대끼리 5.2 는 겹침 (8판 성체 폭)")
-			T.truthy(try(-20, 5.3, g2), "에픽 초거대끼리 5.3 은 됨")
+			T.falsy(try(-20, 11.6, g2), "에픽 초거대끼리 11.6 은 겹침 (성체 폭 11.7)")
+			T.truthy(try(-20, 11.8, g2), "에픽 초거대끼리 11.8 은 됨")
 			T.eq(#w.data.incubators, 5)
 			-- 6판: 정원 칸 수(1레벨 7칸)까지
 			T.truthy(try(-30, -20))

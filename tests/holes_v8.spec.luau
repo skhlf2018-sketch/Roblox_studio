@@ -404,20 +404,43 @@ return function(T, Loader)
 	T.suite("8판: 7 식물 크기 · 정원 간격")
 
 	T.test(
-		"RARITY_PLANT_SCALE 16칸: 일반 1 → 해커 글리치 4~5, 등급마다 커짐 · STAGE_SCALE 0.3 / 0.55 / 0.8 / 1",
+		"RARITY_PLANT_SCALE 16칸 (8판 추가 2026-11-09): 일반 1 · 에픽 3 · 신성 5 · 울트라디바인 6, 매끄러운 곡선(등급마다 커지고 커지는 폭은 점점 줄어듦) · 해커 글리치 모양 = LOBBY_FILL_SCALE (간격용 표 값 6.16) · STAGE_SCALE 0.3 / 0.55 / 0.8 / 1",
 		function()
-			local prev = 0
+			local prev, prevStep = 0, math.huge
 			local count = 0
-			for _, r in Rarities.list do
+			for i, r in Rarities.list do
 				local s = Config.RARITY_PLANT_SCALE[r.id]
 				T.truthy(s ~= nil, r.id)
 				T.truthy(s > prev, r.id .. " 등급이 높을수록 큼")
+				-- 곡선 1 + 2.876 × ln(1 + 0.335 × (순서 - 1)) 를 소수 둘째 자리까지
+				T.near(s, 1 + 2.876 * math.log(1 + 0.335 * (i - 1)), 0.01, r.id .. " 곡선")
+				if i > 1 then
+					local step = s - prev
+					T.truthy(step <= prevStep + 1e-9, r.id .. " 커지는 폭이 줄어듦 (매끄러운 곡선)")
+					prevStep = step
+				end
 				prev = s
 				count += 1
 			end
 			T.eq(count, 16)
 			T.eq(Config.RARITY_PLANT_SCALE.common, 1)
-			T.truthy(Config.RARITY_PLANT_SCALE.hacker_glitch >= 4 and Config.RARITY_PLANT_SCALE.hacker_glitch <= 5)
+			T.eq(Config.RARITY_PLANT_SCALE.epic, 3, "중간(희귀 ~ 에픽)쯤 3배")
+			T.truthy(Config.RARITY_PLANT_SCALE.rare >= 2.4 and Config.RARITY_PLANT_SCALE.rare < 3)
+			T.eq(Config.RARITY_PLANT_SCALE.divine, 5)
+			T.eq(Config.RARITY_PLANT_SCALE.ultradivine, 6, "울트라디바인 6배")
+			-- 맨 위 등급: 모양은 거대(베이스를 덮음), 간격은 표 값
+			T.eq(Config.LOBBY_FILL_RARITY, Rarities.TOP)
+			T.eq(Config.LOBBY_FILL_RARITY, "hacker_glitch")
+			T.truthy(Config.LOBBY_FILL_SCALE >= 12 and Config.LOBBY_FILL_SCALE <= 16, "거대 배율 12 ~ 16")
+			T.eq(Config.LOBBY_FILL_MAX_PER_GARDEN, 1)
+			T.eq(GardenRules.rarityScale("hacker_glitch"), Config.LOBBY_FILL_SCALE)
+			T.eq(GardenRules.spacingRarityScale("hacker_glitch"), Config.RARITY_PLANT_SCALE.hacker_glitch)
+			for _, r in Rarities.list do
+				if r.id ~= Config.LOBBY_FILL_RARITY then
+					T.eq(GardenRules.rarityScale(r.id), Config.RARITY_PLANT_SCALE[r.id], r.id .. " 모양 = 표")
+				end
+				T.eq(GardenRules.spacingRarityScale(r.id), Config.RARITY_PLANT_SCALE[r.id], r.id .. " 간격 = 표")
+			end
 			T.eq(Config.STAGE_SCALE.sprout, 0.3)
 			T.eq(Config.STAGE_SCALE.stem, 0.55)
 			T.eq(Config.STAGE_SCALE.bud, 0.8)
@@ -426,13 +449,14 @@ return function(T, Loader)
 				T.truthy(Config.STAGE_SCALE[def.id] ~= nil, def.id .. " 단계 배율")
 			end
 			T.eq(GardenRules.rarityScale("nope"), 1)
+			T.eq(GardenRules.spacingRarityScale(nil), 1)
 			T.eq(GardenRules.sizeScale("giant"), 1.5)
 			T.eq(GardenRules.sizeScale(nil), 1)
 		end
 	)
 
 	T.test(
-		"growthScale: 자라면서 점점 커짐 (단계 시작점은 STAGE_SCALE 그대로, 사이는 이어짐, 줄어들지 않음, 이상한 값 안전)",
+		"growthScale: 자라면서 점점 커짐 (단계 시작점은 STAGE_SCALE 그대로, 사이는 이어짐, 줄어들지 않음, 이상한 값 안전) · 8판 추가: plantScale(모양) ↔ spacingScale(간격) · promptHeight 상한",
 		function()
 			T.near(GardenRules.growthScale(0, 100), 0.3, 1e-9)
 			T.near(GardenRules.growthScale(25, 100), 0.55, 1e-9)
@@ -449,32 +473,58 @@ return function(T, Loader)
 			T.near(GardenRules.growthScale(500, 100), 1, 1e-9, "다 자란 뒤")
 			T.near(GardenRules.growthScale(0 / 0, 100), 0.3, 1e-9)
 			T.near(GardenRules.growthScale(5, 0), 1, 1e-9, "required 0 = 다 자람")
-			-- plantScale = 등급 × 크기 × 자람
-			T.near(GardenRules.plantScale("static_world_tree", "giant"), 4.5 * 1.5, 1e-9)
+			-- plantScale(모양) = 등급 × 크기 × 자람 — 거대 식물은 LOBBY_FILL_SCALE
+			local L = Config.LOBBY_FILL_SCALE
+			T.near(GardenRules.plantScale("static_world_tree", "giant"), L * 1.5, 1e-9)
 			T.near(GardenRules.plantScale("sprout_daisy", "normal", 0, 10), 0.3, 1e-9)
-			T.near(GardenRules.plantScale("final_boss_bloom", "big", 60, 100), 4.5 * 1.15 * 0.8, 1e-9)
+			T.near(GardenRules.plantScale("final_boss_bloom", "big", 60, 100), L * 1.15 * 0.8, 1e-9)
+			T.near(GardenRules.plantScale("error_rose", "huge"), 6 * 1.3, 1e-9)
 			T.eq(GardenRules.plantScale("nope", nil), 1)
+			-- spacingScale(간격) = 표 등급 × 크기 (자람 없음) — 거대 식물만 모양과 다름
+			T.near(GardenRules.spacingScale("static_world_tree", "giant"), 6.16 * 1.5, 1e-9)
+			T.near(GardenRules.spacingScale("error_rose", "huge"), GardenRules.plantScale("error_rose", "huge"), 1e-12)
+			T.eq(GardenRules.spacingScale(nil, nil), 1)
+			T.eq(GardenRules.spacingScale("nope", "giant"), 1.5)
+			T.truthy(GardenRules.isLobbyFill("static_world_tree"))
+			T.truthy(GardenRules.isLobbyFill("final_boss_bloom"))
+			T.falsy(GardenRules.isLobbyFill("error_rose"))
+			T.falsy(GardenRules.isLobbyFill(nil))
+			T.falsy(GardenRules.isLobbyFill("nope"))
+			-- 프롬프트 높이: 키 × 비율, 최대 PLANT_PROMPT_MAX_HEIGHT (거대 식물도 손이 닿게)
+			T.eq(Config.PLANT_PROMPT_MAX_HEIGHT, 7)
+			T.near(GardenRules.promptHeight(4, 0.6), 2.4, 1e-9)
+			T.eq(GardenRules.promptHeight(67, 0.6), 7)
+			T.eq(GardenRules.promptHeight(24, 0.5), 7)
+			T.eq(GardenRules.promptHeight(0 / 0, 0.5), 0)
+			T.eq(GardenRules.promptHeight(-3, 0.5), 0)
+			T.eq(GardenRules.promptHeight(math.huge, 0.5), 7)
 		end
 	)
 
 	T.test(
-		"정원 간격 = 다 자란 폭 평균 (일반끼리 7판 그대로 4, 큰 등급은 더 넓게, 상한 14)",
+		"정원 간격 = 다 자란 폭(간격용) 평균 (일반끼리 7판 그대로 4, 에픽끼리 7.8, 울트라디바인·거대 식물은 상한 14) · 8판 추가: 거대 식물은 정원에 1그루 (reason giant)",
 		function()
 			T.eq(EggPlacement.gap("normal", "normal"), 4, "petId 없으면 7판과 같음")
 			T.eq(EggPlacement.gap("normal", "normal", "sprout_daisy", "sprout_daisy"), 4)
-			T.near(EggPlacement.footprint("static_world_tree", "normal"), 2.6 * 4.5, 1e-9)
-			T.near(EggPlacement.gap("normal", "normal", "static_world_tree", "static_world_tree"), 11.7, 1e-9)
+			T.near(EggPlacement.gap("normal", "normal", "pharaoh_palm", "pharaoh_palm"), 7.8, 1e-9, "에픽 2.6 × 3")
+			T.near(EggPlacement.footprint("error_rose", "normal"), 2.6 * 6, 1e-9)
+			T.eq(EggPlacement.gap("normal", "normal", "error_rose", "error_rose"), Config.PLANT_GAP_MAX)
+			-- 거대 식물 간격은 표 값(6.16)으로 — 모양(× 16)이 아님
+			local glitchFoot = 2.6 * Config.RARITY_PLANT_SCALE.hacker_glitch
+			T.near(EggPlacement.footprint("static_world_tree", "normal"), glitchFoot, 1e-9)
 			T.near(
 				EggPlacement.gap("normal", "normal", "static_world_tree", "sprout_daisy"),
-				(11.7 + 2.6) / 2,
+				(glitchFoot + 2.6) / 2,
 				1e-9,
 				"큰 것과 작은 것은 평균"
 			)
 			T.eq(EggPlacement.gap("giant", "giant", "static_world_tree", "static_world_tree"), Config.PLANT_GAP_MAX)
 			T.eq(Config.PLANT_GAP_MAX, 14)
-			local spots = { { x = 0, z = 0, size = "normal", petId = "static_world_tree" } }
-			T.falsy(EggPlacement.check(0, 11.6, "normal", spots, nil, "static_world_tree"), "11.6 은 겹침")
-			T.truthy(EggPlacement.check(0, 11.71, "normal", spots, nil, "static_world_tree"))
+			local ultra = { { x = 0, z = 0, size = "normal", petId = "error_rose" } }
+			local ok, reason = EggPlacement.check(0, 13.9, "normal", ultra, nil, "upside_down_tree")
+			T.falsy(ok, "13.9 은 겹침")
+			T.eq(reason, "tooClose")
+			T.truthy(EggPlacement.check(0, 14, "normal", ultra, nil, "upside_down_tree"), "딱 14")
 			T.truthy(
 				EggPlacement.check(
 					0,
@@ -486,17 +536,46 @@ return function(T, Loader)
 				)
 			)
 			-- pets 목록도 같은 간격
-			T.falsy(EggPlacement.check(0, 8, "normal", {}, spots, "static_world_tree"))
+			T.falsy(EggPlacement.check(0, 8, "normal", {}, ultra, "error_rose"))
+			-- 거대 식물 1그루: 자라는 씨앗(placed)이든 성체(pets)든 이미 있으면 어디든 "giant"
+			local glitch = { { x = 0, z = 0, size = "normal", petId = "static_world_tree" } }
+			ok, reason = EggPlacement.check(-25, -20, "normal", glitch, nil, "final_boss_bloom")
+			T.falsy(ok, "거대 식물 둘째")
+			T.eq(reason, "giant")
+			ok, reason = EggPlacement.check(-25, -20, "giant", {}, glitch, "static_world_tree")
+			T.eq(reason, "giant", "성체 목록에 있어도")
+			ok, reason = EggPlacement.check(20, 0, "normal", glitch, nil, "final_boss_bloom")
+			T.eq(reason, "outside", "정원 밖이 먼저")
+			T.truthy(string.find(EggPlacement.message("giant"), "하나만", 1, true) ~= nil)
+			T.eq(EggPlacement.lobbyFillCount(glitch), 1)
+			T.eq(EggPlacement.lobbyFillCount(ultra), 0)
+			-- 거대 식물 옆에 다른 식물은 간격(표 값 평균)만 지키면 됨 — 모양은 덮어도 됨
+			local near = (glitchFoot + 2.6) / 2
+			T.truthy(EggPlacement.check(0, near + 0.01, "normal", glitch, nil, "sprout_daisy"))
+			T.falsy(EggPlacement.check(0, near - 0.1, "normal", glitch, nil, "sprout_daisy"))
+			-- 첫 거대 식물은 됨
+			T.truthy(
+				EggPlacement.check(
+					-25,
+					-20,
+					"normal",
+					{ { x = 0, z = 0, size = "normal", petId = "sprout_daisy" } },
+					nil,
+					"static_world_tree"
+				)
+			)
+			-- firstFreeGrid 는 자리만 봄 (저장 보정이 거대 식물 규칙 때문에 식물을 팔지 않게)
+			T.truthy(EggPlacement.firstFreeGrid("normal", glitch, "final_boss_bloom") ~= nil)
 		end
 	)
 
 	T.test(
-		"정원 칸 최대 18 이 맨 위 등급(보통·초거대)으로도 다 들어감 · 섞어 심어도 18칸",
+		"정원 칸 최대 18 이 가장 큰 보통 등급(울트라디바인 보통·초거대)으로도 다 들어감 · 거대 식물 1그루 + 나머지 17그루 · 섞어 심어도 18칸",
 		function()
 			local cases = {
-				{ "static_world_tree", "normal" },
-				{ "static_world_tree", "giant" },
-				{ "final_boss_bloom", "huge" },
+				{ "error_rose", "normal" },
+				{ "error_rose", "giant" },
+				{ "upside_down_tree", "huge" },
 			}
 			for _, case in cases do
 				local placed = {}
@@ -511,10 +590,9 @@ return function(T, Loader)
 				end
 				T.eq(#placed, 18, case[1] .. " " .. case[2])
 			end
-			-- 섞기: 등급 순서대로 큰 것부터 한 그루씩
+			-- 섞기: 거대 식물(초거대) 1그루 먼저 + 등급 순서대로 큰 것부터 한 그루씩 — 전부 check 통과
 			local placed = {}
 			local ids = {
-				"static_world_tree",
 				"error_rose",
 				"studio_tree",
 				"mainframe_tree",
@@ -522,16 +600,19 @@ return function(T, Loader)
 				"sky_pillar_flower",
 			}
 			for i = 1, 18 do
-				local id = ids[(i - 1) % #ids + 1]
-				local spot = EggPlacement.firstFreeGrid("big", placed, id)
+				local id = if i == 1 then "static_world_tree" else ids[(i - 2) % #ids + 1]
+				local size = if i == 1 then "giant" else "big"
+				local spot = EggPlacement.firstFreeGrid(size, placed, id)
 				T.truthy(spot ~= nil, "섞어 심기 " .. i)
-				table.insert(placed, { x = spot.x, z = spot.z, size = "big", petId = id })
+				T.truthy(EggPlacement.check(spot.x, spot.z, size, placed, nil, id), "섞어 심기 check " .. i)
+				table.insert(placed, { x = spot.x, z = spot.z, size = size, petId = id })
 			end
+			T.eq(EggPlacement.lobbyFillCount(placed), 1)
 		end
 	)
 
 	T.test(
-		"서버 PlaceEgg 도 큰 식물 간격 (해커 글리치끼리 6 은 거부, 11.7 은 됨) · 저장된 옛 정원(7판 간격)은 불러와도 식물이 안 팔림",
+		"서버 PlaceEgg 도 큰 식물 간격 (울트라디바인끼리 6 은 거부, 14 는 됨) · 8판 추가: 거대 식물 둘째는 거부, 첫째를 집으면 됨 · 저장된 옛 정원(7판 간격·거대 식물 여러 그루)은 불러와도 식물이 안 팔림",
 		function()
 			inWorld(nil, function(H)
 				local BaseService = H.server("Services/BaseService")
@@ -542,17 +623,28 @@ return function(T, Loader)
 				local plot = MapLayout.plot(1)
 				H.spawn(p, plot.spawn.x, 3, plot.spawn.z)
 				data.penLevel = 11
-				local function try(lx, lz)
-					BaseService.grantEgg(p, "static_world_tree", "normal", {}, "dev")
+				local function try(petId, lx, lz)
+					BaseService.grantEgg(p, petId, "normal", {}, "dev")
 					local egg = data.eggs[#data.eggs]
 					local w = MapLayout.toWorld(1, lx, lz)
-					return BaseService.placeEgg(p, egg.uid, w.x, w.z)
+					return BaseService.placeEgg(p, egg.uid, w.x, w.z), egg.uid
 				end
-				T.truthy(try(-20, -20))
-				T.falsy(try(-20, -14), "6 은 거부")
+				T.truthy(try("error_rose", -20, -20))
+				T.falsy(try("error_rose", -20, -14), "6 은 거부")
 				T.truthy(H.hasNotify(p, "error", "너무 가까워요"))
-				T.truthy(try(-20, -8.2), "11.8 은 됨 (간격 11.7)")
-				-- 저장된 옛 자리 (7판에 4 간격으로 심어 둔 해커 글리치 3그루) → 그대로, 안 팔림
+				T.truthy(try("upside_down_tree", -20, -6), "14 는 됨 (간격 상한 14)")
+				-- 거대 식물: 첫째는 됨, 둘째는 멀리 떨어져 있어도 거부
+				local placedFirst, firstUid = try("static_world_tree", -30, 20)
+				T.truthy(placedFirst, "거대 식물 첫째")
+				local placedSecond, secondUid = try("final_boss_bloom", 0, 20)
+				T.falsy(placedSecond, "거대 식물 둘째")
+				T.truthy(H.hasNotify(p, "error", "거대 식물은 정원에 하나만"))
+				T.eq(#data.incubators, 3)
+				-- 첫째를 가방으로 집으면 둘째를 심을 수 있음
+				T.truthy(BaseService.pickUpEgg(p, firstUid))
+				local w = MapLayout.toWorld(1, 0, 20)
+				T.truthy(BaseService.placeEgg(p, secondUid, w.x, w.z), "첫째를 집은 뒤 둘째")
+				-- 저장된 옛 자리 (7판에 4 간격으로 심어 둔 해커 글리치 3그루) → 그대로, 안 팔림 (거대 식물 규칙도 안 봄)
 				local DataSchema = H.server("Logic/DataSchema")
 				local raw = DataSchema.default(0)
 				raw.penLevel = 11

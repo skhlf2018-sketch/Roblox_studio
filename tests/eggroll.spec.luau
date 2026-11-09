@@ -200,6 +200,52 @@ return function(T, Loader)
 		T.near(hits / n, EggSpawn.SPECIAL_CHANCE_PER_RESET.secret, 0.003)
 	end)
 
+	T.test(
+		"8판 추가 (사장님 2026-11-09): 해커 글리치 특별 추첨 = 0.00012% — 상수 0.0000012 · 경계(난수 0.0000011 나옴 / 0.0000013 안 나옴) · 1e7번이면 0~50번(기대 12) · 실제 추첨 20만 번 중 3번 이하, 울트라디바인 1% 는 그대로",
+		function()
+			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch
+			T.eq(chance, 0.0000012)
+			-- 해커 글리치가 맨 먼저 굴려짐 (SPECIAL_RARITIES[1]) → 첫 난수만 바꿔서 경계 확인
+			local function firstIsGlitch(biomeId, value)
+				local calls = 0
+				local specials = EggRoll.rollSpecials(biomeId, nil, function()
+					calls += 1
+					return if calls == 1 then value else 0.99
+				end)
+				return #specials > 0 and specials[1].rarity == "hacker_glitch"
+			end
+			for _, biomeId in { "bug_dimension", "robot_factory", "clock_tower", "rainbow_sky" } do
+				T.truthy(firstIsGlitch(biomeId, 0.0000011), biomeId .. ": 0.0000011 이면 나옴")
+				T.falsy(firstIsGlitch(biomeId, 0.0000013), biomeId .. ": 0.0000013 이면 안 나옴")
+			end
+			-- 1e7 번 굴리면 기대 12번 → 0 ~ 50 번
+			local rand = T.rng(20261109)
+			local hits = 0
+			for _ = 1, 1e7 do
+				if rand() < chance then
+					hits += 1
+				end
+			end
+			print(string.format("      (참고) 해커 글리치 특별 추첨 1e7번 중 %d번 (기대 12)", hits))
+			T.truthy(hits >= 0 and hits <= 50, "1e7번 중 " .. hits)
+			-- 실제 추첨 (무지개 하늘섬 20만 번): 해커 글리치 기대 0.24번, 울트라디바인 1% 그대로
+			local rand2 = T.rng(1109)
+			local glitch, ultra = 0, 0
+			local n = 200000
+			for _ = 1, n do
+				for _, pet in EggRoll.rollSpecials("rainbow_sky", nil, rand2) do
+					if pet.rarity == "hacker_glitch" then
+						glitch += 1
+					elseif pet.rarity == "ultradivine" then
+						ultra += 1
+					end
+				end
+			end
+			T.truthy(glitch <= 3, "20만 번 중 해커 글리치 " .. glitch)
+			T.near(ultra / n, EggSpawn.SPECIAL_CHANCE_PER_RESET.ultradivine, 0.001, "울트라디바인 1%")
+		end
+	)
+
 	T.test("pickDistinct: 서로 다른 칸", function()
 		local rand = T.rng(3)
 		for _ = 1, 50 do

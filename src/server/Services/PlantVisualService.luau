@@ -10,7 +10,7 @@
 	     Attr Stage("sprout"/"stem"/"bud") + Progress/Required 로 고르고, 모양이 바뀔 때 + 8판 자람 배율(GardenRules.growthScale)이
 	     0.04 바뀔 때만 다시 만듦 → 키 = 성체 키 × 자람 배율 (점점 커짐).
 	2) 성체 식물 (태그 GardenPlant): 모델 "PlantVisual" — 절차적 식물 (Visuals.plantLook: 구역 테마 + 이름 낱말 + id 해시)
-	     모양 22종(PLANT_FORMS, 7판 circuit·blocky·glitch · 8판 gear·clock·cloud) · 8판 크기 = GARDEN_BASE × GardenRules.plantScale(등급 1 ~ 4.5 × 크기 등급) ·
+	     모양 22종(PLANT_FORMS, 7판 circuit·blocky·glitch · 8판 gear·clock·cloud) · 8판 크기 = GARDEN_BASE × GardenRules.plantScale(등급 1 ~ 6, 거대 식물 16 × 크기 등급) ·
 	     받침 고리 색 · 돌연변이 색(Visuals.mutationLooks)
 	     열매 파트 Fruit1~FruitMax 를 미리 만들고 Attr Fruits 개수만큼만 보임 (바뀌면 Transparency 만 바꿈).
 	3) 둥지 옆 장식 식물 (태그 ParentAnimalSpot 자리 → 모델 태그 ParentAnimal): 그 구역 식물 작게 + 이름표.
@@ -54,11 +54,16 @@ local FRUIT_MAX = 5
 --   RARITY_PLANT_SCALE 1 ~ 4.5 × PLANT_SIZE_SCALE 1 ~ 1.5 × 자람 growthScale 0.3 → 1). 7판 RARITY_SCALE·SIZE_SCALE 표는 없앰.
 --   GARDEN_BASE = 배율 1 성체(일반·보통)를 정원에 놓을 때의 모델 배율 — 모델 바닥 폭이 Config.PLANT_FOOTPRINT(2.6) 근처
 --   (정원 간격 EggPlacement.gap 이 이 폭을 씀 → 큰 등급끼리도 안 겹침, smoke_visuals 가 폭을 잼)
+-- 8판 추가 (2026-11-09 사장님): 곡선 1 → 울트라디바인 6, 맨 위 등급은 모양만 거대(Config.LOBBY_FILL_SCALE 16 — 키 약 67, 베이스를 덮음).
+--   크기 적용은 그대로 GardenRules.plantScale(모양용) 한 곳 → 모델·VisualHeight·이름표·아우라가 같이 커짐.
+--   흙 둔덕·받침 고리만 간격용 배율(GardenRules.spacingScale, groundScale) — 거대 식물 둔덕이 옆 식물을 덮지 않게.
+--   이름표 MaxDistance 는 키만큼 늘림(mount). 프롬프트 높이 상한은 클라(GardenRules.promptHeight)
 local GARDEN_BASE = 1.35 -- (7판 보통 성체와 같은 크기 · 정원 폭 평균 ≈ 0.93 × 간격 폭)
 -- 자라는 씨앗 단계 모양의 크기 1 꼭대기 높이 (buildStage 의 top) — 단계 모델을 "성체 키 × 자람 배율" 에 맞추는 데 씀
 local STAGE_TOP: { [string]: number } = { seed = 0.52, sprout = 0.72, stem = 1.26, bud = 2.02 }
 local ADULT_TOP = 3 -- 배율 1 성체 꼭대기 (모양마다 키 3 × tall 근처)
 local GROWTH_STEP = 0.04 -- 자람 배율이 이만큼 바뀔 때마다 씨앗 모델을 다시 만듦 (1초마다 오는 Progress 로 점점 커짐)
+local LABEL_DISTANCE_OVER_TOP = 40 -- 8판 추가: 이름표 MaxDistance ≥ 식물 키 + 이 값 (키 20 이하는 BaseService 의 60 그대로)
 local NATURAL: { [string]: boolean } = { silver = true, golden = true, rainbow = true }
 
 local RAINBOW = ColorSequence.new({
@@ -1287,6 +1292,10 @@ function PlantVisualService.build(plantId: string, opts: BuildOptions?): Model
 	local scale = (o.scale or 1) * (if o.sized == false then 1 else GardenRules.plantScale(plantId, o.size))
 	local b = newBuilder(plantId, scale)
 	local mutations: { string } = o.mutations or {}
+	-- 8판 추가 (2026-11-09): 흙 둔덕·받침 고리는 간격용 배율(GardenRules.spacingScale) — 거대 식물(모양 × 16)의 둔덕이
+	--   옆에 심은 식물을 덮지 않게. 거대 식물이 아니면 모양 배율과 같아서 k = 1
+	local ground = (o.scale or 1) * (if o.sized == false then 1 else GardenRules.spacingScale(plantId, o.size))
+	local k = if scale > 0 then ground / scale else 1
 
 	local petalColor = rgb(look.petal)
 	local petalMat = materialOf(look.petalMaterial) or SMOOTH
@@ -1328,8 +1337,16 @@ function PlantVisualService.build(plantId: string, opts: BuildOptions?): Model
 		petalParts = {},
 	}
 	-- 흙 둔덕 + 등급 색 받침 고리
-	piece(b, "Ell", Vector3.new(1.3, 0.32, 1.3), CFrame.new(0, 0.05, 0), DIRT, Enum.Material.Ground, "Mound")
-	piece(b, "Cyl", Vector3.new(1.5, 0.08, 1.5), CFrame.new(0, 0.03, 0), rarityColor(rarity), SMOOTH, "RarityRing")
+	piece(b, "Ell", Vector3.new(1.3, 0.32, 1.3) * k, CFrame.new(0, 0.05 * k, 0), DIRT, Enum.Material.Ground, "Mound")
+	piece(
+		b,
+		"Cyl",
+		Vector3.new(1.5, 0.08, 1.5) * k,
+		CFrame.new(0, 0.03 * k, 0),
+		rarityColor(rarity),
+		SMOOTH,
+		"RarityRing"
+	)
 
 	local form = FORMS[look.form] or FORMS.flower
 	local spots, top = form(b, paint)
@@ -1550,6 +1567,8 @@ local function mount(part: BasePart, model: Model, uid: string)
 	local label = part:FindFirstChild("Label")
 	if label and label:IsA("BillboardGui") then
 		label.StudsOffsetWorldSpace = Vector3.new(0, floor + height + 1.4 - pos.Y, 0)
+		-- 8판 추가 (2026-11-09): 키 큰 식물(거대 식물 약 67)은 이름표가 높이 떠 있어서 보이는 거리도 키만큼 늘림
+		label.MaxDistance = math.max(label.MaxDistance, height + LABEL_DISTANCE_OVER_TOP)
 	end
 	model.Parent = part
 end
@@ -1560,6 +1579,12 @@ local seeds: { [BasePart]: SeedState } = {}
 -- 8판: 정원 성체의 모델 배율 (등급 × 크기 등급, GARDEN_BASE 기준) — 성체·자라는 씨앗이 같은 값을 씀
 function PlantVisualService.gardenScale(petId: string, sizeId: string?): number
 	return GARDEN_BASE * GardenRules.plantScale(petId, sizeId)
+end
+
+-- 8판 추가 (2026-11-09): 흙 둔덕·받침 고리 배율 = GARDEN_BASE × 간격용 배율 (GardenRules.spacingScale).
+--   거대 식물만 gardenScale 보다 작음 (모양 × 16 이어도 둔덕은 간격 크기 → 옆 식물을 덮지 않음), 나머지는 gardenScale 과 같음
+function PlantVisualService.groundScale(petId: string, sizeId: string?): number
+	return GARDEN_BASE * GardenRules.spacingScale(petId, sizeId)
 end
 
 -- 8판: 자라는 씨앗 단계 모양 배율 — 단계 모델 키가 "다 자란 성체 키 × 자람 배율(GardenRules.growthScale 0.3 → 1)" 이 되게.
@@ -1601,7 +1626,7 @@ local function refreshSeed(part: BasePart)
 	end
 	local model = PlantVisualService.buildStage(petId, stage, {
 		scale = scale,
-		ringScale = adult,
+		ringScale = PlantVisualService.groundScale(petId, sizeId), -- 8판 추가: 거대 식물도 둔덕은 간격 크기 (나머지 = adult)
 		auraScale = adult * step,
 		mutations = split(mutations),
 		fx = true,

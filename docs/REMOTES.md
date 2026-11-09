@@ -1,4 +1,10 @@
 # Remote 목록 (서버 ↔ 클라) — 8판 "씨앗을 훔치세요"
+> **[8판 추가] 크기 곡선 · 거대 식물 · 특별 추첨 0.00012% (수석, 2026-11-09 — 사장님 지시 2026-11-09)** — **Remote·Attribute·Snapshot 모양은 그대로** (새 Remote 없음). 설계: `docs/SEED_GAME_DESIGN.md` 9장 45~50번.
+> - **크기**: `Config.RARITY_PLANT_SCALE` 곡선 1 → 6 (울트라디바인 6, 해커 글리치 칸 6.16 = 간격용). 맨 위 등급(`Config.LOBBY_FILL_RARITY` = hacker_glitch)은 **모양만** × `LOBBY_FILL_SCALE` 16 — `GardenRules.plantScale`(모양) ↔ `GardenRules.spacingScale`(간격, `EggPlacement.footprint`), `GardenRules.isLobbyFill(petId)`. 모양 적용은 그대로 `PlantVisualService`(plantScale) — `VisualHeight` Attr 이 키 약 67 까지 커짐, 흙 둔덕만 `PlantVisualService.groundScale`.
+> - **PlaceEgg 거부 이유 `"giant"`** (`EggPlacement.check` → `Notify` "거대 식물은 정원에 하나만 심을 수 있어요! …"): 정원(자라는 씨앗 + 성체)에 거대 식물이 이미 1그루면 (`LOBBY_FILL_MAX_PER_GARDEN`). 클라 미리보기도 같은 함수라 빨강 + 같은 글.
+> - **프롬프트 높이 상한** `Config.PLANT_PROMPT_MAX_HEIGHT` 7 (`GardenRules.promptHeight(VisualHeight, 0.5 | 0.6)`) — `IncubatorController.promptBase`·`PetFxController` 가 씀. 정원 자동 자리 `EggPlacement.firstFreeGrid` 는 넓은 격자(`EggPlacement.WIDE_GRID`, 14 간격 20칸)부터.
+> - 해커 글리치 초기화 특별 추첨 `EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch` = 0.0000012 (0.00012%) → `Announce` "rareEgg" 해커 글리치는 거의 안 옴 (일반 둥지 추첨으로는 18~21구역에서 그대로 나옴).
+
 > **[8판] 떨어진 씨앗 5초 · 튜토리얼 1,000 · 러닝머신 ÷2 · 러닝머신 터치 · 둥지 무리 · 구역 21개 · 식물 크기 · 경비 잡힘 시간 (수석, 2026-11-08 — 사장님 지시 2026-11-08)** — 설계: `docs/SEED_GAME_DESIGN.md` 9장 33~44번. 저장 스키마 7 그대로.
 > - **새 Remote** 서버 → 클라 **`TreadmillTouched`** (`Types.TreadmillTouch` = `{ level, nextLevel?, nextCost?, maxed, gainPerSecond, nextGainPerSecond? }`): 내 러닝머신 벨트에 **올라서는 순간 1번** (0레벨 = 잠김이어도 — 그때 `nextCost` = 해금 500). → 클라가 "레벨 n → n+1 올리기 (가격)" 창, 버튼은 기존 **`PurchaseUpgrade("Treadmill")`**. 최대(20)면 `maxed = true`. 0레벨 "러닝머신이 잠겨 있어요! 먼저 사세요" `Notify` 는 **없앰**.
 > - **새 플레이어 Attr `TreadmillTouching`** (bool): 내 벨트 위(수평)에 서 있는 동안 true → 내려오면 false (창 닫기). 벨트 위에서 점프해도 안 깜빡임. 0레벨에서 사면 다음 틱(0.2초)에 바로 탐 (`OnTreadmill`).

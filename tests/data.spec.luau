@@ -370,7 +370,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"해커 글리치: 7판 버그 차원 2종 + 8판 새 구역 3개 7종 = 9종 (전부 둥지), 특별 추첨 0.5% (구역마다 하루 약 1~2개)",
+		"해커 글리치: 7판 버그 차원 2종 + 8판 새 구역 3개 7종 = 9종 (전부 둥지), 특별 추첨 0.00012% (8판 추가 2026-11-09 — 18~21구역 다 합쳐 하루 약 0.0014개)",
 		function()
 			local n = 0
 			local where = { bug_dimension = true, robot_factory = true, clock_tower = true, rainbow_sky = true }
@@ -389,9 +389,19 @@ return function(T, Loader)
 				T.truthy((EggSpawn.SPECIAL_CHANCE_PER_RESET[id] or 0) > 0, id .. " 확률")
 			end
 			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch
+			T.eq(chance, 0.0000012, "사장님 2026-11-09: 0.00012%")
+			-- 나머지 등급 특별 추첨 확률은 7판 그대로
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.ultradivine, 0.01)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.developer, 0.01)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.original, 0.01)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker, 0.01)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.super, 0.01)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.divine, 0.002)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.eternity, 0.02)
+			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.secret, 0.08)
 			local cycle = Config.DAY_SECONDS + Config.NIGHT_SECONDS + Config.INTERMISSION_SECONDS
-			local perDay = 86400 / cycle * chance
-			T.truthy(perDay >= 1 and perDay <= 2, "하루 " .. perDay .. "개")
+			local perDay = 86400 / cycle * chance * 4 -- 해커 글리치 둥지가 있는 18~21구역 4곳
+			T.truthy(perDay > 0.001 and perDay < 0.002, "18~21구역 합쳐 하루 " .. perDay .. "개")
 		end
 	)
 

@@ -11,6 +11,7 @@
 	    남은 시간 = required - progress ("성장 시간" — 밤에 30배 빨리 줄어드는 그 숫자, 씨앗 위 타이머와 같음)
 	- 성체 뽑아서 팔기 (SellPlant): 값 = 그 식물 열매 1개 값 × Config.PLANT_SELL_FRUIT_MULTIPLIER(20)
 	- 8판 식물 크기 (plantScale = 등급 × 크기 등급 × 자람): rarityScale · sizeScale · stageScale · growthScale (Config 한 곳)
+	  8판 추가 (2026-11-09): 모양용(plantScale) ↔ 간격용(spacingScale) 따로 — 거대 식물(isLobbyFill)만 다름. promptHeight(상한)
 ]]
 
 local Data = script.Parent.Data
@@ -46,13 +47,36 @@ function GardenRules.stage(progress: number, required: number): StageId
 end
 
 ------------------------------------------------------------------
--- 8판 (사장님 2026-11-08) 식물 크기: 등급이 높을수록 성체가 크고(×1 ~ ×4.5), 자라면서 점점 커짐. 숫자는 Config 한 곳
+-- 8판 (사장님 2026-11-08) 식물 크기: 등급이 높을수록 성체가 크고, 자라면서 점점 커짐. 숫자는 Config 한 곳
 --   (RARITY_PLANT_SCALE · PLANT_SIZE_SCALE · STAGE_SCALE). 모양 적용은 선임 PlantVisualService
+-- 8판 추가 (사장님 2026-11-09): 곡선 일반 1 → 울트라디바인 6, 맨 위 등급(Config.LOBBY_FILL_RARITY)은 **모양만** 거대
+--   (LOBBY_FILL_SCALE 16 — 베이스를 덮음). 그래서 배율이 두 가지:
+--     모양용 rarityScale / plantScale  — 겉모습·이름표·VisualHeight·아우라 (PlantVisualService)
+--     간격용 spacingRarityScale / spacingScale — 정원 간격·성체 폭 (EggPlacement.footprint), 표 값 그대로 (해커 글리치 6.16)
 ------------------------------------------------------------------
 
--- 등급 → 성체 크기 배율 (모르는 등급 1)
-function GardenRules.rarityScale(rarityId: string?): number
+-- 이 등급이 베이스를 덮는 거대 식물 등급인가 (Config.LOBBY_FILL_RARITY)
+function GardenRules.isLobbyFillRarity(rarityId: string?): boolean
+	return rarityId ~= nil and rarityId == Config.LOBBY_FILL_RARITY
+end
+
+-- 이 식물이 거대 식물인가 (모르는 식물·nil 이면 false)
+function GardenRules.isLobbyFill(petId: string?): boolean
+	local plant = if petId then Plants.get(petId) else nil
+	return plant ~= nil and GardenRules.isLobbyFillRarity(plant.rarity)
+end
+
+-- 등급 → 정원 간격용 배율 = Config.RARITY_PLANT_SCALE 표 값 그대로 (모르는 등급 1)
+function GardenRules.spacingRarityScale(rarityId: string?): number
 	return if rarityId then Config.RARITY_PLANT_SCALE[rarityId] or 1 else 1
+end
+
+-- 등급 → 성체 **모양** 크기 배율 (거대 식물 등급이면 LOBBY_FILL_SCALE, 아니면 표 값, 모르는 등급 1)
+function GardenRules.rarityScale(rarityId: string?): number
+	if GardenRules.isLobbyFillRarity(rarityId) then
+		return Config.LOBBY_FILL_SCALE
+	end
+	return GardenRules.spacingRarityScale(rarityId)
 end
 
 -- 씨앗 크기 등급(normal/big/huge/giant) → 식물 크기 배율 (모르는 크기 1)
@@ -81,11 +105,29 @@ function GardenRules.growthScale(progress: number, required: number): number
 	return GardenRules.stageScale(stages[1].id)
 end
 
--- 식물 하나의 보이는 크기 배율 = 등급 × 크기 등급 × 자람 (progress/required 를 안 주면 성체 = 자람 1)
+-- 식물 하나의 보이는(모양) 크기 배율 = 모양 등급 배율 × 크기 등급 × 자람 (progress/required 를 안 주면 성체 = 자람 1)
+--   거대 식물(해커 글리치)은 LOBBY_FILL_SCALE 16 × 크기 × 자람
 function GardenRules.plantScale(petId: string, sizeId: string?, progress: number?, required: number?): number
 	local plant = Plants.get(petId)
 	local grow = if progress and required then GardenRules.growthScale(progress, required) else 1
 	return GardenRules.rarityScale(if plant then plant.rarity else nil) * GardenRules.sizeScale(sizeId) * grow
+end
+
+-- 정원 간격용 성체 배율 = 표 등급 배율 × 크기 등급 (자람 없음 — 심을 때부터 다 자란 폭만큼 띄움). 거대 식물도 표 값(6.16)
+--   → EggPlacement.footprint 가 이것 × PLANT_FOOTPRINT 로 간격을 정하고 PLANT_GAP_MAX 에 묶임. 거대 식물이 아니면 plantScale 성체와 같음
+function GardenRules.spacingScale(petId: string?, sizeId: string?): number
+	local plant = if petId then Plants.get(petId) else nil
+	return GardenRules.spacingRarityScale(if plant then plant.rarity else nil) * GardenRules.sizeScale(sizeId)
+end
+
+-- 정원 프롬프트 높이 (식물 파트 바닥에서, 스터드) = 식물 키 × fraction, 단 Config.PLANT_PROMPT_MAX_HEIGHT 까지
+--   (8판 추가: 키 67 거대 식물·키 24 울트라디바인도 손이 닿게). 이상한 값·0 이하면 0
+function GardenRules.promptHeight(visualHeight: number, fraction: number): number
+	local h = visualHeight * fraction
+	if h ~= h or h <= 0 then
+		return 0
+	end
+	return math.min(h, Config.PLANT_PROMPT_MAX_HEIGHT)
 end
 
 -- 단계 한국어 이름 ("새싹" ...). 모르는 id 면 id 그대로

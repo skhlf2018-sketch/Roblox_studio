@@ -101,7 +101,7 @@
 | `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E) (물 주기는 2026-10-28 삭제) · 먹이기 결과 반짝/냠냠(`FeedResult`) |
 | `Controllers/PlantFxController.luau` | **새 파일.** 아우라 100 스터드 안만 켜기 · 가까운(60) 식물 살랑살랑 |
 | `Controllers/HatchController.luau` | **성체 카드** "성체가 됐어요!" (`PlantGrown`) |
-| `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 10" |
+| `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 100" |
 | `Controllers/HudController.luau` | HUD (3장) + 오른쪽 **초록 열매 버튼·배지 "12/300"** |
 | `Controllers/IndexController.luau` | "식물 도감" (등급 16개, 열매 1개 값, 신성 이상 무지개 띠) |
 | `Controllers/ShopController.luau` | 상점: 정원 업그레이드("정원 칸 7 → 8") · 러닝머신(20단계 이름, "1초에 속도 +N") · 트레일 |
@@ -227,7 +227,7 @@
 | 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐, 높이 = `VisualHeight`) / 내 씨앗: "집기"(E, 1칸) · "건너뛰기"(R, 2칸) 옆으로 나란히 (8판 `WorldPrompt.stack`). (물 주기는 2026-10-28 삭제) |
 | 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
 | "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
-| 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`) / "씨앗 뽑기 · 크리스탈 10"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
+| 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`, 일반은 회색 카드 + "너무 흔해서 사쿠라 나무가 안 받아요") / "씨앗 뽑기 · 크리스탈 100"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
 | 도감 | IndexController | "식물 도감", 구역 탭 18(7판), 등급 16개 색·영어 이름(신성·슈퍼·울트라디바인 무지개 띠, 해커 글리치 깨진 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
 | 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") · 트레일 |
 | 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` → 위 가운데 속도 배지 "👟 +1M" (8판), 벨트에 올라서면 **러닝머신 창** "올리기 · N 코인" (8판, 0장) |

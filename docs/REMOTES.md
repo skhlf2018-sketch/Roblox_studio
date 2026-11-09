@@ -152,7 +152,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `PurchaseUpgrade` | `kind: "Pen"\|"Treadmill"\|"Trail"`, `trailId: string?` (Trail 일 때만) | 종류·id 허용 목록, 다음 레벨 있는지, 코인 충분한지 (상점 화면 버튼이라 거리 검사 없음). `"Pen"` = 6판 **정원 업그레이드**(칸 7 → 18). 러닝머신은 **20레벨까지** (6판). 트레일은 사면 바로 장착 | 5 / 2 |
 | `UseTool` | `kind`: `"Bat"\|"BearTrap"\|"WaterBat"\|"Katana"\|"Axe"\|"AngelSpear"\|"Hammer"\|"CandyCane"\|"Scythe"` (`Remotes.ToolKinds`) | 그 도구를 손에 들고 있는지, 구역 무기는 해금했는지, 근접 무기 공용 쿨다운, **허브(안전 구역)가 아닌지**, 곰덫 개수. 대상·위치는 서버가 찾음 | 4 / 2 |
 | `ClaimIndexReward` | `"all"` 또는 식물 id | 발견했고(= 한 번이라도 성체가 됨) 아직 안 받았는지 | 5 / 1 |
-| `SakuraOffer` | `plantUid: string` (내 정원의 **성체** uid) | 사쿠라 나무(`SakuraIncubator` 파트 표면) 14 스터드 안, 내 정원의 성체인지 (자라는 씨앗은 안 됨). 통과: 그 성체가 없어지고(정원 자리가 빔) 크리스탈 +등급별(`Config.SAKURA_OFFER_CRYSTALS`: 일반 1 … 비밀 20 … 슈퍼 100 … 해커 글리치 700, 7판) → `SakuraResult` offered + `Notify` + `DataUpdate("pets")`·`DataUpdate("special")` | 3 / 1 |
+| `SakuraOffer` | `plantUid: string` (내 정원의 **성체** uid) | 사쿠라 나무(`SakuraIncubator` 파트 표면) 14 스터드 안, 내 정원의 성체인지 (자라는 씨앗은 안 됨). 통과: 그 성체가 없어지고(정원 자리가 빔) 크리스탈 +등급별(`Config.SAKURA_OFFER_CRYSTALS`: 8판 추가 2 — 일반 0 = 못 바침 · 고급 1 · 에픽 5 · 코스믹 40 · 비밀 70 · 슈퍼 200 … 해커 글리치 700. 일반 성체면 거부 + `Notify` "너무 흔해서 사쿠라 나무가 안 받아요", 식물 그대로) → `SakuraResult` offered + `Notify` + `DataUpdate("pets")`·`DataUpdate("special")` | 3 / 1 |
 | **`DropEgg`** (2판) | 없음 | 씨앗을 들고 있는지. 씨앗은 그 자리에 떨어짐 → 경비 추격 끝(`ChaseEnded` dropped). 8판: 그 씨앗 구역 **안**이면 그대로 (다음 초기화까지), **밖**이면 5초 뒤 둥지로 (`ExpiresAt`·`ReturnsToNest`) + `Notify` info | 2 / 1 |
 | **`TreadmillLeave`** (2판) | 없음 | 러닝머신 위인지. 내려서 벨트 앞으로 옮겨 줌. **클라가 러닝머신 위에서 점프할 때 보내세요** (`OnTreadmill` 이 true 일 때) | 3 / 2 |
 | **`EquipTrail`** (2판 마무리) | `trailId: string` 또는 `"none"` | 허용 목록, 가진 트레일인지. 바꾸면 저장 + 속도 다시 계산 + `DataUpdate("upgrades")` + `Notify` | 5 / 2 |
@@ -163,7 +163,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`FeedFruit`** (6판) | `plantUid: string`, `fruitId: string` (열매 가방의 칸 = 그 열매를 맺은 **식물 id**) | 내 정원 20 안, 내 정원의 성체, 가방에 그 열매가 1개 이상, **붙을 수 있는 돌연변이가 남아 있음** (`FruitRules.feedOptions(fruitId, plant.mutations)` 가 비면 거부 — 열매 그대로, `Notify` error). 통과: 열매 1개를 먹고 `FruitRules.rollFeed` 확률로 돌연변이 1개 (자연: 황금·무지개는 더 좋은 것으로만 바뀜 / 원소: 얼음·불·번개 중 하나만, 그 구역 열매면 ×3, 높은 등급 열매일수록 ↑, 합 상한 90%) → `FeedResult` + `Notify` + `DataUpdate("fruits"/"pets")`. 미리보기 확률은 `FruitRules.feedChance` | 5 / 2 |
 | **`SkipGrowth`** (6판) | `eggUid: string` (정원에서 자라는 씨앗), `mode: "all"\|"half"` (`Remotes.SkipModes`) | 내 정원의 자라는 씨앗, 남은 시간 > 0, **코인 충분** (가격 = `GardenRules.skipCost(petId, progress, required, mode)` = 올림(건너뛸 분) × 10 코인 × 등급 배수, 일반 1 … 슈퍼 500 … 해커 글리치 5000. 남은 시간은 씨앗 위 타이머 숫자(밤에도 같은 "성장 초" — 7판: 성장 3배가 적용된 Required 기준)). `"all"` 이면 바로 성체(`PlantGrown`), `"half"` 면 남은 시간 절반. 화면 버튼이라 거리 검사 없음. 코인 부족은 `Notify` error | 5 / 2 |
 | **`SellPlant`** (6판, 5판 `SellPet` 자리) | `plantUid: string` (내 정원의 **성체**) | 내 정원 20 안 **또는** 판매 가판대 14 안, 내 정원의 성체. 값 = 열매 1개 값 × 20 (`GardenRules.sellPrice(plant)`, 코인 2배 게임패스면 × 2) → 정원 자리가 빔 (달린 열매도 같이 없어짐 — 먼저 따세요) → `Notify` + `DataUpdate("pets")` | 10 / 4 |
-| **`SakuraDraw`** (6판) | 없음 | 사쿠라 나무 14 안, 크리스탈 ≥ `Config.SAKURA_DRAW_COST`(10), 씨앗 가방에 빈칸 (가득 차면 거부, 크리스탈 그대로). 뽑기: 벚꽃 씨앗(벚꽃 요정 나무·코스믹) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무·비밀) 2.5% (`Config.SAKURA_SEEDS`), 크기·자연 돌연변이는 둥지 씨앗처럼 → `EggGranted`(source `"sakura"`) + `SakuraResult` draw | 5 / 2 |
+| **`SakuraDraw`** (6판) | 없음 | 사쿠라 나무 14 안, 크리스탈 ≥ `Config.SAKURA_DRAW_COST`(8판 추가 2: 100, 7판 10), 씨앗 가방에 빈칸 (가득 차면 거부, 크리스탈 그대로). 뽑기: 벚꽃 씨앗(벚꽃 요정 나무·코스믹) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무·비밀) 2.5% (`Config.SAKURA_SEEDS`), 크기·자연 돌연변이는 둥지 씨앗처럼 → `EggGranted`(source `"sakura"`) + `SakuraResult` draw | 5 / 2 |
 
 - **씨앗 줍기**는 Remote 가 아니라 서버가 만든 `ProximityPrompt`(E 키, 씨앗 파트 안의 `StealPrompt`)로 합니다. 서버가 거리·낮인지·이미 들고 있는지 확인합니다.
 - **사쿠라 크리스탈 줍기**도 `ProximityPrompt`(크리스탈 파트 안의 `CrystalPrompt`). 서버가 거리 확인. 벚꽃 구역 씨앗을 배달할 때마다 크리스탈 +1.
@@ -278,7 +278,7 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 | 판매 가판대 | `SellStall` 근처(14) ProximityPrompt "열매 팔기 (12개 · 3.4K 코인)" → `SellFruits()`, 결과 `FruitsSold { count, coins }` |
 | 도감(인덱스) + 모두 획득 | `indexDiscovered/indexClaimed` (식물 id), `Progression.biomeProgress`, `ClaimIndexReward("all")`. 보상 코인 = 열매 1개 값 × 10 |
 | 상점 (정원/러닝머신/트레일) | `Upgrades` + `Economy.nextPenCost/nextTreadmillCost`, `PurchaseUpgrade(kind, id)`. 러닝머신 **20레벨**, 1초 속도 `Economy.treadmillGainPerSecond(level)` |
-| 사쿠라 나무 | 근처(14)에서 "성체 바치기" → 정원 성체 고르기 → `SakuraOffer(plantUid)` / "씨앗 뽑기 (크리스탈 10)" → `SakuraDraw()`, 결과 `SakuraResult`, Attr `SakuraCrystals` |
+| 사쿠라 나무 | 근처(14)에서 "성체 바치기" → 정원 성체 고르기 → `SakuraOffer(plantUid)` / "씨앗 뽑기 (크리스탈 100)" → `SakuraDraw()`, 결과 `SakuraResult`, Attr `SakuraCrystals` |
 | 튜토리얼 패널 | `TutorialUpdate` / `State.get().tutorial`: "n / 5" + `text` + `hint`, `done` 이면 숨김, 끝내는 순간 `reward`(8판 1,000 코인) 축하. 화살표: 1 숲 둥지 · 2 허브 경계 · 3 핫바 씨앗 + 내 정원 · 4 자라는 씨앗 · 5 성체 열매 → 판매 가판대 |
 | 랭킹판 | `LeaderboardUpdate { money, speed }` (money = 코인) |
 | 채팅 공지 / 잡힘 | `Announce`("ALL SEED RESET!", 공지 씨앗), `Caught` |
@@ -293,7 +293,7 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 - **건너뛰기** (`GardenRules.skipCost`): 올림(남은 분) × 10 코인 × 등급 배수 (전부 / 절반).
 - **성체 팔기** (`GardenRules.sellPrice`): 열매 1개 값 × 20.
 - **열매 먹이기 돌연변이** (`Data/Mutations` + `FruitRules`): 자연(황금 4% · 무지개 1% — 더 좋은 것으로만) · 원소(얼음 5% · 불 5% · 번개 3% — 하나만). 그 구역 열매 ×3, 열매 등급 보너스 1 + (등급 순서 - 1) × 0.1, 합 상한 90%.
-- **사쿠라 나무** (`SakuraService`, `shared/SakuraRules`): 성체 바치기 → 크리스탈, 10개 → 특별 씨앗 뽑기 (97.5% / 2.5%).
+- **사쿠라 나무** (`SakuraService`, `shared/SakuraRules`): 성체 바치기 → 크리스탈 (일반은 못 바침), 100개 → 특별 씨앗 뽑기 (97.5% / 2.5%, 8판 추가 2).
 - **러닝머신** (`TreadmillService`): 1초마다 속도 += 걸음당 속도 × 4 (`Config.TREADMILL_MULTIPLIER`) + `TreadmillStep`. 20레벨 = 1초 1,000,000.
 - **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+1,000 코인, 8판). 튜토리얼 씨앗 = 숲 강아지풀(1초).
 - **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id`.

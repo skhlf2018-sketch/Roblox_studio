@@ -18,6 +18,8 @@
 	  없앰: DROPPED_EGG_LIFETIME(60초 뒤 사라짐), GUARD_CATCH_GRACE_SECONDS(잡힘은 이제 거리 대신 시간으로 정함)
 	8판 추가 (사장님 2026-11-09): 크기 곡선 1 → 6 (RARITY_PLANT_SCALE), 맨 위 등급 거대 크기(LOBBY_FILL_RARITY · LOBBY_FILL_SCALE ·
 	  LOBBY_FILL_MAX_PER_GARDEN), 정원 프롬프트 높이 상한(PLANT_PROMPT_MAX_HEIGHT). 특별 추첨 확률은 Data/EggSpawn
+	8판 추가 2 (사장님 2026-11-09 "사쿠라 뽑기가 너무 쉬움"): SAKURA_DRAW_COST 10 → 100, SAKURA_OFFER_CRYSTALS 낮은 등급을 짜게
+	  (일반 0 = 못 바침 · 고급 1 · 에픽 5 · 코스믹 40 · 슈퍼 200 · 해커 글리치 700)
 ]]
 
 local Config = {
@@ -282,25 +284,26 @@ local Config = {
 	--   성체 식물을 바치면 크리스탈 (등급이 높을수록 많이) → 크리스탈로 특별 씨앗 뽑기 (가방으로)
 	------------------------------------------------------------------
 	SAKURA_RADIUS = 14, -- 사쿠라 나무 파트 표면에서 이 거리 안
-	SAKURA_DRAW_COST = 10, -- [수석] 특별 씨앗 뽑기 1번에 크리스탈 몇 개
-	-- [수석] 성체 1그루를 바치면 받는 크리스탈 (등급별)
+	-- 8판 추가 2 (사장님 2026-11-09 "사쿠라 뽑기가 너무 쉬움"): 뽑기 10 → 100, 낮은 등급 크리스탈을 짜게
+	SAKURA_DRAW_COST = 100, -- 특별 씨앗 뽑기 1번에 크리스탈 몇 개 (7판 10)
+	-- 성체 1그루를 바치면 받는 크리스탈 (등급별, 단조 증가). 0 = 못 바침 (SakuraRules.canOffer — "너무 흔해서 안 받아요")
+	-- 뽑기 1번(100) = 고급 100그루 · 에픽 20그루 · 코스믹 2.5그루 · 영원 1그루
 	SAKURA_OFFER_CRYSTALS = {
-		common = 1,
+		common = 0, -- 7판 1
 		uncommon = 1,
 		rare = 2,
-		epic = 3,
-		legendary = 5,
-		mythic = 8,
-		cosmic = 12,
-		secret = 20,
-		eternity = 30,
-		divine = 50,
-		-- 7판 새 등급 (super = 6판 슈퍼 울트라디바인 100 그대로)
-		super = 100,
-		hacker = 150,
-		original = 220,
-		developer = 320,
-		ultradivine = 480,
+		epic = 5, -- 7판 3
+		legendary = 10, -- 7판 5
+		mythic = 20, -- 7판 8
+		cosmic = 40, -- 7판 12
+		secret = 70, -- 7판 20
+		eternity = 100, -- 7판 30
+		divine = 150, -- 7판 50
+		super = 200, -- 7판 100 (6판 슈퍼 울트라디바인 값)
+		hacker = 260, -- 7판 150
+		original = 330, -- 7판 220
+		developer = 400, -- 7판 320
+		ultradivine = 500, -- 7판 480
 		hacker_glitch = 700,
 	} :: { [string]: number },
 	-- 뽑기 결과: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (5판 블룸 97.5% / 스피릿 블룸 2.5% 확률 그대로)
@@ -308,8 +311,9 @@ local Config = {
 		{ plantId = "blossom_fairy", chance = 0.975 },
 		{ plantId = "spirit_blossom", chance = 0.025 },
 	} :: { { plantId: string, chance: number } },
+	-- 줍기·배달은 1개씩 그대로 (8판 추가 2: 뽑기가 100 이라 상대 가치가 이미 1/10 — 줍기만으로 뽑기 1번 = 초기화 약 34번 ≈ 2.8시간)
 	SAKURA_CRYSTALS_PER_DELIVERY = 1, -- 벚꽃 구역 씨앗을 배달할 때마다 (들고 허브에 들어올 때)
-	SAKURA_CRYSTAL_DROPS_PER_RESET = 3, -- [추정] 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 수
+	SAKURA_CRYSTAL_DROPS_PER_RESET = 3, -- [추정] 초기화 때 벚꽃 둥지 근처에 떨어지는 크리스탈 수 (1개 = 크리스탈 1)
 	SAKURA_CRYSTAL_PICKUP_DISTANCE = 12,
 	SAKURA_CRYSTAL_MAX = 999999,
 

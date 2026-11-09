@@ -3,7 +3,8 @@
 	SakuraRules — 사쿠라 나무 규칙 (6판 "씨앗을 훔치세요" 씨앗 버전, 사장님 결정 4, 순수 로직, Lune 테스트 대상)
 
 	- 바치기 (SakuraOffer): 정원의 성체 식물 1그루를 바치면 사쿠라 크리스탈 (등급이 높을수록 많이, Config.SAKURA_OFFER_CRYSTALS)
-	- 뽑기 (SakuraDraw): 크리스탈 Config.SAKURA_DRAW_COST 개로 특별 씨앗 1개 → 씨앗 가방으로
+	    8판 추가 2: 크리스탈이 0 인 등급(일반)은 못 바침 (canOffer false + TOO_COMMON 안내 — 서버 거부 · 클라 회색 카드 같은 글)
+	- 뽑기 (SakuraDraw): 크리스탈 Config.SAKURA_DRAW_COST(8판 추가 2: 100) 개로 특별 씨앗 1개 → 씨앗 가방으로
 	    벚꽃 씨앗(벚꽃 요정 나무) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무) 2.5% (Config.SAKURA_SEEDS — 5판 블룸 확률 그대로)
 	- 5판의 "학 바쳐서 해금"·"블룸 돌연변이 붙이기"는 없앰
 ]]
@@ -23,7 +24,18 @@ function SakuraRules.crystalsFor(petId: string): number
 	if not plant then
 		return 0
 	end
-	return Config.SAKURA_OFFER_CRYSTALS[plant.rarity] or 1
+	return Config.SAKURA_OFFER_CRYSTALS[plant.rarity] or 0
+end
+
+-- 못 바치는 이유 (서버 거부 안내 · 클라 고르기 창 회색 카드에 같은 글)
+SakuraRules.TOO_COMMON = "너무 흔해서 사쿠라 나무가 안 받아요"
+
+-- 바칠 수 있나 (크리스탈이 1개 이상인 등급만 — 8판 추가 2: 일반은 0). 못 바치면 false, 이유
+function SakuraRules.canOffer(petId: string): (boolean, string?)
+	if SakuraRules.crystalsFor(petId) <= 0 then
+		return false, SakuraRules.TOO_COMMON
+	end
+	return true, nil
 end
 
 function SakuraRules.canAfford(crystals: number): boolean

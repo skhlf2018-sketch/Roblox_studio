@@ -960,8 +960,8 @@ return function(T, Loader)
 		"성체를 바치면 등급별 크리스탈 (멀면·성체가 아니면·이상한 인자면 거부), 정원 자리가 빔",
 		function()
 			local w = sakuraWorld()
-			local daisy = addPlant(w, "sprout_daisy") -- 일반 1개
-			local rose = addPlant(w, "rune_rose") -- 비밀 20개
+			local daisy = addPlant(w, "sprout_daisy") -- 일반 0개 (8판 추가 2: 못 바침)
+			local rose = addPlant(w, "rune_rose") -- 비밀 70개 (8판 추가 2, 7판 20)
 			w.H.landmarks.nearName = nil
 			w.H.client(w.player, "SakuraOffer", daisy.uid)
 			T.eq(#w.data.pets, 2)
@@ -980,26 +980,62 @@ return function(T, Loader)
 			T.eq(#w.data.pets, 1, "바친 성체만 사라짐")
 			T.eq(w.data.pets[1].uid, daisy.uid)
 			T.eq(w.data.sakuraCrystals, w.Config.SAKURA_OFFER_CRYSTALS.secret)
-			T.eq(w.player.attrs.SakuraCrystals, 20)
+			T.eq(w.player.attrs.SakuraCrystals, 70)
 			local result = w.H.sent(w.player, "SakuraResult")[1][1]
 			T.eq(result.kind, "offered")
 			T.eq(result.consumed, rose.uid)
-			T.eq(result.gained, 20)
-			T.eq(result.crystals, 20)
+			T.eq(result.gained, 70)
+			T.eq(result.crystals, 70)
 			T.eq(w.player.attrs.SakuraUnlocked, nil, "6판: 해금 없음")
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"크리스탈 10개로 특별 씨앗 뽑기 → 씨앗 가방 (벚꽃 씨앗 / 정령 벚꽃 씨앗), 모자라면·가방이 차면 거부",
+		"8판 추가 2: 일반 성체는 못 바침 ('너무 흔해서 사쿠라 나무가 안 받아요', 식물·크리스탈 그대로), 고급은 1개",
+		function()
+			local w = sakuraWorld()
+			local daisy = addPlant(w, "sprout_daisy") -- 일반
+			local puppy = addPlant(w, "puppy_grass") -- 일반 (강아지풀, 실제 1초 — C-1 의 10그루)
+			w.H.clearSent()
+			w.H.client(w.player, "SakuraOffer", daisy.uid)
+			T.eq(#w.data.pets, 2, "일반 성체는 정원에 그대로")
+			T.eq(w.data.sakuraCrystals, 0)
+			T.truthy(
+				w.H.hasNotify(w.player, "error", "너무 흔해서 사쿠라 나무가 안 받아요"),
+				"거절 안내"
+			)
+			T.eq(#w.H.sent(w.player, "SakuraResult"), 0, "결과 이벤트 없음")
+			-- 서비스 직접 불러도 nil (Remote 우회 없음)
+			T.eq(w.SakuraService.offer(w.player, puppy.uid), nil)
+			T.eq(#w.data.pets, 2)
+			T.eq(w.data.sakuraCrystals, 0)
+			-- 고급은 1개
+			T.eq(w.Pets.get("mossy_fern").rarity, "uncommon")
+			local u = addPlant(w, "mossy_fern")
+			w.H.advance(3)
+			T.eq(w.SakuraService.offer(w.player, u.uid), 1)
+			T.eq(w.data.sakuraCrystals, 1)
+			T.eq(#w.data.pets, 2, "고급만 사라짐")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"크리스탈 100개로 특별 씨앗 뽑기 (8판 추가 2, 7판 10) → 씨앗 가방 (벚꽃 씨앗 / 정령 벚꽃 씨앗), 모자라면·가방이 차면 거부",
 		function()
 			local w = sakuraWorld()
 			w.H.client(w.player, "SakuraDraw")
-			T.truthy(w.H.hasNotify(w.player, "error", "크리스탈이 10개 필요"))
+			T.truthy(w.H.hasNotify(w.player, "error", "크리스탈이 100개 필요"))
 			T.eq(#w.data.eggs, 0)
-			w.SakuraService.addCrystals(w.player, 25)
+			w.SakuraService.addCrystals(w.player, 99)
+			w.H.advance(3)
+			w.H.client(w.player, "SakuraDraw")
+			T.eq(w.data.sakuraCrystals, 99, "99개면 모자람")
+			T.eq(#w.data.eggs, 0)
+			w.SakuraService.addCrystals(w.player, 16)
 			w.H.clearSent()
+			w.H.advance(3)
 			w.H.client(w.player, "SakuraDraw")
 			T.eq(w.data.sakuraCrystals, 15)
 			T.eq(#w.data.eggs, 1)
@@ -1021,10 +1057,11 @@ return function(T, Loader)
 			T.eq(w.data.sakuraCrystals, 15)
 			-- 가방이 가득 차면 거부 (크리스탈 그대로)
 			w.H.landmarks.nearName = "SakuraIncubator"
+			w.SakuraService.addCrystals(w.player, 100) -- 115: 뽑을 만큼 있음
 			fillBag(w, w.Config.EGG_INVENTORY_MAX - #w.data.eggs)
 			w.H.advance(3)
 			w.H.client(w.player, "SakuraDraw")
-			T.eq(w.data.sakuraCrystals, 15, "가방이 차면 크리스탈 안 씀")
+			T.eq(w.data.sakuraCrystals, 115, "가방이 차면 크리스탈 안 씀")
 			T.truthy(w.H.hasNotify(w.player, "error", "씨앗 가방이 가득"))
 			T.eq(w.H.remotes.SakuraApply, nil, "6판: 블룸 Remote 없음")
 			w.H.uninstall()
@@ -1035,7 +1072,7 @@ return function(T, Loader)
 		local w = sakuraWorld()
 		local spirit = 0
 		for _ = 1, 1000 do
-			w.data.sakuraCrystals = 10
+			w.data.sakuraCrystals = w.Config.SAKURA_DRAW_COST
 			table.clear(w.data.eggs)
 			if w.SakuraService.draw(w.player) == "spirit_blossom" then
 				spirit += 1

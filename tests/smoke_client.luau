@@ -1850,8 +1850,8 @@ local function body()
 		check(crystalText and string.find(crystalText.Text, "크리스탈 3개", 1, true), "창에 크리스탈 3개")
 		local drawButton = sakuraWin:FindFirstChild("DrawButton", true)
 		check(
-			drawButton and drawButton.Active == false and string.find(drawButton.Text, "크리스탈 10", 1, true),
-			"크리스탈 3개: '씨앗 뽑기 · 크리스탈 10' 회색 ("
+			drawButton and drawButton.Active == false and string.find(drawButton.Text, "크리스탈 100", 1, true),
+			"크리스탈 3개: '씨앗 뽑기 · 크리스탈 100' 회색 (8판 추가 2: 10 → 100) ("
 				.. tostring(drawButton and drawButton.Text)
 				.. ")"
 		)
@@ -1867,8 +1867,32 @@ local function body()
 		local p5Card = pickerRoot() and pickerRoot():FindFirstChild("p5", true)
 		local p5Info = p5Card and p5Card:FindFirstChild("Info")
 		check(
-			p5Info and string.find(p5Info.Text, "크리스탈 +", 1, true) ~= nil,
-			"카드에 크리스탈 미리보기: " .. tostring(p5Info and p5Info.Text)
+			p5Info and p5Info.Text == "크리스탈 +10",
+			"카드에 크리스탈 미리보기 (전설 10, 8판 추가 2): " .. tostring(p5Info and p5Info.Text)
+		)
+		-- 8판 추가 2: 일반 성체(아기 데이지 p1)는 회색 카드 + 이유, 눌러도 안 골라짐
+		local p1Card = pickerRoot() and pickerRoot():FindFirstChild("p1", true)
+		local p1Info = p1Card and p1Card:FindFirstChild("Info")
+		check(
+			p1Info and p1Info.Text == "바칠 수 없어요",
+			"일반 카드: '바칠 수 없어요' (" .. tostring(p1Info and p1Info.Text) .. ")"
+		)
+		local p1Reason = false
+		for _, d in (if p1Card then p1Card:GetDescendants() else {}) do
+			if
+				d:IsA("TextLabel")
+				and string.find(d.Text, "너무 흔해서 사쿠라 나무가 안 받아요", 1, true)
+			then
+				p1Reason = true
+			end
+		end
+		check(p1Reason, "일반 카드에 이유 '너무 흔해서 사쿠라 나무가 안 받아요'")
+		check(p1Card and p1Card.BackgroundColor3.R < 0.9, "일반 카드는 회색 (흰 카드 아님)")
+		pickCard("p1")
+		local confirmAfterCommon = pickerRoot() and pickerRoot():FindFirstChild("Confirm", true)
+		check(
+			confirmAfterCommon and confirmAfterCommon.Active == false,
+			"일반 카드를 눌러도 안 골라짐 (바치기 버튼 꺼짐)"
 		)
 		check(pickCard("p5"), "성체 (수정 설강화) 고름")
 		pickerConfirm()
@@ -1876,13 +1900,16 @@ local function body()
 		check(offer and offer.args[1] == "p5", "SakuraOffer(성체 uid) 보냄")
 		fire(
 			"SakuraResult",
-			{ kind = "offered", consumed = "p5", petId = "crystal_snowdrop", gained = 5, crystals = 8 }
+			{ kind = "offered", consumed = "p5", petId = "crystal_snowdrop", gained = 10, crystals = 13 }
 		)
 		check(true, "바치기 연출")
-		player:SetAttribute("SakuraCrystals", 12)
+		player:SetAttribute("SakuraCrystals", 99)
 		sigOf(player, "Attr_SakuraCrystals"):Fire()
 		check(trigger(sakuraPrompt) and Windows.isOpen("Sakura"), "다시 사쿠라 창")
-		check(drawButton.Active == true, "크리스탈 12개: '씨앗 뽑기' 켜짐")
+		check(drawButton.Active == false, "크리스탈 99개: '씨앗 뽑기' 아직 회색 (100 필요)")
+		player:SetAttribute("SakuraCrystals", 120)
+		sigOf(player, "Attr_SakuraCrystals"):Fire()
+		check(drawButton.Active == true, "크리스탈 120개: '씨앗 뽑기' 켜짐")
 		check(click(drawButton) and lastSent("SakuraDraw") ~= nil, "씨앗 뽑기 → SakuraDraw()")
 		holdDelays = true
 		fire("SakuraResult", {

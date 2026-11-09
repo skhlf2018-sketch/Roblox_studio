@@ -5,9 +5,10 @@
 
 	- 나무: Tag "SakuraIncubator" 파트 (맵에 없으면 벚꽃 구역 안 MapLayout.specials.sakuraIncubator 자리에 임시 파트)
 	- Remote SakuraOffer(plantUid): 나무 SAKURA_RADIUS(14) 안에서 내 정원의 성체 식물 1그루를 바침 → 크리스탈
-	    (등급별 Config.SAKURA_OFFER_CRYSTALS: 일반 1 … 슈퍼 100 … 해커 글리치 700, 7판). 정원 자리가 빔.
+	    (등급별 Config.SAKURA_OFFER_CRYSTALS — 8판 추가 2: 일반 0 · 고급 1 · 에픽 5 · 코스믹 40 · 슈퍼 200 … 해커 글리치 700). 정원 자리가 빔.
+	    크리스탈 0 인 등급(일반)은 거부 (SakuraRules.canOffer — "너무 흔해서 사쿠라 나무가 안 받아요", 식물 그대로).
 	    → SakuraResult { kind = "offered", consumed = plantUid, petId, gained, crystals } + Notify
-	- Remote SakuraDraw(): 나무 근처에서 크리스탈 SAKURA_DRAW_COST(10) 개로 특별 씨앗 뽑기 → 씨앗 가방으로
+	- Remote SakuraDraw(): 나무 근처에서 크리스탈 SAKURA_DRAW_COST(8판 추가 2: 100) 개로 특별 씨앗 뽑기 → 씨앗 가방으로
 	    벚꽃 씨앗(벚꽃 요정 나무) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무) 2.5%. 크기·자연 돌연변이는 둥지 씨앗처럼 굴림.
 	    가방이 가득 차면 거부 (크리스탈 그대로). → EggGranted(source "sakura") + SakuraResult { kind = "draw", petId, egg, crystals }
 	- 크리스탈 얻기 (저장: sakuraCrystals): 성체 바치기 · 벚꽃 구역 씨앗을 배달할 때마다 SAKURA_CRYSTALS_PER_DELIVERY 개 ·
@@ -90,6 +91,21 @@ function SakuraService.offer(player: Player, plantUid: string): number?
 			player,
 			"error",
 			"바칠 성체 식물을 골라 주세요! (정원에 자란 식물만 바칠 수 있어요)"
+		)
+		return nil
+	end
+	local canOffer, reason = SakuraRules.canOffer(plant.petId)
+	if not canOffer then
+		-- 8판 추가 2: 일반 등급(크리스탈 0)은 안 받음 — 식물은 정원에 그대로
+		local plantDef = Plants.get(plant.petId)
+		Net.notify(
+			player,
+			"error",
+			string.format(
+				"%s: %s! 판매 가판대에서 팔 수 있어요.",
+				if plantDef then plantDef.name else plant.petId,
+				reason or SakuraRules.TOO_COMMON
+			)
 		)
 		return nil
 	end

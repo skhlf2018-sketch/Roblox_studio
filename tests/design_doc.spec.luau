@@ -609,6 +609,48 @@ return function(T, Loader)
 		end
 	)
 
+	T.test(
+		"8판 추가 2 사쿠라 (사장님 '너무 쉬움'): 14장 뽑기 크리스탈 · 등급별 바치기 16칸 · 줍기·배달 = Config",
+		function()
+			local draw = configRows["사쿠라 뽑기 (8판 추가 2)"]
+			T.truthy(draw, "14장 '사쿠라 뽑기' 줄")
+			T.eq(tonumber(string.match(draw, "^크리스탈 (%d+)개 → ")), Config.SAKURA_DRAW_COST)
+			T.eq(Config.SAKURA_DRAW_COST, 100)
+			for _, entry in Config.SAKURA_SEEDS do
+				local text = Plants.get(entry.plantId).seedName .. " " .. pct(entry.chance)
+				T.truthy(hasText(draw, text), "14장 뽑기 확률 '" .. text .. "'")
+			end
+			-- 바치기: "일반 0 (못 바침) · 고급 1 · … · 해커 글리치 700" = 등급 순서 · 한국어 이름 · Config 숫자
+			local offer = configRows["사쿠라 바치기 (8판 추가 2)"]
+			T.truthy(offer, "14장 '사쿠라 바치기' 줄")
+			local parts = splitDot(offer)
+			T.eq(#parts, #Rarities.list)
+			local prev = -1
+			for i, part in parts do
+				local rarity = Rarities.list[i]
+				local name, n = string.match(part, "^(.-) (%d+)")
+				T.eq(name, rarity.name, "14장 바치기 " .. i .. " 번째 등급")
+				T.eq(tonumber(n), Config.SAKURA_OFFER_CRYSTALS[rarity.id], rarity.id .. " 크리스탈 (14장)")
+				T.truthy(tonumber(n) > prev, rarity.id .. " 크리스탈 증가")
+				prev = tonumber(n)
+				-- 0 이면 "(못 바침)" 이 붙고, 아니면 안 붙음
+				T.eq(string.find(part, "(못 바침)", 1, true) ~= nil, tonumber(n) == 0, part)
+			end
+			T.eq(Config.SAKURA_OFFER_CRYSTALS.common, 0, "일반은 못 바침")
+			-- 줍기·배달
+			local pickup = configRows["사쿠라 크리스탈 줍기·배달"]
+			T.truthy(pickup, "14장 줍기·배달 줄")
+			T.eq(
+				tonumber(string.match(pickup, "^초기화마다 벚꽃 둥지 근처 (%d+)개")),
+				Config.SAKURA_CRYSTAL_DROPS_PER_RESET
+			)
+			T.eq(tonumber(string.match(pickup, "씨앗 배달 %+(%d+)")), Config.SAKURA_CRYSTALS_PER_DELIVERY)
+			-- 9장 51번 · 11번
+			T.truthy(hasText(SEED, "51. **사쿠라 뽑기 어렵게**"), "SEED 9장 51번")
+			T.truthy(hasText(SEED, "너무 흔해서 사쿠라 나무가 안 받아요"), "SEED 에 안내 글")
+		end
+	)
+
 	------------------------------------------------------------------
 	T.suite("GAME_DESIGN 7장 ↔ Sizes")
 

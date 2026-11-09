@@ -25,24 +25,24 @@ return function(T, Loader)
 	local Progression = Loader.require(S .. "Progression")
 	local DataSchema = Loader.require("ServerScriptService/Server/Logic/DataSchema")
 
-	-- SEED 11장 표: id, 화면 이름, 표 성장 시간(초), 건너뛰기 배수, 크리스탈, 도감 속도, 식물 수, 열매 간격 범위, 열매 값 범위
+	-- SEED 11장 표: id, 화면 이름, 표 성장 시간(초), 건너뛰기 배수, 크리스탈 (8판 추가 2 숫자), 도감 속도, 식물 수, 열매 간격 범위, 열매 값 범위
 	local DAY = 86400
 	local SEED_RARITIES = {
-		{ "common", "Common", 10, 1, 1, 420, 6, 29, 31, 8, 13 },
+		{ "common", "Common", 10, 1, 0, 420, 6, 29, 31, 8, 13 },
 		{ "uncommon", "Uncommon", 60, 2, 1, 520, 12, 27, 29, 36, 53 },
 		{ "rare", "Rare", 300, 4, 2, 620, 16, 25, 27, 180, 260 },
-		{ "epic", "Epic", 1200, 8, 3, 800, 16, 23, 25, 1100, 1600 },
-		{ "legendary", "Legendary", 3600, 15, 5, 1000, 16, 21, 23, 7200, 11000 },
-		{ "mythic", "Mythic", 10800, 30, 8, 1300, 19, 19, 21, 54e3, 79e3 },
-		{ "cosmic", "Cosmic", 28800, 60, 12, 1700, 17, 17, 19, 450e3, 660e3 },
-		{ "secret", "Secret", DAY, 100, 20, 2200, 13, 15, 17, 4.5e6, 6.6e6 },
-		{ "eternity", "Eternity", 2 * DAY, 180, 30, 2800, 10, 13, 15, 45e6, 66e6 },
-		{ "divine", "Divine", 4 * DAY, 300, 50, 3600, 7, 11, 13, 540e6, 790e6 },
-		{ "super", "Super", 8 * DAY, 500, 100, 4600, 5, 9, 10, 10e9, 15e9 },
-		{ "hacker", "Hacker", 14 * DAY, 800, 150, 5800, 4, 8, 9, 120e9, 180e9 },
-		{ "original", "Original", 20 * DAY, 1200, 220, 7200, 4, 7, 8, 1.5e12, 2.2e12 },
-		{ "developer", "Developer", 30 * DAY, 2000, 320, 9000, 11, 6, 7, 18e12, 27e12 }, -- 8판: 6 → 11
-		{ "ultradivine", "Ultradivine", 45 * DAY, 3000, 480, 11000, 17, 5, 6, 220e12, 330e12 }, -- 8판: 5 → 17
+		{ "epic", "Epic", 1200, 8, 5, 800, 16, 23, 25, 1100, 1600 },
+		{ "legendary", "Legendary", 3600, 15, 10, 1000, 16, 21, 23, 7200, 11000 },
+		{ "mythic", "Mythic", 10800, 30, 20, 1300, 19, 19, 21, 54e3, 79e3 },
+		{ "cosmic", "Cosmic", 28800, 60, 40, 1700, 17, 17, 19, 450e3, 660e3 },
+		{ "secret", "Secret", DAY, 100, 70, 2200, 13, 15, 17, 4.5e6, 6.6e6 },
+		{ "eternity", "Eternity", 2 * DAY, 180, 100, 2800, 10, 13, 15, 45e6, 66e6 },
+		{ "divine", "Divine", 4 * DAY, 300, 150, 3600, 7, 11, 13, 540e6, 790e6 },
+		{ "super", "Super", 8 * DAY, 500, 200, 4600, 5, 9, 10, 10e9, 15e9 },
+		{ "hacker", "Hacker", 14 * DAY, 800, 260, 5800, 4, 8, 9, 120e9, 180e9 },
+		{ "original", "Original", 20 * DAY, 1200, 330, 7200, 4, 7, 8, 1.5e12, 2.2e12 },
+		{ "developer", "Developer", 30 * DAY, 2000, 400, 9000, 11, 6, 7, 18e12, 27e12 }, -- 8판: 6 → 11
+		{ "ultradivine", "Ultradivine", 45 * DAY, 3000, 500, 11000, 17, 5, 6, 220e12, 330e12 }, -- 8판: 5 → 17
 		{ "hacker_glitch", "H?a.(cke_r!#", 60 * DAY, 5000, 700, 14000, 9, 4, 5, 2.7e15, 3.3e15 }, -- 8판: 2 → 9
 	}
 	local SKIP_MULT = {}
@@ -1219,7 +1219,7 @@ return function(T, Loader)
 							pick({ 0, 5, 49, 160, 1000, 1e6, 1e12, 1e18, w.Config.MONEY_MAX - 1, w.Config.MONEY_MAX })
 					end
 					if rand() < 0.05 then
-						w.dataA.sakuraCrystals = pick({ 0, 9, 10, 19, 100 })
+						w.dataA.sakuraCrystals = pick({ 0, 9, 10, 19, 99, 100, 199 }) -- 8판 추가 2: 뽑기 100
 					end
 					if
 						step % 20 == 0

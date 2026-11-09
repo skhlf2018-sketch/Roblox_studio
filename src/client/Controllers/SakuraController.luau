@@ -4,7 +4,8 @@
 
 	- 프롬프트 "SakuraPrompt" (E, "바치기 · 뽑기") → 사쿠라 창 ("Sakura"): 크리스탈 수 + 버튼 두 개
 	    "성체 바치기" (OfferButton) → 정원 성체 고르기 (카드마다 SakuraRules.crystalsFor 크리스탈 미리보기) → SakuraOffer(plantUid)
-	    "씨앗 뽑기 · 크리스탈 10" (DrawButton, 모자라면 회색 + 안내) → SakuraDraw()
+	      크리스탈 0 인 등급(8판 추가 2: 일반)은 회색 카드 + "너무 흔해서 사쿠라 나무가 안 받아요" (SakuraRules.canOffer)
+	    "씨앗 뽑기 · 크리스탈 N" (N = Config.SAKURA_DRAW_COST, 8판 추가 2: 100 — DrawButton, 모자라면 회색 + 안내) → SakuraDraw()
 	    벚꽃 씨앗 97.5% · 정령 벚꽃 씨앗 2.5% (Config.SAKURA_SEEDS). 나무에서 멀어지면 창이 저절로 닫힘.
 	- SakuraResult kind "offered"(바침 → 크리스탈 +gained, 꽃잎) / "draw"(특별 씨앗 → 가방, 꽃 팝업 · 정령이면 보라 빛기둥)
 	- 크리스탈 개수(Attr SakuraCrystals): 창 + 나무 위 이름표(내 화면)
@@ -76,12 +77,19 @@ function SakuraController.openOffer(part: BasePart?)
 		liveTitle = title,
 		color = SAKURA,
 		hint = string.format(
-			"성체 1그루를 바치면 크리스탈 (등급이 높을수록 많이)! 크리스탈 %d개로 특별 씨앗 뽑기",
+			"성체 1그루를 바치면 크리스탈 (등급이 높을수록 많이 · 일반은 못 바쳐요)! 크리스탈 %d개로 특별 씨앗 뽑기",
 			Config.SAKURA_DRAW_COST
 		),
 		count = 1,
 		items = PetPicker.myPets,
+		-- 8판 추가 2: 크리스탈 0 인 등급(일반)은 회색 카드 + 이유 (서버도 같은 규칙으로 거부)
+		check = function(item: PetPicker.Item): (boolean, string?)
+			return SakuraRules.canOffer(item.petId)
+		end,
 		info = function(item: PetPicker.Item): string?
+			if not SakuraRules.canOffer(item.petId) then
+				return "바칠 수 없어요"
+			end
 			return string.format("크리스탈 +%d", SakuraRules.crystalsFor(item.petId))
 		end,
 		status = function(selected: { PetPicker.Item }): string?

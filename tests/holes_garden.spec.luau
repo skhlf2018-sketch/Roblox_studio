@@ -337,7 +337,7 @@ return function(T, Loader)
 					w.dataA.money = pick({ 0, 5, 49, 50, 160, 1000, 100000, 1e12 })
 				end
 				if rand() < 0.05 then
-					w.dataA.sakuraCrystals = pick({ 0, 9, 10, 19, 100 })
+					w.dataA.sakuraCrystals = pick({ 0, 9, 10, 19, 99, 100, 199 }) -- 8판 추가 2: 뽑기 100
 				end
 				if step % 15 == 0 and #w.dataA.incubators < 4 and #w.dataA.pets + #w.dataA.incubators < 17 then
 					if #w.dataA.eggs < 40 then
@@ -392,8 +392,21 @@ return function(T, Loader)
 					a1 = arg("uid")
 				end
 				H.spawn(w.A, at[1], 3, at[2]) -- 밤이 되면 서버가 베이스로 옮기므로 부르기 직전에 다시 세움
+				-- 8판 추가 2: 내 일반 성체를 바치려 하면 나무 가까이에서도 아무것도 안 바뀜
+				local commonOffer = false
+				if name == "SakuraOffer" then
+					for _, r in w.dataA.pets do
+						local def = w.Plants.get(r.petId)
+						if r.uid == a1 and def and def.rarity == "common" then
+							commonOffer = true
+						end
+					end
+				end
 				local sigBefore = sigOf(w)
 				H.client(w.A, name, a1, a2, a3)
+				if commonOffer then
+					T.eq(sigOf(w), sigBefore, name .. " #" .. step .. ": 일반 성체를 바침")
+				end
 				-- 거리 문: 숲 한가운데에서는 정원·판매 가판대 일을 할 수 없고, 사쿠라 나무에서 멀면 바치기·뽑기를 할 수 없음
 				local farFromGarden = at == spots[3]
 				if farFromGarden and (name == "SellFruits" or name == "PickFruit" or name == "FeedFruit") then

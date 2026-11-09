@@ -19,8 +19,9 @@ return function(T, Loader)
 
 	T.test("바치기: 등급이 높을수록 크리스탈이 많음, 모르는 식물 0", function()
 		T.eq(SakuraRules.crystalsFor("sprout_daisy"), Config.SAKURA_OFFER_CRYSTALS.common)
-		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), Config.SAKURA_OFFER_CRYSTALS.super, "7판: 슈퍼 100")
-		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), 100)
+		T.eq(SakuraRules.crystalsFor("sprout_daisy"), 0, "8판 추가 2: 일반 0 (7판 1)")
+		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), Config.SAKURA_OFFER_CRYSTALS.super, "슈퍼")
+		T.eq(SakuraRules.crystalsFor("rainbow_thunder_tree"), 200, "8판 추가 2: 슈퍼 200 (7판 100)")
 		T.eq(
 			SakuraRules.crystalsFor("static_world_tree"),
 			Config.SAKURA_OFFER_CRYSTALS.hacker_glitch,
@@ -31,23 +32,78 @@ return function(T, Loader)
 		T.truthy(SakuraRules.crystalsFor("rune_rose") > SakuraRules.crystalsFor("owl_oak"))
 	end)
 
-	T.test("뽑기: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (20만 회), 크리스탈 10개", function()
-		local rand = T.rng(31)
-		local spirit = 0
-		local n = 200000
-		for _ = 1, n do
-			if SakuraRules.roll(rand) == "spirit_blossom" then
-				spirit += 1
+	T.test(
+		"8판 추가 2 (사장님 '너무 쉬움'): 일반은 못 바침, 표 숫자, 코스믹 씨앗 1번 = 에픽 20 · 코스믹 2.5그루",
+		function()
+			local expected = {
+				common = 0,
+				uncommon = 1,
+				rare = 2,
+				epic = 5,
+				legendary = 10,
+				mythic = 20,
+				cosmic = 40,
+				secret = 70,
+				eternity = 100,
+				divine = 150,
+				super = 200,
+				hacker = 260,
+				original = 330,
+				developer = 400,
+				ultradivine = 500,
+				hacker_glitch = 700,
+			}
+			for id, n in expected do
+				T.eq(Config.SAKURA_OFFER_CRYSTALS[id], n, id .. " 크리스탈")
 			end
+			-- 일반(크리스탈 0)은 못 바침 + 이유, 고급부터 바침
+			local ok, reason = SakuraRules.canOffer("sprout_daisy")
+			T.falsy(ok)
+			T.eq(reason, "너무 흔해서 사쿠라 나무가 안 받아요")
+			T.eq(reason, SakuraRules.TOO_COMMON)
+			T.falsy((SakuraRules.canOffer("puppy_grass")), "강아지풀(실제 1초)도 못 바침 — C-1")
+			T.truthy((SakuraRules.canOffer("mossy_fern")), "고급은 바침")
+			T.eq(SakuraRules.crystalsFor("mossy_fern"), 1)
+			T.truthy((SakuraRules.canOffer("static_world_tree")))
+			T.falsy((SakuraRules.canOffer("없는식물")), "모르는 식물은 못 바침")
+			-- 모든 식물: 크리스탈 > 0 ⇔ 바칠 수 있음, 일반 등급만 못 바침
+			for _, plant in Plants.list do
+				local can = SakuraRules.canOffer(plant.id)
+				T.eq(can, SakuraRules.crystalsFor(plant.id) > 0, plant.id)
+				T.eq(can, plant.rarity ~= "common", plant.id .. " (일반만 못 바침)")
+			end
+			-- 코스믹 씨앗(벚꽃 씨앗 97.5%) 1번에 드는 성체 수
+			T.eq(Config.SAKURA_DRAW_COST / Config.SAKURA_OFFER_CRYSTALS.epic, 20, "에픽 20그루")
+			T.eq(Config.SAKURA_DRAW_COST / Config.SAKURA_OFFER_CRYSTALS.cosmic, 2.5, "코스믹 2.5그루")
+			T.eq(Config.SAKURA_DRAW_COST / Config.SAKURA_OFFER_CRYSTALS.uncommon, 100, "고급 100그루")
+			-- 줍기·배달은 1개씩 그대로 (뽑기 1번 = 100개)
+			T.eq(Config.SAKURA_CRYSTALS_PER_DELIVERY, 1)
+			T.eq(Config.SAKURA_CRYSTAL_DROPS_PER_RESET, 3)
 		end
-		T.near(spirit / n, 0.025, 0.002)
-		T.eq(SakuraRules.roll(T.constant(0)), "blossom_fairy")
-		T.eq(SakuraRules.roll(T.constant(0.999)), "spirit_blossom")
-		T.eq(Config.SAKURA_DRAW_COST, 10)
-		T.truthy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST))
-		T.falsy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST - 1))
-		T.eq(#SakuraRules.seedIds(), 2)
-	end)
+	)
+
+	T.test(
+		"뽑기: 벚꽃 씨앗 97.5% / 정령 벚꽃 씨앗 2.5% (20만 회), 크리스탈 100개 (8판 추가 2, 7판 10)",
+		function()
+			local rand = T.rng(31)
+			local spirit = 0
+			local n = 200000
+			for _ = 1, n do
+				if SakuraRules.roll(rand) == "spirit_blossom" then
+					spirit += 1
+				end
+			end
+			T.near(spirit / n, 0.025, 0.002)
+			T.eq(SakuraRules.roll(T.constant(0)), "blossom_fairy")
+			T.eq(SakuraRules.roll(T.constant(0.999)), "spirit_blossom")
+			T.eq(Config.SAKURA_DRAW_COST, 100)
+			T.falsy(SakuraRules.canAfford(99))
+			T.falsy(SakuraRules.canAfford(10), "7판 비용 10 으로는 못 뽑음")
+			T.truthy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST))
+			T.falsy(SakuraRules.canAfford(Config.SAKURA_DRAW_COST - 1))
+			T.eq(#SakuraRules.seedIds(), 2)
+		end
+	)
 
 	T.test("5판 해금·블룸 규칙과 상수는 없음", function()
 		T.eq(SakuraRules.pickOffering, nil)

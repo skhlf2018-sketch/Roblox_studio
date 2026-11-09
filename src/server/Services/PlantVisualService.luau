@@ -382,15 +382,17 @@ function PlantVisualService.addAura(host: BasePart, rarityId: string, scale: num
 			beam.Name = "SkyPillar"
 			beam.Attachment0 = a0
 			beam.Attachment1 = a1
-			beam.Width0 = math.max(2, 2.5 * scale)
-			beam.Width1 = math.max(3, 4 * scale)
+			-- 2026-11-09 본부장: 거대(로비 가득) 식물은 빛기둥이 화면을 덮어서 폭 상한 10/16, 클수록 더 투명하게
+			beam.Width0 = math.clamp(2.5 * scale, 2, 10)
+			beam.Width1 = math.clamp(4 * scale, 3, 16)
 			beam.FaceCamera = true
 			beam.LightEmission = 1
 			beam.LightInfluence = 0
 			beam.Segments = 1
 			beam.Color = if look.beamStyle == "glitch" then GLITCH else RAINBOW
+			local startAlpha = math.clamp(0.15 + math.max(0, scale - 6) * 0.05, 0.15, 0.7)
 			beam.Transparency =
-				NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.15), NumberSequenceKeypoint.new(1, 1) })
+				NumberSequence.new({ NumberSequenceKeypoint.new(0, startAlpha), NumberSequenceKeypoint.new(1, 1) })
 			beam.Enabled = true
 			beam.Parent = host
 		end

@@ -6656,7 +6656,14 @@ local function refreshPlot(index: number)
 	local step = dyn.stepLabel
 	if step then
 		step.Text = if treadLevel >= 1
-			then "+" .. Format.number(Economy.treadmillGainPerSecond(treadLevel)) .. "/초"
+			-- 9판 (본부장): 벨트 위 글도 실제 이득 = 레벨 × 트레일 배율 × 스피드 배수
+			then "+" .. Format.number(
+				Economy.treadmillGainPerSecond(
+					treadLevel,
+					playerNumber(owner, Tags.PlayerAttributes.TrailMultiplier, 1),
+					playerNumber(owner, Tags.PlayerAttributes.TreadmillBoost, 1)
+				)
+			) .. "/초"
 			else "잠김 (" .. Format.number(Economy.nextTreadmillCost(0) or 0) .. " 코인)"
 	end
 	local pad = dyn.pad
@@ -6681,7 +6688,14 @@ local function watchOwner(index: number, player: Player?)
 	end
 	table.clear(dyn.conns)
 	if player then
-		for _, name in { Tags.PlayerAttributes.PenLevel, Tags.PlayerAttributes.TreadmillLevel } do
+		for _, name in
+			{
+				Tags.PlayerAttributes.PenLevel,
+				Tags.PlayerAttributes.TreadmillLevel,
+				Tags.PlayerAttributes.TrailMultiplier,
+				Tags.PlayerAttributes.TreadmillBoost,
+			}
+		do
 			table.insert(
 				dyn.conns,
 				player:GetAttributeChangedSignal(name):Connect(function()

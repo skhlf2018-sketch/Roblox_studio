@@ -170,11 +170,6 @@ function BoostController.start()
 			render()
 		end
 	end)
-	Purchase.onGranted(function()
-		if Windows.isOpen(NAME) then
-			render()
-		end
-	end)
 
 	-- 왼쪽 메뉴: 인덱스(2) 와 슬로우 모드(8) 사이
 	HudController.addMenuButton("boost", "스피드 배수", 3, function()

@@ -2000,9 +2000,57 @@ local function body()
 		local body3 = td:FindFirstChild("Body", true).Text
 		check(
 			string.find(body3, "레벨 3 → 레벨 4", 1, true) ~= nil
-				and string.find(body3, "+" .. Format8.number(Economy8.treadmillGainPerSecond(4)), 1, true) ~= nil,
-			"레벨 3: '레벨 3 → 레벨 4 · 1초에 속도 +A → +B': " .. (string.gsub(body3, "\n", " / "))
+				and string.find(
+						body3,
+						"+"
+							.. Format8.number(
+								Economy8.treadmillGainPerSecond(
+									4,
+									requireNode(Loader.get("ReplicatedStorage/Client/State")).get().trailMultiplier
+								)
+							),
+						1,
+						true
+					)
+					~= nil,
+			"레벨 3: '레벨 3 → 레벨 4 · 1초에 속도 +A → +B' (Snapshot 트레일 배율 반영): "
+				.. (string.gsub(body3, "\n", " / "))
 		)
+		-- 9판: 1초 이득 = 레벨 × 트레일(Attr TrailMultiplier) × 스피드 배수(Attr TreadmillBoost), Attr 가 바뀌면 바로
+		player:SetAttribute("TrailMultiplier", 2)
+		sigOf(player, "Attr_TrailMultiplier"):Fire()
+		player:SetAttribute("TreadmillBoost", 8)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
+		local body3b = td:FindFirstChild("Body", true).Text
+		local want3 = "+" .. Format8.number(Economy8.treadmillGainPerSecond(3, 2, 8))
+		local want4 = "+" .. Format8.number(Economy8.treadmillGainPerSecond(4, 2, 8))
+		check(
+			string.find(body3b, want3 .. " → " .. want4, 1, true) ~= nil,
+			"트레일 ×2 · 스피드 배수 ×8 → '"
+				.. want3
+				.. " → "
+				.. want4
+				.. "': "
+				.. (string.gsub(body3b, "\n", " / "))
+		)
+		local Shop9b = ctrl("ShopController")
+		check(
+			Shop9b.gainPerSecond(4) == Economy8.treadmillGainPerSecond(4, 2, 8),
+			"ShopController.gainPerSecond = Economy.treadmillGainPerSecond(레벨, 트레일, 배수)"
+		)
+		Windows.open("Shop")
+		local tcard9 = playerGui:FindFirstChild("TreadmillCard", true)
+		local cardHas = false
+		for _, d in tcard9:GetDescendants() do
+			if d:IsA("TextLabel") and string.find(d.Text, "1초에 속도 " .. want4, 1, true) then
+				cardHas = true
+			end
+		end
+		check(cardHas, "상점 러닝머신 카드도 '1초에 속도 " .. want4 .. "' (트레일·배수 반영)")
+		Windows.close()
+		player:SetAttribute("TrailMultiplier", nil)
+		player:SetAttribute("TreadmillBoost", nil)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
 		local cost3 = Economy8.nextTreadmillCost(3)
 		check(buy.Text == "올리기 · " .. Format8.money(cost3), "버튼 '올리기 · 가격' (" .. buy.Text .. ")")
 		-- 9판: 러닝머신 창 가운데 "⏩ 건너뛰기 · R$ N" (레벨 3 → tskip_4 = R$ 50)

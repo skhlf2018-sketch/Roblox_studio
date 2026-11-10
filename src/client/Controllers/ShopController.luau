@@ -3,7 +3,7 @@
 	ShopController — 상점 창 (2판: 원작 초록 창 + 오른쪽 세로 탭) · 베이스 업그레이드 표지판 누르기 (9판)
 
 	  탭 "업그레이드"(기본): 카드 2장 — 정원(칸 수 Economy.penSlots) / 러닝머신(1초 속도
-	      Economy.treadmillGainPerSecond, 20레벨 = 1,000,000, 레벨 모양 이름 20개)
+	      ShopController.gainPerSecond = Economy.treadmillGainPerSecond(레벨, 트레일 배율, 스피드 배수) — 9판, 레벨 모양 이름 20개)
 	      사기 버튼 → PurchaseUpgrade("Pen" | "Treadmill"). 코인이 모자라면 회색 (서버가 다시 검사)
 	      9판: 러닝머신 카드에 "⏩ 건너뛰기 · R$ N" (Products.nextTreadmillSkip, 최대 레벨이면 없음) → Purchase.prompt
 	  탭 "트레일": 트레일 상점 창(TrailController)을 엶
@@ -144,6 +144,27 @@ local function hasMoneyPass(): boolean
 	return snap ~= nil and snap.moneyPass == true
 end
 ShopController.hasMoneyPass = hasMoneyPass
+
+-- 배율 하나 (Attr → Snapshot → 1)
+local function multiplierOf(attr: string, snapKey: string): number
+	local a = Players.LocalPlayer:GetAttribute(attr)
+	if typeof(a) == "number" and a > 0 then
+		return a
+	end
+	local snap = State.get() :: any
+	local v = if snap then snap[snapKey] else nil
+	return if typeof(v) == "number" and v > 0 then v else 1
+end
+
+-- 9판: 그 러닝머신 레벨의 내 1초 속도 이득 = 레벨 이득 × 장착 트레일 배율 × 스피드 배수 (서버 TreadmillService 와 같은 식)
+--   숫자는 Attr TrailMultiplier · TreadmillBoost (없으면 Snapshot trailMultiplier · treadmillBoost)
+function ShopController.gainPerSecond(level: number): number
+	return Economy.treadmillGainPerSecond(
+		level,
+		multiplierOf(Attr.TrailMultiplier, "trailMultiplier"),
+		multiplierOf(Attr.TreadmillBoost, "treadmillBoost")
+	)
+end
 
 -- 다음 레벨 가격 (nil = 최대 레벨)
 function ShopController.signCost(kind: string): number?
@@ -482,11 +503,11 @@ function ShopController.start()
 					then string.format(
 						"%s 러닝머신: 1초에 속도 +%s",
 						nextName,
-						Format.number(Economy.treadmillGainPerSecond(tLevel + 1))
+						Format.number(ShopController.gainPerSecond(tLevel + 1))
 					)
 					else string.format(
 						"최고 러닝머신! 1초에 속도 +%s",
-						Format.number(Economy.treadmillGainPerSecond(tLevel))
+						Format.number(ShopController.gainPerSecond(tLevel))
 					),
 			})
 			tread.Name = "TreadmillCard"
@@ -570,19 +591,16 @@ function ShopController.start()
 	end
 
 	Windows.register(NAME, window, render)
+	-- 9판: 숫자는 ProductGranted 가 아니라 DataUpdate("upgrades")·Attr 로 다시 (상품 지급도 이 둘로 옴)
 	State.onChanged(function(section: string)
-		if Windows.isOpen(NAME) and (section == "upgrades" or section == "snapshot") then
-			render()
+		if section == "upgrades" or section == "snapshot" then
+			if Windows.isOpen(NAME) then
+				render()
+			end
+			repaintAll()
 		end
 	end)
-	-- 9판: 로벅스 상품을 받으면 창·표지판 다시
-	Purchase.onGranted(function()
-		if Windows.isOpen(NAME) then
-			render()
-		end
-		repaintAll()
-	end)
-	for _, name in { Attr.MoneyPass, Attr.TreadmillLevel, Attr.PenLevel } do
+	for _, name in { Attr.MoneyPass, Attr.TreadmillLevel, Attr.PenLevel, Attr.TreadmillBoost, Attr.TrailMultiplier } do
 		player:GetAttributeChangedSignal(name):Connect(function()
 			if Windows.isOpen(NAME) then
 				render()

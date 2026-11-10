@@ -10,7 +10,7 @@
 
 	8판 러닝머신 터치 창 (원작처럼, 사장님 2026-11-08):
 	  내 베이스 러닝머신 벨트에 올라서거나 닿으면 "TreadmillDialog" 창 (Ui.dialog):
-	    레벨 n → n+1 · 1초에 속도 +A → +B (Economy.treadmillGainPerSecond) · 가격 (Economy.nextTreadmillCost)
+	    레벨 n → n+1 · 1초에 속도 +A → +B (9판: ShopController.gainPerSecond = 트레일·스피드 배수 반영, TreadmillTouched.gainPerSecond 는 안 씀) · 가격 (Economy.nextTreadmillCost)
 	    "올리기 · N 코인" → PurchaseUpgrade("Treadmill") (코인이 모자라면 회색), 0레벨(잠김)이면 "러닝머신 사기 · N 코인"
 	    최대 레벨이면 "최대 레벨!" 회색. 레벨·코인이 바뀌면 창 글·버튼이 바로 바뀜 (창은 열린 채)
 	    9판: 가운데 "⏩ 건너뛰기 · R$ N" (TreadmillSkip, Products.nextTreadmillSkip → Purchase.prompt, 최대면 숨김)
@@ -195,8 +195,8 @@ end
 function TreadmillController.costInfo(): (number, number?, number, number, string)
 	local level = treadLevel()
 	local cost = Economy.nextTreadmillCost(level)
-	local now = Economy.treadmillGainPerSecond(level)
-	local nextGain = if cost then Economy.treadmillGainPerSecond(level + 1) else now
+	local now = ShopController.gainPerSecond(level)
+	local nextGain = if cost then ShopController.gainPerSecond(level + 1) else now
 	local names = ShopController.TREADMILL_NAMES
 	local name = names[math.clamp(if cost then level + 1 else level, 1, #names)] or ""
 	return level, cost, now, nextGain, name
@@ -409,7 +409,9 @@ function TreadmillController.start()
 	NotifyController.mute("러닝머신이 잠겨 있어요") -- 서버 잠김 안내 → 이 창이 대신
 	player:GetAttributeChangedSignal(Attr.TreadmillLevel):Connect(refreshDialog)
 	player:GetAttributeChangedSignal(Attr.Money):Connect(refreshDialog)
-	Purchase.onGranted(refreshDialog) -- 9판: 로벅스로 레벨을 올리면 창 글·가격 다시
+	-- 9판: 1초 이득 = 레벨 × 트레일 × 스피드 배수 → 그 Attr 가 바뀌면 다시 (ProductGranted 는 안 봄 — 값은 Attr·DataUpdate 로 옴)
+	player:GetAttributeChangedSignal(Attr.TreadmillBoost):Connect(refreshDialog)
+	player:GetAttributeChangedSignal(Attr.TrailMultiplier):Connect(refreshDialog)
 	State.onChanged(function(section: string)
 		if section == "upgrades" or section == "snapshot" then
 			refreshDialog()

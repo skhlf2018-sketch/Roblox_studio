@@ -414,7 +414,16 @@ return function(T, Loader)
 					T.truthy(EggRoll.rarityWeight(row[1], id) > 0)
 				end
 				T.eq(sum, 100, row[1])
-				T.truthy((weights.hacker_glitch or 0) > 0, row[1] .. " 해커 글리치가 나옴")
+				-- 2026-11-10 (사장님): 해커 글리치는 보통 추첨 가중치 0 (표에 없음) — 풀에는 식물이 있고, 마지막 구역 특별 추첨으로만
+				T.eq(weights.hacker_glitch, nil, row[1] .. " 해커 글리치는 보통 추첨 표에 없음")
+				T.eq(EggRoll.rarityWeight(row[1], "hacker_glitch"), 0, row[1])
+				local glitchInPool = 0
+				for _, p in list do
+					if p.rarity == "hacker_glitch" then
+						glitchInPool += 1
+					end
+				end
+				T.truthy(glitchInPool >= 2, row[1] .. " 풀에 해커 글리치 식물 " .. glitchInPool)
 			end
 			T.eq(Plants.count, 182)
 			-- (8판: 먹이기 ×3 구역에 하나씩 → 9판 열매 먹이기 삭제로 먹이기 구역 칸 자체가 없음)

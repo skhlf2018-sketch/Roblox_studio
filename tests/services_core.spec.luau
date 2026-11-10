@@ -578,7 +578,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"점프(TreadmillLeave)하면 벨트 앞(복도 쪽)으로 내려옴 → 밖으로 나갔다 와야 다시 탐 / 벨트를 벗어나면 자동으로 내림",
+		"점프(TreadmillLeave)하면 벨트 옆(마당 가운데 쪽, 2026-11-10 — 앞은 표지판 자리)으로 내려옴 → 밖으로 나갔다 와야 다시 탐 / 벨트를 벗어나면 자동으로 내림",
 		function()
 			local w = treadWorld(1)
 			w.H.spawn(w.player, w.tx, 3, w.tz)
@@ -588,7 +588,10 @@ return function(T, Loader)
 			T.eq(w.player.attrs.OnTreadmill, false)
 			T.truthy(w.player.Character.humanoid.WalkSpeed > 16, "WalkSpeed 되돌림")
 			local root = w.player.Character.root
-			T.near(root.Position.X, w.tx + w.plot.facing * 9, 1e-9, "벨트 앞 (반 6 + 3)")
+			-- 2026-11-10 (사장님 "표지판에 끼니까 오른쪽으로 빠지게"): 벨트 앞(x + facing × 9)이 아니라 옆 (z + 반 4 + 3 = +7)
+			T.near(root.Position.X, w.tx, 1e-9, "앞으로 안 나옴 — 표지판 자리 (같은 x)")
+			T.near(root.Position.Z, w.tz + 7, 1e-9, "벨트 옆 (반 4 + 3, 마당 가운데 쪽)")
+			T.eq(root.CFrame.LookVector.X, w.plot.facing, "보는 방향은 그대로 복도 쪽")
 			T.falsy(w.H.MapLayout.isOnTreadmill(root.Position, 1, w.Config.TREADMILL_PAD_MARGIN))
 			local speed = w.data.speed
 			w.H.advance(3)
@@ -609,6 +612,62 @@ return function(T, Loader)
 			w.H.teleport(w.player, w.tx, 30, w.tz)
 			w.H.advance(0.2)
 			T.eq(w.player.attrs.OnTreadmill, false, "공중")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		'2026-11-10 (사장님 "러닝머신 타고 내려올 때 앞에 표지판에 끼니까 오른쪽으로 빠지게"): 7개 베이스 전부 TreadmillLeave 로 내리는 자리 ① 벨트(+여유 1) 밖 ② 그 베이스 앞마당 안 ③ 업그레이드 · 건너뛰기(z-7) · 펫 우리 표지판에서 수평 5 이상 ④ 내린 뒤 바로 다시 안 탐 (속도 불변)',
+		function()
+			local w = treadWorld(1)
+			local MapLayout = w.H.MapLayout
+			T.eq(MapLayout.PLOT_COUNT, 7)
+			local function flat(a, bx, bz)
+				return math.sqrt((a.X - bx) ^ 2 + (a.Z - bz) ^ 2)
+			end
+			w.H.spawn(w.player, 0, 3, -5) -- 허브 쪽에서 시작 (캐릭터 만들기)
+			for i = 1, MapLayout.PLOT_COUNT do
+				w.session.plotIndex = i
+				local plot = MapLayout.plot(i)
+				local tx, tz = plot.treadmill.x, plot.treadmill.z
+				-- 벨트 밖에 있다가 (무장) → 올라서서 타고 → TreadmillLeave
+				w.H.teleport(w.player, tx + plot.facing * 20, 3, tz)
+				w.H.advance(0.4)
+				w.H.teleport(w.player, tx, 3, tz)
+				w.H.advance(0.4)
+				T.eq(w.player.attrs.OnTreadmill, true, i .. "번 베이스: 탐")
+				w.H.client(w.player, "TreadmillLeave")
+				T.eq(w.player.attrs.OnTreadmill, false, i .. "번 베이스: 내림")
+				local pos = w.player.Character.root.Position
+				local where = i .. "번 베이스 (" .. pos.X .. ", " .. pos.Z .. ")"
+				-- ① 벨트 사각형 + 여유(Config.TREADMILL_PAD_MARGIN) 밖, 그리고 여유 1 밖
+				T.falsy(MapLayout.isOnTreadmill(pos, i, w.Config.TREADMILL_PAD_MARGIN), where .. " 벨트 위")
+				T.falsy(
+					MapLayout.inRect(MapLayout.treadmillRect(i), pos.X, pos.Z, 1),
+					where .. " 벨트 + 여유 1 안"
+				)
+				-- ② 이 베이스 앞마당 안
+				T.truthy(MapLayout.inRect(plot.yardRect, pos.X, pos.Z), where .. " 앞마당 밖")
+				-- ③ 표지판 3개에서 수평 5 스터드 이상 (건너뛰기 표지판 = 업그레이드 표지판에서 z - 7, MapBuilder)
+				local up = plot.signs.treadmillUpgrade
+				local pen = plot.signs.penUpgrade
+				T.truthy(flat(pos, up.x, up.z) >= 5, where .. " 업그레이드 표지판 " .. flat(pos, up.x, up.z))
+				T.truthy(
+					flat(pos, up.x, up.z - 7) >= 5,
+					where .. " 건너뛰기 표지판 " .. flat(pos, up.x, up.z - 7)
+				)
+				T.truthy(
+					flat(pos, pen.x, pen.z) >= 5,
+					where .. " 펫 우리 업그레이드 표지판 " .. flat(pos, pen.x, pen.z)
+				)
+				-- 보는 방향은 그대로 복도 쪽
+				T.eq(w.player.Character.root.CFrame.LookVector.X, plot.facing, where .. " 복도 쪽을 봄")
+				-- ④ 내린 뒤 서 있어도 바로 다시 안 탐, 속도도 안 오름
+				local speed = w.data.speed
+				w.H.advance(3)
+				T.eq(w.player.attrs.OnTreadmill, false, where .. " 바로 다시 탐")
+				T.eq(w.data.speed, speed, where .. " 내린 뒤 속도 불변")
+			end
 			w.H.uninstall()
 		end
 	)

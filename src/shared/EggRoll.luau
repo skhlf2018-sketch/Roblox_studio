@@ -163,6 +163,11 @@ function EggRoll.rollSpecials(biomeId: string, side: string?, rand: RandomFn): {
 				table.insert(candidates, pet)
 			end
 		end
+		-- 2026-11-10: 구역이 정해진 등급(해커 글리치 = 마지막 구역)은 그 구역에서만 추첨
+		local only = EggSpawn.SPECIAL_ONLY_BIOME[rarityId]
+		if only ~= nil and only ~= biomeId then
+			candidates = {}
+		end
 		if #candidates > 0 then
 			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET[rarityId] or 0
 			if rand() < chance then

@@ -69,16 +69,17 @@ return function(T, Loader)
 		{ "haunted_castle", 500e9, "호박 머리 덩굴", { eternity = 55, divine = 40, super = 5 } },
 		{ "hacker_lab", 700e9, "바이러스 덩굴", { super = 55, hacker = 40, original = 5 } },
 		{ "developer_room", 900e9, "디버그 선인장", { original = 55, developer = 40, ultradivine = 5 } },
-		{ "bug_dimension", 1.2e12, "글리치 장미 괴물", { developer = 40, ultradivine = 55, hacker_glitch = 5 } },
+		-- 2026-11-10 (사장님): 해커 글리치는 보통 추첨에서 뺌 (옛 5 · 8 · 12 · 20% → 울트라디바인으로), 마지막 구역 특별 추첨으로만
+		{ "bug_dimension", 1.2e12, "글리치 장미 괴물", { developer = 40, ultradivine = 60 } },
 		-- 8판 새 구역 3개
 		{
 			"robot_factory",
 			1.22e12,
 			"톱니 해바라기 로봇",
-			{ developer = 40, ultradivine = 52, hacker_glitch = 8 },
+			{ developer = 40, ultradivine = 60 },
 		},
-		{ "clock_tower", 1.24e12, "태엽 장미 기사", { developer = 25, ultradivine = 63, hacker_glitch = 12 } },
-		{ "rainbow_sky", 1.26e12, "무지개 용 덩굴", { ultradivine = 80, hacker_glitch = 20 } },
+		{ "clock_tower", 1.24e12, "태엽 장미 기사", { developer = 25, ultradivine = 75 } },
+		{ "rainbow_sky", 1.26e12, "무지개 용 덩굴", { ultradivine = 100 } },
 	}
 
 	local function withWorld(fn)
@@ -441,7 +442,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지 추첨 분포(구역마다 3만 번)가 가중치와 ±1.5%p 안이고 새 구역은 새 등급을 뽑음 / 특별 추첨 해커 글리치는 버그 차원에서만 (8판 추가: 0.00012%)",
+		"둥지 추첨 분포(구역마다 3만 번)가 가중치와 ±1.5%p 안이고 새 구역은 새 등급을 뽑음 (해커 글리치만 예외 — 보통 추첨 0) / 특별 추첨 해커 글리치는 마지막 구역(무지개 하늘섬)에서만 (2026-11-10, 0.0001%)",
 		function()
 			local rand = T.rng(7070)
 			local seen = {}
@@ -466,41 +467,38 @@ return function(T, Loader)
 				end
 			end
 			for _, r in Rarities.list do
-				T.truthy(seen[r.id], r.id .. " 는 어느 구역에서도 안 뽑힘")
-			end
-			local glitchHits, resets = 0, 200000
-			for _ = 1, resets do
-				for _, b in Biomes.list do
-					if b.id ~= "bug_dimension" then
-						break
-					end
+				if r.id == "hacker_glitch" then
+					T.falsy(seen[r.id], "2026-11-10: 해커 글리치는 보통 추첨에서 한 번도 안 뽑힘")
+				else
+					T.truthy(seen[r.id], r.id .. " 는 어느 구역에서도 안 뽑힘")
 				end
 			end
+			local glitchHits, resets = 0, 20000
 			for _ = 1, resets do
-				for _, pet in EggRoll.rollSpecials("bug_dimension", nil, rand) do
+				for _, pet in EggRoll.rollSpecials("rainbow_sky", nil, rand) do
 					if pet.rarity == "hacker_glitch" then
 						glitchHits += 1
 					end
 				end
-				for _, other in { "hacker_lab", "developer_room", "haunted_castle" } do
+				-- 마지막 구역이 아니면 해커 글리치 특별 씨앗은 절대 안 나옴
+				for _, other in { "bug_dimension", "robot_factory", "clock_tower", "hacker_lab", "developer_room" } do
 					for _, pet in EggRoll.rollSpecials(other, nil, rand) do
 						T.truthy(pet.rarity ~= "hacker_glitch", other .. " 에서 해커 글리치 특별 씨앗")
 					end
 				end
-				if _ > 20000 then
-					break
-				end
 			end
-			-- 8판 추가 (사장님 2026-11-09): 0.5% → 0.00012% — 20,000번이면 기대 0.024번 (경계는 eggroll.spec 이 봄)
+			-- 8판 추가 (사장님 2026-11-09): 0.5% → 0.0001% (2026-11-10) — 20,000번이면 기대 0.02번 (경계는 eggroll.spec 이 봄)
+			T.truthy(glitchHits <= 2, "해커 글리치 특별 씨앗 20,000번 중 " .. glitchHits .. " (기대 0.02)")
 			T.truthy(
-				glitchHits <= 2,
-				"해커 글리치 특별 씨앗 20,000번 중 " .. glitchHits .. " (기대 0.024)"
+				#EggRoll.rollSpecials("rainbow_sky", nil, T.constant(0)) > 0,
+				"난수 0 이면 마지막 구역에서 나옴"
 			)
-			T.truthy(
-				#EggRoll.rollSpecials("bug_dimension", nil, T.constant(0)) > 0,
-				"난수 0 이면 버그 차원에서 나옴"
+			T.eq(EggRoll.rollSpecials("rainbow_sky", nil, T.constant(0))[1].rarity, "hacker_glitch")
+			T.eq(
+				EggRoll.rollSpecials("bug_dimension", nil, T.constant(0))[1].rarity,
+				"ultradivine",
+				"2026-11-10: 버그 차원은 난수 0 이어도 해커 글리치 아님"
 			)
-			T.eq(EggRoll.rollSpecials("bug_dimension", nil, T.constant(0))[1].rarity, "hacker_glitch")
 		end
 	)
 

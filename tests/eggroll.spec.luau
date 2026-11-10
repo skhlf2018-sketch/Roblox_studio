@@ -99,9 +99,20 @@ return function(T, Loader)
 			local castle = EggRoll.nestOdds("haunted_castle", nil)
 			T.near(castle.rainbow_thunder_tree, 0.025, 1e-9, "슈퍼 5% ÷ 2종")
 			T.near(castle.sky_pillar_flower, 0.025, 1e-9)
+			-- 2026-11-10: 해커 글리치는 보통 추첨 가중치 0 → 풀에는 있지만 확률 0, 울트라디바인 60% 가 6종으로 나뉨
 			local bug = EggRoll.nestOdds("bug_dimension", nil)
-			T.near(bug.glitch_hacker_bloom, 0.025, 1e-9, "해커 글리치 5% ÷ 2종")
-			T.near(bug.static_world_tree, 0.025, 1e-9)
+			T.eq(bug.glitch_hacker_bloom, 0, "해커 글리치 보통 추첨 0")
+			T.eq(bug.static_world_tree, 0)
+			local ultraPlants = 0
+			local ultraSum = 0
+			for _, p in EggRoll.nestPool("bug_dimension", nil) do
+				if p.rarity == "ultradivine" then
+					ultraPlants += 1
+					ultraSum += bug[p.id]
+				end
+			end
+			T.near(ultraSum, 0.6, 1e-9, "울트라디바인 60%")
+			T.truthy(ultraPlants >= 1)
 		end
 	)
 
@@ -141,8 +152,8 @@ return function(T, Loader)
 			T.near(room.ultradivine, 0.05, 0.005)
 			local bug = shares("bug_dimension")
 			T.near(bug.developer, 0.40, 0.01)
-			T.near(bug.ultradivine, 0.55, 0.01)
-			T.near(bug.hacker_glitch, 0.05, 0.005)
+			T.near(bug.ultradivine, 0.60, 0.01)
+			T.eq(bug.hacker_glitch, nil, "2026-11-10: 보통 추첨에서 해커 글리치는 한 번도 안 나옴")
 			T.eq(bug.super, nil)
 		end
 	)
@@ -158,23 +169,29 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (해커 글리치는 그 등급이 풀에 있는 18~21구역에서만)",
+		"특별 추첨: 난수 0 이면 희귀한 것부터 최대 2개, 0.99 면 없음 (해커 글리치는 마지막 구역 rainbow_sky 에서만 — 2026-11-10, 18~20구역은 난수 0 이어도 안 나옴)",
 		function()
 			local specials = EggRoll.rollSpecials("haunted_castle", nil, T.constant(0))
 			T.eq(#specials, EggSpawn.MAX_SPECIALS_PER_BIOME)
 			T.eq(specials[1].rarity, "super")
 			T.eq(specials[2].rarity, "divine")
+			-- 2026-11-10: 18~20구역은 해커 글리치 후보가 비어서 난수 0 이어도 안 나옴 → 울트라디바인 · 개발자
 			local bug = EggRoll.rollSpecials("bug_dimension", nil, T.constant(0))
 			T.eq(#bug, 2)
-			T.eq(bug[1].rarity, "hacker_glitch")
-			T.eq(bug[2].rarity, "ultradivine")
+			T.eq(bug[1].rarity, "ultradivine")
+			T.eq(bug[2].rarity, "developer")
+			-- 마지막 구역 rainbow_sky 는 난수 0 이면 해커 글리치가 맨 먼저
+			local sky = EggRoll.rollSpecials("rainbow_sky", nil, T.constant(0))
+			T.eq(#sky, 2)
+			T.eq(sky[1].rarity, "hacker_glitch")
+			T.eq(sky[2].rarity, "ultradivine")
 			local lab = EggRoll.rollSpecials("hacker_lab", nil, T.constant(0))
 			T.eq(lab[1].rarity, "original")
 			T.eq(lab[2].rarity, "hacker")
 			for _, b in Biomes.list do
 				for _, pet in EggRoll.rollSpecials(b.id, Biomes.sideForCycle(b, 1), T.constant(0)) do
 					if pet.rarity == "hacker_glitch" then
-						T.truthy(b.order >= 18, "해커 글리치 공지는 18~21구역에서만: " .. b.id)
+						T.eq(b.id, "rainbow_sky", "해커 글리치 공지는 마지막 구역에서만: " .. b.id)
 					end
 				end
 			end
@@ -201,10 +218,10 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"8판 추가 (사장님 2026-11-09): 해커 글리치 특별 추첨 = 0.00012% — 상수 0.0000012 · 경계(난수 0.0000011 나옴 / 0.0000013 안 나옴) · 1e7번이면 0~50번(기대 12) · 실제 추첨 20만 번 중 3번 이하, 울트라디바인 1% 는 그대로",
+		"사장님 2026-11-10: 해커 글리치 특별 추첨 = 0.0001% — 상수 0.000001 · 경계(난수 0.0000009 나옴 / 0.0000011 안 나옴, 마지막 구역만) · 1e7번이면 0~50번(기대 10) · 실제 추첨 20만 번 중 3번 이하, 울트라디바인 1% 는 그대로",
 		function()
 			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch
-			T.eq(chance, 0.0000012)
+			T.eq(chance, 0.000001)
 			-- 해커 글리치가 맨 먼저 굴려짐 (SPECIAL_RARITIES[1]) → 첫 난수만 바꿔서 경계 확인
 			local function firstIsGlitch(biomeId, value)
 				local calls = 0
@@ -214,11 +231,17 @@ return function(T, Loader)
 				end)
 				return #specials > 0 and specials[1].rarity == "hacker_glitch"
 			end
-			for _, biomeId in { "bug_dimension", "robot_factory", "clock_tower", "rainbow_sky" } do
-				T.truthy(firstIsGlitch(biomeId, 0.0000011), biomeId .. ": 0.0000011 이면 나옴")
-				T.falsy(firstIsGlitch(biomeId, 0.0000013), biomeId .. ": 0.0000013 이면 안 나옴")
+			-- 2026-11-10: 마지막 구역 rainbow_sky 에서만 나옴 (18~20구역은 난수가 아무리 작아도 안 나옴)
+			T.truthy(firstIsGlitch("rainbow_sky", 0.0000009), "rainbow_sky: 0.0000009 이면 나옴")
+			T.falsy(firstIsGlitch("rainbow_sky", 0.0000011), "rainbow_sky: 0.0000011 이면 안 나옴")
+			for _, biomeId in { "bug_dimension", "robot_factory", "clock_tower" } do
+				T.falsy(
+					firstIsGlitch(biomeId, 0.0000009),
+					biomeId .. ": 0.0000009 이어도 안 나옴 (마지막 구역이 아님)"
+				)
+				T.falsy(firstIsGlitch(biomeId, 0), biomeId .. ": 난수 0 이어도 안 나옴")
 			end
-			-- 1e7 번 굴리면 기대 12번 → 0 ~ 50 번
+			-- 1e7 번 굴리면 기대 10번 → 0 ~ 50 번
 			local rand = T.rng(20261109)
 			local hits = 0
 			for _ = 1, 1e7 do
@@ -226,9 +249,9 @@ return function(T, Loader)
 					hits += 1
 				end
 			end
-			print(string.format("      (참고) 해커 글리치 특별 추첨 1e7번 중 %d번 (기대 12)", hits))
+			print(string.format("      (참고) 해커 글리치 특별 추첨 1e7번 중 %d번 (기대 10)", hits))
 			T.truthy(hits >= 0 and hits <= 50, "1e7번 중 " .. hits)
-			-- 실제 추첨 (무지개 하늘섬 20만 번): 해커 글리치 기대 0.24번, 울트라디바인 1% 그대로
+			-- 실제 추첨 (무지개 하늘섬 20만 번): 해커 글리치 기대 0.2번, 울트라디바인 1% 그대로
 			local rand2 = T.rng(1109)
 			local glitch, ultra = 0, 0
 			local n = 200000

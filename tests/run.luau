@@ -59,6 +59,8 @@ local specs = {
 	{ "holes_boost_order.spec", require("./holes_boost_order.spec") },
 	-- 2026-11-10 닿아야만 잡힘 · 구역 안 드롭 = 바로 둥지 주임 검수 H 시리즈
 	{ "holes_touch_catch.spec", require("./holes_touch_catch.spec") },
+	-- 2026-11-10 해커 글리치 = 마지막 구역 특별 추첨(0.0001%)만 주임 검수 J 시리즈
+	{ "holes_glitch_only_last.spec", require("./holes_glitch_only_last.spec") },
 }
 
 local filters: { string } = {}

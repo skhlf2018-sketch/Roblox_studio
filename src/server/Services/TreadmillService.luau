@@ -9,7 +9,7 @@
 	    × 장착 트레일 배율 × 9판 로벅스 러닝머신 부스트(data.treadmillBoost, 산 것 중 가장 큰 배수 — Attr TreadmillBoost)
 	    → Wallet.addSpeed + TreadmillStep { amount } (클라 "+500" 분홍 팝업)
 	    (TreadmillTouched 의 gainPerSecond·nextGainPerSecond 는 트레일·부스트 전 숫자 그대로)
-	- 내리기: 클라가 점프할 때 TreadmillLeave() → 벨트 앞(복도 쪽)으로 내려 줌.
+	- 내리기: 클라가 점프할 때 TreadmillLeave() → 벨트 옆(마당 가운데 쪽)으로 내려 줌 (2026-11-10: 앞은 표지판 자리라 낌).
 	    클라가 안 보내도 점프하면 몸통이 TREADMILL_MAX_HEIGHT(8) 위로 떠서 서버가 내려 줌 (그 자리 착지 → 걸어서 나가면 됨).
 	    서버도 0.2초마다 확인해서 벨트 위를 벗어났거나(높이 TREADMILL_MAX_HEIGHT 위로 떴거나) 알을 들었거나
 	    기절·죽음이면 자동으로 내림. 내린 뒤에는 벨트 밖으로 한 번 나가야 다시 탈 수 있음 (점프 착지로 바로 다시 타지 않게).
@@ -74,7 +74,7 @@ local function mount(player: Player, session: Sessions.Session)
 	placeAt(player, session, plot.treadmill.x, plot.treadmill.z, plot.facing)
 end
 
--- 내리기. stepOff = true 면 벨트 앞(복도 쪽)으로 내려 줌 (점프로 내릴 때)
+-- 내리기. stepOff = true 면 벨트 옆(마당 가운데 쪽)으로 내려 줌 (점프로 내릴 때) — 앞은 표지판 자리
 function TreadmillService.leave(player: Player, stepOff: boolean?)
 	local session = Sessions.get(player)
 	if not session or not session.onTreadmill then
@@ -85,8 +85,10 @@ function TreadmillService.leave(player: Player, stepOff: boolean?)
 	if stepOff then
 		local plot = MapLayout.plot(session.plotIndex)
 		if plot then
-			local offset = MapLayout.TREADMILL_PAD.sizeX / 2 + 3
-			placeAt(player, session, plot.treadmill.x + plot.facing * offset, plot.treadmill.z, plot.facing)
+			-- 사장님 2026-11-10: 벨트 앞(복도 쪽)에는 업그레이드 표지판이 있어서 내리면 표지판에 낌 →
+			--   **옆(마당 가운데 쪽, +z)** 으로 내림. 왼쪽 베이스에서는 달리는 방향의 오른쪽. 표지판·건너뛰기 표지판은 앞과 -z 쪽
+			local offset = MapLayout.TREADMILL_PAD.sizeZ / 2 + 3
+			placeAt(player, session, plot.treadmill.x, plot.treadmill.z + offset, plot.facing)
 		end
 	end
 end

@@ -258,7 +258,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역마다 둥지 식물 8종 (천사&악마는 쪽마다 8종), 둥지 식물 등급은 그 구역 등급 표 안에만",
+		"구역마다 둥지 식물 8종 (천사&악마는 쪽마다 8종), 둥지 식물 등급은 그 구역 등급 표 안에만 (예외: 해커 글리치 — 표에 없고 가중치 0, 2026-11-10)",
 		function()
 			for _, b in Biomes.list do
 				local weights = EggSpawn.BIOME_RARITY_WEIGHTS[b.id]
@@ -269,10 +269,19 @@ return function(T, Loader)
 					for _, p in Plants.inBiome(b.id) do
 						if p.source == "nest" and (b.sides == nil or p.side == side) then
 							n += 1
-							T.truthy(
-								weights[p.rarity] ~= nil,
-								p.id .. " 등급 " .. p.rarity .. " 이 " .. b.id .. " 표에 없음"
-							)
+							if weights[p.rarity] == nil then
+								-- 2026-11-10 (사장님): 표에 없는 등급의 풀 식물은 해커 글리치뿐 (보통 추첨 가중치 0, 마지막 구역 특별 추첨으로만)
+								T.eq(
+									p.rarity,
+									"hacker_glitch",
+									p.id .. " 등급 " .. p.rarity .. " 이 " .. b.id .. " 표에 없음"
+								)
+								T.eq(
+									weights.hacker_glitch or 0,
+									0,
+									b.id .. " 해커 글리치 보통 추첨 가중치 0"
+								)
+							end
 						end
 					end
 					T.eq(n, 8, b.id .. " " .. side)
@@ -312,13 +321,13 @@ return function(T, Loader)
 			T.eq(w.developer_room.developer, 40)
 			T.eq(w.developer_room.ultradivine, 5)
 			T.eq(w.bug_dimension.developer, 40)
-			T.eq(w.bug_dimension.ultradivine, 55)
-			T.eq(w.bug_dimension.hacker_glitch, 5)
+			T.eq(w.bug_dimension.ultradivine, 60, "2026-11-10: 해커 글리치 5% 를 울트라디바인으로")
+			T.eq(w.bug_dimension.hacker_glitch, nil, "2026-11-10: 보통 추첨에서 해커 글리치 뺌")
 		end
 	)
 
 	T.test(
-		"7판: 모든 등급이 어느 구역 둥지에든 나옴, 등급마다 식물이 있음 (새 등급 6개 포함)",
+		"7판: 모든 등급이 어느 구역 둥지에든 나옴 (예외: 해커 글리치는 보통 추첨 0 — 마지막 구역 특별 추첨으로만, 2026-11-10), 등급마다 식물이 있음 (새 등급 6개 포함)",
 		function()
 			for _, r in Rarities.list do
 				local where = 0
@@ -327,7 +336,16 @@ return function(T, Loader)
 						where += 1
 					end
 				end
-				T.truthy(where > 0, r.id .. " 가 나오는 구역이 없음")
+				if r.id == "hacker_glitch" then
+					T.eq(where, 0, "해커 글리치는 보통 둥지 추첨 어느 구역에도 없음")
+					T.eq(
+						EggSpawn.SPECIAL_ONLY_BIOME.hacker_glitch,
+						"rainbow_sky",
+						"대신 마지막 구역 특별 추첨"
+					)
+				else
+					T.truthy(where > 0, r.id .. " 가 나오는 구역이 없음")
+				end
 				local plants = 0
 				for _, p in Plants.list do
 					if p.rarity == r.id then
@@ -370,7 +388,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"해커 글리치: 7판 버그 차원 2종 + 8판 새 구역 3개 7종 = 9종 (전부 둥지), 특별 추첨 0.00012% (8판 추가 2026-11-09 — 18~21구역 다 합쳐 하루 약 0.0014개)",
+		"해커 글리치: 7판 버그 차원 2종 + 8판 새 구역 3개 7종 = 9종 (전부 둥지 풀), 특별 추첨 0.0001% (사장님 2026-11-10, 8판의 0.00012% 에서 다시 정함) — 마지막 구역(rainbow_sky) 한 곳에서만 → 하루 약 0.00029개",
 		function()
 			local n = 0
 			local where = { bug_dimension = true, robot_factory = true, clock_tower = true, rainbow_sky = true }
@@ -389,7 +407,7 @@ return function(T, Loader)
 				T.truthy((EggSpawn.SPECIAL_CHANCE_PER_RESET[id] or 0) > 0, id .. " 확률")
 			end
 			local chance = EggSpawn.SPECIAL_CHANCE_PER_RESET.hacker_glitch
-			T.eq(chance, 0.0000012, "사장님 2026-11-09: 0.00012%")
+			T.eq(chance, 0.000001, "사장님 2026-11-10: 0.0001%")
 			-- 나머지 등급 특별 추첨 확률은 7판 그대로
 			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.ultradivine, 0.01)
 			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.developer, 0.01)
@@ -400,8 +418,8 @@ return function(T, Loader)
 			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.eternity, 0.02)
 			T.eq(EggSpawn.SPECIAL_CHANCE_PER_RESET.secret, 0.08)
 			local cycle = Config.DAY_SECONDS + Config.NIGHT_SECONDS + Config.INTERMISSION_SECONDS
-			local perDay = 86400 / cycle * chance * 4 -- 해커 글리치 둥지가 있는 18~21구역 4곳
-			T.truthy(perDay > 0.001 and perDay < 0.002, "18~21구역 합쳐 하루 " .. perDay .. "개")
+			local perDay = 86400 / cycle * chance * 1 -- 2026-11-10: 해커 글리치는 마지막 구역(rainbow_sky) 1곳에서만
+			T.truthy(perDay > 0.00025 and perDay < 0.00035, "마지막 구역 하루 " .. perDay .. "개")
 		end
 	)
 

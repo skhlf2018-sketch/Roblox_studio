@@ -1216,7 +1216,13 @@ return function(T, Loader)
 					sides = bi.sides,
 					color = bi.color,
 				}))
-				table.insert(parts, "W" .. i .. serialize(EggSpawn.BIOME_RARITY_WEIGHTS[bi.id]))
+				local weights = EggSpawn.BIOME_RARITY_WEIGHTS[bi.id]
+				if i == 18 then
+					-- 2026-11-10 (사장님): 18구역의 해커 글리치 5% 를 보통 추첨에서 뺌 → 일부러 바뀜 (새 값은 data.spec 이 봄).
+					--   해시는 7판 글자 그대로를 지키려고 7판 표를 직접 적음
+					weights = { developer = 40, ultradivine = 55, hacker_glitch = 5 }
+				end
+				table.insert(parts, "W" .. i .. serialize(weights))
 			end
 			for i = 1, 7 do
 				table.insert(parts, "P" .. i .. serialize(MapLayout.plot(i)))
@@ -1246,7 +1252,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"구역 19~21: 식물 8종씩·가중치 합 100·맵 끝 5040·zoneAt 경계·isInHub 범위(허브 -300~0)·마지막 구역 끝, 해커 글리치 특별 추첨은 18~21구역에서만 (8판 추가: 0.00012%)",
+		"구역 19~21: 식물 8종씩·가중치 합 100·맵 끝 5040·zoneAt 경계·isInHub 범위(허브 -300~0)·마지막 구역 끝, 해커 글리치 특별 추첨은 마지막 구역(21)에서만 (2026-11-10, 0.0001%)",
 		function()
 			T.eq(MapLayout.MAP_END_Z, 5040)
 			T.eq(MapLayout.BIOME_COUNT, 21)
@@ -1292,8 +1298,8 @@ return function(T, Loader)
 					T.truthy(weights[rarity] ~= nil, id .. " 에서 나오면 안 되는 등급 " .. rarity)
 				end
 			end
-			-- 해커 글리치 특별 추첨 (구역마다 4만 번): 풀에 해커 글리치가 있는 18~21 만
-			--   8판 추가 (사장님 2026-11-09): 0.5% → 0.00012% — 4만 번이면 기대 0.048번 (경계·1e7번은 eggroll.spec)
+			-- 해커 글리치 특별 추첨 (구역마다 4만 번): 2026-11-10 마지막 구역(21 rainbow_sky) 만
+			--   8판 추가 (사장님 2026-11-09): 0.5% → 0.0001% (2026-11-10) — 4만 번이면 기대 0.04번 (경계·1e7번은 eggroll.spec)
 			for _, b in Biomes.list do
 				local hits = 0
 				for _ = 1, 40000 do
@@ -1305,12 +1311,15 @@ return function(T, Loader)
 						end
 					end
 				end
-				if b.order >= 18 then
-					T.truthy(hits <= 2, b.id .. " 해커 글리치 특별 씨앗 " .. hits .. " (기대 0.048)")
+				if b.id == "rainbow_sky" then
+					T.truthy(hits <= 2, b.id .. " 해커 글리치 특별 씨앗 " .. hits .. " (기대 0.04)")
 					local first = EggRoll.rollSpecials(b.id, "light", T.constant(0))[1]
 					T.eq(first and first.rarity, "hacker_glitch", b.id .. " 난수 0 이면 해커 글리치")
 				else
-					T.eq(hits, 0, b.id .. " 에는 해커 글리치가 없음")
+					T.eq(hits, 0, b.id .. " 에는 해커 글리치 특별 씨앗이 없음 (마지막 구역만)")
+					for _, pet in EggRoll.rollSpecials(b.id, "light", T.constant(0)) do
+						T.truthy(pet.rarity ~= "hacker_glitch", b.id .. " 난수 0 이어도 해커 글리치 아님")
+					end
 				end
 			end
 		end
@@ -1912,14 +1921,14 @@ return function(T, Loader)
 				T.eq(flicker, 0, "점프해도 TreadmillTouching 이 안 깜빡임")
 				T.eq(#H.sent(p, "TreadmillTouched"), sentBefore + 1, "점프로 다시 보내지 않음")
 				T.eq(p.attrs.TreadmillTouching, true)
-				-- 클라 경로: 점프 입력 → TreadmillLeave → 서버가 벨트 앞으로 내려 줌 (Attr false) → 다시 올라서면 TreadmillTouched 1번 + 바로 탐
+				-- 클라 경로: 점프 입력 → TreadmillLeave → 서버가 벨트 옆으로 내려 줌 (Attr false, 2026-11-10: 앞은 표지판) → 다시 올라서면 TreadmillTouched 1번 + 바로 탐
 				H.teleport(p, plot.treadmill.x, 3, plot.treadmill.z)
 				H.advance(0.4)
 				T.eq(p.attrs.OnTreadmill, true)
 				H.client(p, "TreadmillLeave")
 				H.advance(0.4)
 				T.eq(p.attrs.OnTreadmill, false, "TreadmillLeave 로 내림")
-				T.eq(p.attrs.TreadmillTouching, false, "벨트 앞으로 내려서 창 닫기")
+				T.eq(p.attrs.TreadmillTouching, false, "벨트 옆으로 내려서 창 닫기")
 				H.teleport(p, plot.treadmill.x, 3, plot.treadmill.z)
 				H.advance(0.4)
 				T.eq(p.attrs.OnTreadmill, true)

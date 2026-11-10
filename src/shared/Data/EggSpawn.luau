@@ -20,7 +20,7 @@
 	   해커 글리치 0.5%: 주기 하나 = 낮 285 + 밤 10 + 대기 3 = 298초 → 하루 약 290번 초기화 × 0.005 ≈ 1.45개/일
 	   (6판 슈퍼 울트라디바인 자리 — 이제 맨 위 등급은 버그 차원 둥지 일반 추첨 5% 에도 나옴)
 	   8판: 해커 글리치가 풀에 있는 구역이 4개(18~21)라 구역마다 0.5% → 하루 약 5.8개 (뒤 구역은 일반 추첨에도 자주 나옴)
-	   8판 추가 (사장님 2026-11-09): 해커 글리치만 **0.00012%** (0.0000012) → 하루 약 0.0014개. 나머지 등급 확률은 그대로
+	   8판 추가 (사장님 2026-11-09): 해커 글리치만 **0.00012%** (0.0000012) → 하루 약 0.0014개. 나머지 등급 확률은 그대로 → 2026-11-10 다시: **0.0001%** (0.000001), 마지막 구역 초기화 때만 (보통 둥지 추첨에서는 안 나옴)
 
 	3) 공지 씨앗 (초기화 때만): EXTRA_SPECIALS — 둥지 풀에 없는 식물(source = "special")을 이 확률로
 	   그 식물 구역의 무작위 둥지에 놓고 공지 (누구나 훔침). 5판 특별 알(지터버그·영혼 세계 수호자)과 제단 펫 자리.
@@ -47,11 +47,13 @@ local EggSpawn = {
 		-- 7판 새 구역
 		hacker_lab = { super = 55, hacker = 40, original = 5 },
 		developer_room = { original = 55, developer = 40, ultradivine = 5 },
-		bug_dimension = { developer = 40, ultradivine = 55, hacker_glitch = 5 },
+		bug_dimension = { developer = 40, ultradivine = 60 },
+		-- ★ 2026-11-10 (사장님): 해커 글리치는 **보통 둥지 추첨에서 안 나옴** (5 · 8 · 12 · 20% 없앰 → 울트라디바인으로).
+		--   마지막 구역(rainbow_sky) 초기화 특별 추첨 0.0001% 로만 (아래 SPECIAL_ONLY_BIOME)
 		-- 8판 새 구역 (사장님 2026-11-08: 맨 위 등급 쪽을 섞음 — 뒤로 갈수록 해커 글리치가 조금씩 더 자주)
-		robot_factory = { developer = 40, ultradivine = 52, hacker_glitch = 8 },
-		clock_tower = { developer = 25, ultradivine = 63, hacker_glitch = 12 },
-		rainbow_sky = { ultradivine = 80, hacker_glitch = 20 },
+		robot_factory = { developer = 40, ultradivine = 60 },
+		clock_tower = { developer = 25, ultradivine = 75 },
+		rainbow_sky = { ultradivine = 100 },
 	} :: { [string]: { [string]: number } },
 
 	-- 초기화 때만 등장 + 공지되는 등급 (희귀한 것부터)
@@ -67,10 +69,16 @@ local EggSpawn = {
 		"secret",
 	},
 
+	-- 이 등급의 특별 추첨은 이 구역에서만 (사장님 2026-11-10: 해커 글리치는 마지막 구역에서만 나오게)
+	SPECIAL_ONLY_BIOME = {
+		hacker_glitch = "rainbow_sky",
+	} :: { [string]: string },
+
 	SPECIAL_CHANCE_PER_RESET = {
-		-- 8판 추가 (사장님 2026-11-09): 0.5% → **0.00012%** (= 0.0000012). 18~21구역 4곳 × 하루 약 290번 초기화 → 하루 약 0.0014개
-		--   (서버 하나에서 약 2년에 한 번). 해커 글리치는 18~21구역 일반 둥지 추첨(5 · 8 · 12 · 20%)으로는 그대로 나옴
-		hacker_glitch = 0.0000012,
+		-- (옛 값, 지금은 아래 ★ 줄) 8판 추가 (사장님 2026-11-09): 0.5% → 0.00012% (= 0.0000012). 18~21구역 4곳 × 하루 약 290번 초기화 → 하루 약 0.0014개
+		--   2026-11-10: 마지막 구역(rainbow_sky) 한 곳에서만 · 보통 둥지 추첨에서는 안 나옴 → (옛 값 기준 하루 약 0.00035개)
+		-- ★ 2026-11-10 (사장님이 다시 정함): **0.0001%** (= 0.000001) — 마지막 구역 한 곳 × 하루 약 290번 초기화 → 서버 하나에서 약 9년에 한 번
+		hacker_glitch = 0.000001,
 		ultradivine = 0.01, -- [수석] 7판
 		developer = 0.01, -- [수석] 7판
 		original = 0.01, -- [수석] 7판

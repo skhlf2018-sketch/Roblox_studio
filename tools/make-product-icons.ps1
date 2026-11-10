@@ -5,8 +5,11 @@ Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root "assets\product-icons"
 New-Item -ItemType Directory -Force $out | Out-Null
+$script:only = @($args)
 
 function New-Icon([string]$key, [string]$big, [string]$small, [int[]]$top, [int[]]$bottom) {
+	# 인자로 key 를 주면 그 아이콘만 다시 만듦 (이미 올린 아이콘을 안 건드리게)
+	if ($script:only.Count -gt 0 -and $script:only -notcontains $key) { return }
 	$size = 512
 	$bmp = New-Object System.Drawing.Bitmap $size, $size
 	$g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -61,5 +64,8 @@ New-Icon "coins_1b" "1B" "코인" @(255, 215, 70) @(225, 150, 20)
 # 속도 (개발자 상품) — 빨강
 New-Icon "speed_10m" "10M" "속도" @(255, 110, 110) @(200, 40, 60)
 New-Icon "speed_100m" "100M" "속도" @(255, 110, 110) @(200, 40, 60)
+
+# 슈퍼 씨앗 (개발자 상품, 사장님 2026-11-10) — 보라
+New-Icon "seed_super" "SUPER" "씨앗" @(235, 120, 220) @(130, 50, 170)
 
 (Get-ChildItem $out -Filter *.png | Measure-Object).Count

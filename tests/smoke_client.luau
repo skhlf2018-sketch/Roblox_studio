@@ -249,13 +249,17 @@ local tweenStub = {
 		return { Play = function() end, Cancel = function() end, Completed = done }
 	end,
 }
--- 9판: 로벅스 구매창 흉내 (띄운 productId 를 모아 둠)
+-- 9판: 로벅스 구매창 흉내 (띄운 productId 를 모아 둠). 62번: 게임패스 창은 pass = true
 local marketPrompts = {}
 local MarketplaceStub = {
 	PromptProductPurchase = function(_, who, productId)
-		table.insert(marketPrompts, { player = who, id = productId })
+		table.insert(marketPrompts, { player = who, id = productId, pass = false })
 	end,
 	PromptProductPurchaseFinished = signal(),
+	PromptGamePassPurchase = function(_, who, gamePassId)
+		table.insert(marketPrompts, { player = who, id = gamePassId, pass = true })
+	end,
+	PromptGamePassPurchaseFinished = signal(),
 }
 local fakeServices = {
 	MarketplaceService = MarketplaceStub,
@@ -1177,10 +1181,12 @@ local function body()
 		check(#marketPrompts == promptsBefore, "배수 1: 잠긴 4배·2048배 카드를 눌러도 구매창 안 뜸")
 		click(b2)
 		check(
-			#marketPrompts == promptsBefore + 1 and marketPrompts[#marketPrompts].id == 7002,
-			"배수 1: 2배 카드는 구매창 (productId 7002)"
+			#marketPrompts == promptsBefore + 1
+				and marketPrompts[#marketPrompts].id == 7002
+				and marketPrompts[#marketPrompts].pass == true,
+			"배수 1: 2배 카드는 게임패스 구매창 (PromptGamePassPurchase, gamePassId 7002 — 62번)"
 		)
-		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7002, false)
+		MarketplaceStub.PromptGamePassPurchaseFinished:Fire(77, 7002, false)
 		-- 2배를 사서 배수 2 가 되면 4배가 열림 (8배는 아직 잠김)
 		player:SetAttribute("TreadmillBoost", 2)
 		sigOf(player, "Attr_TreadmillBoost"):Fire()
@@ -1202,10 +1208,12 @@ local function body()
 		)
 		click(b4)
 		check(
-			#marketPrompts == promptsBefore + 2 and marketPrompts[#marketPrompts].id == 7004,
-			"배수 2: 4배 카드는 구매창 (productId 7004)"
+			#marketPrompts == promptsBefore + 2
+				and marketPrompts[#marketPrompts].id == 7004
+				and marketPrompts[#marketPrompts].pass == true,
+			"배수 2: 4배 카드는 게임패스 구매창 (gamePassId 7004) — 패스 창을 닫으면 바로 다시 누를 수 있었음"
 		)
-		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7004, false)
+		MarketplaceStub.PromptGamePassPurchaseFinished:Fire(77, 7004, false)
 		-- 끝 (2048 가짐): 살 수 있는 카드 0장, 나머지는 '샀어요 ✔'
 		player:SetAttribute("TreadmillBoost", 2048)
 		sigOf(player, "Attr_TreadmillBoost"):Fire()
@@ -1786,14 +1794,32 @@ local function body()
 		tskip1.productId = 4242
 		clickDetector(skipSignPart)
 		check(
-			#marketPrompts == beforeMarket + 1 and marketPrompts[#marketPrompts].id == 4242,
-			"상품 id 가 있으면 PromptProductPurchase(나, 4242)"
+			#marketPrompts == beforeMarket + 1
+				and marketPrompts[#marketPrompts].id == 4242
+				and marketPrompts[#marketPrompts].pass == false,
+			"상품 id 가 있으면 PromptProductPurchase(나, 4242) — 러닝머신 레벨은 개발자 상품"
 		)
 		check(Purchase9.prompt("tskip_1") == "busy", "구매창이 떠 있는 동안 다시 안 띄움 ('busy')")
 		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 4242, false)
 		check(Purchase9.prompt("tskip_1") == "prompted", "구매창을 닫으면 다시 띄울 수 있음")
 		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 4242, false)
 		tskip1.productId = 0
+		-- 62번: 게임패스(코인 2배)는 PromptGamePassPurchase · 패스 창을 닫아도(PromptGamePassPurchaseFinished) 다시 누를 수 있음
+		local moneyPass9 = Products9.get("money_pass")
+		moneyPass9.productId = 5151
+		local beforePass = #marketPrompts
+		check(Purchase9.prompt("money_pass") == "prompted", "코인 2배 패스 → 'prompted'")
+		check(
+			#marketPrompts == beforePass + 1
+				and marketPrompts[#marketPrompts].id == 5151
+				and marketPrompts[#marketPrompts].pass == true,
+			"코인 2배는 PromptGamePassPurchase(나, 5151)"
+		)
+		check(Purchase9.prompt("money_pass") == "busy", "패스 창이 떠 있는 동안 'busy'")
+		MarketplaceStub.PromptGamePassPurchaseFinished:Fire(77, 5151, false)
+		check(Purchase9.prompt("money_pass") == "prompted", "패스 창을 닫으면 다시 띄울 수 있음")
+		MarketplaceStub.PromptGamePassPurchaseFinished:Fire(77, 5151, false)
+		moneyPass9.productId = 0
 		check(Purchase9.prompt("nope_key") == "unknown", "모르는 상품 → 'unknown'")
 		check(Purchase9.robux(2048) == "R$ 2,048" and Purchase9.robux(3) == "R$ 3", "가격 글 'R$ 2,048' · 'R$ 3'")
 		-- 최대 레벨이면 건너뛰기 표지판은 숨김(서버 Attr Hidden) → 안 눌림

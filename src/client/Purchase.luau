@@ -6,9 +6,11 @@
 	    · 상품이 없으면 "unknown"
 	    · Products.isConfigured 가 false (productId 0 = 아직 Creator Dashboard 에서 안 만듦) → 구매창 없이
 	      토스트 "준비 중이에요 — 어른과 함께 상품을 만들어야 살 수 있어요" → "notready"
-	    · 설정됐으면 MarketplaceService:PromptProductPurchase(나, productId) → "prompted"
-	    · 연타 방지: 창을 띄운 뒤 BUSY_SECONDS 동안(또는 PromptProductPurchaseFinished 가 올 때까지) 다시 안 띄움 → "busy"
-	  돈을 받고 지급하는 것은 전부 서버 (ProcessReceipt → ProductService). 클라는 구매창만 띄움.
+	    · 설정됐으면 개발자 상품은 MarketplaceService:PromptProductPurchase(나, productId),
+	      게임패스(product.isPass — 부스트 11개 · 코인 2배, 62번)는 PromptGamePassPurchase(나, productId = gamePassId) → "prompted"
+	    · 연타 방지: 창을 띄운 뒤 BUSY_SECONDS 동안(또는 PromptProductPurchaseFinished · PromptGamePassPurchaseFinished 가 올 때까지)
+	      다시 안 띄움 → "busy"
+	  돈을 받고 지급하는 것은 전부 서버 (상품 ProcessReceipt · 패스 소유 확인 → ProductService). 클라는 구매창만 띄움.
 	  서버 ProductGranted { key, kind } → 팡파레(ProductGranted 소리) + 화면 가운데 "🎉 ○○ 받았어요!" + Purchase.onGranted 구독자
 	    (상점·스피드 배수 창·러닝머신 창이 다시 그림).
 	  Purchase.robux(n) = "R$ 2,048" (가격 글자 통일)
@@ -80,7 +82,12 @@ function Purchase.prompt(key: string): string
 	end
 	busyUntil = now + Purchase.BUSY_SECONDS
 	local ok, err = pcall(function()
-		MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)
+		if product.isPass then
+			-- 게임패스 (62번: 부스트 11개 · 코인 2배) — productId 칸이 gamePassId
+			MarketplaceService:PromptGamePassPurchase(Players.LocalPlayer, product.productId)
+		else
+			MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)
+		end
 	end)
 	if not ok then
 		busyUntil = -math.huge
@@ -163,6 +170,12 @@ function Purchase.start()
 	-- 구매창을 닫으면(샀든 안 샀든) 바로 다시 누를 수 있게
 	pcall(function()
 		MarketplaceService.PromptProductPurchaseFinished:Connect(function()
+			busyUntil = -math.huge
+		end)
+	end)
+	-- 게임패스 구매창도 (지급은 서버가 소유를 확인해서 ProductGranted 로 — 여기서는 창 닫기만)
+	pcall(function()
+		MarketplaceService.PromptGamePassPurchaseFinished:Connect(function()
 			busyUntil = -math.huge
 		end)
 	end)

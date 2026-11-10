@@ -1,26 +1,43 @@
 --!strict
 --[[
-	Products — 로벅스 개발자 상품 표 (9판, 사장님 2026-11-10) — 순수 데이터
+	Products — 로벅스 상품 표 (9판, 사장님 2026-11-10) — 순수 데이터
 
-	- 구매창은 클라가 MarketplaceService:PromptProductPurchase(player, product.productId) 로 엶 (선임).
-	  서버로 "사 줘" 하는 Remote 는 없음 (위조 방지) — 돈을 받으면 로블록스가 서버 ProcessReceipt 를 부르고,
-	  서버 ProductService 가 지급 → ProductGranted { key, kind } + Snapshot section.
-	- productId 는 아래 **Products.IDS 한 곳**에만 적음. 0 = 아직 Creator Dashboard 에서 안 만듦 (Products.isConfigured = false
-	  → 클라는 "준비 중"). 아빠가 상품을 만들고 받은 id 숫자를 여기 붙여 넣으면 끝 (docs/ROBUX_SETUP.md).
+	사장님 2026-11-10 (62번): "영구적인 것은 게임패스, 소모품은 개발자 상품"
+	  - 게임패스 12개 (isPass = true, 한 번만 삼): boost_2 … boost_2048 (11) + money_pass
+	      구매창 MarketplaceService:PromptGamePassPurchase(player, productId) (클라 Purchase). ProcessReceipt 는 안 옴 →
+	      서버 ProductService 가 UserOwnsGamePassAsync 로 소유를 확인해서 반영 (접속할 때 syncPasses + PromptGamePassPurchaseFinished)
+	  - 개발자 상품 24개 (isPass = false, 소모품): tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m
+	      구매창 MarketplaceService:PromptProductPurchase(player, productId). 돈을 받으면 로블록스가 서버 ProcessReceipt 를 부르고,
+	      서버 ProductService 가 지급 → ProductGranted { key, kind } + Snapshot section.
+	  서버로 "사 줘" 하는 Remote 는 없음 (위조 방지).
+	- id 는 아래 **Products.IDS 한 곳**에만 적음 (product.productId 칸 — 패스면 그 숫자가 gamePassId, 상품이면 developer productId).
+	  0 = 아직 Creator Dashboard 에서 안 만듦 (Products.isConfigured = false → 클라는 "준비 중").
+	  아빠가 만들고 받은 id 숫자를 여기 붙여 넣으면 끝 (docs/ROBUX_SETUP.md). 패스 id 와 상품 id 를 섞지 말 것.
+	- Products.byProductId(id) = 개발자 상품만 (패스 id 를 넣으면 nil — 영수증으로 패스를 지급하는 일이 없게),
+	  Products.byPassId(id) = 패스만.
 
 	kind (효과는 서버 ProductService.grant):
-	  - "treadmillBoost": 러닝머신 부스트 ×value (영구). 산 것 중 **가장 큰 배수**만 적용 (곱이 아님).
+	  - "treadmillBoost" [게임패스]: 러닝머신 부스트 ×value (영구, 웹에서 건너뛰어 산 패스는 낸 값만큼만 — boostFromOwnedPasses). 산 것 중 **가장 큰 배수**만 적용 (곱이 아님).
 	      **순서대로만 열림** (2배를 사야 4배가 열림 — Products.nextTreadmillBoost · treadmillBoostState · treadmillBoostOutcome)
 	      러닝머신 1초 이득 = 레벨 이득 × 트레일 배율 × 부스트 (러닝머신 탈 때만, 걷는 속도 배수 아님)
 	  - "treadmillSkip": 러닝머신을 value 레벨로 바로 올림 (코인 안 듦). 지금 레벨 + 1 = value 일 때 파는 상품
 	  - "coins": 코인 +value · "speed": 속도 +value
-	  - "moneyPass": 코인 2배 (영원히) — 열매 판매·성체 팔기 코인 × value(2)
+	  - "moneyPass" [게임패스]: 코인 2배 (영원히) — 열매 판매·성체 팔기 코인 × value(2)
 	가격(로벅스): 부스트 = 배수와 같은 숫자 · 러닝머신 레벨 = TREADMILL_SKIP_ROBUX (18~20레벨은 [추정]) · 상점 5개
 ]]
 
 local Config = require(script.Parent.Config)
 
-export type Product = { key: string, kind: string, name: string, robux: number, productId: number, value: number? }
+-- isPass = true 면 게임패스 (productId = gamePassId), false 면 개발자 상품 (productId = developer productId)
+export type Product = {
+	key: string,
+	kind: string,
+	name: string,
+	robux: number,
+	productId: number,
+	value: number?,
+	isPass: boolean,
+}
 
 local Kinds = {
 	treadmillBoost = "treadmillBoost",
@@ -30,9 +47,11 @@ local Kinds = {
 	moneyPass = "moneyPass",
 }
 
--- ★ 아빠가 Creator Dashboard → Monetization → Developer Products 에서 만든 상품 id 를 여기에 붙여 넣기 (0 = 아직 없음)
+-- ★ 아빠가 Creator Dashboard 에서 만든 id 를 여기에 붙여 넣기 (0 = 아직 없음). 한 표지만 두 종류 — 섞지 말 것:
+--   [게임패스] Monetization → Passes 의 Pass ID : boost_2 … boost_2048, money_pass (12개)
+--   [개발자 상품] Monetization → Developer Products 의 Product ID : tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m (24개)
 local IDS: { [string]: number } = {
-	-- 러닝머신 부스트 (영구)
+	-- [게임패스] 러닝머신 부스트 (영구) — 2배부터 차례로 다 붙일 것
 	boost_2 = 0,
 	boost_4 = 0,
 	boost_8 = 0,
@@ -44,7 +63,9 @@ local IDS: { [string]: number } = {
 	boost_512 = 0,
 	boost_1024 = 0,
 	boost_2048 = 0,
-	-- 러닝머신 레벨 바로 올리기 (tskip_N = N레벨로)
+	-- [게임패스] 상점 창: 코인 2배 (영원히)
+	money_pass = 0,
+	-- [개발자 상품] 러닝머신 레벨 바로 올리기 (tskip_N = N레벨로)
 	tskip_1 = 0,
 	tskip_2 = 0,
 	tskip_3 = 0,
@@ -65,8 +86,7 @@ local IDS: { [string]: number } = {
 	tskip_18 = 0,
 	tskip_19 = 0,
 	tskip_20 = 0,
-	-- 상점 창
-	money_pass = 0,
+	-- [개발자 상품] 상점 창
 	coins_1m = 0,
 	coins_1b = 0,
 	speed_10m = 0,
@@ -100,43 +120,67 @@ local TREADMILL_SKIP_ROBUX: { number } = {
 	20000, -- [추정] 20레벨
 }
 
-local function make(key: string, kind: string, name: string, robux: number, value: number?): Product
-	return { key = key, kind = kind, name = name, robux = robux, productId = IDS[key] or 0, value = value }
+local function make(key: string, kind: string, name: string, robux: number, value: number?, isPass: boolean): Product
+	return {
+		key = key,
+		kind = kind,
+		name = name,
+		robux = robux,
+		productId = IDS[key] or 0,
+		value = value,
+		isPass = isPass,
+	}
 end
 
 local list: { Product } = {}
 local byKey: { [string]: Product } = {}
-local byId: { [number]: Product } = {}
+local byId: { [number]: Product } = {} -- 개발자 상품만 (영수증 ProcessReceipt 용)
+local byPass: { [number]: Product } = {} -- 게임패스만 (PromptGamePassPurchaseFinished · UserOwnsGamePassAsync 용)
+local boostByValue: { [number]: Product } = {}
 local treadmillBoosts: { Product } = {}
 local treadmillSkips: { Product } = {}
 local shop: { Product } = {}
+local passes: { Product } = {}
 
 local function add(group: { Product }, product: Product)
 	table.insert(group, product)
 	table.insert(list, product)
 	byKey[product.key] = product
+	if product.isPass then
+		table.insert(passes, product)
+	end
 	if product.productId > 0 then
-		byId[product.productId] = product
+		if product.isPass then
+			byPass[product.productId] = product
+		else
+			byId[product.productId] = product
+		end
 	end
 end
 
 for _, multiplier in BOOST_MULTIPLIERS do
-	add(
-		treadmillBoosts,
-		make(`boost_{multiplier}`, Kinds.treadmillBoost, `러닝머신 부스트 x{multiplier}`, multiplier, multiplier)
+	local product = make(
+		`boost_{multiplier}`,
+		Kinds.treadmillBoost,
+		`러닝머신 부스트 x{multiplier}`,
+		multiplier,
+		multiplier,
+		true
 	)
+	add(treadmillBoosts, product)
+	boostByValue[multiplier] = product
 end
 
 for level, robux in TREADMILL_SKIP_ROBUX do
 	local name = if level == 1 then "러닝머신 열기 (1레벨)" else `러닝머신 {level}레벨로 올리기`
-	add(treadmillSkips, make(`tskip_{level}`, Kinds.treadmillSkip, name, robux, level))
+	add(treadmillSkips, make(`tskip_{level}`, Kinds.treadmillSkip, name, robux, level, false))
 end
 
-add(shop, make("money_pass", Kinds.moneyPass, "코인 2배 (영원히)", 199, Config.MONEY_PASS_MULTIPLIER))
-add(shop, make("coins_1m", Kinds.coins, "코인 1M", 99, 1e6))
-add(shop, make("coins_1b", Kinds.coins, "코인 1B", 199, 1e9))
-add(shop, make("speed_10m", Kinds.speed, "속도 10M", 199, 1e7))
-add(shop, make("speed_100m", Kinds.speed, "속도 100M", 259, 1e8))
+add(shop, make("money_pass", Kinds.moneyPass, "코인 2배 (영원히)", 199, Config.MONEY_PASS_MULTIPLIER, true))
+add(shop, make("coins_1m", Kinds.coins, "코인 1M", 99, 1e6, false))
+add(shop, make("coins_1b", Kinds.coins, "코인 1B", 199, 1e9, false))
+add(shop, make("speed_10m", Kinds.speed, "속도 10M", 199, 1e7, false))
+add(shop, make("speed_100m", Kinds.speed, "속도 100M", 259, 1e8, false))
 
 local Products = {
 	Kinds = Kinds,
@@ -146,6 +190,8 @@ local Products = {
 	treadmillBoosts = treadmillBoosts,
 	treadmillSkips = treadmillSkips,
 	shop = shop,
+	-- 게임패스 12개 (부스트 11 + money_pass, 표 순서)
+	passes = passes,
 	BOOST_MULTIPLIERS = BOOST_MULTIPLIERS,
 	TREADMILL_SKIP_ROBUX = TREADMILL_SKIP_ROBUX,
 	-- 러닝머신 레벨 가격 중 [추정] 한 레벨 (사장님이 안 정해 준 숫자 — 문서·보고용)
@@ -156,12 +202,20 @@ function Products.get(key: string): Product?
 	return byKey[key]
 end
 
--- ProcessReceipt 의 receipt.ProductId → 상품 (0·음수·모르는 id = nil)
+-- ProcessReceipt 의 receipt.ProductId → **개발자 상품만** (0·음수·모르는 id·게임패스 id = nil — 영수증으로 패스를 주지 않음)
 function Products.byProductId(id: number): Product?
 	if type(id) ~= "number" or id <= 0 then
 		return nil
 	end
 	return byId[id]
+end
+
+-- PromptGamePassPurchaseFinished 의 gamePassId → **게임패스만** (0·음수·모르는 id·개발자 상품 id = nil)
+function Products.byPassId(id: number): Product?
+	if type(id) ~= "number" or id <= 0 then
+		return nil
+	end
+	return byPass[id]
 end
 
 -- 지금 러닝머신 레벨의 "다음 레벨로 올리기" 상품 (0레벨 → tskip_1, 최대 레벨이면 nil)
@@ -247,6 +301,35 @@ function Products.treadmillBoostOutcome(current: number, product: Product): (num
 		now = step.value or now
 	end
 	return now, budget
+end
+
+-- 가진 부스트 게임패스들로 정해지는 배수 (순수 — 서버 ProductService.syncPasses 가 씀, 62번).
+--   게임패스는 웹(게임 페이지 상점)에서 순서를 건너뛰어 살 수 있음 → 사장님 규칙 "2배를 사야 4배가 열림" + 낸 값만큼은 받게:
+--   예산 = 가진 패스들의 가격 합. 2배부터 차례로 가격을 빼며 올릴 수 있는 데까지 (treadmillBoostOutcome 의 걷기와 같음).
+--   순서대로 다 가졌으면 그 최댓값. 중복·모르는 값·NaN 은 무시. 예: {2,4,8} → 8 · {2048} → 1024 · {4} → 2 · {} → 1 · {2,8} → 4
+function Products.boostFromOwnedPasses(ownedMultipliers: { number }): number
+	local budget = 0
+	local counted: { [Product]: boolean } = {}
+	if type(ownedMultipliers) == "table" then
+		for _, multiplier in ownedMultipliers do
+			if type(multiplier) == "number" and multiplier == multiplier then
+				local product = boostByValue[multiplier]
+				if product and not counted[product] then
+					counted[product] = true
+					budget += product.robux
+				end
+			end
+		end
+	end
+	local now = 1
+	for _, product in treadmillBoosts do
+		if product.robux > budget then
+			break
+		end
+		budget -= product.robux
+		now = product.value or now
+	end
+	return now
 end
 
 -- Creator Dashboard 에서 만든 id 가 붙어 있나 (false 면 클라는 "준비 중")

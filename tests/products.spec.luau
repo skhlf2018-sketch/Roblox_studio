@@ -89,17 +89,101 @@ return function(T, Loader)
 		}
 	end
 
-	-- 상품 id 를 가짜로 붙임 (Products.IDS 는 아직 전부 0 이라서): byProductId 만 바꿔 끼움
+	-- 상품 id 를 가짜로 붙임 (Products.IDS 는 아직 전부 0 이라서): byProductId 만 바꿔 끼움 — 개발자 상품만 (62번: 패스는 영수증 없음)
 	local function fakeConfigure(w)
 		w.fakeIds = {}
 		local byId = {}
 		for i, product in w.Products.list do
-			w.fakeIds[product.key] = 100000 + i
-			byId[100000 + i] = product
+			if not product.isPass then
+				w.fakeIds[product.key] = 100000 + i
+				byId[100000 + i] = product
+			end
 		end
 		w.Products.byProductId = function(id)
 			return byId[id]
 		end
+	end
+
+	-- 게임패스 id 를 가짜로 붙임: 패스 product.productId = 200000 + i (isConfigured 가 true) + byPassId 를 바꿔 끼움
+	local function fakeConfigurePasses(w)
+		w.passIds = {}
+		local byPass = {}
+		for i, product in w.Products.passes do
+			product.productId = 200000 + i
+			w.passIds[product.key] = product.productId
+			byPass[product.productId] = product
+		end
+		w.Products.byPassId = function(id)
+			return byPass[id]
+		end
+	end
+
+	-- 가짜 MarketplaceService: owned[gamePassId] = true 면 가짐. failFirst = 패스마다 처음 몇 번 실패할지 (math.huge = 늘 실패)
+	local function fakeMarket(w)
+		local market = { owned = {}, calls = 0, failFirst = 0, tries = {}, handlers = {} }
+		function market:UserOwnsGamePassAsync(userId, passId)
+			market.calls += 1
+			market.tries[passId] = (market.tries[passId] or 0) + 1
+			if market.tries[passId] <= market.failFirst then
+				error("가짜 HTTP 실패")
+			end
+			return userId == w.player.UserId and market.owned[passId] == true
+		end
+		market.PromptGamePassPurchaseFinished = {
+			Connect = function(_, fn)
+				table.insert(market.handlers, fn)
+				return { Disconnect = function() end }
+			end,
+		}
+		Loader.service("MarketplaceService", market)
+		return market
+	end
+
+	local function own(w, market, ...)
+		for _, key in { ... } do
+			market.owned[w.passIds[key]] = true
+		end
+	end
+
+	local function sync(w, player)
+		return w.H.run(function()
+			return w.ProductService.syncPasses(player or w.player)
+		end)
+	end
+
+	local function passFinished(w, key, wasPurchased, player)
+		local id = if type(key) == "number" then key else w.passIds[key]
+		w.H.run(function()
+			w.ProductService.onGamePassPurchaseFinished(player or w.player, id, wasPurchased)
+		end)
+	end
+
+	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (holes_v9 와 같은 방법)
+	local fs = require("@lune/fs")
+	local luau = require("@lune/luau")
+	local function patchedProducts(replacements)
+		local source = fs.readFile("src/shared/Data/Products.luau")
+		for key, id in replacements do
+			local pattern = "\n\t" .. key .. " = 0,"
+			local from, to = string.find(source, pattern, 1, true)
+			assert(from, "Products.luau 에 '" .. key .. " = 0,' 칸이 없음")
+			source = string.sub(source, 1, from - 1)
+				.. "\n\t"
+				.. key
+				.. " = "
+				.. tostring(id)
+				.. ","
+				.. string.sub(source, to + 1)
+		end
+		return luau.load(source, {
+			debugName = "Products(patched)",
+			environment = {
+				script = { Parent = { Config = "CONFIG" } },
+				require = function()
+					return Config
+				end,
+			},
+		})()
 	end
 
 	local function process(w, r, maxSeconds)
@@ -162,6 +246,26 @@ return function(T, Loader)
 			end
 			T.eq(Products.get("money_pass").value, Config.MONEY_PASS_MULTIPLIER)
 			T.eq(Products.get("없는상품"), nil)
+			-- 62번: 영구 = 게임패스 12개 (부스트 11 + money_pass), 소모품 = 개발자 상품 24개
+			local passKeys, devCount = {}, 0
+			for _, p in Products.list do
+				T.eq(type(p.isPass), "boolean", p.key .. " isPass")
+				local permanent = p.kind == "treadmillBoost" or p.kind == "moneyPass"
+				T.eq(p.isPass, permanent, p.key .. " 영구면 패스")
+				if p.isPass then
+					table.insert(passKeys, p.key)
+				else
+					devCount += 1
+				end
+			end
+			T.eq(#passKeys, 12)
+			T.eq(devCount, 24)
+			T.eq(#Products.passes, 12)
+			for i, p in Products.passes do
+				T.eq(p.key, passKeys[i], "Products.passes 는 표 순서")
+				T.truthy(p.isPass)
+			end
+			T.eq(Products.passes[12].key, "money_pass")
 		end
 	)
 
@@ -182,6 +286,7 @@ return function(T, Loader)
 			T.truthy(Products.isConfigured({ key = "x", kind = "coins", name = "x", robux = 1, productId = 42 }))
 			for _, bad in { 0, -1, 123456, 0 / 0, "5" } do
 				T.eq(Products.byProductId(bad), nil, tostring(bad))
+				T.eq(Products.byPassId(bad), nil, tostring(bad))
 			end
 		end
 	)
@@ -432,14 +537,18 @@ return function(T, Loader)
 	------------------------------------------------------------------
 	T.suite("9판 ProductService.processReceipt (MarketplaceService.ProcessReceipt)")
 
-	T.test("start(): MarketplaceService.ProcessReceipt 에 콜백을 하나 붙임", function()
-		local w = world()
-		local market = {}
-		Loader.service("MarketplaceService", market)
-		w.ProductService.start()
-		T.eq(market.ProcessReceipt, w.ProductService.processReceipt)
-		w.H.uninstall()
-	end)
+	T.test(
+		"start(): MarketplaceService.ProcessReceipt 에 콜백을 하나 붙임 + PromptGamePassPurchaseFinished 연결 (62번)",
+		function()
+			local w = world()
+			local market = fakeMarket(w)
+			w.ProductService.start()
+			T.eq(market.ProcessReceipt, w.ProductService.processReceipt)
+			T.eq(#market.handlers, 1, "게임패스 구매 이벤트에 하나")
+			T.eq(#w.H.warnings, 0)
+			w.H.uninstall()
+		end
+	)
 
 	T.test(
 		"지급 + 저장 성공 → PurchaseGranted, 저장소(DataStore)에 영수증·코인이 들어감 · 같은 PurchaseId 가 또 와도 한 번만",
@@ -660,6 +769,256 @@ return function(T, Loader)
 			w2.player.Chatted:Fire("/buy coins_1b")
 			T.eq(w2.data.money, 0)
 			w2.H.uninstall()
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite(
+		"62번 게임패스 (영구 = 패스 12개 · 소모품 = 개발자 상품 24개) — 소유 확인으로만 반영"
+	)
+
+	T.test(
+		"boostFromOwnedPasses: 예산 = 가진 패스 가격 합, 2배부터 차례로 — {2,4,8}→8 · {2048}→1024 · {4}→2 · {}→1 · {2,8}→4 · 중복·모르는 값·NaN 무시",
+		function()
+			local function b(list)
+				return Products.boostFromOwnedPasses(list)
+			end
+			T.eq(b({ 2, 4, 8 }), 8)
+			T.eq(b({ 2048 }), 1024, "웹에서 2048 만: 2~1024 (2046 R$) 까지")
+			T.eq(b({ 4 }), 2)
+			T.eq(b({}), 1)
+			T.eq(b({ 2, 8 }), 4, "예산 10: 2+4, 남 4 < 8")
+			T.eq(b({ 8, 2 }), 4, "순서 상관 없음")
+			T.eq(b({ 2, 2, 2 }), 2, "중복은 한 번만")
+			T.eq(b({ 2, 4, 4, 4 }), 4)
+			T.eq(b({ 3, 0 / 0, -2, 1e9, math.huge }), 1, "모르는 값·NaN 무시")
+			T.eq(b({ "4", true, {} }), 1, "숫자가 아니면 무시")
+			T.eq(b(nil), 1, "목록이 없으면 1")
+			local all = {}
+			for _, m in Products.BOOST_MULTIPLIERS do
+				table.insert(all, m)
+			end
+			T.eq(b(all), 2048, "11개 다 가짐")
+			table.remove(all, 1)
+			T.eq(b(all), 1024, "2배만 빠짐: 예산 4092 → 1024 (2048 은 순서대로)")
+			-- 순서대로 사면 언제나 마지막 배수 (treadmillBoostOutcome 과 같음)
+			local owned, boost = {}, 1
+			for _, p in Products.treadmillBoosts do
+				table.insert(owned, p.value)
+				boost = Products.treadmillBoostOutcome(boost, p)
+				T.eq(b(owned), p.value)
+				T.eq(boost, p.value)
+			end
+		end
+	)
+
+	T.test(
+		"byProductId 는 개발자 상품만 · byPassId 는 패스만 (진짜 Products 파일에 id 를 붙여서) — 패스 id 로 영수증 지급은 없음",
+		function()
+			local P = patchedProducts({ boost_2 = 11, money_pass = 12, tskip_1 = 13, coins_1m = 14, boost_2048 = 15 })
+			T.eq(P.byProductId(11), nil, "boost_2 는 패스")
+			T.eq(P.byProductId(12), nil, "money_pass 는 패스")
+			T.eq(P.byProductId(15), nil)
+			T.eq(P.byPassId(11).key, "boost_2")
+			T.eq(P.byPassId(12).key, "money_pass")
+			T.eq(P.byPassId(15).key, "boost_2048")
+			T.eq(P.byProductId(13).key, "tskip_1")
+			T.eq(P.byProductId(14).key, "coins_1m")
+			T.eq(P.byPassId(13), nil, "tskip_1 은 개발자 상품")
+			T.eq(P.byPassId(14), nil)
+			T.truthy(P.isConfigured(P.get("boost_2")) and P.isConfigured(P.get("money_pass")))
+			T.falsy(P.isConfigured(P.get("boost_4")))
+			T.eq(P.get("boost_2").productId, 11, "패스도 productId 칸 (= gamePassId)")
+		end
+	)
+
+	T.test(
+		"syncPasses: 가진 패스 → 배수·코인 2배 (+ Attr · DataUpdate) · 안 가짐 → 그대로 · ProductGranted 는 안 보냄 · id 없는 패스는 확인 안 함 · 데이터 미로드면 아무것도 안 함",
+		function()
+			local w = world()
+			local market = fakeMarket(w)
+			-- id 를 하나도 안 붙임 (지금 파일): 확인 호출 없음
+			T.truthy(sync(w))
+			T.eq(market.calls, 0, "id 없는 패스는 확인 안 함")
+			fakeConfigurePasses(w)
+			-- 안 가짐
+			T.truthy(sync(w))
+			T.eq(market.calls, 12, "id 붙은 패스 12개를 확인")
+			T.eq(w.data.treadmillBoost, 1)
+			T.eq(w.data.moneyPass, false)
+			T.eq(lastSection(w, "upgrades"), nil, "안 바뀌면 DataUpdate 없음")
+			-- 2·4배 + 코인 2배를 가짐
+			own(w, market, "boost_2", "boost_4", "money_pass")
+			T.truthy(sync(w))
+			T.eq(w.data.treadmillBoost, 4)
+			T.eq(w.data.moneyPass, true)
+			T.eq(w.player.attrs.TreadmillBoost, 4)
+			T.eq(w.player.attrs.MoneyPass, true)
+			T.eq(lastSection(w, "upgrades").treadmillBoost, 4)
+			T.eq(#granted(w), 0, "접속 때 맞추는 것은 구매 알림이 아님")
+			T.eq(w.data.stats.productsBought, nil)
+			-- 데이터 미로드 사람
+			local loading = w.H.newPlayer(9002, "Loading")
+			w.Sessions.create(loading)
+			local before = market.calls
+			T.falsy(sync(w, loading))
+			T.eq(market.calls, before, "불러오기 전에는 확인도 안 함")
+			w.H.uninstall()
+			-- onPlayerReady 가 따로(task.spawn) 맞춤
+			local w2 = world()
+			local market2 = fakeMarket(w2)
+			fakeConfigurePasses(w2)
+			own(w2, market2, "boost_2", "boost_4", "boost_8")
+			w2.ProductService.onPlayerReady(w2.player)
+			w2.H.advance(1)
+			T.eq(w2.data.treadmillBoost, 8)
+			T.eq(w2.player.attrs.TreadmillBoost, 8)
+			w2.H.uninstall()
+		end
+	)
+
+	T.test(
+		"syncPasses: 확인이 실패하면 2번 더 (사이 1초) · 전부 실패하면 데이터 그대로 false · 절대 안 낮춤 (저장값·/buy 로 받은 것 유지)",
+		function()
+			local w = world()
+			local market = fakeMarket(w)
+			fakeConfigurePasses(w)
+			own(w, market, "boost_2", "money_pass")
+			-- 처음 2번 실패, 3번째 성공 → 반영
+			market.failFirst = 2
+			local started = w.H.clock()
+			T.truthy(sync(w))
+			T.eq(market.calls, 36, "패스 12개 × 3번")
+			T.truthy(w.H.clock() - started >= 2 * w.ProductService.PASS_RETRY_SECONDS, "사이 1초씩 기다림")
+			T.eq(w.data.treadmillBoost, 2)
+			T.eq(w.data.moneyPass, true)
+			w.H.uninstall()
+			-- 늘 실패 → false, 그대로
+			local w2 = world()
+			local m2 = fakeMarket(w2)
+			fakeConfigurePasses(w2)
+			own(w2, m2, "boost_2", "boost_4", "money_pass")
+			m2.failFirst = math.huge
+			w2.data.treadmillBoost = 1
+			T.falsy(sync(w2))
+			T.eq(m2.calls, 12 * (1 + w2.ProductService.PASS_CHECK_RETRIES), "3번씩 해 봄")
+			T.eq(w2.data.treadmillBoost, 1, "데이터 그대로")
+			T.eq(w2.data.moneyPass, false)
+			T.truthy(string.find(w2.H.warnings[#w2.H.warnings], "소유 확인 실패", 1, true))
+			w2.H.uninstall()
+			-- 절대 안 낮춤: 저장값 64 · 코인 2배 true, 패스는 2배만 → 64 그대로
+			local w3 = world()
+			local m3 = fakeMarket(w3)
+			fakeConfigurePasses(w3)
+			own(w3, m3, "boost_2")
+			w3.data.treadmillBoost = 64
+			w3.data.moneyPass = true
+			T.truthy(sync(w3))
+			T.eq(w3.data.treadmillBoost, 64)
+			T.eq(w3.data.moneyPass, true)
+			T.eq(w3.player.attrs.TreadmillBoost, 64)
+			w3.H.uninstall()
+		end
+	)
+
+	T.test(
+		"PromptGamePassPurchaseFinished: wasPurchased false·모르는 id·개발자 상품 id 무시 · 소유 확인 false 면 미지급(안내) · 확인되면 지급 + ProductGranted · 두 번 와도 ProductGranted 1번",
+		function()
+			local w = world()
+			local market = fakeMarket(w)
+			fakeConfigure(w)
+			fakeConfigurePasses(w)
+			w.ProductService.start()
+			T.eq(#market.handlers, 1)
+			local fire = function(id, wasPurchased)
+				w.H.run(function()
+					market.handlers[1](w.player, id, wasPurchased)
+				end)
+			end
+			-- 안 삼 / 모르는 id / 개발자 상품 id
+			own(w, market, "boost_2")
+			fire(w.passIds.boost_2, false)
+			fire(424242, true)
+			fire(w.fakeIds.coins_1m, true)
+			T.eq(market.calls, 0, "확인 호출도 없음")
+			T.eq(#granted(w), 0)
+			T.eq(w.data.treadmillBoost, 1)
+			-- 샀다는데 로블록스 소유 확인은 false → 지급 안 함 + 안내
+			fire(w.passIds.boost_4, true)
+			T.eq(w.data.treadmillBoost, 1)
+			T.eq(#granted(w), 0)
+			T.truthy(w.H.hasNotify(w.player, "info", "구매를 확인하는 중이에요"))
+			-- 진짜 삼 (2배)
+			fire(w.passIds.boost_2, true)
+			T.eq(w.data.treadmillBoost, 2)
+			T.eq(w.player.attrs.TreadmillBoost, 2)
+			T.eq(lastSection(w, "upgrades").treadmillBoost, 2)
+			local g = granted(w)
+			T.eq(#g, 1)
+			T.eq(g[1].key, "boost_2")
+			T.eq(g[1].kind, "treadmillBoost")
+			T.truthy(w.H.hasNotify(w.player, "success", "러닝머신 부스트 x2"))
+			T.eq(w.data.stats.productsBought, 1)
+			-- 같은 이벤트가 또 옴 → ProductGranted 1번 그대로
+			fire(w.passIds.boost_2, true)
+			T.eq(#granted(w), 1, "두 번 와도 한 번만")
+			T.eq(w.data.stats.productsBought, 1)
+			-- 동시에 두 번 (첫 확인이 실패해서 1초 기다리는 사이 또 옴) → 한 번만
+			own(w, market, "money_pass")
+			market.tries = {}
+			market.failFirst = 1
+			local done = 0
+			for _ = 1, 2 do
+				coroutine.resume(coroutine.create(function()
+					w.ProductService.onGamePassPurchaseFinished(w.player, w.passIds.money_pass, true)
+					done += 1
+				end))
+			end
+			T.eq(done, 1, "두 번째는 바로 끝남 (확인 중인 패스)")
+			w.H.advance(5)
+			T.eq(done, 2)
+			T.eq(w.data.moneyPass, true)
+			T.eq(w.player.attrs.MoneyPass, true)
+			local moneyGrants = 0
+			for _, item in granted(w) do
+				if item.key == "money_pass" then
+					moneyGrants += 1
+				end
+			end
+			T.eq(moneyGrants, 1)
+			T.truthy(w.H.hasNotify(w.player, "success", "코인 2배!"))
+			-- 패스는 영수증으로는 안 옴: 패스 id 로 영수증이 와도 모르는 상품
+			T.eq(
+				process(w, { PlayerId = w.player.UserId, ProductId = w.passIds.boost_8, PurchaseId = "fake-pass" }),
+				NOT_YET
+			)
+			T.eq(w.data.treadmillBoost, 2)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"건너뛴 패스 (위조 클라·웹): 4배 패스만 사면 ×2 + '순서대로 열려요' 안내 (ProductGranted 는 감) · 그다음 2배를 사면 ×4 · 저장 시도",
+		function()
+			local w = world()
+			local market = fakeMarket(w)
+			fakeConfigurePasses(w)
+			w.DataService.start()
+			w.session.saveEnabled = true
+			own(w, market, "boost_4")
+			passFinished(w, "boost_4", true)
+			T.eq(w.data.treadmillBoost, 2, "낸 4 R$ 만큼만: 2배 (남 2)")
+			T.truthy(w.H.hasNotify(w.player, "success", "스피드 배수는 순서대로 열려요. 지금 x2"))
+			T.eq(granted(w)[1].key, "boost_4")
+			T.eq(w.H.store.data["player_9001"].data.treadmillBoost, 2, "저장됨")
+			own(w, market, "boost_2")
+			passFinished(w, "boost_2", true)
+			T.eq(w.data.treadmillBoost, 4, "2·4배 다 가짐 → 4")
+			T.truthy(w.H.hasNotify(w.player, "success", "러닝머신 부스트 x4"))
+			T.eq(#granted(w), 2)
+			T.eq(w.data.stats.productsBought, 2)
+			T.eq(w.H.store.data["player_9001"].data.treadmillBoost, 4)
+			w.H.uninstall()
 		end
 	)
 end

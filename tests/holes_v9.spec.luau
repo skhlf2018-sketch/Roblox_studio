@@ -799,7 +799,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"id 몇 개만 붙인 파일: 붙인 것만 isConfigured · byProductId 로 찾아짐 · 나머지는 준비 중 · 진짜 ProcessReceipt 로 지급되고 안 붙인 것의 id 로 오는 영수증은 안 지급",
+		"id 몇 개만 붙인 파일: 붙인 것만 isConfigured · 개발자 상품은 byProductId, 게임패스는 byPassId 로만 찾아짐 (62번) · 나머지는 준비 중 · 진짜 ProcessReceipt 로 상품만 지급 (패스 id 로 온 영수증·안 붙인 것의 id 는 안 지급) · 패스는 소유 확인(syncPasses)으로",
 		function()
 			inWorld(
 				{ ids = { boost_2 = 5001, boost_2048 = 5002, tskip_1 = 5003, money_pass = 5004, coins_1m = 5005 } },
@@ -814,45 +814,48 @@ return function(T, Loader)
 					end
 					table.sort(configured)
 					T.eq(table.concat(configured, ","), "boost_2,boost_2048,coins_1m,money_pass,tskip_1")
-					T.eq(P.byProductId(5002).key, "boost_2048")
+					T.eq(P.byProductId(5002), nil, "boost_2048 은 게임패스 — 영수증 표에 없음")
+					T.eq(P.byPassId(5002).key, "boost_2048")
+					T.eq(P.byPassId(5004).key, "money_pass")
 					T.eq(P.byProductId(5005).key, "coins_1m")
+					T.eq(P.byPassId(5005), nil, "coins_1m 은 개발자 상품 — 패스 표에 없음")
 					T.eq(P.byProductId(0), nil, "0 은 여전히 아무것도 아님")
 					T.eq(P.byProductId(5006), nil)
 					T.eq(P.get("boost_4").productId, 0, "안 붙인 것은 0")
 					local function r(productId, purchaseId)
 						return { PlayerId = w.player.UserId, ProductId = productId, PurchaseId = purchaseId }
 					end
-					local RATE = Config.PRODUCT_SPEED_PER_ROBUX
-					T.eq(process(w, r(5001, "p1")), GRANTED)
-					T.eq(w.data.treadmillBoost, 2)
-					local speed = w.data.speed
-					T.eq(process(w, r(5002, "p2")), GRANTED)
-					T.eq(
-						w.data.treadmillBoost,
-						1024,
-						"2 에서 boost_2048 (2048 R$) 을 바로 사면: 4~1024 (2044 R$) 까지만 — 2048 은 순서대로 열려야 함"
-					)
-					T.eq(w.data.speed, speed + 4 * RATE, "남은 4 R$ 는 속도")
-					speed = w.data.speed
-					T.eq(
-						process(w, r(5001, "p3")),
-						GRANTED,
-						"가진 부스트를 또 사도 (돈은 받았으니) 처리됨 — 배수는 그대로, 2 R$ 는 속도"
-					)
-					T.eq(w.data.treadmillBoost, 1024, "배수 그대로")
-					T.eq(w.data.speed, speed + 2 * RATE)
+					-- 패스 id 로 영수증이 와도 (로블록스는 안 보내지만) 지급 안 함 — 모르는 상품 경로
+					T.eq(process(w, r(5001, "p1")), NOT_YET)
+					T.eq(process(w, r(5004, "p2")), NOT_YET)
+					T.eq(w.data.treadmillBoost, 1)
+					T.eq(w.data.moneyPass, false)
 					T.eq(process(w, r(5003, "p4")), GRANTED)
 					T.eq(w.data.treadmillLevel, 1)
-					T.eq(process(w, r(5004, "p5")), GRANTED)
-					T.eq(w.data.moneyPass, true)
 					T.eq(process(w, r(5005, "p6")), GRANTED)
 					T.eq(w.data.money, 1e6)
 					-- 안 붙인 상품 (boost_4 는 id 0): 로블록스가 보낼 수 없지만, 만약 ProductId 0 이나 다른 id 가 오면 지급 안 함
 					T.eq(process(w, r(0, "p7")), NOT_YET)
 					T.eq(process(w, r(5009, "p8")), NOT_YET)
 					T.eq(w.data.money, 1e6)
+					T.eq(#w.data.receipts, 2)
+					-- 패스는 소유 확인으로: 웹에서 2배·2048배 패스와 코인 2배를 가짐 → 예산 2050 → 1024 (2048 은 순서대로 열려야 함)
+					local asked = {}
+					Loader.service("MarketplaceService", {
+						UserOwnsGamePassAsync = function(_, userId, passId)
+							table.insert(asked, passId)
+							return userId == w.player.UserId and (passId == 5001 or passId == 5002 or passId == 5004)
+						end,
+					})
+					T.truthy(w.H.run(function()
+						return w.ProductService.syncPasses(w.player)
+					end))
+					table.sort(asked)
+					T.eq(table.concat(asked, ","), "5001,5002,5004", "id 붙은 패스 3개만 확인")
 					T.eq(w.data.treadmillBoost, 1024)
-					T.eq(#w.data.receipts, 6)
+					T.eq(w.data.moneyPass, true)
+					T.eq(w.player.attrs.TreadmillBoost, 1024)
+					T.eq(w.player.attrs.MoneyPass, true)
 				end
 			)
 		end
@@ -921,7 +924,7 @@ return function(T, Loader)
 				end
 			end
 			-- 같은 id 를 두 상품에 붙이면 byProductId 가 한 쪽만 돌려줌 (지급이 엉뚱한 상품으로 가는 것을 보여 줌)
-			inWorld({ ids = { boost_2 = 777, boost_2048 = 777 } }, function(w)
+			inWorld({ ids = { tskip_1 = 777, coins_1b = 777, boost_2 = 778, boost_2048 = 778 } }, function(w)
 				local hit = w.Products.byProductId(777)
 				T.truthy(hit ~= nil)
 				local twins = 0
@@ -932,9 +935,12 @@ return function(T, Loader)
 				end
 				T.eq(twins, 2, "같은 id 를 두 상품에 붙인 파일")
 				T.truthy(
-					hit.key == "boost_2" or hit.key == "boost_2048",
+					hit.key == "tskip_1" or hit.key == "coins_1b",
 					"겹치면 한쪽만 지급됨 — 겹치게 붙이지 말 것"
 				)
+				-- 게임패스도 같음 (62번: byPassId)
+				local passHit = w.Products.byPassId(778)
+				T.truthy(passHit and (passHit.key == "boost_2" or passHit.key == "boost_2048"))
 			end)
 		end
 	)

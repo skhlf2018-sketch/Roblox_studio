@@ -483,8 +483,16 @@ return function(T, Loader)
 			local speed = w.data.speed
 			T.eq(process(w, r2), NOT_YET)
 			T.eq(w.data.speed, speed + 1e7)
-			T.eq(process(w, r2), GRANTED, "이번 접속에서 다시 오면 영수증이 있어 그냥 확인")
+			-- (주임 9판 F-1) 저장이 안 된 지급은 다시 와도 PurchaseGranted 로 확인하지 않음 (저장이 돼야 확인) — 두 번 지급은 없음
+			T.eq(
+				process(w, r2),
+				NOT_YET,
+				"저장이 안 된 채로는 확인하지 않음 (영수증은 있어서 두 번 안 줌)"
+			)
 			T.eq(w.data.speed, speed + 1e7, "두 번 안 줌")
+			w.session.saveEnabled = true
+			T.eq(process(w, r2), GRANTED, "저장이 되는 세션이 되면 저장하고 확인")
+			T.eq(w.data.speed, speed + 1e7, "그래도 한 번만")
 			w.H.uninstall()
 		end
 	)

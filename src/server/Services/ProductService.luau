@@ -7,10 +7,11 @@
 	- MarketplaceService.ProcessReceipt = ProductService.processReceipt (게임 전체에 하나만):
 	    1) 그 플레이어가 서버에 없으면 NotProcessedYet (로블록스가 나중에 다시 부름)
 	    2) 데이터를 불러오는 중이면 LOAD_WAIT_SECONDS 까지 기다림, 그래도 안 되면 NotProcessedYet
-	    3) receipt.PurchaseId 가 data.receipts(최근 Config.RECEIPT_HISTORY_MAX 개 고리)에 있으면 이미 준 것 → PurchaseGranted (중복 지급 없음)
+	    3) receipt.PurchaseId(64자까지) 가 data.receipts(최근 Config.RECEIPT_HISTORY_MAX 개 고리)에 있으면 이미 준 것 → PurchaseGranted (중복 지급 없음).
+	       단 지급은 했는데 저장이 아직 안 된 영수증(unsaved)은 저장을 다시 해 보고 성공해야 PurchaseGranted (주임 9판 F-1)
 	    4) 모르는 productId(Products.IDS 에 없음) → NotProcessedYet (경고 — 돈 받고 못 주는 일이 없게: 처리 안 된 구매는 로블록스가 다시 알려 주고, 끝내 처리 안 되면 환불될 수 있음)
 	    5) 영수증을 먼저 적고(yield 전) grant → 저장(DataService.save) 성공이면 PurchaseGranted.
-	       저장 실패면 NotProcessedYet (영수증은 메모리에 남아 이번 접속에서 다시 와도 두 번 안 줌). 메모리 모드(스튜디오)는 저장 없이 PurchaseGranted
+	       저장 실패면 NotProcessedYet (영수증은 메모리에 남아 이번 접속에서 다시 와도 두 번 안 줌 — 다시 오면 저장부터 다시 해 봄). 메모리 모드는 스튜디오만 저장 없이 PurchaseGranted
 	- 지급 ProductService.grant(player, key, source) — 순수 지급 로직 (테스트·개발 명령 /buy 가 같이 씀, 영수증 확인 없음):
 	    treadmillBoost : data.treadmillBoost = max(지금, 배수) (곱 아님). 이하를 또 사면 그대로 (소비 처리, 안내). Attr TreadmillBoost
 	                     러닝머신 1초 이득 = 레벨 이득 × 트레일 배율 × 부스트 (TreadmillService — 러닝머신 탈 때만)
@@ -23,6 +24,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
@@ -47,6 +49,7 @@ local ProductService = {}
 
 ProductService.LOAD_WAIT_SECONDS = 15 -- ProcessReceipt 가 데이터 불러오는 중에 오면 이만큼 기다림
 ProductService.SAVE_WAIT_SECONDS = 10 -- 자동저장이 진행 중이면 끝날 때까지 이만큼 기다렸다 저장
+ProductService.RECEIPT_ID_MAX = 64 -- 영수증 기록 글자 수 (DataSchema.cleanReceipts 와 같음)
 
 local function syncAttributes(player: Player, data: Types.PlayerData)
 	player:SetAttribute(Attr.TreadmillBoost, data.treadmillBoost)
@@ -151,6 +154,12 @@ function ProductService.grant(player: Player, key: string, source: string?): boo
 	return true
 end
 
+-- 지급은 했지만 저장이 아직 확인 안 된 영수증 (플레이어 데이터 표 → { [영수증 번호]: true }, 약한 키).
+-- (주임 9판 F-1) 이런 영수증이 로블록스 재시도로 다시 오면 "이미 준 것"이라고 바로 PurchaseGranted 하지 않고
+-- 저장을 다시 해 보고, 저장이 성공해야 PurchaseGranted — 안 그러면 저장이 안 된 채 확인해 버려서
+-- 서버가 꺼지면 돈만 받고 상품이 사라짐
+local unsaved: { [Types.PlayerData]: { [string]: boolean } } = setmetatable({}, { __mode = "k" }) :: any
+
 -- 영수증 기록 (뒤가 최신, RECEIPT_HISTORY_MAX 개 고리)
 local function remember(data: Types.PlayerData, purchaseId: string)
 	table.insert(data.receipts, purchaseId)
@@ -167,9 +176,10 @@ local function forget(data: Types.PlayerData, purchaseId: string)
 end
 
 -- 지급 뒤 저장. 저장할 수 없는 서버(스튜디오 메모리 모드)는 true
+-- (주임 9판: 실서버가 메모리 모드면 저장이 안 되니 false → NotProcessedYet. 스튜디오는 진짜 돈이 아니라서 true)
 local function persist(player: Player, session: Sessions.Session): boolean
 	if DataService.isMemoryMode() then
-		return true
+		return RunService:IsStudio()
 	end
 	local waited = 0
 	while session.saving and waited < ProductService.SAVE_WAIT_SECONDS do
@@ -187,7 +197,11 @@ function ProductService.processReceipt(receipt: { [string]: any }): Enum.Product
 	if typeof(playerId) ~= "number" or typeof(productId) ~= "number" or purchaseId == nil then
 		return notYet
 	end
-	local receiptId = tostring(purchaseId)
+	-- 기록은 저장 데이터 정리 규칙(DataSchema.cleanReceipts: 1 ~ 64자)과 같게 — 안 그러면 불러올 때 기록이 사라져 중복 방지가 풀림
+	local receiptId = string.sub(tostring(purchaseId), 1, ProductService.RECEIPT_ID_MAX)
+	if receiptId == "" then
+		return notYet
+	end
 	local player = Players:GetPlayerByUserId(playerId)
 	if not player then
 		return notYet
@@ -203,7 +217,16 @@ function ProductService.processReceipt(receipt: { [string]: any }): Enum.Product
 		return notYet
 	end
 	if table.find(data.receipts, receiptId) then
-		return granted -- 이미 준 영수증 (다시 와도 한 번만)
+		-- 이미 준 영수증 (다시 와도 한 번만). 단 저장이 아직 확인 안 된 것은 저장이 되어야 확인 (F-1)
+		local pending = unsaved[data]
+		if pending and pending[receiptId] then
+			if persist(player, session) then
+				pending[receiptId] = nil
+				return granted
+			end
+			return notYet
+		end
+		return granted
 	end
 	local product = Products.byProductId(productId)
 	if not product then
@@ -218,11 +241,21 @@ function ProductService.processReceipt(receipt: { [string]: any }): Enum.Product
 	end
 	-- yield 전에 먼저 적음 → 같은 영수증이 동시에 와도 한 번만 지급
 	remember(data, receiptId)
+	local pending = unsaved[data]
+	if not pending then
+		pending = {}
+		unsaved[data] = pending
+	end
+	-- 저장이 성공할 때까지 "저장 안 됨" 표시 (같은 영수증이 또 와도 저장 뒤에야 확인). grant 보다 먼저 적어 둠:
+	-- grant 가 도중에 오류를 내도 (효과는 이미 적용됨) 다시 올 때 저장부터 확인
+	pending[receiptId] = true
 	if not ProductService.grant(player, product.key, "purchase") then
 		forget(data, receiptId)
+		pending[receiptId] = nil
 		return notYet
 	end
 	if persist(player, session) then
+		pending[receiptId] = nil
 		return granted
 	end
 	warn("[ProductService] 지급 뒤 저장 실패 — 나중에 다시 확인: " .. player.Name .. " " .. product.key)

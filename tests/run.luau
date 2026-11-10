@@ -53,6 +53,8 @@ local specs = {
 	-- 9판 (사장님 2026-11-10): 로벅스 상품 · 열매 먹이기 삭제 · 밤 귀가 배달 버그
 	{ "products.spec", require("./products.spec") },
 	{ "night_carry.spec", require("./night_carry.spec") },
+	-- 9판 주임 검수 (로벅스 영수증 안전성 · 효과 · 먹이기 잔재 · 밤 귀가 · 상품 켜기 시나리오 · 무작위 요청+영수증)
+	{ "holes_v9.spec", require("./holes_v9.spec") },
 }
 
 local filters: { string } = {}

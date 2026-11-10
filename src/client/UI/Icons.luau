@@ -4,7 +4,8 @@
 	외부 이미지를 올릴 수 없어서 네모·동그라미 Frame 을 겹쳐 그립니다.
 
 	  Icons.draw("cart", parent, 40)   → 40×40 기준 상자(Frame "Icon") 안에 그림. UIScale 로 크기 맞춤
-	종류: cart, book, seed, plant, fruit, coin, shoe, moon, sun, trash, star, lock, gear, gift, scroll, sell, trail
+	종류: cart, book, seed, plant, fruit, coin, shoe, moon, sun, trash, star, lock, gear, gift, scroll, sell, trail,
+	      9판 bolt(번개 — 스피드 배수), robux(로벅스)
 	  6판 "씨앗을 훔치세요": 옛 이름 egg(= seed), paw(= plant), money(= coin) 도 같은 그림 (옛 코드 호환)
 ]]
 
@@ -190,6 +191,20 @@ DRAW.trail = function(h)
 			-20
 		)
 	end
+end
+
+-- 9판: 번개 (스피드 배수 버튼·창)
+DRAW.bolt = function(h)
+	local yellow = Color3.fromRGB(255, 220, 40)
+	frame(h, px(23, 11), px(8, 18), yellow, 2, 25)
+	frame(h, px(20, 20), px(18, 6), yellow, 2, -10)
+	frame(h, px(17, 29), px(8, 18), yellow, 2, 25)
+end
+
+-- 9판: 로벅스 (육각형 느낌 — 둥근 네모 두 겹)
+DRAW.robux = function(h)
+	frame(h, px(20, 20), px(28, 28), Color3.fromRGB(0, 176, 111), 6, 45)
+	frame(h, px(20, 20), px(12, 12), Color3.fromRGB(20, 60, 40), 2, 45)
 end
 
 -- size = 화면 기준 한 변 (그림은 40 기준으로 그리고 UIScale 로 맞춤)

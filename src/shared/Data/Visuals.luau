@@ -106,7 +106,8 @@ Visuals.Tags = {
 	RarityHighlight = "RarityHighlight", -- 희귀도 테두리 Highlight (클라가 가까운 것만 켬, 31개 한계)
 	EggShell = "EggShell", -- 씨앗 껍데기·무지개 돌연변이 식물 파트 (Attr Rainbow = true 면 클라가 색 순환, 7판 Attr Glitch = 깨진 색 깜빡)
 	Ambient = "AmbientEmitter", -- 구역 분위기 파티클
-	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 클라가 "업그레이드" 프롬프트
+	UpgradeSign = "UpgradeSign", -- 베이스 업그레이드 표지판 (Attr Kind = "Pen"|"Treadmill", PlotIndex) — 9판: ClickDetector "SignClick" 로 누르면 업그레이드 (프롬프트 없앰)
+	TreadmillSkipSign = "TreadmillSkipSign", -- 9판: 러닝머신 업그레이드 표지판 옆 "⏩ 건너뛰기 · R$ N" (Attr PlotIndex, ClickDetector "SignClick") — 로벅스로 다음 레벨
 	LeaderboardBoard = "LeaderboardBoard", -- 5판: 허브 스폰 광장 랭킹판 (판 파트만, Front 면 글은 클라 LeaderboardController 가 채움)
 }
 

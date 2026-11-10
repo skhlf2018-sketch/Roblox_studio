@@ -2,9 +2,10 @@
 --[[
 	HudController — 항상 보이는 화면 (2판: 원작 Steal An Egg HUD 그대로)
 
-	  왼쪽 가운데   : 상점(초록·카트) · 인덱스(하늘·책) · [다른 컨트롤러가 더한 버튼] (5판: 퀘스트·선물 버튼 없앰)
+	  왼쪽 가운데   : 상점(초록·카트) · 인덱스(하늘·책) · [다른 컨트롤러가 더한 버튼 — 9판 "스피드 배수"(번개, BoostController)]
 	                  · 슬로우 모드 토글(초록 네모) · 설정(톱니)
-	  왼쪽 아래     : 신발 + 속도(빨강 큰 글씨) / 코인 + "1.2K 코인"(초록) / "친구 부스트: +10%"
+	  왼쪽 아래     : 신발 + 속도(빨강 큰 글씨) + 9판 "×8" 배지(러닝머신 스피드 배수, Attr TreadmillBoost > 1 일 때)
+	                  / 코인 + "1.2K 코인"(초록) / "친구 부스트: +10%"
 	  오른쪽 가운데 : 빨간 씨앗 버튼(자라는 씨앗 패널, 배지 = 가방 씨앗 수) · 주황 식물 버튼(정원 식물 창)
 	                  · 초록 열매 버튼(열매 가방 창, 배지 "12/300" = Attr FruitCount / fruitBagMax) — 6판
 	  오른쪽 아래   : 달/해 그림 + "3분 58초" (밤까지 / 낮까지 남은 시간)
@@ -48,6 +49,7 @@ HudController.petsButton = nil :: TextButton? -- 정원 식물 창 버튼 (튜�
 HudController.eggButton = nil :: TextButton?
 HudController.fruitButton = nil :: TextButton? -- 6판: 열매 가방 버튼
 HudController.fruitBadge = nil :: TextLabel? -- "12/300"
+HudController.boostBadge = nil :: TextLabel? -- 9판: 속도 옆 "×8" (러닝머신 스피드 배수)
 
 local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
@@ -92,6 +94,7 @@ local ICONS: { [string]: string } = {
 	index = "book",
 	slow = "shoe",
 	settings = "gear",
+	boost = "bolt", -- 9판: 스피드 배수 (BoostController)
 }
 
 local function menuButton(kind: string, caption: string, order: number, parent: Instance, onClick: () -> ()): TextButton
@@ -415,10 +418,50 @@ function HudController.start()
 		end
 		Ui.tween(shownMoney, TweenInfo.new(0.4, Enum.EasingStyle.Quad), { Value = target })
 	end
+	-- 9판: 러닝머신 스피드 배수 배지 "×8" (속도 숫자 바로 오른쪽, 배수가 1 이면 숨김)
+	local boostBadge: TextLabel = Ui.new("TextLabel", {
+		Name = "BoostBadge",
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 200, 0.5, 0),
+		Size = UDim2.fromOffset(46, 22),
+		BackgroundColor3 = Color3.fromRGB(255, 150, 20),
+		TextColor3 = C.white,
+		TextSize = 16,
+		Text = "×1",
+		Visible = false,
+		ZIndex = 3,
+		Parent = speedRow,
+	})
+	Ui.corner(1).Parent = boostBadge
+	Ui.stroke(C.winEdge, 2).Parent = boostBadge
+	HudController.boostBadge = boostBadge
+	local function refreshBoostBadge()
+		local b = player:GetAttribute(Attr.TreadmillBoost)
+		if typeof(b) ~= "number" then
+			local snap = State.get() :: any
+			b = if snap then snap.treadmillBoost else nil
+		end
+		local n = if typeof(b) == "number" then b else 1
+		boostBadge.Visible = n > 1
+		boostBadge.Text = "×" .. Format.number(n)
+		-- 숫자 글자 폭(TextBounds)을 알면 바로 옆, 모르면 기본 자리 (터치: 코인 줄이 x 250 에서 시작 → 200 까지만)
+		local ok, bounds = pcall(function(): number
+			return speedLabel.TextBounds.X
+		end)
+		local x = if ok and typeof(bounds) == "number" and bounds > 0 then 54 + bounds + 6 else 200
+		boostBadge.Position = UDim2.new(0, math.clamp(x, 80, 200), 0.5, 0)
+	end
 	local function refreshSpeed()
 		local s = player:GetAttribute(Attr.Speed)
 		speedLabel.Text = Format.number(if typeof(s) == "number" then s else 0)
+		refreshBoostBadge()
 	end
+	player:GetAttributeChangedSignal(Attr.TreadmillBoost):Connect(refreshBoostBadge)
+	State.onChanged(function(section: string)
+		if section == "snapshot" or section == "upgrades" then
+			refreshBoostBadge()
+		end
+	end)
 	player:GetAttributeChangedSignal(Attr.Money):Connect(refreshMoney)
 	player:GetAttributeChangedSignal(Attr.Speed):Connect(function()
 		refreshSpeed()

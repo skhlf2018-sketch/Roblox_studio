@@ -634,6 +634,84 @@ local function body()
 		table.find(levelsSeen, "레벨 10 > 레벨 11") ~= nil,
 		"10레벨 표지판 '레벨 10 > 레벨 11' (최대 아님)"
 	)
+	-- 9판: 업그레이드 표지판 = ClickDetector (프롬프트 없음) · 러닝머신 표지판 옆 건너뛰기 표지판
+	do
+		local signOk, signN = true, 0
+		local treadSigns = {}
+		for _, s in tagged.UpgradeSign or {} do
+			signN += 1
+			local cd = s:FindFirstChildOfClass("ClickDetector")
+			if not cd or cd.MaxActivationDistance ~= 20 or s:FindFirstChildOfClass("ProximityPrompt") then
+				signOk = false
+			end
+			if not s:FindFirstChild("PriceButton", true) or not s:FindFirstChild("Edge", true) then
+				signOk = false
+			end
+			if s:GetAttribute("Kind") == "Treadmill" then
+				treadSigns[s:GetAttribute("PlotIndex")] = s
+			end
+		end
+		check(
+			signN == 14 and signOk,
+			"9판: 업그레이드 표지판 14개 = ClickDetector 20 · PriceButton · Edge, 프롬프트 없음 ("
+				.. signN
+				.. ")"
+		)
+		local skipOk, skipN = true, 0
+		local skipByPlot = {}
+		for _, s in tagged.TreadmillSkipSign or {} do
+			skipN += 1
+			local pi = s:GetAttribute("PlotIndex")
+			skipByPlot[pi] = s
+			local tread = treadSigns[pi]
+			local cd = s:FindFirstChildOfClass("ClickDetector")
+			if not tread or not cd or s:GetAttribute("Kind") ~= "TreadmillSkip" then
+				skipOk = false
+			else
+				local a, b = s.CFrame.Position, tread.CFrame.Position
+				local side = math.abs(a.Z - b.Z)
+				-- 바로 옆 (판 사이 1 스터드 안팎), 안 겹침, 같은 쪽을 봄
+				if side < (8 + 4.4) / 2 or side > 8 or math.abs(a.X - b.X) > 0.5 then
+					skipOk = false
+				end
+				if s.CFrame.LookVector:Dot(tread.CFrame.LookVector) < 0.99 then
+					skipOk = false
+				end
+			end
+		end
+		check(
+			skipN == 7 and skipOk,
+			"9판: 건너뛰기 표지판 7개 = 러닝머신 표지판 바로 옆·같은 방향·ClickDetector ("
+				.. skipN
+				.. ")"
+		)
+		-- 플롯 2: 20레벨(최대)이면 숨김 → 3레벨이면 "R$ 50"(tskip_4)
+		local skip2 = skipByPlot[2]
+		local gui2 = skip2 and skip2:FindFirstChildOfClass("SurfaceGui")
+		check(
+			skip2
+				and skip2:GetAttribute("Hidden") == true
+				and skip2.Transparency == 1
+				and gui2
+				and gui2.Enabled == false,
+			"최대 레벨이면 건너뛰기 표지판 숨김"
+		)
+		kidLevels.TreadmillLevel = 3
+		MapBuilder.setPlotOwner(2, kid)
+		local price = skip2 and skip2:FindFirstChild("Price", true)
+		check(
+			skip2:GetAttribute("Hidden") == false
+				and price
+				and price.Text == "R$ 50"
+				and skip2:GetAttribute("ProductKey") == "tskip_4",
+			"3레벨: 건너뛰기 표지판 'R$ 50' (tskip_4): " .. tostring(price and price.Text)
+		)
+		kidLevels.TreadmillLevel = 16
+		MapBuilder.setPlotOwner(2, kid)
+		check(price.Text == "R$ 10,000", "16레벨: 'R$ 10,000' (tskip_17, 쉼표): " .. price.Text)
+		kidLevels.TreadmillLevel = 20
+		MapBuilder.setPlotOwner(2, kid)
+	end
 	local sign = MapBuilder.getPlot(2).sign
 	local title = sign and sign:FindFirstChild("Title", true)
 	check(title and title.Text == "Kid의 베이스", "주인 이름 간판: " .. tostring(title and title.Text))

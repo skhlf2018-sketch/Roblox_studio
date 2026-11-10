@@ -13,6 +13,7 @@
 	    레벨 n → n+1 · 1초에 속도 +A → +B (Economy.treadmillGainPerSecond) · 가격 (Economy.nextTreadmillCost)
 	    "올리기 · N 코인" → PurchaseUpgrade("Treadmill") (코인이 모자라면 회색), 0레벨(잠김)이면 "러닝머신 사기 · N 코인"
 	    최대 레벨이면 "최대 레벨!" 회색. 레벨·코인이 바뀌면 창 글·버튼이 바로 바뀜 (창은 열린 채)
+	    9판: 가운데 "⏩ 건너뛰기 · R$ N" (TreadmillSkip, Products.nextTreadmillSkip → Purchase.prompt, 최대면 숨김)
 	  한 번 열면(또는 닫으면) 벨트에서 내려올 때까지 다시 안 뜸. 벨트에서 내려오면 창이 저절로 닫힘.
 	  벨트 판정은 TreadmillController.setTouching(on) 한 곳으로 모음:
 	    · 서버(수석 8판): 올라선 순간 Remote TreadmillTouched → setTouching(true), 서 있는 동안 Attr TreadmillTouching
@@ -32,11 +33,13 @@ local Config = require(Shared.Data.Config)
 local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
 local MapLayout = require(Shared.Data.MapLayout)
+local Products = require(Shared.Data.Products)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
 local State = require(Client.State)
+local Purchase = require(Client.Purchase)
 local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
 local WorldPrompt = require(Client.UI.WorldPrompt)
@@ -51,6 +54,7 @@ local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
 local DIALOG = "TreadmillDialog"
 local TREAD_BLUE = Color3.fromRGB(40, 120, 230) -- 상점 러닝머신 카드와 같은 색
+local ROBUX_GREEN = Color3.fromRGB(0, 176, 111) -- 9판: 로벅스 버튼
 local TOUCH_DISTANCE = 2.5 -- 벨트 파트 상자에서 몸통까지 이만큼(+ TREADMILL_PAD_MARGIN)이면 "닿음" (몸통은 벨트 윗면 위 약 3)
 
 local controls: any = nil
@@ -246,6 +250,15 @@ local function refreshDialog()
 			Ui.setButton(button, verb .. " · " .. Format.money(cost), if afford then C.shopGreen else C.gray, afford)
 		end
 	end
+	-- 9판: "⏩ R$ N" 로벅스로 다음 레벨 (최대 레벨이면 숨김)
+	local skip = d.buttons.TreadmillSkip
+	if skip then
+		local product = Products.nextTreadmillSkip(treadLevel())
+		skip.Visible = product ~= nil
+		if product then
+			Ui.setButton(skip, "⏩ 건너뛰기 · " .. Purchase.robux(product.robux), ROBUX_GREEN, true)
+		end
+	end
 end
 
 function TreadmillController.isDialogOpen(): boolean
@@ -261,6 +274,19 @@ function TreadmillController.openDialog()
 	end
 	local d = Ui.dialog(DIALOG, "👟 러닝머신 업그레이드", TreadmillController.dialogBody(), {
 		{ name = "DialogCancel", text = "닫기", color = C.gray, sound = "Close" },
+		{
+			-- 9판: 로벅스로 다음 레벨 (Purchase.prompt — 상품이 아직 없으면 "준비 중" 토스트)
+			name = "TreadmillSkip",
+			text = "⏩ 건너뛰기",
+			color = ROBUX_GREEN,
+			keepOpen = true,
+			onClick = function()
+				local product = Products.nextTreadmillSkip(treadLevel())
+				if product then
+					Purchase.prompt(product.key)
+				end
+			end,
+		},
 		{
 			name = "TreadmillUpgrade",
 			text = "올리기",
@@ -383,6 +409,7 @@ function TreadmillController.start()
 	NotifyController.mute("러닝머신이 잠겨 있어요") -- 서버 잠김 안내 → 이 창이 대신
 	player:GetAttributeChangedSignal(Attr.TreadmillLevel):Connect(refreshDialog)
 	player:GetAttributeChangedSignal(Attr.Money):Connect(refreshDialog)
+	Purchase.onGranted(refreshDialog) -- 9판: 로벅스로 레벨을 올리면 창 글·가격 다시
 	State.onChanged(function(section: string)
 		if section == "upgrades" or section == "snapshot" then
 			refreshDialog()

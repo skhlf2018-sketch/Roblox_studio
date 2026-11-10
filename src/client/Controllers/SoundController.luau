@@ -8,7 +8,7 @@
 	ID 가 "rbxassetid://0" 이면 조용히 건너뜀 (사장님이 나중에 ID 만 채우면 됨).
 	서버 이벤트 연결은 여기 start() 에서 (줍기/RUN/잡힘/배달/코인/밤/희귀 씨앗 공지 …).
 	6판: 성체 됨(PlantGrown → Grown · 전설 이상 GrownRare) · 열매 따기(FruitPicked → FruitPick) ·
-	  열매 팔기(FruitsSold → FruitSell) · 먹이기(FeedResult → 돌연변이면 FeedMutate, 아니면 Feed).
+	  열매 팔기(FruitsSold → FruitSell). 9판: 먹이기 소리 없앰 · 로벅스 상품(ProductGranted)은 Purchase.luau 가 냄.
 ]]
 
 local Players = game:GetService("Players")
@@ -219,10 +219,6 @@ function SoundController.start()
 	end)
 	Net.on(E.FruitsSold, function()
 		SoundController.play("FruitSell")
-	end)
-	Net.on(E.FeedResult, function(payload: any)
-		local mutation = if typeof(payload) == "table" then payload.mutation else nil
-		SoundController.play(if typeof(mutation) == "string" then "FeedMutate" else "Feed")
 	end)
 	Net.on(E.IndexRewarded, function()
 		SoundController.play("Reward")

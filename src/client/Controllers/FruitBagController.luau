@@ -1,13 +1,10 @@
 --!strict
 --[[
-	FruitBagController — 열매 가방 창 · 열매 팔기 · 열매 먹이기 (6판 "씨앗을 훔치세요", 선임)
+	FruitBagController — 열매 가방 창 · 열매 팔기 (6판 "씨앗을 훔치세요", 선임 · 9판: 먹이기 없앰)
 
 	- 열매 가방 창 ("FruitBag"): 위 "열매 12/300 · 다 팔면 3.4K 코인", 칸마다 열매(식물 열매 색) · "꿀 튤립 열매" · ×개수 ·
-	  "1개 40 · 모두 480 코인" · "먹이기"(FeedButton → 성체 고르기). 오른쪽 HUD 열매 버튼(HudController)으로 열림.
-	- 먹이기 (FeedFruit(plantUid, fruitId) — fruitId = 열매 가방 칸 = 그 열매를 맺은 식물 id):
-	    feedFruit(fruitId)  열매 → 성체 고르기 (PetPicker) · feedPlant(plantUid)  성체 → 열매 고르기 (정원 식물 창 "먹이기")
-	    붙을 수 있는 것 FruitRules.feedOptions · 확률 FruitRules.feedChance 미리보기. 더 붙을 게 없으면 회색 카드.
-	    결과 FeedResult 연출(반짝/냠냠)은 PetFxController, 글은 서버 Notify.
+	  "1개 40 · 모두 480 코인" · 아래 "가판대에서 파세요"(SellHint). 오른쪽 HUD 열매 버튼(HudController)으로 열림.
+	- 9판 (2026-11-10 사장님 지시): 열매 먹이기(FeedFruit / FeedResult)는 화면에서 완전히 삭제.
 	- 판매 가판대(SellStall, 허브 + 베이스마다) 클라 프롬프트 "SellFruitsPrompt"(E): "열매 팔기" · "열매 12개 · 3.4K 코인"
 	  (Attr FruitCount · FruitBagValue). 누르면 SellFruits() (열매가 없으면 안내만). FruitsSold { count, coins } → 화면 가운데 "+3.4K 코인"
 	  (식물 팔기 = PetsController 의 "SellPrompt"(F))
@@ -18,7 +15,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local Mutations = require(Shared.Data.Mutations)
 local Pets = require(Shared.Data.Pets)
 local Rarities = require(Shared.Data.Rarities)
 local Visuals = require(Shared.Data.Visuals)
@@ -26,7 +22,6 @@ local FruitRules = require(Shared.FruitRules)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
-local Types = require(Shared.Types)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
 local State = require(Client.State)
@@ -45,7 +40,6 @@ local C = Theme.Colors
 local Attr = Tags.PlayerAttributes
 local SIZE = Vector2.new(820, 540)
 local CARD = Vector2.new(170, 236)
-local FEED_COLOR = Color3.fromRGB(150, 90, 220)
 
 local function plantName(petId: string): string
 	local pet = Pets.get(petId)
@@ -77,110 +71,6 @@ local function bagMax(): number
 end
 FruitBagController.fruitCount = fruitCount
 FruitBagController.bagMax = bagMax
-
-local function findPlant(uid: string): Types.PetRecord?
-	local snap = State.get()
-	for _, record in (if snap then snap.pets or {} else {}) :: { Types.PetRecord } do
-		if record.uid == uid then
-			return record
-		end
-	end
-	return nil
-end
-
--- "황금 4% · 얼음 15%" (붙을 수 있는 것과 확률)
-local function optionsText(fruitId: string, mutations: { string }): string
-	local parts: { string } = {}
-	for _, option in FruitRules.feedOptions(fruitId, mutations) do
-		local m = Mutations.get(option.id)
-		table.insert(
-			parts,
-			string.format("%s %d%%", if m then m.name else option.id, math.floor(option.chance * 100 + 0.5))
-		)
-	end
-	return table.concat(parts, " · ")
-end
-
-local function chanceText(fruitId: string, mutations: { string }): string
-	return string.format("돌연변이 %d%%", math.floor(FruitRules.feedChance(fruitId, mutations) * 100 + 0.5))
-end
-
-------------------------------------------------------------------
--- 먹이기
-------------------------------------------------------------------
-
--- 열매(fruitId) → 먹일 성체 고르기
-function FruitBagController.feedFruit(fruitId: string)
-	PetPicker.open({
-		title = plantName(fruitId) .. " 열매 먹이기",
-		color = FEED_COLOR,
-		hint = "열매를 먹일 성체를 골라요 (확률로 돌연변이 → 열매 값 UP)",
-		count = 1,
-		items = PetPicker.myPets,
-		check = function(item: PetPicker.Item): (boolean, string?)
-			if #FruitRules.feedOptions(fruitId, item.mutations) == 0 then
-				return false, "더 붙을 게 없어요"
-			end
-			return true, nil
-		end,
-		info = function(item: PetPicker.Item): string?
-			return chanceText(fruitId, item.mutations)
-		end,
-		status = function(selected: { PetPicker.Item }): string?
-			local item = selected[1]
-			if not item then
-				return nil
-			end
-			return "붙을 수 있는 것: " .. optionsText(fruitId, item.mutations)
-		end,
-		empty = "열매를 먹일 성체 식물이 없어요!",
-		confirmText = "먹이기",
-		onConfirm = function(selected: { PetPicker.Item })
-			Net.send(Remotes.ToServer.FeedFruit, selected[1].uid, fruitId)
-		end,
-	})
-end
-
--- 성체(plantUid) → 먹일 열매 고르기
-function FruitBagController.feedPlant(plantUid: string)
-	local record = findPlant(plantUid)
-	if not record then
-		return
-	end
-	local mutations = record.mutations or {}
-	if #PetPicker.myFruits() == 0 then
-		NotifyController.toast("열매 가방이 비었어요! 정원에서 열매를 먼저 따요", "error")
-		return
-	end
-	PetPicker.open({
-		title = plantName(record.petId) .. " 에게 열매 먹이기",
-		color = FEED_COLOR,
-		hint = "먹일 열매를 골라요 (그 구역 열매면 원소 돌연변이 ×3)",
-		count = 1,
-		items = PetPicker.myFruits,
-		check = function(item: PetPicker.Item): (boolean, string?)
-			if #FruitRules.feedOptions(item.petId, mutations) == 0 then
-				return false, "더 붙을 게 없어요"
-			end
-			return true, nil
-		end,
-		info = function(item: PetPicker.Item): string?
-			return chanceText(item.petId, mutations)
-		end,
-		status = function(selected: { PetPicker.Item }): string?
-			local item = selected[1]
-			if not item then
-				return nil
-			end
-			return "붙을 수 있는 것: " .. optionsText(item.petId, mutations)
-		end,
-		empty = "열매 가방이 비었어요!",
-		confirmText = "먹이기",
-		onConfirm = function(selected: { PetPicker.Item })
-			Net.send(Remotes.ToServer.FeedFruit, plantUid, selected[1].petId)
-		end,
-	})
-end
 
 ------------------------------------------------------------------
 -- 팔기
@@ -251,18 +141,12 @@ function FruitBagController.start()
 		TextScaled = true,
 		Parent = content,
 	})
-	local hint = Ui.label(
-		"판매 가판대에서 E 로 팔아요 · '먹이기' 로 성체에 먹이면 돌연변이!",
-		UDim2.new(1, 0, 0, 24),
-		18,
-		C.yellow,
-		{
-			Name = "Hint",
-			Position = UDim2.fromOffset(0, 40),
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Parent = content,
-		}
-	)
+	local hint = Ui.label("판매 가판대에서 E 로 팔아요", UDim2.new(1, 0, 0, 24), 18, C.yellow, {
+		Name = "Hint",
+		Position = UDim2.fromOffset(0, 40),
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = content,
+	})
 	local grid = Ui.scroll(UDim2.new(1, 0, 1, -72), UDim2.fromOffset(0, 72), content)
 	local gridLayout = Ui.grid(CARD, 10)
 	gridLayout.Parent = grid
@@ -355,16 +239,13 @@ function FruitBagController.start()
 				C.money,
 				{ Name = "Value", Position = UDim2.fromOffset(4, 126), TextScaled = true, Parent = card }
 			)
-			local fruitId = item.petId
-			local feed = Ui.button("먹이기", FEED_COLOR, UDim2.new(1, -14, 0, buttonH), function()
-				FruitBagController.feedFruit(fruitId)
-			end, {
-				anchor = Vector2.new(0.5, 1),
-				position = UDim2.new(0.5, 0, 1, -6),
-				textSize = 22,
-				parent = card,
+			Ui.label("가판대에서 파세요", UDim2.new(1, -14, 0, buttonH), 18, C.yellow, {
+				Name = "SellHint",
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.new(0.5, 0, 1, -6),
+				TextScaled = true,
+				Parent = card,
 			})
-			feed.Name = "FeedButton"
 		end
 	end
 	Windows.register(NAME, window, render)

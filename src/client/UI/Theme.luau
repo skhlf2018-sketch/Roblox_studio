@@ -56,6 +56,7 @@ Theme.Menu = {
 	fruits = Theme.Colors.fruitRed,
 	settings = Theme.Colors.purple,
 	trail = Theme.Colors.trailPurple,
+	boost = Color3.fromRGB(255, 150, 20), -- 9판: 스피드 배수 (러닝머신 부스트) 버튼·창
 }
 
 Theme.Tween = {

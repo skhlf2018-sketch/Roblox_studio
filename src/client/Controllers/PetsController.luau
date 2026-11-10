@@ -6,7 +6,7 @@
 	  "열매 가방 12/300"(FruitBagOpen → 열매 가방 창), 쪽 넘기기
 	- 카드 (성체 식물마다): 3D 식물, 이름(등급 색), "열매 3/5 · 1개 40 코인"(FruitRules.fruitValue), 크기/돌연변이,
 	  "다음 열매 12초"(1초마다 — fruitInterval - fruitProgress, 마지막 DataUpdate("pets") 뒤 흐른 시간만큼 이어 셈, 가득이면 "열매 가득!"),
-	  버튼 "열매 따기 3/5"(PickFruit = PickFruit(uid)) · "먹이기"(Feed → 열매 고르기 → FeedFruit) · "팔기 N"(Sell → 확인 창 → SellPlant(uid))
+	  버튼 "열매 따기 3/5"(PickFruit = PickFruit(uid)) · "팔기 N"(Sell → 확인 창 → SellPlant(uid))
 	  (팔기 값 = GardenRules.sellPrice = 열매 1개 값 × 20, 서버가 다시 계산 — 내 정원 근처나 판매 가판대 근처에서만 됨)
 	- 열매 값 높은 순. 한 쪽에 18그루.
 	- 판매 가판대(SellStall) 프롬프트 "식물 팔기"(F — E 는 "열매 팔기") → 이 창.
@@ -318,25 +318,17 @@ function PetsController.start()
 				}
 			)
 			pick.Name = "PickFruit"
-			local feed = Ui.button("먹이기", C.purple, UDim2.new(0.5, -10, 0, buttonH), function()
-				FruitBagController.feedPlant(uid)
-			end, {
-				anchor = Vector2.new(0, 1),
-				position = UDim2.new(0, 7, 1, -6),
-				textSize = 18,
-				parent = card,
-			})
-			feed.Name = "Feed"
+			-- 9판: "먹이기" 버튼 없앰 → 팔기가 한 줄 전체
 			local sell = Ui.button(
 				"팔기 " .. Format.number(GardenRules.sellPrice(record)),
 				C.eggRed,
-				UDim2.new(0.5, -10, 0, buttonH),
+				UDim2.new(1, -14, 0, buttonH),
 				function()
 					PetsController.confirmSell(record)
 				end,
 				{
-					anchor = Vector2.new(1, 1),
-					position = UDim2.new(1, -7, 1, -6),
+					anchor = Vector2.new(0.5, 1),
+					position = UDim2.new(0.5, 0, 1, -6),
 					textSize = 16,
 					parent = card,
 					sound = "Click",

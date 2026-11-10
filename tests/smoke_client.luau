@@ -6,12 +6,14 @@
 
 	하는 일: 클라 컨트롤러 전부 start() → Snapshot → 창 전부 열기·버튼 누르기
 	        → 사쿠라 나무 프롬프트(6판: 성체 바치기 / 씨앗 뽑기) → 펫 고르기 창에서 카드 고르고 확인
-	          → 보낸 Remote 이름·인자 확인 → 결과 이벤트(SakuraResult · 6판 PlantGrown/FruitPicked/FruitsSold/FeedResult)
+	          → 보낸 Remote 이름·인자 확인 → 결과 이벤트(SakuraResult · 6판 PlantGrown/FruitPicked/FruitsSold · 9판 ProductGranted)
 	          (6판: 퓨전 머신·제단·비밀 통로 없앰 · 5판: 퀘스트·선물 창 없앰)
 	        6판 "씨앗을 훔치세요": 식물 id (sprout_daisy·puppy_grass·owl_oak…) 로 Snapshot 을 만듦.
-	          정원 식물 창(열매 따기·먹이기·팔기 확인 창) · 열매 가방 창 · 판매 가판대 "열매 팔기" · 건너뛰기 창(전부/절반)
+	          정원 식물 창(열매 따기·팔기 확인 창, 9판 먹이기 없음) · 열매 가방 창 · 판매 가판대 "열매 팔기" · 건너뛰기 창(전부/절반)
 	          · 정원 프롬프트(열매 따기, GardenPlant 만) · 아우라 켜기/끄기(PlantFxController)
 	        → 무기 손 모양 붙이기·휘두르기, 폰 화면에서 버튼 크기(46px 이상) 계산 확인
+	        9판: 업그레이드 표지판 누르기(ClickDetector)·건너뛰기 표지판·상점 로벅스 탭·스피드 배수 창(BoostWindow)·
+	          구매 공통(Client/Purchase: 준비 중 토스트 / PromptProductPurchase / 연타 방지 / ProductGranted 연출)
 	task.wait 는 바로 멈추고(무한 루프 방지), task.delay 는 바로 실행합니다.
 ]]
 local fs = require("@lune/fs")
@@ -88,6 +90,7 @@ local CLASSES = {
 	"Weld",
 	"Humanoid",
 	"Backpack",
+	"ClickDetector", -- 9판 표지판 누르기
 }
 local EVENTS = {
 	"MouseButton1Down",
@@ -102,6 +105,9 @@ local EVENTS = {
 	"Changed",
 	"CharacterAdded",
 	"Triggered",
+	"MouseClick", -- 9판 ClickDetector
+	"MouseHoverEnter",
+	"MouseHoverLeave",
 }
 local signalCache = {}
 local sidCounter = 0
@@ -243,7 +249,16 @@ local tweenStub = {
 		return { Play = function() end, Cancel = function() end, Completed = done }
 	end,
 }
+-- 9판: 로벅스 구매창 흉내 (띄운 productId 를 모아 둠)
+local marketPrompts = {}
+local MarketplaceStub = {
+	PromptProductPurchase = function(_, who, productId)
+		table.insert(marketPrompts, { player = who, id = productId })
+	end,
+	PromptProductPurchaseFinished = signal(),
+}
 local fakeServices = {
+	MarketplaceService = MarketplaceStub,
 	CollectionService = CollectionService,
 	Players = Players,
 	TweenService = tweenStub,
@@ -563,7 +578,36 @@ tag(nestEgg, "Egg")
 local upgradeSign = worldPart("UpgradeSign", roblox.Vector3.new(30, 4, 20), roblox.Vector3.new(8, 4.6, 0.8))
 upgradeSign:SetAttribute("Kind", "Treadmill")
 upgradeSign:SetAttribute("PlotIndex", 1)
+do -- MapBuilder 표지판 SurfaceGui 안 이름 (Board > Edge · PriceButton) + ClickDetector "SignClick"
+	local board = Instance.new("Frame")
+	board.Name = "Board"
+	board.Parent = upgradeSign
+	local edge = Instance.new("UIStroke")
+	edge.Name = "Edge"
+	edge.Parent = board
+	local priceButton = Instance.new("Frame")
+	priceButton.Name = "PriceButton"
+	priceButton.Parent = board
+	local click = Instance.new("ClickDetector")
+	click.Name = "SignClick"
+	click.MaxActivationDistance = 20
+	click.Parent = upgradeSign
+end
 tag(upgradeSign, "UpgradeSign")
+-- 9판: 남의 베이스 정원 표지판(ClickDetector 없음 → 클라가 만듦) · 내 러닝머신 건너뛰기 표지판
+local otherSign = worldPart("UpgradeSign", roblox.Vector3.new(200, 4, 20), roblox.Vector3.new(8, 4.6, 0.8))
+otherSign:SetAttribute("Kind", "Pen")
+otherSign:SetAttribute("PlotIndex", 2)
+tag(otherSign, "UpgradeSign")
+local skipSignPart = worldPart("TreadmillSkipSign", roblox.Vector3.new(30, 3.4, 13), roblox.Vector3.new(4.4, 3, 0.6))
+skipSignPart:SetAttribute("Kind", "TreadmillSkip")
+skipSignPart:SetAttribute("PlotIndex", 1)
+do
+	local click = Instance.new("ClickDetector")
+	click.Name = "SignClick"
+	click.Parent = skipSignPart
+end
+tag(skipSignPart, "TreadmillSkipSign")
 local sellStall = worldPart("SellStall", roblox.Vector3.new(4, 2, 4), roblox.Vector3.new(7, 3.4, 3))
 tag(sellStall, "SellStall")
 local trailShop = worldPart("TrailShop", roblox.Vector3.new(60, 2, -260), roblox.Vector3.new(12, 3.4, 3))
@@ -646,11 +690,15 @@ local function body()
 			"PlantFxController",
 			"LeaderboardController",
 			"TutorialController",
+			-- 9판
+			"BoostController",
 		}
 	do
 		ctrl(name).start()
 		check(true, "start " .. name)
 	end
+	requireNode(Loader.get("ReplicatedStorage/Client/Purchase")).start()
+	check(true, "start Purchase (9판 구매 공통)")
 
 	local function plant(uid, petId, size, mutations, x, z, fruits)
 		return {
@@ -819,8 +867,74 @@ local function body()
 	local penCard = playerGui:FindFirstChild("PenCard", true)
 	check(penCard and click(penCard:FindFirstChild("Buy")), "상점 펫 우리 업그레이드 사기 누름")
 	check(lastSent("PurchaseUpgrade") and lastSent("PurchaseUpgrade").args[1] == "Pen", "PurchaseUpgrade(Pen) 보냄")
+	check(playerGui:FindFirstChild("Tab_featured", true) == nil, "9판: 상점 '추천' 탭 없음")
 	check(click(playerGui:FindFirstChild("Tab_speed", true)), "상점 속도 탭 (로벅스)")
-	check(findButton("준비 중") ~= nil, "로벅스 상품은 '준비 중'")
+	do
+		local shopWin = playerGui:FindFirstChild("Windows", true):FindFirstChild("Shop")
+		local s10 = shopWin:FindFirstChild("Product_speed_10m", true)
+		local s100 = shopWin:FindFirstChild("Product_speed_100m", true)
+		local n = 0
+		for _, d in shopWin:GetDescendants() do
+			if string.sub(d.Name, 1, 8) == "Product_" then
+				n += 1
+			end
+		end
+		check(n == 2 and s10 ~= nil and s100 ~= nil, "속도 탭: 카드 2장 (10M · 100M) — " .. n .. "장")
+		check(
+			s10
+				and s10:FindFirstChild("BuyProduct").Text == "R$ 199"
+				and s100:FindFirstChild("BuyProduct").Text == "R$ 259",
+			"속도 탭 가격 'R$ 199' · 'R$ 259'"
+		)
+		check(
+			findButton("준비 중", shopWin) == nil and findButton("x2", shopWin) == nil,
+			"옛 '준비 중'·'x2 스피드' 카드 없음"
+		)
+		check(shopWin:FindFirstChild("NotReady", true) ~= nil, "상품 id 가 0 이면 아래 '준비 중' 안내 글")
+		holdDelays = true
+		local beforePrompts = #marketPrompts
+		check(click(s10:FindFirstChild("BuyProduct")), "10M 스피드 사기 누름")
+		local toasted = false
+		for _, d in playerGui:GetDescendants() do
+			if d.Name == "Toast" and string.find(d.Text, "준비 중이에요", 1, true) then
+				toasted = true
+			end
+		end
+		check(
+			toasted and #marketPrompts == beforePrompts,
+			"상품 id 0 → '준비 중이에요…' 토스트, 구매창 안 띄움"
+		)
+		holdDelays = false
+		check(click(playerGui:FindFirstChild("Tab_money", true)), "상점 코인 탭")
+		local pass = shopWin:FindFirstChild("Product_money_pass", true)
+		local c1m = shopWin:FindFirstChild("Product_coins_1m", true)
+		local c1b = shopWin:FindFirstChild("Product_coins_1b", true)
+		check(
+			pass
+				and c1m
+				and c1b
+				and pass:FindFirstChild("BuyProduct").Text == "R$ 199"
+				and c1m:FindFirstChild("BuyProduct").Text == "R$ 99"
+				and c1b:FindFirstChild("BuyProduct").Text == "R$ 199",
+			"코인 탭: 코인 2배 R$ 199 · 1M R$ 99 · 1B R$ 199"
+		)
+		player:SetAttribute("MoneyPass", true)
+		sigOf(player, "Attr_MoneyPass"):Fire()
+		pass = shopWin:FindFirstChild("Product_money_pass", true)
+		local passBtn = pass and pass:FindFirstChild("BuyProduct")
+		check(
+			passBtn and passBtn.Text == "보유 중" and passBtn.Active == false,
+			"코인 2배를 가졌으면 '보유 중' 회색"
+		)
+		player:SetAttribute("MoneyPass", nil)
+		click(playerGui:FindFirstChild("Tab_upgrades", true))
+		local tcard = shopWin:FindFirstChild("TreadmillCard", true)
+		local skipBtn = tcard and tcard:FindFirstChild("SkipRobux")
+		check(
+			skipBtn and skipBtn.Text == "⏩ 건너뛰기 · R$ 3",
+			"상점 러닝머신 카드 '⏩ 건너뛰기 · R$ 3': " .. tostring(skipBtn and skipBtn.Text)
+		)
+	end
 	check(
 		click(playerGui:FindFirstChild("Tab_trail", true)) and Windows.isOpen("Trail"),
 		"상점 트레일 탭 → 트레일 상점 창"
@@ -949,22 +1063,13 @@ local function body()
 		click(sell)
 		check(click(dialogRoot("ConfirmDialog"):FindFirstChild("ConfirmYes", true)), "확인 누름")
 		check(lastSent("SellPlant") and lastSent("SellPlant").args[1] == "p1", "SellPlant(p1) 보냄")
-		-- 먹이기: 성체 카드 → 열매 고르기 → FeedFruit(plantUid, fruitId)
+		-- 9판: 먹이기 없음 — 정원 식물 카드에 '먹이기' 버튼 없음, 열매 가방은 '가판대에서 파세요'
 		Windows.open("Pets")
 		local p4Card = playerGui:FindFirstChild("Windows", true):FindFirstChild("Pets"):FindFirstChild("p4", true)
-		check(click(p4Card and p4Card:FindFirstChild("Feed")), "황금 부엉이 참나무 카드 '먹이기' 누름")
-		check(Windows.isOpen("PetPicker"), "열매 고르기 창")
-		local fruitCard = pickerRoot() and pickerRoot():FindFirstChild("sprout_daisy", true)
-		local fruitInfo = fruitCard and fruitCard:FindFirstChild("Info")
 		check(
-			fruitInfo and string.find(fruitInfo.Text, "돌연변이", 1, true) ~= nil,
-			"열매 카드에 돌연변이 확률: " .. tostring(fruitInfo and fruitInfo.Text)
+			p4Card and p4Card:FindFirstChild("Feed") == nil and p4Card:FindFirstChild("Sell") ~= nil,
+			"9판: 성체 카드에 '먹이기' 없음 (팔기만)"
 		)
-		check(pickCard("sprout_daisy"), "아기 데이지 열매 고름")
-		pickerConfirm()
-		local feed = lastSent("FeedFruit")
-		check(feed and feed.args[1] == "p4" and feed.args[2] == "sprout_daisy", "FeedFruit(p4, sprout_daisy) 보냄")
-		-- 열매 가방 창 → 열매 카드 '먹이기' → 성체 고르기
 		Windows.open("FruitBag")
 		local bagWin = playerGui:FindFirstChild("Windows", true):FindFirstChild("FruitBag")
 		local summary = bagWin:FindFirstChild("Summary", true)
@@ -976,15 +1081,91 @@ local function body()
 		)
 		local daisyFruit = bagWin:FindFirstChild("Fruit_sprout_daisy", true)
 		check(daisyFruit and daisyFruit:FindFirstChild("Count").Text == "×3", "열매 칸 '×3'")
-		check(click(daisyFruit and daisyFruit:FindFirstChild("FeedButton")), "열매 칸 '먹이기' 누름")
-		check(Windows.isOpen("PetPicker"), "성체 고르기 창")
-		check(pickCard("p8"), "성체 (얼음 강아지풀) 고름")
-		pickerConfirm()
-		feed = lastSent("FeedFruit")
-		check(feed and feed.args[1] == "p8" and feed.args[2] == "sprout_daisy", "FeedFruit(p8, sprout_daisy) 보냄")
+		check(daisyFruit and daisyFruit:FindFirstChild("FeedButton") == nil, "9판: 열매 칸에 '먹이기' 없음")
+		local sellHint = daisyFruit and daisyFruit:FindFirstChild("SellHint")
+		check(sellHint and sellHint.Text == "가판대에서 파세요", "열매 칸 '가판대에서 파세요'")
+		check(lastSent("FeedFruit") == nil, "9판: FeedFruit 안 보냄")
 	end
 	Windows.open("Settings")
 	check(clickText("켜짐"), "설정 토글")
+
+	print("[9판 스피드 배수 창 (BoostWindow)]")
+	do
+		local hudMenu = playerGui:FindFirstChild("LeftMenu", true)
+		local boostBtn = hudMenu and hudMenu:FindFirstChild("boost")
+		local index = hudMenu and hudMenu:FindFirstChild("index")
+		local slow = hudMenu and hudMenu:FindFirstChild("slow")
+		check(
+			boostBtn
+				and index
+				and slow
+				and index.LayoutOrder < boostBtn.LayoutOrder
+				and boostBtn.LayoutOrder < slow.LayoutOrder,
+			"왼쪽 메뉴: '인덱스' 와 '슬로우 모드' 사이에 '스피드 배수'"
+		)
+		local cap = boostBtn and boostBtn:FindFirstChild("Caption")
+		check(cap and cap.Text == "스피드 배수", "버튼 이름 '스피드 배수'")
+		Windows.close()
+		check(click(boostBtn) and Windows.isOpen("BoostWindow"), "스피드 배수 버튼 → BoostWindow")
+		local bw = playerGui:FindFirstChild("Windows", true):FindFirstChild("BoostWindow")
+		local n = 0
+		for _, d in bw:GetDescendants() do
+			if string.sub(d.Name, 1, 6) == "Boost_" then
+				n += 1
+			end
+		end
+		check(n == 11, "카드 11장 (2배 … 2048배): " .. n)
+		local function cardBtn(v)
+			local c = bw:FindFirstChild("Boost_" .. v, true)
+			return c and c:FindFirstChild("BuyBoost"), c
+		end
+		local b2, c2 = cardBtn(2)
+		local b4, c4 = cardBtn(4)
+		local b2048, c2048 = cardBtn(2048)
+		check(
+			c2:FindFirstChild("Title").Text == "2배 스피드"
+				and c4:FindFirstChild("Title").Text == "4배"
+				and c2048:FindFirstChild("Title").Text == "2048배",
+			"카드 제목 '2배 스피드' · '4배' · '2048배'"
+		)
+		check(
+			b2.Text == "R$ 2" and b4.Text == "R$ 4" and b2048.Text == "R$ 2,048",
+			"가격 'R$ 2' · 'R$ 4' · 'R$ 2,048' (" .. b2048.Text .. ")"
+		)
+		local hint = bw:FindFirstChild("Hint", true)
+		check(
+			hint and string.find(hint.Text, "걷는 속도가 아니에요", 1, true) ~= nil,
+			"설명 '러닝머신을 탈 때 … (걷는 속도가 아니에요)'"
+		)
+		local hudBoost = playerGui:FindFirstChild("BoostBadge", true)
+		check(hudBoost and hudBoost.Visible == false, "배수 없으면 HUD '×N' 배지 숨김")
+		-- 8배를 가졌을 때
+		player:SetAttribute("TreadmillBoost", 8)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
+		local b8 = cardBtn(8)
+		local b16 = cardBtn(16)
+		check(
+			b2.Text == "보유 중" and b2.Active == false and b4.Text == "보유 중",
+			"8배 가짐: 2·4배 '보유 중' 회색"
+		)
+		check(b8.Text == "적용 중" and b8.Active == false, "8배 카드 '적용 중'")
+		check(b16.Text == "R$ 16" and b16.Active ~= false, "16배는 살 수 있음 'R$ 16'")
+		local cur = bw:FindFirstChild("Current", true)
+		check(
+			cur and string.find(cur.Text, "×8", 1, true) ~= nil,
+			"위에 '지금 ×8 적용 중!': " .. tostring(cur and cur.Text)
+		)
+		check(hudBoost.Visible and hudBoost.Text == "×8", "HUD 속도 옆 '×8' 배지")
+		local beforeBoost = #marketPrompts
+		click(b2)
+		check(#marketPrompts == beforeBoost, "보유 중 카드는 눌러도 구매창 없음")
+		click(b16)
+		check(#marketPrompts == beforeBoost, "16배 (상품 id 0) → 준비 중 (구매창 없음)")
+		player:SetAttribute("TreadmillBoost", nil)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
+		check(b2.Text == "R$ 2" and not hudBoost.Visible, "배수 없어지면 다시 'R$ 2' · 배지 숨김")
+		Windows.close()
+	end
 
 	print("[폰 버튼 크기 (844x390, 46px 이상)]")
 	local screen = playerGui:FindFirstChild("StealAnEggUI")
@@ -1006,10 +1187,12 @@ local function body()
 	local pickButton = playerGui:FindFirstChild("PickFruit", true)
 	check(px(pickButton, "Pets") >= 45.9, string.format("열매 따기 버튼 %.1fpx", px(pickButton, "Pets")))
 	check(px(playerGui:FindFirstChild("Sell", true), "Pets") >= 45.9, "뽑아서 팔기 버튼 46px 이상")
-	check(px(playerGui:FindFirstChild("Feed", true), "Pets") >= 45.9, "먹이기 버튼 46px 이상")
 	check(px(playerGui:FindFirstChild("PickAllFruit", true), "Pets") >= 45.9, "열매 모두 따기 46px 이상")
 	Windows.open("FruitBag")
-	check(px(playerGui:FindFirstChild("FeedButton", true), "FruitBag") >= 45.9, "열매 가방 먹이기 46px 이상")
+	check(
+		playerGui:FindFirstChild("SellHint", true) ~= nil,
+		"열매 가방 '가판대에서 파세요' (먹이기 버튼 자리)"
+	)
 	Windows.open("Sakura")
 	check(px(playerGui:FindFirstChild("OfferButton", true), "Sakura") >= 45.9, "사쿠라 성체 바치기 46px 이상")
 	check(px(playerGui:FindFirstChild("DrawButton", true), "Sakura") >= 45.9, "사쿠라 씨앗 뽑기 46px 이상")
@@ -1020,7 +1203,41 @@ local function body()
 	Windows.open("Shop")
 	click(playerGui:FindFirstChild("Tab_upgrades", true))
 	check(px(playerGui:FindFirstChild("Buy", true), "Shop") >= 45.9, "상점 사기 버튼 46px 이상")
-	check(px(playerGui:FindFirstChild("Tab_featured", true), "Shop") >= 45.9, "상점 탭 46px 이상")
+	check(px(playerGui:FindFirstChild("Tab_speed", true), "Shop") >= 45.9, "상점 탭 46px 이상")
+	check(
+		px(playerGui:FindFirstChild("SkipRobux", true), "Shop") >= 45.9,
+		string.format(
+			"상점 러닝머신 '⏩ 건너뛰기' %.1fpx",
+			px(playerGui:FindFirstChild("SkipRobux", true), "Shop")
+		)
+	)
+	do
+		-- 9판: 러닝머신 카드 안 '⏩ 건너뛰기' 와 코인 '사기' 버튼이 안 겹침 (카드 높이 400 기준)
+		local tcard = playerGui:FindFirstChild("TreadmillCard", true)
+		local skip = tcard:FindFirstChild("SkipRobux")
+		local buy = tcard:FindFirstChild("Buy")
+		local skipBottom = 400 + skip.Position.Y.Offset
+		local buyTop = 400 + buy.Position.Y.Offset - buy.Size.Y.Offset
+		local skipTop = skipBottom - skip.Size.Y.Offset
+		check(
+			skipBottom <= buyTop and skipTop >= 166 + 2 * 30,
+			"러닝머신 카드: 건너뛰기 버튼이 사기 버튼·설명 줄과 안 겹침"
+		)
+	end
+	Windows.open("BoostWindow")
+	check(
+		px(playerGui:FindFirstChild("BuyBoost", true), "BoostWindow") >= 45.9,
+		"스피드 배수 카드 버튼 46px 이상"
+	)
+	do
+		local bw = windowsLayer:FindFirstChild("BoostWindow")
+		local s = bw.ScreenScale.Scale
+		local view = cam.ViewportSize -- 창 배율(Ui.fitScale)은 카메라 화면 기준 (다른 창과 같음)
+		check(
+			bw.Size.X.Offset * s <= view.X and bw.Size.Y.Offset * s <= view.Y,
+			string.format("폰 스피드 배수 창 %.0fx%.0f 화면 안", bw.Size.X.Offset * s, bw.Size.Y.Offset * s)
+		)
+	end
 	Windows.open("Trail")
 	check(px(playerGui:FindFirstChild("BuyTrail", true), "Trail") >= 45.9, "트레일 사기 버튼 46px 이상")
 	Windows.close()
@@ -1375,13 +1592,135 @@ local function body()
 			e:Destroy()
 		end
 	end
-	-- 업그레이드 표지판 프롬프트
-	local signPrompt = upgradeSign:FindFirstChild("UpgradePrompt")
-	check(signPrompt and signPrompt.Enabled == true, "내 베이스 업그레이드 표지판 프롬프트")
-	check(
-		trigger(signPrompt) and lastSent("PurchaseUpgrade").args[1] == "Treadmill",
-		"표지판 → PurchaseUpgrade(Treadmill)"
-	)
+	-- 9판: 업그레이드 표지판 = 누르기 (회색 E 프롬프트 없음)
+	do
+		local Shop9 = ctrl("ShopController")
+		local Purchase9 = requireNode(Loader.get("ReplicatedStorage/Client/Purchase"))
+		local Products9 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Products"))
+		Shop9.CLICK_COOLDOWN = 0
+		Purchase9.TOAST_COOLDOWN = 0
+		local function clickDetector(part)
+			local d = part:FindFirstChildOfClass("ClickDetector")
+			if d then
+				sigOf(d, "MouseClick"):Fire(player)
+			end
+			return d
+		end
+		local function toastNow(text)
+			for _, d in playerGui:GetDescendants() do
+				if d.Name == "Toast" and string.find(d.Text, text, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+		check(
+			upgradeSign:FindFirstChildOfClass("ProximityPrompt") == nil,
+			"9판: 업그레이드 표지판에 프롬프트 없음"
+		)
+		check(
+			otherSign:FindFirstChildOfClass("ProximityPrompt") == nil,
+			"9판: 남의 표지판에도 프롬프트 없음"
+		)
+		local myDetector = upgradeSign:FindFirstChildOfClass("ClickDetector")
+		check(
+			myDetector and myDetector.MaxActivationDistance == 20,
+			"내 표지판 ClickDetector 거리 20 ("
+				.. tostring(myDetector and myDetector.MaxActivationDistance)
+				.. ")"
+		)
+		local otherDetector = otherSign:FindFirstChildOfClass("ClickDetector")
+		check(
+			otherDetector ~= nil and otherDetector.MaxActivationDistance == 0,
+			"ClickDetector 없는 표지판은 클라가 만듦 · 남의 것은 거리 0 (안 눌림)"
+		)
+		check(
+			Shop9.signCount() == 3,
+			"표지판 3개 연결 (업그레이드 2 + 건너뛰기 1): " .. Shop9.signCount()
+		)
+		player:SetAttribute("Money", 12345)
+		player:SetAttribute("TreadmillLevel", 0)
+		Shop9.repaintSigns()
+		local priceButton = upgradeSign:FindFirstChild("PriceButton", true)
+		check(
+			priceButton.BackgroundColor3 == roblox.Color3.fromRGB(225, 30, 40),
+			"코인이 되면 가격 칸 빨강 (그대로)"
+		)
+		local beforeClick = #sent
+		clickDetector(upgradeSign)
+		check(
+			#sent == beforeClick + 1 and lastSent("PurchaseUpgrade").args[1] == "Treadmill",
+			"표지판 누르면 바로 PurchaseUpgrade(Treadmill) 한 번"
+		)
+		check(Shop9.clickSign(otherSign) == "notmine" and #sent == beforeClick + 1, "남의 표지판은 안 보냄")
+		-- 마우스 올리기: 노란 테두리 + 가격 칸 살짝 큼 → 내리면 원래대로
+		sigOf(myDetector, "MouseHoverEnter"):Fire(player)
+		local edge = upgradeSign:FindFirstChild("Edge", true)
+		check(
+			edge.Color == roblox.Color3.fromRGB(255, 220, 60) and priceButton.Size.X.Scale > 0.79,
+			"마우스 올리면 노란 테두리 + 가격 칸 살짝 큼"
+		)
+		sigOf(myDetector, "MouseHoverLeave"):Fire(player)
+		check(
+			edge.Color ~= roblox.Color3.fromRGB(255, 220, 60) and priceButton.Size.X.Scale < 0.79,
+			"내리면 원래대로"
+		)
+		-- 코인이 모자라면: 가격 칸 회색 + "코인이 부족해요" + 안 보냄
+		holdDelays = true
+		player:SetAttribute("Money", 0)
+		Shop9.repaintSigns()
+		check(
+			priceButton.BackgroundColor3 == roblox.Color3.fromRGB(120, 120, 130),
+			"코인 모자라면 가격 칸 회색"
+		)
+		local beforePoor = #sent
+		check(Shop9.clickSign(upgradeSign) == "poor", "코인 모자라면 'poor'")
+		check(
+			#sent == beforePoor and toastNow("코인이 부족해요"),
+			"'코인이 부족해요' 토스트 · 안 보냄"
+		)
+		holdDelays = false
+		player:SetAttribute("Money", 12345)
+		-- 연타 방지
+		Shop9.CLICK_COOLDOWN = 10
+		Shop9.clickSign(upgradeSign)
+		check(Shop9.clickSign(upgradeSign) == "busy", "연타 방지 (0.35초 안 두 번째는 'busy')")
+		Shop9.CLICK_COOLDOWN = 0
+		-- 건너뛰기 표지판 → 로벅스 (상품 id 0 = 준비 중 토스트, 설정되면 구매창)
+		holdDelays = true
+		local beforeMarket = #marketPrompts
+		check(Shop9.clickSign(skipSignPart) == "notready", "건너뛰기 표지판: 상품 id 0 → 'notready'")
+		check(
+			toastNow("준비 중이에요") and #marketPrompts == beforeMarket,
+			"'준비 중이에요…' 토스트, 구매창 안 띄움"
+		)
+		holdDelays = false
+		local tskip1 = Products9.get("tskip_1")
+		tskip1.productId = 4242
+		clickDetector(skipSignPart)
+		check(
+			#marketPrompts == beforeMarket + 1 and marketPrompts[#marketPrompts].id == 4242,
+			"상품 id 가 있으면 PromptProductPurchase(나, 4242)"
+		)
+		check(Purchase9.prompt("tskip_1") == "busy", "구매창이 떠 있는 동안 다시 안 띄움 ('busy')")
+		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 4242, false)
+		check(Purchase9.prompt("tskip_1") == "prompted", "구매창을 닫으면 다시 띄울 수 있음")
+		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 4242, false)
+		tskip1.productId = 0
+		check(Purchase9.prompt("nope_key") == "unknown", "모르는 상품 → 'unknown'")
+		check(Purchase9.robux(2048) == "R$ 2,048" and Purchase9.robux(3) == "R$ 3", "가격 글 'R$ 2,048' · 'R$ 3'")
+		-- 최대 레벨이면 건너뛰기 표지판은 숨김(서버 Attr Hidden) → 안 눌림
+		skipSignPart:SetAttribute("Hidden", true)
+		sigOf(skipSignPart, "Attr_Hidden"):Fire()
+		check(
+			skipSignPart:FindFirstChildOfClass("ClickDetector").MaxActivationDistance == 0
+				and Shop9.clickSign(skipSignPart) == "max",
+			"숨긴 건너뛰기 표지판은 안 눌림"
+		)
+		skipSignPart:SetAttribute("Hidden", nil)
+		sigOf(skipSignPart, "Attr_Hidden"):Fire()
+		player:SetAttribute("TreadmillLevel", nil)
+	end
 	-- 판매 가판대: "열매 팔기"(E) → SellFruits / "식물 팔기"(F) → 정원 식물 창 · 트레일 상점 프롬프트
 	local sellFruits = sellStall:FindFirstChild("SellFruitsPrompt", true)
 	check(
@@ -1666,6 +2005,19 @@ local function body()
 		)
 		local cost3 = Economy8.nextTreadmillCost(3)
 		check(buy.Text == "올리기 · " .. Format8.money(cost3), "버튼 '올리기 · 가격' (" .. buy.Text .. ")")
+		-- 9판: 러닝머신 창 가운데 "⏩ 건너뛰기 · R$ N" (레벨 3 → tskip_4 = R$ 50)
+		local skip9 = td:FindFirstChild("TreadmillSkip", true)
+		check(
+			skip9 and skip9.Visible and skip9.Text == "⏩ 건너뛰기 · R$ 50",
+			"러닝머신 창 '⏩ 건너뛰기 · R$ 50' (" .. tostring(skip9 and skip9.Text) .. ")"
+		)
+		local beforeSkip = #sent
+		local beforeMarket9 = #marketPrompts
+		check(
+			click(skip9) and #sent == beforeSkip and #marketPrompts == beforeMarket9,
+			"건너뛰기 누름 → 상품 id 0 이라 아무것도 안 보냄 (준비 중)"
+		)
+		check(dialogRoot("TreadmillDialog") ~= nil, "건너뛰기 눌러도 창은 열린 채")
 		-- 코인이 모자라면 회색 + 눌러도 안 보냄
 		player:SetAttribute("Money", 0)
 		sigOf(player, "Attr_Money"):Fire()
@@ -1726,6 +2078,13 @@ local function body()
 		player:SetAttribute("TreadmillLevel", 9999)
 		sigOf(player, "Attr_TreadmillLevel"):Fire()
 		check(upBtn.Text == "최대 레벨!" and upBtn.Active == false, "최대 레벨: '최대 레벨!' 회색")
+		local skipMax = holder:FindFirstChild("TreadmillSkip", true)
+		check(skipMax and skipMax.Visible == false, "최대 레벨: '⏩ 건너뛰기' 숨김")
+		local skipH = holder:FindFirstChild("TreadmillSkip", true)
+		check(
+			skipH.Size.Y.Offset * hs >= 45.9,
+			string.format("폰 '⏩ 건너뛰기' 버튼 %.1fpx", skipH.Size.Y.Offset * hs)
+		)
 		player:SetAttribute("TreadmillTouching", nil)
 		Tread.setTouching(false)
 		check(dialogRoot("TreadmillDialog") == nil, "setTouching(false) → 창 닫힘")
@@ -2056,17 +2415,14 @@ local function body()
 		fire("FruitsSold", { count = 5, coins = 450 })
 		local soldPop = playerGui:FindFirstChild("FruitsSoldPopup", true)
 		check(soldPop and soldPop:FindFirstChild("Coins").Text == "+450 코인", "FruitsSold → 화면 '+450 코인'")
-		fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop", mutation = "frozen" })
-		local feedPop = myPlant:FindFirstChild("FeedPop")
+		check(handlers["FeedResult"] == nil, "9판: FeedResult 받는 곳 없음 (먹이기 연출·소리 없앰)")
+		-- 9판: ProductGranted → 축하 글
+		fire("ProductGranted", { key = "boost_8", kind = "treadmillBoost" })
+		local grantPop = playerGui:FindFirstChild("ProductGrantedPopup", true)
 		check(
-			feedPop and string.find(feedPop:FindFirstChild("Text").Text, "!", 1, true) ~= nil,
-			"FeedResult(얼음) → 식물 위 돌연변이 이름: "
-				.. tostring(feedPop and feedPop:FindFirstChild("Text").Text)
+			grantPop and string.find(grantPop:FindFirstChild("Title").Text, "받았어요", 1, true) ~= nil,
+			"ProductGranted → 축하 글: " .. tostring(grantPop and grantPop:FindFirstChild("Title").Text)
 		)
-		feedPop.Parent = nil
-		fire("FeedResult", { plantUid = "p1", fruitId = "crystal_snowdrop" })
-		feedPop = myPlant:FindFirstChild("FeedPop")
-		check(feedPop and feedPop:FindFirstChild("Text").Text == "냠냠", "FeedResult(안 붙음) → '냠냠'")
 		holdDelays = false
 	end
 	check(
@@ -2696,10 +3052,13 @@ local function body()
 				{ { coins = "x", count = 1 }, n = 1 },
 				{ { coins = 0 / 0, count = 1 }, n = 1 },
 			},
-			FeedResult = {
+			-- 9판
+			ProductGranted = {
 				{ n = 0 },
-				{ { plantUid = "p1", mutation = 5 }, n = 1 },
-				{ { plantUid = "p1", mutation = "nope" }, n = 1 },
+				{ "x", n = 1 },
+				{ { key = 5 }, n = 1 },
+				{ { key = "nope", kind = 3 }, n = 1 },
+				{ { key = "coins_1m" }, n = 1 },
 			},
 			PlantGrown = {
 				{ n = 0 },
@@ -2853,7 +3212,10 @@ local function body()
 
 		local rects = menuRects()
 		local plan = Hud.menuPlan()
-		check(#rects == 4, tag .. " 메뉴 버튼 4개 (5판: 퀘스트·선물 버튼 없앰)")
+		check(
+			#rects == 5,
+			tag .. " 메뉴 버튼 5개 (5판: 퀘스트·선물 버튼 없앰 · 9판: + 스피드 배수)"
+		)
 		local joy = Layout.joystickZone(area)
 		local inside, big, clearJoy, badgeOk = true, true, true, true
 		local parts = {}

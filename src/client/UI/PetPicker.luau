@@ -1,6 +1,6 @@
 --!strict
 --[[
-	PetPicker — "식물(또는 열매) 고르기" 공용 창 (6판: 사쿠라 나무 성체 바치기 · 열매 먹이기)
+	PetPicker — "식물(또는 열매) 고르기" 공용 창 (6판: 사쿠라 나무 성체 바치기 · 9판: 열매 먹이기 없앰)
 
 	  PetPicker.open({
 	      title = "사쿠라 나무", color = Theme.Colors.pink,

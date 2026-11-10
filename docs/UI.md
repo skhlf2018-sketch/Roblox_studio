@@ -1,4 +1,4 @@
-# 화면·소리·생김새 (UI.md) — 8판 "씨앗을 훔치세요" (등급 16개 · 구역 21개 · 식물 182종 · 8판 화면)
+# 화면·소리·생김새 (UI.md) — 9판 "씨앗을 훔치세요" (등급 16개 · 구역 21개 · 식물 182종 · 9판 화면)
 
 작성: 선임 (2026-10-18 처음 · 2판 원작 스타일 · 5판 2026-10-22 · **7차 전면 갱신 = 6판 "씨앗을 훔치세요", 2026-10-27**).
 게임이 **보이고 들리게** 만드는 부분을 정리한 문서입니다. 이전 기록(알·펫·퓨전·제단·우리 펫 걷기)은 git 이력에.
@@ -6,6 +6,19 @@
 원작 느낌의 핵심 = **Plastic 재질 + 표면 스터드** + 두 가지 색 체크무늬 + 굵은 검은 외곽선 글씨. 배치 숫자는 전부 수석의 `src/shared/Data/MapLayout.luau`, Remote 는 `docs/REMOTES.md`, 규칙은 `docs/SEED_GAME_DESIGN.md`.
 
 **6판 용어** (화면 글): 알 → **씨앗** · 우리 → **정원** · 부화 → **성체가 됨** · 펫 → **(성체) 식물** · 돈 `$` → **코인** (`Format.money(n)` = "1.5K 코인") · 쓰다듬기 → **물 주기** · 경비 → **식물 괴물**. Remote·모듈·태그·변수 이름은 5판 그대로인 것이 많음 (`PetPet`, `IncubatingEgg`, `PetsController`, `PetModels` …).
+
+## 0-9. 9판 (선임 2026-11-10) — 먹이기 없음 · 표지판 누르기 · 건너뛰기 표지판 · 스피드 배수 창 · 상점 탭 · 로벅스 구매 공통
+
+사장님 지시 2026-11-10. 수석 9판 계약: `Data/Products`(상품 표·`productId` 는 `Products.IDS` 한 곳, 지금 전부 0) · Remote `ProductGranted { key, kind }` · Attr `TreadmillBoost`(number)·`MoneyPass`(bool) · Snapshot `treadmillBoost`·`moneyPass` · `FeedFruit`/`FeedResult` 없앰.
+
+- **먹이기 화면 완전 삭제**: 열매 가방 칸 아래 = 노란 글 **"가판대에서 파세요"**(`SellHint`, 버튼 자리), 위 안내 "판매 가판대에서 E 로 팔아요". 정원 식물 카드 = "열매 따기" + **"팔기 N"(한 줄 전체)**. `FruitBagController.feedFruit/feedPlant`, `PetFxController.fed`(냠냠·돌연변이 반짝 `FeedPop`), 소리 `Feed`·`FeedMutate` 없앰.
+- **구매 공통 `src/client/Purchase.luau`**: `Purchase.prompt(key)` → `"unknown"` / `"notready"`(`Products.isConfigured` false → 토스트 **"준비 중이에요 — 어른과 함께 상품을 만들어야 살 수 있어요"**, 1초에 한 번) / `"busy"`(구매창을 띄운 뒤 2초 또는 `PromptProductPurchaseFinished` 까지) / `"prompted"`(`MarketplaceService:PromptProductPurchase(나, productId)`). `ProductGranted` → 소리 **`ProductGranted`**(팡파레 id 재사용) + 화면 가운데 **"🎉 ○○ 받았어요! / 고마워요!"**(`ProductGrantedPopup`, 2.4초) + `Purchase.onGranted` 구독자(상점·스피드 배수 창·러닝머신 창·표지판 다시). 가격 글 `Purchase.robux(n)` = **"R$ 2,048"** (쉼표, MapBuilder 표지판도 같은 모양). Main 이 `Purchase.start()`.
+- **업그레이드 표지판 = 누르기** (회색 E `UpgradePrompt` 없앰): MapBuilder 가 표지판 판 파트에 **`ClickDetector "SignClick"`**(MaxActivationDistance 20, 폰 터치도 됨) + SurfaceGui 이름 `Board`(Frame) > `Edge`(UIStroke)·`PriceButton`. 클라 `ShopController.hookSign` (ClickDetector 가 없으면 내 화면에 만듦): **내 베이스 것만** 거리 20(남의 것은 내 화면에서 0 = 손가락 커서도 안 나옴) → `clickSign(part)` = 코인 되면 바로 `PurchaseUpgrade(kind)`(한 번에 한 레벨, 0.35초 연타 방지) / 모자라면 토스트 **"코인이 부족해요"** + `Error` / 최대면 "최대 레벨이에요!". 가격 칸 색 = 코인 되면 빨강(그대로) · 모자라면 **회색**(1초에 한 번 다시 칠함), 마우스 올리면 `Edge` 노랑 14px + 가격 칸 ×1.08. 서버는 클릭을 안 들음 (Remote 는 그대로 `PurchaseUpgrade`).
+- **"⏩ 건너뛰기" 표지판** (MapBuilder `skipSign`, 태그 **`Visuals.Tags.TreadmillSkipSign`**, Attr `PlotIndex`·`Kind = "TreadmillSkip"`·`ProductKey`·`Hidden`): 러닝머신 업그레이드 표지판 **바로 옆(z −7, 스폰 반대쪽)** 보라 판 4.4×3 + 말뚝 (파트 2 × 7 = 14, 맵 7,724) — 글 "⏩ 건너뛰기" + 로벅스 초록 가격 칸 **"R$ N"**(`Products.nextTreadmillSkip(주인 레벨).robux`, `refreshPlot` 이 맞춤). 최대 레벨이면 **숨김**(투명·안 부딪힘·SurfaceGui 끔·ClickDetector 0·Attr `Hidden`). 누르면 `Purchase.prompt(tskip_n)`.
+- **러닝머신 창** `TreadmillDialog` 버튼 3개: 닫기 · **`TreadmillSkip` "⏩ 건너뛰기 · R$ N"**(로벅스 초록, 최대면 숨김, 창은 열린 채) · 올리기. **상점 러닝머신 카드**: 설명 2줄 + 코인 버튼 위 **`SkipRobux` "⏩ 건너뛰기 · R$ N"**.
+- **스피드 배수 창** (`Controllers/BoostController`, 창 **"BoostWindow"** 820×540 주황 "⚡ 스피드 배수"): 왼쪽 메뉴 **인덱스(2)와 슬로우 모드(8) 사이** order 3 kind `boost` 번개 그림 **"스피드 배수"** (`Icons` 새 그림 `bolt`·`robux`, `Theme.Menu.boost`). 설명 "러닝머신을 탈 때 속도가 N배로 올라요 (걷는 속도가 아니에요)", 위 "지금 ×N 적용 중!" / "아직 스피드 배수가 없어요 (×1)", 카드 11장 격자 스크롤(`Boost_2`… 144×190: 번개 + "2배 스피드"/"4배"… + `BuyBoost` "R$ 2"…"R$ 2,048"). 지금 배수(Attr `TreadmillBoost` → Snapshot → 1)와 같으면 회색 "적용 중", 작으면 회색 "보유 중"(눌러도 안 삼). **HUD 속도 옆 `BoostBadge` "×8"** (주황 알약, 배수 > 1 일 때만, 터치에서 코인 줄 x 250 앞까지).
+- **상점 탭**: 업그레이드 · 트레일 · **속도 · 코인** ("추천" 없앰). 속도 = `Product_speed_10m` "10M 스피드 · R$ 199" · `Product_speed_100m` "100M 스피드 · R$ 259", 코인 = `Product_money_pass` "코인 2배 · 영원히! · R$ 199"(Attr `MoneyPass` 면 회색 "보유 중") · `Product_coins_1m` "1M 코인 · R$ 99" · `Product_coins_1b` "1B 코인 · R$ 199". 버튼 `BuyProduct`(로벅스 초록) → `Purchase.prompt`. 아직 id 0 인 상품이 있으면 아래 노란 글 `NotReady` "로벅스 상품은 어른과 함께 만들면 살 수 있어요 (준비 중)".
+- 폰(750×381 · 844×390): 왼쪽 메뉴 5개 = 2열(1열 상점·인덱스·스피드 배수, 2열 슬로우·설정), 조이스틱·속도/코인 줄과 안 겹침 · 스피드 배수 카드·러닝머신 창 건너뛰기·상점 건너뛰기 버튼 46px 이상 (smoke).
 
 ## 0-8. 8판 (선임 2026-11-08) — 프롬프트 안 겹침 · 러닝머신 터치 창 · 구역 입장 배너 · 속도 배지
 
@@ -16,7 +29,7 @@
   |---|---|---|
   | 내 자라는 씨앗 `IncubatingEgg` | `PickUpPrompt` "집기" E | `SkipPrompt` "건너뛰기" R |
   | 판매 가판대 `SellStall` | `SellFruitsPrompt` "열매 팔기" E (FruitBag) | `SellPrompt` "식물 팔기" F (Pets) |
-  하나씩만 있는 것(그대로): 성체 `PickFruitPrompt`(E, `GardenPromptAttach`) · 사쿠라 `SakuraPrompt` · 업그레이드 표지판 `UpgradePrompt` · 트레일 상점 `TrailPrompt` · 서버 둥지 씨앗 "훔치기"·크리스탈. 같은 키(E)끼리는 로블록스가 가장 가까운 것 하나만 보여 줌(`Exclusivity` 기본값).
+  하나씩만 있는 것(그대로): 성체 `PickFruitPrompt`(E, `GardenPromptAttach`) · 사쿠라 `SakuraPrompt` · 트레일 상점 `TrailPrompt` · 서버 둥지 씨앗 "훔치기"·크리스탈. 같은 키(E)끼리는 로블록스가 가장 가까운 것 하나만 보여 줌(`Exclusivity` 기본값).
 - **러닝머신 터치 창** (`TreadmillController`, `Ui.dialog` **"TreadmillDialog"**, 파란 띠 "👟 러닝머신 업그레이드"): 내 벨트에 올라서면 한 번 — 글 "레벨 n → n+1 (○○ 러닝머신) / 1초에 속도 +A → +B (`Economy.treadmillGainPerSecond`) / 내 코인", 버튼 "닫기" · **"올리기 · N 코인"**(`Economy.nextTreadmillCost`, 모자라면 회색·안 보냄) → `PurchaseUpgrade("Treadmill")`, 사도 창은 열린 채 다음 레벨로 바뀜. 0레벨 = "아직 러닝머신이 없어요!" + **"러닝머신 사기 · N 코인"**, 최대 = "최대 레벨!" 회색. 닫으면 벨트에서 내려올 때까지 안 뜸, 내려오면 저절로 닫힘. 판정은 **`setTouching(on)` 한 곳**: 서버 `TreadmillTouched` → true, Attr `TreadmillTouching` 이 있으면 그것, 없으면(옛 서버) 0.25초 클라 판정(`OnTreadmill` · `MapLayout.treadmillRect` · 태그 `Treadmill` 파트). 옛 서버 "러닝머신이 잠겨 있어요!…" 토스트는 `NotifyController.mute` 로 숨김. 상점 러닝머신 카드는 그대로.
 - **구역 입장 배너** (`HudController`, Alerts 층 Frame **"ZoneBanner"** > `Title`·`Sub`, 기준 560×80): 새 구역에 들어가면 위 가운데에 큰 **한국어 이름**(구역 `accent` 색, 52px) + 작은 **영어 이름·얼굴** "Jungle 😬"(22px), **1.5초** 보이고 0.35초 동안 사라짐. 허브·베이스 = 초록 **"안전 구역" / "Safe Zone"**. 접속 직후 첫 구역은 안 띄움, 같은 구역은 한 번만(서버 `ZoneEntered` 와 `ZoneController.changed` 둘 다 들음). 튜토리얼 패널이 보이면 아래로 밀림(전과 같음). `HudController.zoneBannerText(zone)` · `showZoneBanner(zone)`.
 - **속도 획득 배지** (`SpeedFxController.popGain(amount)`, Alerts 층 **"SpeedPop"** 240×60 분홍 알약 + 신발 그림 + "+4B"): 러닝머신 걸음 `TreadmillStep`(전의 캐릭터 옆 분홍 "+500" `StepPop` 을 이걸로 통일) · 도감 보상 `IndexRewarded.speed`. 처음 한 번만 만들고 글자·위치만 바꿈, 마지막으로 오른 뒤 1.2초 보임. 구역 배너가 떠 있으면 그 바로 아래, 아니면 그 자리.
@@ -96,15 +109,17 @@
 | 파일 | 내용 |
 |---|---|
 | `Controllers/IncubatorController.luau` | 씨앗 창(오른쪽 빨간 씨앗 버튼): "자라는 중" 탭(단계 이름 `GardenRules.stageName`·막대·남은 시간·가방 버튼·⏩ 건너뛰기) + "가방" 탭(심기) · **씨앗 심기 모드** · **건너뛰기 창**(`SkipDialog`) · 자라는 씨앗 프롬프트 "집기"(E)·"건너뛰기"(R) |
-| `Controllers/PetsController.luau` | **정원 식물 창**(오른쪽 주황 버튼): "정원 n/칸 · 성체 n", 열매 모두 따기, 카드마다 열매·값·다음 열매·따기·먹이기·팔기(확인 창) · 판매 가판대 "식물 팔기"(F) |
-| `Controllers/FruitBagController.luau` | **새 파일.** 열매 가방 창 · 먹이기(열매 ↔ 성체 고르기 + 확률 미리보기) · 판매 가판대 "열매 팔기"(E) · "+N 코인" 연출 |
-| `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E) (물 주기는 2026-10-28 삭제) · 먹이기 결과 반짝/냠냠(`FeedResult`) |
+| `Controllers/PetsController.luau` | **정원 식물 창**(오른쪽 주황 버튼): "정원 n/칸 · 성체 n", 열매 모두 따기, 카드마다 열매·값·다음 열매·따기·팔기(확인 창, 9판 먹이기 없음) · 판매 가판대 "식물 팔기"(F) |
+| `Controllers/FruitBagController.luau` | 열매 가방 창 (9판: 먹이기 없음, 칸 아래 "가판대에서 파세요") · 판매 가판대 "열매 팔기"(E) · "+N 코인" 연출 |
+| `Controllers/PetFxController.luau` | 다시 씀. 내 정원 파트에만 프롬프트 "열매 따기"(E) (물 주기는 2026-10-28 삭제) (9판: 먹이기 결과 연출 없앰) |
 | `Controllers/PlantFxController.luau` | **새 파일.** 아우라 100 스터드 안만 켜기 · 가까운(60) 식물 살랑살랑 |
 | `Controllers/HatchController.luau` | **성체 카드** "성체가 됐어요!" (`PlantGrown`) |
 | `Controllers/SakuraController.luau` | 사쿠라 창: "성체 바치기" / "씨앗 뽑기 · 크리스탈 100" |
 | `Controllers/HudController.luau` | HUD (3장) + 오른쪽 **초록 열매 버튼·배지 "12/300"** |
 | `Controllers/IndexController.luau` | "식물 도감" (등급 16개, 열매 1개 값, 신성 이상 무지개 띠) |
-| `Controllers/ShopController.luau` | 상점: 정원 업그레이드("정원 칸 7 → 8") · 러닝머신(20단계 이름, "1초에 속도 +N") · 트레일 |
+| `Controllers/ShopController.luau` | 상점: 정원 업그레이드("정원 칸 7 → 8") · 러닝머신(20단계 이름, "1초에 속도 +N", 9판 "⏩ 건너뛰기 · R$ N") · 트레일 · 9판 속도/코인 로벅스 탭 · **업그레이드·건너뛰기 표지판 누르기**(ClickDetector) |
+| `Controllers/BoostController.luau` | **9판 새 파일.** 스피드 배수 창 `BoostWindow` (카드 11장) + 왼쪽 메뉴 "스피드 배수" 버튼 |
+| `Purchase.luau` (Client 바로 아래) | **9판 새 파일.** 로벅스 구매 공통 `Purchase.prompt(key)` · `onGranted` · `robux(n)` · ProductGranted 축하 연출 |
 | `Controllers/TutorialController.luau` | 6판 5단계 가리키기 (4-3장) |
 | `Controllers/SoundController.luau` | 소리 (5장) — 결과 이벤트에서 스스로 냄 |
 | `Controllers/WorldFxController.luau` | "+열매 N" 팝업(`FruitPicked`), 떨어진 씨앗 "32초", 자는 경비 Z, 무지개 순환 |
@@ -144,8 +159,8 @@
 | 태그 **`AuraFx`** (`Visuals.Tags.AuraFx`): 그 파트 아래 ParticleEmitter·PointLight 는 서버가 `Enabled = false` → 클라가 100 안만 켬. 정원 모델은 투명 파트 `Aura`, 씨앗은 껍데기 `Shell` 에 붙음. 빛기둥 Beam `SkyPillar`·`SpecialBeam` 은 늘 켜짐 | PlantFxController |
 | 무지개 돌연변이: 꽃잎·열매 파트에 `EggShell` 태그 + Attr `Rainbow` | WorldFx 색 순환 |
 | 클라 프롬프트 (내 것에만, Attachment `GardenPromptAttach`): 성체 `PickFruitPrompt`(E) · `WaterPrompt`(F) / 씨앗 `WaterPrompt`(F) · "집기"(E) · "건너뛰기"(R) / 가판대 `SellFruitsPrompt`(E) · `SellPrompt`(F, 식물 팔기) / 사쿠라 `SakuraPrompt`(E) | PetFx · Incubator · FruitBag · Pets · Sakura |
-| 정원 식물 창 버튼 `PickFruit`(카드)·`PickAllFruit`·`FruitBagOpen`·`Feed`·`Sell` · 열매 가방 `FeedButton` · 건너뛰기 창 `SkipDialog`(`SkipAll`/`SkipHalf`) · 사쿠라 `OfferButton`/`DrawButton` | Tutorial 반짝 · smoke_client |
-| `UpgradeSign` 태그 Attr `Kind`·`PlotIndex` / `TrailShop` / `PlotSpawn` / `LeaderboardBoard` | Shop · Trail · WorldFx · Leaderboard |
+| 정원 식물 창 버튼 `PickFruit`(카드)·`PickAllFruit`·`FruitBagOpen`·`Sell` · 열매 가방 `SellHint` (9판) · 건너뛰기 창 `SkipDialog`(`SkipAll`/`SkipHalf`) · 사쿠라 `OfferButton`/`DrawButton` | Tutorial 반짝 · smoke_client |
+| `UpgradeSign` 태그 Attr `Kind`·`PlotIndex` + ClickDetector `SignClick` · SurfaceGui `Board`>`Edge`·`PriceButton` (9판) / `TreadmillSkipSign` (9판) / `TrailShop` / `PlotSpawn` / `LeaderboardBoard` | Shop · Trail · WorldFx · Leaderboard |
 | 경비 겉모습 `SleepZ`(`Z1~Z3`), `GuardPose`, `GuardGlow`, 눈 `EyeOpen`/`EyeClosed`/`Brow` | WorldFx Z 둥실 · 얼굴 |
 | 핫바 `BagEgg_<uid>`·`MoreEggs`, `TutorialPanel`·`TutorialArrow`·`TutorialGlow`·`TutorialDone`, Workspace `TutorialGuide`, 씨앗 미리보기 `EggPlacePreview`/`EggPlaceRing`, 떨어진 씨앗 `DropTimer` | Hotbar · Tutorial · Incubator · WorldFx |
 
@@ -221,20 +236,20 @@
 | 씨앗 심기 모드 | IncubatorController | 정원 바닥 미리보기 초록/빨강 = `EggPlacement.check(toLocal, 자라는 씨앗 + 성체 자리)` + 정원 칸 + 서 있는 곳. PC 클릭 / 폰 "여기 심기" → `PlaceEgg(uid, 월드 x, z)` |
 | **건너뛰기 창** | IncubatorController + `Ui.dialog` | "전부 · N 코인" / "절반 · N 코인" / 취소 — `GardenRules.skipCost(petId, progress, required, mode)`, **1초마다 다시 계산**, 코인 모자라면 회색 → `SkipGrowth(uid, "all"\|"half")` |
 | **성체 카드** | HatchController | `PlantGrown` → 씨앗 퐁! → "성체가 됐어요!" + 3D 식물 + "열매 1개 N 코인 · N초마다" + NEW!(도감 첫 발견). 한꺼번에 여러 그루면 4장까지 |
-| **정원 식물 창** | PetsController | `snap.pets`: "정원 n/칸 · 성체 n", **열매 모두 따기**(`PickFruit("all")`), 열매 가방 버튼, 카드: 열매 n/5 · 1개 값(`FruitRules.fruitValue`) · 다음 열매 n초(1초마다) · 따기(`PickFruit(uid)`) · 먹이기 · **팔기 N 코인**(`GardenRules.sellPrice`, 확인 창 → `SellPlant`) |
-| **열매 가방 창** | FruitBagController | `snap.fruits`: "열매 12/300 · 다 팔면 N 코인", 칸마다 열매 색 · 이름 · ×개수 · 값 · **먹이기** → 성체 고르기(카드에 `feedOptions`·`feedChance`, 더 붙을 게 없으면 회색) → `FeedFruit(plantUid, fruitId)` |
+| **정원 식물 창** | PetsController | `snap.pets`: "정원 n/칸 · 성체 n", **열매 모두 따기**(`PickFruit("all")`), 열매 가방 버튼, 카드: 열매 n/5 · 1개 값(`FruitRules.fruitValue`) · 다음 열매 n초(1초마다) · 따기(`PickFruit(uid)`) · **팔기 N 코인**(`GardenRules.sellPrice`, 확인 창 → `SellPlant`) |
+| **열매 가방 창** | FruitBagController | `snap.fruits`: "열매 12/300 · 다 팔면 N 코인", 칸마다 열매 색 · 이름 · ×개수 · 값 · "가판대에서 파세요" (9판: 먹이기 없음) |
 | 판매 가판대 | FruitBagController / PetsController | E "열매 팔기 · 열매 12개 · 3.4K 코인"(Attr `FruitCount`·`FruitBagValue`, 0개면 안내만) → `SellFruits()` → `FruitsSold` "+3.4K 코인" / F "식물 팔기" → 정원 식물 창 |
 | 정원 프롬프트 | PetFxController / IncubatorController | 내 성체: "열매 따기 (n)"(E, 0개면 꺼짐, 높이 = `VisualHeight`) / 내 씨앗: "집기"(E, 1칸) · "건너뛰기"(R, 2칸) 옆으로 나란히 (8판 `WorldPrompt.stack`). (물 주기는 2026-10-28 삭제) |
-| 물방울 · 먹이기 결과 | PetFxController | `PetPetted(owner, uid)` → 💧 + 파란 반짝 + `Water` (Attr `OwnerUserId` 로 거름) / `FeedResult` → 돌연변이 색 반짝 + "황금!" 또는 "냠냠" |
 | "+열매 N" | WorldFxController | `FruitPicked{plantUid,count}` → 그 식물 위 팝업 |
 | 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`, 일반은 회색 카드 + "너무 흔해서 사쿠라 나무가 안 받아요") / "씨앗 뽑기 · 크리스탈 100"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
 | 도감 | IndexController | "식물 도감", 구역 탭 18(7판), 등급 16개 색·영어 이름(신성·슈퍼·울트라디바인 무지개 띠, 해커 글리치 깨진 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
-| 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") · 트레일 |
+| 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") + "⏩ 건너뛰기 · R$ N" · 트레일 · 속도(10M·100M) · 코인(코인 2배·1M·1B) 탭 (9판, "추천" 없음) |
+| 스피드 배수 | BoostController | 9판 `BoostWindow`: 카드 11장 "2배 스피드 · R$ 2" … "2048배 · R$ 2,048", 보유 중/적용 중 회색, HUD 속도 옆 "×N" |
 | 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` → 위 가운데 속도 배지 "👟 +1M" (8판), 벨트에 올라서면 **러닝머신 창** "올리기 · N 코인" (8판, 0장) |
 | 랭킹판 | LeaderboardController | 코인 / 속도 탭 + 허브 3D 판 |
 
 ### 4-1. 확인 창 (`Ui.dialog` / `Ui.confirm`)
-- 화면 층 "Dialogs" (창 위). 버튼은 `Ui.touch` 로 폰에서도 46px 이상. 건너뛰기 · 식물 팔기 · 먹이기 확인에 씀.
+- 화면 층 "Dialogs" (창 위). 버튼은 `Ui.touch` 로 폰에서도 46px 이상. 건너뛰기 · 식물 팔기 확인 · 러닝머신 창(9판 버튼 3개)에 씀.
 
 ### 4-2. 반응형 HUD (`UI/Layout.luau`)
 - PC: 왼쪽 메뉴 넓은 1열, 속도·코인 왼쪽 아래, 오른쪽 버튼 3개(씨앗·식물·열매, 묶음 높이 240). 터치: 속도·코인 위 왼쪽 한 줄, 시간 오른쪽 위, 메뉴는 조이스틱 위 정사각 아이콘 2~3열, 오른쪽 버튼은 점프 버튼과 안 겹치게.
@@ -257,7 +272,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 | **`Grown` / `GrownRare`** (6판) | 짠 / 팡파레 (전설 이상) | `PlantGrown` |
 | **`FruitPick`** (6판) | 뽁! (0.15초에 한 번) | `FruitPicked` |
 | **`FruitSell`** (6판) | 짤랑짤랑 | `FruitsSold` |
-| **`Feed` / `FeedMutate`** (6판) | 냠냠 / 반짝 | `FeedResult` (mutation 없음 / 있음) |
+| **`ProductGranted`** (9판) | 짠! 팡파레 (무료 id 재사용) | 로벅스 상품 받음 (`ProductGranted`). 6판 `Feed`·`FeedMutate` 는 9판에서 없앰 |
 | `SakuraOffer` · `Bloom` / `SpiritBloom` | 철컥+반짝 · 꽃잎 반짝 / 합창 | `SakuraResult` offered · draw (정령 벚꽃 = 비밀 이상) |
 | `Coin` · `Purchase` · `Error` · `Notify` · `Reward` | 짤랑(작게) · 차링 · 뿡 · 띵 · 반짝 상승 | 코인 늘 때 · 성공 · 실패 · 안내 · 도감 보상 |
 | `NightBell` / `DayStart` / `Reset` / `RareEgg` | 종 / 차임 / 휘리릭 / 팡파레 | 밤 · 낮 · ALL SEED RESET · 특별 씨앗 공지 |
@@ -271,13 +286,14 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 
 ## 6. 스튜디오에서 꼭 볼 것
 
-사장님용 번호 체크리스트는 `docs/STUDIO_CHECKLIST.md` (씨앗 줍기 → 심기 → 단계 → 성체 → 열매 따기 → 팔기 → 먹이기 → 건너뛰기 → 물 주기 → 사쿠라 → 도감 → 러닝머신 20레벨). 선임이 특히 걱정하는 것:
+사장님용 번호 체크리스트는 `docs/STUDIO_CHECKLIST.md` (씨앗 줍기 → 심기 → 단계 → 성체 → 열매 따기 → 팔기 → 건너뛰기 → 물 주기 → 사쿠라 → 도감 → 러닝머신 20레벨). 선임이 특히 걱정하는 것:
 1. **씨앗 4단계·성체 모양**: 단계마다 모양이 바뀌는지, 식물이 바닥에 붙어 있는지(떠 있거나 묻히지 않음), 이름표·프롬프트·"+열매" 팝업 높이(`VisualHeight`)가 모양에 맞는지, 열매 개수가 따기에 맞게 보이고 사라지는지.
 2. **흔들기·아우라**: 가까운 식물만 살랑살랑(원래 자리에서 밀리지 않음), 희귀 이상 아우라가 100 스터드 안에서만 켜지고 정원에 식물이 많아도 안 끊기는지.
 3. **식물 괴물 16종**: 키·발 위치(땅에 닿음), 자는 얼굴 ↔ 추격 얼굴, 잡힘 거리가 5판과 같은지.
 4. **판매 가판대 E/F · 자라는 씨앗 E/R 두 프롬프트**가 옆으로 나란히 떠서 겹치지 않고 따로 눌리는지 (8판 UIOffset — 폰에서도), 건너뛰기 확인 창 가격이 1초마다 줄어드는지.
 5. **사쿠라 나무**·**러닝머신 11~20레벨 모양**·폰 에뮬레이터(오른쪽 버튼 3개와 점프 버튼).
 6. **8판**: 러닝머신 벨트에 올라서면 창이 한 번만 뜨는지(매초 다시 안 뜸·내려오면 닫힘), 구역 이름 배너 1.5초·"안전 구역", 속도 배지가 구역 배너 아래로 비키는지.
+7. **9판**: 표지판을 마우스·폰 터치로 누르면 한 번에 한 레벨만 오르는지(ClickDetector 가 SurfaceGui 위에서도 잘 잡히는지 · 남의 베이스 표지판은 커서가 안 바뀌는지), "⏩ 건너뛰기" 작은 표지판이 러닝머신 표지판과 안 겹치고 바로 옆에 서는지(20레벨이면 사라짐), 상품 id 가 0 인 지금은 어디를 눌러도 로벅스 구매창이 **안** 뜨고 "준비 중이에요…" 만 뜨는지, 폰에서 왼쪽 메뉴 5개 배치.
 
 ## 7. 알려진 한계 / 다음 할 일
 - 둥지 파트는 아직 5판 둥지 모양 ("씨앗 주머니/꽃받침" 은 다음에).
@@ -289,7 +305,7 @@ ID 가 `rbxassetid://0` 이면 조용히 건너뜁니다. 6판 정원 소리는 
 
 저장소 루트에서 (정식 테스트 `tests/run.luau` 에는 안 들어감):
 ```powershell
-lune run tests/smoke_visuals.luau   # 서버: 맵(18구역·파트 상한 8,000·사쿠라 나무·러닝머신 20 모양), 식물 158종 모델(모양 19종·파트 수·모양 다 다름, 7판 아우라 5개 고리·빛기둥·Glitch), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴), 8판: 러닝머신 벨트 = 태그 Treadmill + PlotIndex 가 treadmillRect 안, 맵 파트마다 서버 프롬프트 1개 이하
-lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·FeedFruit·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·FeedResult·PetPetted·SakuraResult), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침. 8판: 같은 파트 프롬프트 = Attachment 높이 다름·켜진 것끼리 UIOffset 으로 안 겹침, 러닝머신 터치 창(0레벨 사기·올리기·회색·한 번만·내려오면 닫힘·서버 TreadmillTouched/Attr TreadmillTouching), 구역 배너 "정글 / Jungle 😬"·"안전 구역", 속도 배지 "+500"(Instance 안 늘어남)·구역 배너 아래, 폰 3종·PC 위 가운데 겹침
+lune run tests/smoke_visuals.luau   # 서버: 맵(18구역·파트 상한 8,000·사쿠라 나무·러닝머신 20 모양), 식물 158종 모델(모양 19종·파트 수·모양 다 다름, 7판 아우라 5개 고리·빛기둥·Glitch), 씨앗 4단계, Fruits → 보이는 열매 수, 아우라(rare 이상·Enabled false·AuraFx), 씨앗 껍데기, 경비 식물 괴물(Height 그대로·얼굴), 8판: 러닝머신 벨트 = 태그 Treadmill + PlotIndex 가 treadmillRect 안, 맵 파트마다 서버 프롬프트 1개 이하. 9판: 업그레이드 표지판 14개 ClickDetector 20·PriceButton·Edge·프롬프트 없음, 건너뛰기 표지판 7개 러닝머신 표지판 바로 옆·같은 방향, 최대 레벨 숨김·"R$ 50"·"R$ 10,000"
+lune run tests/smoke_client.luau    # 클라: 컨트롤러 전부 시작 → 창·버튼·프롬프트 → 보낸 Remote (SellFruits·SkipGrowth all/half·PickFruit uid/all·PetPet 씨앗/성체·SellPlant·SakuraOffer·SakuraDraw·PlaceEgg…), 결과 이벤트(PlantGrown·FruitPicked·FruitsSold·SakuraResult·9판 ProductGranted), PlantFx 거리 켜기/끄기·흔들기, 연결 수 안 샘, 폰 버튼 46px·HUD 겹침. 8판: 같은 파트 프롬프트 = Attachment 높이 다름·켜진 것끼리 UIOffset 으로 안 겹침, 러닝머신 터치 창(0레벨 사기·올리기·회색·한 번만·내려오면 닫힘·서버 TreadmillTouched/Attr TreadmillTouching), 구역 배너 "정글 / Jungle 😬"·"안전 구역", 속도 배지 "+500"(Instance 안 늘어남)·구역 배너 아래, 폰 3종·PC 위 가운데 겹침. 9판: 먹이기 없음(Feed·FeedButton·FeedResult 없음, SellHint), 업그레이드 표지판 프롬프트 없음·ClickDetector(내 것 20 / 남의 것 0)·누르면 PurchaseUpgrade·코인 모자람 회색+"코인이 부족해요"·마우스 올림 노랑·연타 방지, 건너뛰기 표지판(준비 중 토스트 / id 있으면 PromptProductPurchase / busy / 숨김), 상점 탭(추천 없음·속도 2장·코인 3장·보유 중·러닝머신 카드 건너뛰기), 러닝머신 창 건너뛰기(R$ 50·최대면 숨김), BoostWindow(메뉴 순서·11장·가격·보유 중/적용 중·HUD ×8), ProductGranted 축하 글, 메뉴 5개 폰 배치
 ```
 `@lune/roblox` 진짜 인스턴스로 만들어 보므로 속성 이름·타입 오타와 nil 오류를 잡음. 모양·배치·느낌은 6장 / STUDIO_CHECKLIST 로 스튜디오에서.

@@ -56,7 +56,7 @@ boot("ChaseController")
 boot("IncubatorController")
 boot("HatchController")
 boot("IndexController")
-boot("FruitBagController") -- 6판: 열매 가방 창 · 판매 가판대 "열매 팔기" · 열매 먹이기
+boot("FruitBagController") -- 6판: 열매 가방 창 · 판매 가판대 "열매 팔기" (9판: 먹이기 없앰)
 boot("PetsController")
 boot("ShopController")
 boot("SettingsController")
@@ -68,6 +68,16 @@ boot("WeaponController")
 -- 선임 5차 (2판): 러닝머신 입력·걸음 팝업, 트레일 상점 창
 boot("TreadmillController")
 boot("TrailController")
+boot("BoostController") -- 9판: 왼쪽 메뉴 "스피드 배수" 버튼 · 러닝머신 부스트 창 (BoostWindow)
+-- 9판: 로벅스 구매 공통 (Client/Purchase — ProductGranted 받으면 팡파레·축하 글)
+task.spawn(function()
+	local ok, err = pcall(function()
+		(require :: any)(Client.Purchase).start()
+	end)
+	if not ok then
+		warn("[Client] Purchase 시작 실패: " .. tostring(err))
+	end
+end)
 boot("SpeedFxController") -- 4판: 빠를수록 시야를 넓혀 속도 체감
 -- 선임 5판·6판: 정원 프롬프트(열매 따기), 식물 아우라·살랑살랑, 랭킹판, 튜토리얼 패널·가리키기 (위 가운데 것들을 내리므로 맨 뒤)
 boot("PetFxController")

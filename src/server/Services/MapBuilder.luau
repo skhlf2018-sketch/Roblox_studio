@@ -57,6 +57,7 @@ local MapLayout = require(Shared.Data.MapLayout)
 local Economy = require(Shared.Economy)
 local Visuals = require(Shared.Data.Visuals)
 local Format = require(Shared.Format)
+local Products = require(Shared.Data.Products)
 local Tags = require(Shared.Tags)
 local EggRules = require(Shared.EggRules)
 local Gui = require(script.Parent.Parent.Util.Gui)
@@ -4836,13 +4837,21 @@ local function upgradeSign(
 	gui.LightInfluence = 0
 	gui.MaxDistance = 150
 	local frame = Instance.new("Frame")
+	frame.Name = "Board"
 	frame.Size = UDim2.fromScale(1, 1)
 	frame.BackgroundColor3 = navy
 	frame.Parent = gui
 	local stroke = Instance.new("UIStroke")
+	stroke.Name = "Edge" -- 9판: 마우스를 올리면 클라가 노랗게 (내 베이스 것만)
 	stroke.Color = Color3.fromRGB(12, 14, 26)
 	stroke.Thickness = 8
 	stroke.Parent = frame
+	-- 9판 (사장님 2026-11-10): 회색 E 프롬프트 대신 표지판을 눌러서(마우스·폰 터치) 업그레이드.
+	--   서버는 클릭을 안 들음 — 클라(ShopController)가 내 베이스 것만 PurchaseUpgrade(kind) 를 보냄 (서버가 다시 검사)
+	local click = Instance.new("ClickDetector")
+	click.Name = "SignClick"
+	click.MaxActivationDistance = 20
+	click.Parent = board
 	local function text(name: string, y: number, h: number, value: string, color: Color3): TextLabel
 		local t = Instance.new("TextLabel")
 		t.Name = name
@@ -4888,6 +4897,114 @@ local function upgradeSign(
 	ps.Parent = price
 	gui.Parent = board
 	return { board = board, level = level, price = price }
+end
+
+-- 9판: 러닝머신 업그레이드 표지판 바로 옆 작은 표지판 "⏩ 건너뛰기 · R$ N" (로벅스로 다음 레벨, Products.nextTreadmillSkip)
+--   파트 2개(판 + 말뚝). 가격 글은 refreshPlot 이 주인 TreadmillLevel 로 맞춤, 최대 레벨이면 숨김 (setSkipVisible)
+type SkipSign = { board: BasePart, post: BasePart, gui: SurfaceGui, price: TextLabel, click: ClickDetector }
+
+local function skipSign(parent: Instance, pos: Vector3, facing: Vector3, plotIndex: number): SkipSign
+	local purple = Color3.fromRGB(80, 40, 140)
+	local boardPos = pos + Vector3.new(0, 3.4, 0)
+	local cf = CFrame.lookAt(boardPos, boardPos + facing)
+	local post = B(parent, Vector3.new(0.8, 2, 0.8), cf * CFrame.new(0, -2.4, 0.2), purple, true)
+	post.Name = "SkipSignPost"
+	local board = makePart({
+		name = "TreadmillSkipSign",
+		size = Vector3.new(4.4, 3, 0.6),
+		cframe = cf,
+		parent = parent,
+		color = purple,
+		material = Enum.Material.Plastic,
+		studs = true,
+		tag = Visuals.Tags.TreadmillSkipSign,
+		attributes = { PlotIndex = plotIndex, Kind = "TreadmillSkip" },
+	})
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Sign"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0
+	gui.MaxDistance = 150
+	local frame = Instance.new("Frame")
+	frame.Name = "Board"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = purple
+	frame.Parent = gui
+	local stroke = Instance.new("UIStroke")
+	stroke.Name = "Edge"
+	stroke.Color = Color3.fromRGB(20, 10, 40)
+	stroke.Thickness = 8
+	stroke.Parent = frame
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.fromScale(0.05, 0.06)
+	title.Size = UDim2.fromScale(0.9, 0.36)
+	title.Font = Enum.Font.FredokaOne
+	title.TextScaled = true
+	title.TextColor3 = WHITE
+	title.Text = "⏩ 건너뛰기"
+	title.Parent = frame
+	local ts = Instance.new("UIStroke")
+	ts.Color = Color3.fromRGB(10, 10, 20)
+	ts.Thickness = 3
+	ts.Parent = title
+	local button = Instance.new("Frame")
+	button.Name = "PriceButton"
+	button.AnchorPoint = Vector2.new(0.5, 0)
+	button.Position = UDim2.fromScale(0.5, 0.5)
+	button.Size = UDim2.fromScale(0.84, 0.4)
+	button.BackgroundColor3 = Color3.fromRGB(0, 176, 111) -- 로벅스 초록
+	button.Parent = frame
+	local bs = Instance.new("UIStroke")
+	bs.Color = WHITE
+	bs.Thickness = 4
+	bs.Parent = button
+	local price = Instance.new("TextLabel")
+	price.Name = "Price"
+	price.BackgroundTransparency = 1
+	price.Size = UDim2.fromScale(1, 1)
+	price.Font = Enum.Font.FredokaOne
+	price.TextScaled = true
+	price.TextColor3 = WHITE
+	price.Text = "R$ 3"
+	price.Parent = button
+	local ps = Instance.new("UIStroke")
+	ps.Color = Color3.fromRGB(0, 50, 30)
+	ps.Thickness = 3
+	ps.Parent = price
+	gui.Parent = board
+	local click = Instance.new("ClickDetector")
+	click.Name = "SignClick"
+	click.MaxActivationDistance = 20
+	click.Parent = board
+	return { board = board, post = post, gui = gui, price = price, click = click }
+end
+
+-- "R$ 2,599" (클라 Purchase.robux 와 같은 모양)
+local function robuxText(n: number): string
+	local out = tostring(math.max(0, math.floor(n)))
+	for _ = 1, 8 do -- 쉼표 넣기 (자리 수 24 까지면 충분, 끝없는 루프 없이)
+		local replaced, count = string.gsub(out, "^(%d+)(%d%d%d)", "%1,%2")
+		out = replaced
+		if count == 0 then
+			break
+		end
+	end
+	return "R$ " .. out
+end
+
+-- 최대 레벨이면 건너뛰기 표지판을 숨김 (파트는 그대로 두고 안 보이고 안 부딪히고 안 눌리게)
+local function setSkipVisible(sign: SkipSign, visible: boolean)
+	sign.board.Transparency = if visible then 0 else 1
+	sign.board.CanCollide = visible
+	sign.post.Transparency = if visible then 0 else 1
+	sign.post.CanCollide = visible
+	sign.gui.Enabled = visible
+	sign.click.MaxActivationDistance = if visible then 20 else 0
+	sign.board:SetAttribute("Hidden", not visible)
 end
 
 -- 머리 위 빌보드 두 줄 (퓨즈 머신 "퓨즈 머신 / 0/3", 판매 등)
@@ -5737,6 +5854,7 @@ type PlotDyn = {
 	lookLevel: number,
 	penSign: UpgradeSign?,
 	treadSign: UpgradeSign?,
+	skipSign: SkipSign?, -- 9판: 러닝머신 표지판 옆 "⏩ 건너뛰기 · R$ N"
 	stepLabel: TextLabel?,
 	ownerLabels: { TextLabel },
 	conns: { RBXScriptConnection },
@@ -5870,6 +5988,9 @@ local function buildPlot(index: number, parent: Instance)
 		"Treadmill",
 		index
 	)
+	-- 9판: 러닝머신 업그레이드 표지판 바로 옆(-z, 스폰 반대쪽) 작은 "⏩ 건너뛰기 · R$ N" 표지판
+	dyn.skipSign =
+		skipSign(plotFolder, Vector3.new(s.treadmillUpgrade.x, FLOOR_TOP, s.treadmillUpgrade.z - 7), toFront, index)
 
 	-- 판매 가게 (앞마당 앞, 퓨즈 머신 옆 — 원작처럼 베이스마다)
 	local sell = stall(
@@ -6522,6 +6643,15 @@ local function refreshPlot(index: number)
 			elseif cost then string.format("레벨 %d > 레벨 %d", treadLevel, treadLevel + 1)
 			else "최대 레벨!"
 		treadSign.price.Text = if cost then Format.number(cost) .. " 코인" else "MAX"
+	end
+	local skip = dyn.skipSign
+	if skip then
+		local product = Products.nextTreadmillSkip(treadLevel)
+		setSkipVisible(skip, product ~= nil)
+		if product then
+			skip.price.Text = robuxText(product.robux)
+			skip.board:SetAttribute("ProductKey", product.key)
+		end
 	end
 	local step = dyn.stepLabel
 	if step then

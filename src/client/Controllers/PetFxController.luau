@@ -8,25 +8,21 @@
 	  남의 정원 파트에는 프롬프트를 안 만듦 (서버가 어차피 거절).
 	  파트가 없어지면(태그 빠짐·Destroying) 연결·프롬프트 정리 (5판 B-3 처럼 연결이 쌓이지 않게 파트마다 한 번만).
 	  uid 는 사람마다 따로 매겨서 겹칠 수 있으니 파트 Attr OwnerUserId == ownerUserId 로 한 번 더 거름 (REMOTES 1장)
-	- FeedResult { plantUid, fruitId, mutation? }: 내 성체 위 — 붙으면 돌연변이 색(Visuals.mutationLooks) 반짝 + "황금!" / 아니면 "냠냠"
-	공개: PetFxController.petted(ownerUserId, uid) · findPlant(ownerUserId, uid) · fed(payload) · hookPart(part) (테스트도 씀)
+	- 9판 (2026-11-10): 열매 먹이기 결과 연출(FeedResult "냠냠")은 먹이기 기능과 함께 삭제.
+	공개: PetFxController.findPlant(ownerUserId, uid) · hookPart(part) · hookedCount() (테스트도 씀)
 ]]
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage.Shared
 local GardenRules = require(Shared.GardenRules)
-local Mutations = require(Shared.Data.Mutations)
 local Pets = require(Shared.Data.Pets)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
-local Visuals = require(Shared.Data.Visuals)
 local Client = script.Parent.Parent
 local Net = require(Client.Net)
-local Fx = require(Client.UI.Fx)
 
 local PetFxController = {}
 
@@ -55,11 +51,6 @@ end
 local function heightOf(part: BasePart): number
 	local h = part:GetAttribute("VisualHeight")
 	return if typeof(h) == "number" and h > 0 then h else part.Size.Y
-end
-
--- 식물 꼭대기 월드 위치
-local function topOf(part: BasePart): Vector3
-	return part.Position + Vector3.new(0, -part.Size.Y / 2 + heightOf(part), 0)
 end
 
 local function plantName(part: BasePart): string
@@ -183,74 +174,6 @@ function PetFxController.hookedCount(): number
 	return n
 end
 
-------------------------------------------------------------------
--- 물방울 연출
-------------------------------------------------------------------
-
--- 식물 위 글자 한 번 ("황금!" / "냠냠")
-local function popWord(part: BasePart, text: string, color: Color3)
-	local gui = Instance.new("BillboardGui")
-	gui.Name = "FeedPop"
-	gui.Adornee = part
-	gui.Size = UDim2.fromOffset(200, 60)
-	local start = Vector3.new(0, -part.Size.Y / 2 + heightOf(part) + 2, 0)
-	gui.StudsOffsetWorldSpace = start
-	gui.LightInfluence = 0
-	gui.AlwaysOnTop = true
-	gui.MaxDistance = 120
-	local label = Instance.new("TextLabel")
-	label.Name = "Text"
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.FredokaOne
-	label.TextScaled = true
-	label.Text = text
-	label.TextColor3 = color
-	label.TextStrokeTransparency = 0
-	label.Parent = gui
-	gui.Parent = part
-	TweenService
-		:Create(
-			gui,
-			TweenInfo.new(1.3, Enum.EasingStyle.Quad),
-			{ StudsOffsetWorldSpace = start + Vector3.new(0, 4, 0) }
-		)
-		:Play()
-	TweenService:Create(
-		label,
-		TweenInfo.new(1.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{ TextTransparency = 1, TextStrokeTransparency = 1 }
-	):Play()
-	task.delay(1.4, function()
-		gui:Destroy()
-	end)
-end
-
--- 먹이기 결과 연출 (FeedResult). 내 식물을 찾았으면 true
-function PetFxController.fed(payload: any): boolean
-	if typeof(payload) ~= "table" or typeof(payload.plantUid) ~= "string" then
-		return false
-	end
-	local part = PetFxController.findPlant(Players.LocalPlayer.UserId, payload.plantUid)
-	if not part then
-		return false
-	end
-	local mutationId = if typeof(payload.mutation) == "string" then payload.mutation else nil
-	local m = if mutationId then Mutations.get(mutationId) else nil
-	if m and mutationId then
-		local look = Visuals.mutationLooks[mutationId]
-		local c = if look then look.color else m.color
-		local color = Color3.fromRGB(c[1], c[2], c[3])
-		popWord(part, m.name .. "!", color)
-		Fx.burst(topOf(part), color, 40, 1, 12)
-		Fx.flash(topOf(part), color, 16, 0.8)
-	else
-		popWord(part, "냠냠", Color3.fromRGB(255, 235, 150))
-		Fx.burst(topOf(part), Color3.fromRGB(255, 220, 120), 10, 0.5, 5)
-	end
-	return true
-end
-
 function PetFxController.start()
 	for _, tag in { Tags.GardenPlant, Tags.IncubatingEgg } do
 		for _, inst in CollectionService:GetTagged(tag) do
@@ -266,7 +189,6 @@ function PetFxController.start()
 			end
 		end)
 	end
-	Net.on(Remotes.ToClient.FeedResult, PetFxController.fed)
 end
 
 return PetFxController

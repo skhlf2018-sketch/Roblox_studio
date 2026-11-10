@@ -7,6 +7,7 @@
 
 return function(T, Loader)
 	local ServerHarness = require("./ServerHarness")
+	local ProductsPatch = require("./ProductsPatch")
 	local S = "ReplicatedStorage/Shared/"
 	local Products = Loader.require(S .. "Data/Products")
 	local Config = Loader.require(S .. "Data/Config")
@@ -46,9 +47,19 @@ return function(T, Loader)
 		{ "speed_100m", "speed", 259, 1e8 },
 	}
 
+	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (holes_v9 와 같은 방법). 진짜 파일에 붙은 진짜 id 가 무엇이든 상관없게
+	-- **36칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움: patchedProducts({}) = 전부 0 (아직 아무것도 안 만든 상태)
+	local function patchedProducts(replacements)
+		return ProductsPatch.load(replacements, Config)
+	end
+
 	-- 가짜 세상: 진짜 Net · Sessions · Snapshot · Wallet · DataService · ProductService (+ 필요하면 더)
-	local function world()
+	--   ids = { key = 숫자 } 를 주면 Products 를 36칸 전부 0 + 그 칸만 가짜 id 인 사본으로 (ProductService 도 그 사본을 씀). 안 주면 진짜 파일
+	local function world(ids)
 		local H = ServerHarness.install(Loader, T)
+		if ids then
+			Loader.mock(S .. "Data/Products", patchedProducts(ids))
+		end
 		H.startNet()
 		local w = { H = H }
 		w.Products = H.shared("Data/Products")
@@ -89,7 +100,7 @@ return function(T, Loader)
 		}
 	end
 
-	-- 상품 id 를 가짜로 붙임 (Products.IDS 는 아직 전부 0 이라서): byProductId 만 바꿔 끼움 — 개발자 상품만 (62번: 패스는 영수증 없음)
+	-- 상품 id 를 가짜로 붙임 (진짜 id 에 기대지 않으려고): byProductId 만 바꿔 끼움 — 개발자 상품만 (62번: 패스는 영수증 없음)
 	local function fakeConfigure(w)
 		w.fakeIds = {}
 		local byId = {}
@@ -156,34 +167,6 @@ return function(T, Loader)
 		w.H.run(function()
 			w.ProductService.onGamePassPurchaseFinished(player or w.player, id, wasPurchased)
 		end)
-	end
-
-	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (holes_v9 와 같은 방법)
-	local fs = require("@lune/fs")
-	local luau = require("@lune/luau")
-	local function patchedProducts(replacements)
-		local source = fs.readFile("src/shared/Data/Products.luau")
-		for key, id in replacements do
-			local pattern = "\n\t" .. key .. " = 0,"
-			local from, to = string.find(source, pattern, 1, true)
-			assert(from, "Products.luau 에 '" .. key .. " = 0,' 칸이 없음")
-			source = string.sub(source, 1, from - 1)
-				.. "\n\t"
-				.. key
-				.. " = "
-				.. tostring(id)
-				.. ","
-				.. string.sub(source, to + 1)
-		end
-		return luau.load(source, {
-			debugName = "Products(patched)",
-			environment = {
-				script = { Parent = { Config = "CONFIG" } },
-				require = function()
-					return Config
-				end,
-			},
-		})()
 	end
 
 	local function process(w, r, maxSeconds)
@@ -269,25 +252,149 @@ return function(T, Loader)
 		end
 	)
 
+	-- [I-1] 진짜 파일의 id 규칙 (진짜 숫자 값에는 기대지 않음 — 누가 id 를 고쳐 붙여도 규칙만 지키면 통과)
 	T.test(
-		"상품 id 는 Products.IDS 한 곳 (36칸, 지금은 전부 0 = 미설정): isConfigured false · byProductId 는 0·음수·모름이면 nil",
+		"[I-1] 상품 id 는 Products.IDS 한 곳 (36칸): 모두 0(미설정) 이거나 0 보다 큰 정수 · 0 이 아닌 id 는 패스·상품 통틀어 안 겹침 · 부스트 패스는 2배부터 빈칸 없이 이어서 붙음 · 패스 id 는 byPassId 로만, 상품 id 는 byProductId 로만 찾아짐",
 		function()
 			local count = 0
+			local used = {}
 			for key, id in Products.IDS do
 				count += 1
 				T.truthy(Products.byKey[key], "IDS 의 모르는 키 " .. key)
-				T.eq(id, 0, key .. " 는 아직 0 (아빠가 Creator Dashboard 에서 만든 뒤 붙임)")
+				-- ① 0 (아직 안 만듦) 이거나 0 보다 큰 정수
+				T.truthy(
+					id == 0 or (type(id) == "number" and id > 0 and id < math.huge and id == math.floor(id)),
+					key .. " id 는 0 이거나 0 보다 큰 정수: " .. tostring(id)
+				)
+				-- ② 0 이 아닌 id 는 서로 겹치지 않음 (패스·상품 통틀어)
+				if id ~= 0 then
+					T.falsy(
+						used[id],
+						key
+							.. " 와 "
+							.. tostring(used[id])
+							.. " 가 같은 id "
+							.. tostring(id)
+							.. " — 한 id 를 두 군데 붙임"
+					)
+					used[id] = key
+				end
 			end
 			T.eq(count, #Products.list, "IDS 칸 수 = 상품 수")
 			for _, p in Products.list do
-				T.eq(p.productId, Products.IDS[p.key])
-				T.falsy(Products.isConfigured(p), p.key)
+				T.eq(p.productId, Products.IDS[p.key], p.key .. " productId = IDS 칸")
+				T.eq(Products.isConfigured(p), p.productId > 0, p.key .. " isConfigured = 0 보다 큼")
 			end
+			-- ③ 부스트 패스는 2배부터 차례로 빈칸 없이 (앞이 0 인데 뒤가 붙어 있으면 실패)
+			local firstEmpty = nil
+			for _, p in Products.treadmillBoosts do
+				if p.productId == 0 then
+					firstEmpty = firstEmpty or p.key
+				else
+					T.falsy(
+						firstEmpty,
+						p.key
+							.. " 는 id 가 붙어 있는데 앞의 "
+							.. tostring(firstEmpty)
+							.. " 가 0 — 2배부터 빈칸 없이 이어서 붙일 것"
+					)
+				end
+			end
+			-- ④ 패스 id 는 byPassId 로만, 개발자 상품 id 는 byProductId 로만
+			for _, p in Products.list do
+				if p.productId > 0 then
+					if p.isPass then
+						T.eq(Products.byPassId(p.productId), p, p.key .. " 는 패스 — byPassId 로 찾아짐")
+						T.eq(
+							Products.byProductId(p.productId),
+							nil,
+							p.key .. " 는 패스 — byProductId 로는 안 찾아짐"
+						)
+					else
+						T.eq(
+							Products.byProductId(p.productId),
+							p,
+							p.key .. " 는 개발자 상품 — byProductId 로 찾아짐"
+						)
+						T.eq(
+							Products.byPassId(p.productId),
+							nil,
+							p.key .. " 는 개발자 상품 — byPassId 로는 안 찾아짐"
+						)
+					end
+				end
+			end
+			-- 이상한 값은 어느 표에서도 안 찾아짐 (123456 은 진짜 id 가 아님)
 			T.truthy(Products.isConfigured({ key = "x", kind = "coins", name = "x", robux = 1, productId = 42 }))
 			for _, bad in { 0, -1, 123456, 0 / 0, "5" } do
 				T.eq(Products.byProductId(bad), nil, tostring(bad))
 				T.eq(Products.byPassId(bad), nil, tostring(bad))
 			end
+		end
+	)
+
+	-- [I-2] 지금 진짜 파일은 36칸 전부 설정됨 — 누가 실수로 0 으로 되돌리면 여기서 잡힘 (값은 안 봄, 붙어 있는지만)
+	T.test(
+		"[I-2] 지금 진짜 Products 파일은 36칸 전부 id 가 붙어 있음 (isConfigured 36개 모두 true — 0 으로 되돌아가면 실패)",
+		function()
+			local configured, empty = 0, {}
+			for _, p in Products.list do
+				if Products.isConfigured(p) then
+					configured += 1
+				else
+					table.insert(empty, p.key)
+				end
+			end
+			T.eq(#Products.list, 36)
+			T.eq(configured, 36, "id 가 0 인 칸: " .. table.concat(empty, ","))
+			T.eq(#empty, 0)
+			-- 패스 12개 · 개발자 상품 24개가 각각 그 표에서 찾아짐 (진짜 id 로 영수증/소유 확인이 연결됨)
+			local passHits, productHits = 0, 0
+			for _, p in Products.list do
+				if p.isPass and Products.byPassId(p.productId) == p then
+					passHits += 1
+				elseif not p.isPass and Products.byProductId(p.productId) == p then
+					productHits += 1
+				end
+			end
+			T.eq(passHits, 12, "byPassId 로 찾아지는 패스")
+			T.eq(productHits, 24, "byProductId 로 찾아지는 개발자 상품")
+		end
+	)
+
+	-- [I-3] id 가 전부 0 인 표 (아직 아무것도 안 만든 상태 = 전부 "준비 중") — 이제는 진짜 파일이 아니라 0 으로 만든 사본으로 봄
+	T.test(
+		"[I-3] id 를 전부 0 으로 만든 사본: 36칸 전부 isConfigured false · byProductId · byPassId 는 어떤 숫자로 물어도 nil · 사본이 진짜 모듈과 섞이지 않음",
+		function()
+			local P = patchedProducts({})
+			T.eq(#P.list, 36)
+			local n = 0
+			for key, id in P.IDS do
+				n += 1
+				T.eq(id, 0, key)
+			end
+			T.eq(n, 36)
+			for _, p in P.list do
+				T.eq(p.productId, 0, p.key)
+				T.falsy(P.isConfigured(p), p.key)
+			end
+			-- 진짜 파일에 붙어 있는 진짜 id 로 물어도 안 찾아짐 (사본에는 없으므로)
+			for _, p in Products.list do
+				T.eq(P.byProductId(p.productId), nil, p.key)
+				T.eq(P.byPassId(p.productId), nil, p.key)
+			end
+			for _, bad in { 0, -1, 999, 0 / 0, "5" } do
+				T.eq(P.byProductId(bad), nil, tostring(bad))
+				T.eq(P.byPassId(bad), nil, tostring(bad))
+			end
+			-- 사본을 만들어도 진짜 모듈은 그대로 (글자 바꾸기는 사본만)
+			T.truthy(Products.isConfigured(Products.get("boost_2")), "진짜 모듈은 그대로")
+			-- 한 칸만 채우면 그 칸만 붙음 (다른 칸은 0 그대로)
+			local one = patchedProducts({ coins_1m = 31 })
+			T.eq(one.byProductId(31).key, "coins_1m")
+			T.truthy(one.isConfigured(one.get("coins_1m")))
+			T.falsy(one.isConfigured(one.get("coins_1b")))
+			T.falsy(one.isConfigured(one.get("boost_2")))
 		end
 	)
 
@@ -835,9 +942,9 @@ return function(T, Loader)
 	T.test(
 		"syncPasses: 가진 패스 → 배수·코인 2배 (+ Attr · DataUpdate) · 안 가짐 → 그대로 · ProductGranted 는 안 보냄 · id 없는 패스는 확인 안 함 · 데이터 미로드면 아무것도 안 함",
 		function()
-			local w = world()
+			local w = world({}) -- 36칸 전부 0 인 사본 (진짜 파일에는 진짜 id 가 붙어 있음)
 			local market = fakeMarket(w)
-			-- id 를 하나도 안 붙임 (지금 파일): 확인 호출 없음
+			-- id 를 하나도 안 붙임 (전부 0 인 표): 확인 호출 없음
 			T.truthy(sync(w))
 			T.eq(market.calls, 0, "id 없는 패스는 확인 안 함")
 			fakeConfigurePasses(w)
@@ -874,6 +981,41 @@ return function(T, Loader)
 			T.eq(w2.data.treadmillBoost, 8)
 			T.eq(w2.player.attrs.TreadmillBoost, 8)
 			w2.H.uninstall()
+		end
+	)
+
+	T.test(
+		"[I-4] 진짜 id 가 붙은 파일: syncPasses 는 패스 12개의 id 만 소유 확인 (개발자 상품 id 는 안 물어봄) · 진짜 id 로 가진 패스는 그대로 반영",
+		function()
+			local w = world() -- 진짜 파일 그대로 (id 값은 안 봄)
+			local market = fakeMarket(w)
+			local P = w.Products
+			local passIds = {}
+			for _, p in P.passes do
+				T.truthy(P.isConfigured(p), p.key .. " 진짜 id 가 붙어 있음")
+				passIds[p.productId] = p.key
+			end
+			market.owned[P.get("boost_2").productId] = true
+			market.owned[P.get("boost_4").productId] = true
+			market.owned[P.get("money_pass").productId] = true
+			T.truthy(sync(w))
+			T.eq(market.calls, 12, "패스 12개를 한 번씩 확인")
+			for _, p in P.passes do
+				T.eq(market.tries[p.productId], 1, p.key .. " 소유 확인 1번")
+			end
+			for id in market.tries do
+				T.truthy(passIds[id], "물어본 id " .. tostring(id) .. " 는 패스 id")
+			end
+			for _, p in P.list do
+				if not p.isPass then
+					T.eq(market.tries[p.productId], nil, p.key .. " 는 개발자 상품 — 소유 확인 안 함")
+				end
+			end
+			T.eq(w.data.treadmillBoost, 4)
+			T.eq(w.data.moneyPass, true)
+			T.eq(w.player.attrs.TreadmillBoost, 4)
+			T.eq(#granted(w), 0, "접속 때 맞추는 것은 구매 알림이 아님")
+			w.H.uninstall()
 		end
 	)
 

@@ -13,8 +13,8 @@
 
 return function(T, Loader)
 	local ServerHarness = require("./ServerHarness")
+	local ProductsPatch = require("./ProductsPatch")
 	local fs = require("@lune/fs")
-	local luau = require("@lune/luau")
 	local S = "ReplicatedStorage/Shared/"
 	local V = "ServerScriptService/Server/"
 	local Config = Loader.require(S .. "Data/Config")
@@ -108,38 +108,18 @@ return function(T, Loader)
 	end
 
 	------------------------------------------------------------------
-	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (아빠가 Creator Dashboard id 를 붙여 넣은 뒤를 흉내)
+	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (아빠가 Creator Dashboard id 를 붙여 넣은 뒤를 흉내).
+	-- 진짜 파일에 붙은 진짜 id 가 무엇이든 상관없게 **36칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움
+	-- (patchedProducts({}) = 전부 0 = 아직 아무것도 안 만든 상태). 글자 바꾸기는 tests/ProductsPatch.luau
 	------------------------------------------------------------------
 	local function patchedProducts(replacements)
-		local source = fs.readFile("src/shared/Data/Products.luau")
-		for key, id in replacements do
-			local pattern = "\n\t" .. key .. " = 0,"
-			local from, to = string.find(source, pattern, 1, true)
-			assert(from, "Products.luau 에 '" .. key .. " = 0,' 칸이 없음")
-			source = string.sub(source, 1, from - 1)
-				.. "\n\t"
-				.. key
-				.. " = "
-				.. tostring(id)
-				.. ","
-				.. string.sub(source, to + 1)
-		end
-		local ConfigNow = Loader.require(S .. "Data/Config")
-		local chunk = luau.load(source, {
-			debugName = "Products(patched)",
-			environment = {
-				script = { Parent = { Config = "CONFIG" } },
-				require = function()
-					return ConfigNow
-				end,
-			},
-		})
-		return chunk()
+		return ProductsPatch.load(replacements, Loader.require(S .. "Data/Config"))
 	end
 
 	------------------------------------------------------------------
 	-- 세상: 진짜 Net · Sessions · Snapshot · Wallet · DataService · ProductService · PetService
-	--   opts.ids = { key = 숫자 } 이면 진짜 Products 파일의 id 칸을 바꿔 끼움 (아니면 byProductId 를 가짜로 — fakeConfigure)
+	--   opts.ids = { key = 숫자 } 이면 진짜 Products 파일을 36칸 전부 0 + 그 칸만 가짜 id 로 바꿔 끼움 ({} = 전부 0).
+	--   안 주면 진짜 파일 그대로 (진짜 id 가 붙어 있음 — 값에는 기대지 말 것), byProductId 를 가짜로 하려면 fakeConfigure
 	------------------------------------------------------------------
 	local function newWorld(opts)
 		opts = opts or {}
@@ -170,7 +150,7 @@ return function(T, Loader)
 		end
 	end
 
-	-- 상품 id 를 가짜로 붙임 (Products.IDS 는 아직 전부 0): byProductId 만 바꿔 끼움
+	-- 상품 id 를 가짜로 붙임 (진짜 id 에 기대지 않으려고): byProductId 만 바꿔 끼움
 	local function fakeConfigure(w)
 		w.fakeIds = {}
 		local byId = {}
@@ -625,33 +605,53 @@ return function(T, Loader)
 		end
 	)
 
+	-- 이상한 ProductId 를 보냄: 지급 · 영수증 기록 없음. zeroTable = true 면 36칸 전부 0 인 표 (아직 아무것도 안 만든 상태),
+	-- false 면 진짜 파일 (진짜 id 가 붙어 있음 — 값에는 기대지 않고, 게임패스 id 로 온 영수증도 안 받는지까지 봄)
+	local function badProductIds(w, zeroTable)
+		enableSaving(w)
+		local speed0 = w.data.speed
+		-- fakeConfigure 안 함: 표 그대로
+		T.eq(w.Products.byProductId(0), nil)
+		for _, p in w.Products.list do
+			if zeroTable then
+				T.eq(p.productId, 0, p.key .. " 는 0 (전부 0 인 표)")
+			else
+				T.truthy(w.Products.isConfigured(p), p.key .. " 는 진짜 id 가 붙어 있음")
+			end
+		end
+		for i, bad in { 999, 0, -1, 0 / 0, 1.5, 1e300, math.huge, "123", false, true, {} } do
+			local r = { PlayerId = w.player.UserId, ProductId = bad, PurchaseId = "bad-" .. i }
+			T.eq(process(w, r), NOT_YET, "ProductId " .. tostring(bad))
+		end
+		T.eq(process(w, { PlayerId = w.player.UserId, PurchaseId = "bad-nil" }), NOT_YET, "ProductId 없음")
+		if not zeroTable then
+			-- 게임패스 id 로 영수증이 와도 (로블록스는 안 보냄) 지급 안 함: 패스는 소유 확인으로만
+			for _, p in w.Products.passes do
+				local r = { PlayerId = w.player.UserId, ProductId = p.productId, PurchaseId = "pass-" .. p.key }
+				T.eq(process(w, r), NOT_YET, p.key .. " 패스 id 로 온 영수증")
+			end
+		end
+		T.eq(w.data.money, 0)
+		T.eq(w.data.speed, speed0)
+		T.eq(w.data.treadmillBoost, 1)
+		T.eq(w.data.treadmillLevel, 0)
+		T.eq(w.data.moneyPass, false)
+		T.eq(
+			#w.data.receipts,
+			0,
+			"처리 못 한 영수증은 기록 안 함 (나중에 진짜 id 를 붙인 뒤 다시 오면 지급)"
+		)
+		T.eq(#grantedList(w), 0)
+	end
+
 	T.test(
-		"모르는 · 이상한 ProductId (999 · 0 · -1 · NaN · 소수 · 큰 수 · 글자 · 없음) → NotProcessedYet · 지급·영수증 기록 없음 (진짜 Products 표는 id 가 전부 0 이라 ProductId 0 영수증이 아무 상품과도 안 맞음)",
+		"모르는 · 이상한 ProductId (999 · 0 · -1 · NaN · 소수 · 큰 수 · 글자 · 없음) → NotProcessedYet · 지급·영수증 기록 없음 — 진짜 Products 표(진짜 id 가 붙음: 게임패스 id 로 온 영수증도 안 받음)와 36칸 전부 0 인 사본 둘 다",
 		function()
 			inWorld(nil, function(w)
-				enableSaving(w)
-				local speed0 = w.data.speed
-				-- fakeConfigure 안 함: 진짜 표 (id 전부 0 = 아직 아무것도 안 켬)
-				for _, p in w.Products.list do
-					T.eq(w.Products.byProductId(0), nil)
-					T.eq(p.productId, 0)
-				end
-				for i, bad in { 999, 0, -1, 0 / 0, 1.5, 1e300, math.huge, "123", false, true, {} } do
-					local r = { PlayerId = w.player.UserId, ProductId = bad, PurchaseId = "bad-" .. i }
-					T.eq(process(w, r), NOT_YET, "ProductId " .. tostring(bad))
-				end
-				T.eq(process(w, { PlayerId = w.player.UserId, PurchaseId = "bad-nil" }), NOT_YET, "ProductId 없음")
-				T.eq(w.data.money, 0)
-				T.eq(w.data.speed, speed0)
-				T.eq(w.data.treadmillBoost, 1)
-				T.eq(w.data.treadmillLevel, 0)
-				T.eq(w.data.moneyPass, false)
-				T.eq(
-					#w.data.receipts,
-					0,
-					"처리 못 한 영수증은 기록 안 함 (나중에 진짜 id 를 붙인 뒤 다시 오면 지급)"
-				)
-				T.eq(#grantedList(w), 0)
+				badProductIds(w, false)
+			end)
+			inWorld({ ids = {} }, function(w)
+				badProductIds(w, true)
 			end)
 		end
 	)
@@ -900,7 +900,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"[F-4] 같은 id 를 두 상품에 붙여 넣은 실수는 시험이 잡는다: 붙인 id 들은 서로 겹치면 안 되고 0 보다 큰 정수 (지금 파일은 전부 0 이라 통과)",
+		"[F-4] 같은 id 를 두 상품에 붙여 넣은 실수는 시험이 잡는다: 붙인 id 들은 서로 겹치면 안 되고 0 보다 큰 정수 (진짜 파일의 규칙 점검 + 겹치게 붙인 사본은 한쪽만 찾아짐)",
 		function()
 			-- 진짜 파일의 규칙 점검 (아빠가 숫자를 붙인 뒤 `lune run tests/run.luau` 로 확인)
 			local P = Loader.require(S .. "Data/Products")

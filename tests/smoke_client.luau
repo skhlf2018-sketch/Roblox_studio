@@ -663,8 +663,30 @@ local function checkTopCenter(screen, area, tutRect, others, tag, fmt, Layout)
 	check(not Layout.overlaps(zbRect, popBelow), tag .. " 구역 배너와 그 아래 속도 배지 안 겹침")
 end
 
+-- 진짜 Products 파일에는 사장님이 만든 진짜 상품 id (36칸) 가 붙어 있음. 이 스모크는 "아직 id 없음 = 준비 중"
+-- 화면과 "id 를 붙이면 구매창" 화면을 둘 다 보므로, 시작할 때 36칸을 잠깐 전부 0 으로 만들고(진짜 값은 여기 적어 둠)
+-- 끝나면(에러로 멈춰도) 반드시 원래 값으로 되돌림 — restoreProductIds(). 이 스모크가 쓰는 Products 는 이 파일의 requireNode 사본
+local realProductIds: { [string]: number } = {}
+local productsForSmoke = nil
+local function zeroProductIds()
+	productsForSmoke = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Products"))
+	for _, product in productsForSmoke.list do
+		realProductIds[product.key] = product.productId
+		product.productId = 0
+	end
+end
+local function restoreProductIds()
+	if productsForSmoke == nil then
+		return
+	end
+	for _, product in productsForSmoke.list do
+		product.productId = realProductIds[product.key] or 0
+	end
+end
+
 local function body()
 	print("[컨트롤러 시작]")
+	zeroProductIds()
 	local State = requireNode(Loader.get("ReplicatedStorage/Client/State"))
 	State.start()
 	for _, name in
@@ -3525,6 +3547,20 @@ local function body()
 end
 
 local ok, err = pcall(body)
+-- 시작할 때 0 으로 만든 상품 id 를 원래 값(진짜 id)으로 되돌림 → 되돌아왔는지 확인
+restoreProductIds()
+if productsForSmoke then
+	local restored = 0
+	for _, product in productsForSmoke.list do
+		if product.productId == realProductIds[product.key] then
+			restored += 1
+		end
+	end
+	check(
+		restored == #productsForSmoke.list,
+		"스모크가 0 으로 만든 상품 id 36칸을 끝나고 원래 값으로 되돌림: " .. restored
+	)
+end
 if not ok then
 	print("ERROR: " .. tostring(err))
 	process.exit(1)

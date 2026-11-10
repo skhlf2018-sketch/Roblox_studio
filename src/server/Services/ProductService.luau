@@ -421,9 +421,21 @@ end
 
 -- 접속 준비·구매 뒤: id 붙은 패스를 전부 소유 확인해서 데이터에 반영 (yield). 데이터가 안 불려 왔거나 나갔으면 아무것도 안 함(false).
 -- 확인이 전부 실패하면 데이터 그대로 false. 확인할 패스가 없으면(id 를 아직 안 붙임) true
+-- 시험용 (개발 명령 /unbuy): 이 접속 동안 패스 소유 확인을 쉼. 게임을 만든 사람은 자기 게임패스를 처음부터 전부
+--   가진 것으로 나와서(로블록스 규칙) 스튜디오에서 언제나 x2048 · 코인 2배가 됨 → 새 플레이어 화면을 보려면 잠깐 꺼야 함.
+--   다시 접속하거나 진짜로 패스를 사면 풀림
+local ignoringPasses: { [Player]: boolean? } = setmetatable({}, { __mode = "k" }) :: any
+
+function ProductService.setIgnorePassesForTest(player: Player, ignore: boolean)
+	ignoringPasses[player] = if ignore then true else nil
+end
+
 function ProductService.syncPasses(player: Player): boolean
 	local _, data = Sessions.getLoaded(player)
 	if not data then
+		return false
+	end
+	if ignoringPasses[player] then
 		return false
 	end
 	local list = configuredPasses()
@@ -461,6 +473,7 @@ function ProductService.onGamePassPurchaseFinished(player: Player, gamePassId: n
 	if not product then
 		return -- 모르는 id · 남의 게임 패스 · 개발자 상품 id
 	end
+	ignoringPasses[player] = nil -- 진짜로 샀으면 시험용 "패스 확인 쉼"은 풀림
 	local session, data = waitLoaded(player)
 	if not session or not data then
 		return -- 못 불러옴 (다음 접속 syncPasses 가 맞춤)

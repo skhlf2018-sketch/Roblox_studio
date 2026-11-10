@@ -1611,3 +1611,9 @@ Lune **599 통과 · 실패 0** (588 + 새 11, 건너뜀 3) · smoke client OK �
 바꾼 테스트: `eggrules.spec` · `services_world.spec` · `holes_v8.spec` · `holes_v8b.spec` · `tests/run.luau`(등록) · 새 `holes_touch_catch.spec`.
 
 **H-1 고침 (본부장, 같은 날)**: 경비가 이 구역 씨앗을 든 채 닿은 사람을 쫓는 대상이 아니어도 (빠른 사람도) 그 틱에 전부 잡음 (`GuardianService.luau` carriers 루프). 이에 맞춰 `services_world`「추격 끝 이유」· `holes_v8b`「경비 속도」「여러 명」· `holes_touch_catch` H2·H5 를 고치고, `holes_touch_catch` 에 H-1 시험 1개 추가 (쫓는 느린 사람이 멀리 있어도 경비 몸에 겹친 빠른 사람은 그 틱에 잡히고 경비는 계속 느린 사람을 쫓음 · 쫓기던 사람이 닿으면 ChaseEnded caught 정확히 1번). 닿은 채로 주워 쫓기도 전에 잡히면 쫓은 적이 없어 ChaseEnded 는 안 나감 (설계대로). H-4 안내 글도 고쳐짐. 검사: Lune **600 통과 · 실패 0** (건너뜀 3).
+
+## 29. 진짜 상품 id 붙인 뒤 검수 (I 시리즈, 주임, 2026-11-10)
+
+본부장이 `Products.IDS` 36칸에 진짜 id (패스 12 · 개발자 상품 24)를 붙이자 "전부 0" 이라 가정한 테스트가 깨짐 (run 6 · smoke_client 9) → **테스트만** 고침 (src 는 IDS 줄 말고 안 바뀜). 새 도우미 `tests/ProductsPatch.luau` 가 IDS 줄(`\tkey = 숫자,` 어떤 숫자든)을 36칸 전부 0 으로 만든 사본 + 필요한 칸만 가짜 id 로 만듦 (products · holes_v9 공용). 고친 테스트 6개 (products 3 · holes_v9 3: 이상한 ProductId · id 몇 개만 · F-4), smoke_client 는 시작할 때 36칸을 0 으로 만들고 끝나면 원래 값으로 되돌림 (되돌렸는지 확인 1개 추가).
+새 검사 I-1~I-4: 진짜 파일은 ① 0 이거나 0 보다 큰 정수 ② 0 아닌 id 는 안 겹침 ③ 부스트 패스는 2배부터 빈칸 없이 ④ 패스 id 는 `byPassId` 로만 · 상품 id 는 `byProductId` 로만 ⑤ **36칸 전부 설정됨** (누가 0 으로 되돌리면 실패) · 전부 0 인 사본은 36칸 전부 "준비 중" · 진짜 id 로 `syncPasses` 는 패스 12개만 물어봄 (상품 id 안 물어봄) · 진짜 패스 id 로 영수증이 와도 NotProcessedYet (불변식 그대로: 영수증 중복 지급 없음 · 모르는 id → NotProcessedYet).
+**검사**: Lune **609 통과 · 실패 0** (건너뜀 3) · smoke client OK (958) · smoke visuals OK (268) · stylua 틀린 파일 0 · selene 에러 0 · luau-analyze 0/0/0/0. src 에서 찾은 문제 없음.

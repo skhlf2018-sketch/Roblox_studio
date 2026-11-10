@@ -19,6 +19,7 @@
 	  /zone lake        그 구역 입구로 순간이동 (구역 id 또는 번호 1~21 (8판), "hub" = 허브 기본 스폰) — 긴 복도 시험용
 	                    (9판: 씨앗을 들고 있었으면 순간이동 전에 둥지로 돌아감 — /zone hub 로 배달 못 함)
 	  /buy boost_8      9판 로벅스 상품을 무료로 받기 (Data/Products 의 key — ProductService.grant, 영수증 없이. 스튜디오/DEV 만)
+	  /unbuy           스피드 배수·코인 2배를 처음으로 되돌림 + 이 접속 동안 게임패스 확인 쉼 (새 플레이어 화면 시험용)
 ]]
 
 local RunService = game:GetService("RunService")
@@ -66,6 +67,7 @@ local COMMAND_NAMES = {
 	"tutorial",
 	"zone",
 	"buy",
+	"unbuy",
 }
 
 local function isAllowed(player: Player): boolean
@@ -199,6 +201,17 @@ local function handle(player: Player, message: string)
 			Net.notify(player, "error", "[개발] 모르는 상품: " .. key .. " (Data/Products 의 key)")
 			return
 		end
+	elseif command == "unbuy" then
+		-- 시험용: 스피드 배수·코인 2배를 처음(없음)으로 되돌리고, 이 접속 동안 게임패스 소유 확인을 쉼
+		--   (게임을 만든 사람은 자기 패스를 전부 가진 것으로 나와 언제나 x2048 이 되므로). 다시 접속하면 원래대로
+		ProductService.setIgnorePassesForTest(player, true)
+		data.treadmillBoost = 1
+		data.moneyPass = false
+		player:SetAttribute("TreadmillBoost", 1)
+		player:SetAttribute("MoneyPass", false)
+		Snapshot.section(player, "upgrades")
+		message =
+			"스피드 배수·코인 2배를 처음으로 되돌렸어요 (다시 접속하면 가진 게임패스가 다시 적용돼요)"
 	else
 		return
 	end

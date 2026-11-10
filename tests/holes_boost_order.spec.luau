@@ -89,7 +89,7 @@ return function(T, Loader)
 		return list
 	end
 
-	-- 상품 id 를 가짜로 붙임 (Products.IDS 는 아직 전부 0): byProductId 만 바꿔 끼움
+	-- 상품 id 를 가짜로 붙임 (진짜 id 에 기대지 않으려고): byProductId 만 바꿔 끼움
 	local function fakeConfigure(w)
 		w.fakeIds = {}
 		local byId = {}

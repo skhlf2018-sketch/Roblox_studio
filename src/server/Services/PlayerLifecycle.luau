@@ -4,7 +4,7 @@
 
 	접속:
 	  1) 세션 만들기 → 2) 베이스 배정(바로, 가득 차면 0 = 누가 나갈 때 배정) → 3) 데이터 불러오기(기다림)
-	  4) 준비: 정원 칸 Attribute → 속도 → 열매(오프라인 열매, 6판) → 정원 씨앗(오프라인 성장 → 성체) → 업그레이드 → 도구
+	  4) 준비: 정원 칸 Attribute → 속도 → 열매(오프라인 열매, 6판) → 정원 씨앗(오프라인 성장 → 성체) → 업그레이드 → 로벅스 상품 Attr(9판) → 도구
 	          → 사쿠라 Attribute → 튜토리얼 단계 맞춤(5판) → Snapshot 전송 → 랭킹판 한 번(5판)
 	          (6판: 오프라인 수입 RewardService 없앰 — 자동 수입이 없음)
 	     준비 단계는 하나씩 pcall 로 감쌈 (하나가 터져도 나머지·DataLoaded·Snapshot 은 진행)
@@ -40,6 +40,7 @@ local SakuraService = require(Services.SakuraService)
 local TutorialService = require(Services.TutorialService)
 local LeaderboardService = require(Services.LeaderboardService)
 local AntiCheatService = require(Services.AntiCheatService)
+local ProductService = require(Services.ProductService)
 
 local Attr = Tags.PlayerAttributes
 
@@ -99,6 +100,7 @@ local function onPlayerAdded(player: Player)
 	safely("FruitService", FruitService.onPlayerReady, player) -- BaseService 보다 먼저 (이미 성체였던 식물만 오프라인 열매)
 	safely("BaseService", BaseService.onPlayerReady, player)
 	safely("UpgradeService", UpgradeService.onPlayerReady, player)
+	safely("ProductService", ProductService.onPlayerReady, player) -- 9판: Attr TreadmillBoost · MoneyPass
 	safely("ToolService", ToolService.onPlayerReady, player)
 	safely("SakuraService", SakuraService.onPlayerReady, player)
 	safely("TutorialService", TutorialService.onPlayerReady, player)

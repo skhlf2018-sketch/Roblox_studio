@@ -12,7 +12,7 @@
 	Remote:
 	  SellPlant(plantUid) — 성체를 뽑아서 팔기. 검증: uid 형식 · 내 정원의 성체 · 내 정원(울타리 사각형) 에서
 	    GARDEN_ACTION_RADIUS(20) 안 또는 판매 가판대 SELL_RADIUS(14) 안. 값 = 열매 1개 값 × 20 (GardenRules.sellPrice)
-	    (코인 2배 게임패스면 × 2). 정원 자리가 빔 → Notify + DataUpdate("pets")
+	    (9판: 로벅스 "코인 2배" data.moneyPass 면 × 2). 정원 자리가 빔 → Notify + DataUpdate("pets")
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,7 +43,7 @@ local Attr = Tags.PlayerAttributes
 
 local PetService = {}
 
--- 성체 목록이 바뀜 (player) — 성체가 됨 / 팔림 / 바침 / 돌연변이 → BaseService 정원 파트 맞추기
+-- 성체 목록이 바뀜 (player) — 성체가 됨 / 팔림 / 바침 → BaseService 정원 파트 맞추기
 PetService.plantsChanged = Signal.new()
 
 local function coins(n: number): string
@@ -175,10 +175,10 @@ function PetService.isNearOwnPen(player: Player, radius: number): boolean
 	return dx * dx + dz * dz <= radius * radius
 end
 
--- 코인 2배 게임패스 배율 (플래그만)
+-- 코인 배율: 9판 로벅스 상품 "코인 2배 (영원히)" (data.moneyPass) 면 × MONEY_PASS_MULTIPLIER — 열매 판매·성체 팔기
 function PetService.coinMultiplier(player: Player): number
-	local session = Sessions.get(player)
-	return if session and session.hasMoneyPass then Config.GAMEPASS_MONEY_MULTIPLIER else 1
+	local _, data = Sessions.getLoaded(player)
+	return if data and data.moneyPass then Config.MONEY_PASS_MULTIPLIER else 1
 end
 
 -- SellPlant: 성체를 뽑아서 팔기. 받은 코인 (못 팔면 nil)

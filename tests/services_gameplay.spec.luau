@@ -282,7 +282,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"밤이 되면 알 든 사람이 허브 밖이면 집으로 텔레포트 → 허브라 다음 틱에 가방으로 배달",
+		"밤이 되면 알 든 사람이 허브 밖이면 집으로 텔레포트 — 9판 버그 수정: 배달 안 되고 씨앗은 둥지로 (안내)",
 		function()
 			local w = world()
 			local B = w.BaseService
@@ -297,8 +297,11 @@ return function(T, Loader)
 			T.eq(w.player.Character.root.Position.Z, spawn.z)
 			T.near(w.player.Character.root.Position.Y, 4.2, 1e-9, "바닥(0.2) + 4")
 			T.eq(w.player.Character.root.CFrame.LookVector.X, 1, "복도 가운데를 봄")
+			T.eq(w.H.eggs.returned, 1, "순간이동 전에 씨앗을 둥지로 돌려보냄")
+			T.truthy(w.H.hasNotify(w.player, "info", "밤이 되어 씨앗이 둥지로 돌아갔어요"))
 			w.H.advance(0.4)
-			T.eq(#w.data.eggs, 1, "집(허브)에 오자마자 배달")
+			T.eq(#w.data.eggs, 0, "집(허브)에 와도 배달 안 됨 (8판까지는 가방에 들어갔음)")
+			T.eq(w.H.eggs.taken, 0)
 			T.eq(#w.H.eggs.droppedAt, 0, "서버 순간이동은 치트로 안 봄")
 			-- 허브 안에서 알을 들고 있으면(가방이 가득 참) 그대로
 			fillBag(w, 49)

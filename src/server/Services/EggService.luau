@@ -24,7 +24,9 @@
 	    떨어진 알을 누가 다시 주우면 예약도 그대로 넘어감 (그 구역 안에서 경비에게 잡히면 둥지로).
 
 	대기(Intermission) 때: 둥지·바닥 알 전부 지우고 새로 놓음 + "ALL EGG RESET!" + 희귀 알 추첨/공지.
-	들고 있는 알은 지우지 않음 (밤에 베이스로 텔레포트되어 배달 가능).
+	들고 있는 알은 지우지 않음 (허브 안에서 가방이 가득 차 들고 있는 알 등).
+	9판 (사장님 2026-11-10 버그 수정): 밤 귀가 순간이동 때 들고 있던 씨앗은 배달되지 않고 **둥지로 돌아감**
+	  (returnCarriedToNest — 서버 순간이동은 전부 이렇게. 스스로 걸어서 허브에 들어온 것만 배달).
 	초기화가 끝나면 EggService.resetDone:fire(cycleNumber) → 사쿠라 크리스탈이 이어서 놓임.
 	5판: 초기화 때 둥지 풀 밖 특별 알(옛 퀘스트 알 지터버그 8%·영혼 세계 수호자 1%, EggSpawn.EXTRA_SPECIALS)도 굴려서 공지.
 	     퀘스트 전용 알(questOnly)은 없앰 → 모든 알을 누구나 훔칠 수 있음.
@@ -750,11 +752,13 @@ function EggService.dropCarriedAt(player: Player, position: Vector3): EggOutcome
 	return "DropHere"
 end
 
--- 치트 의심 배달: 알을 원래 둥지(없으면 같은 구역 빈 둥지)로 돌려보냄, 둥지가 없으면 없앰
-function EggService.confiscate(player: Player)
+-- 들고 있던 씨앗을 원래 둥지(없으면 같은 구역 빈 둥지)로 돌려보냄, 둥지가 없으면 없앰. 들고 있었으면 true
+-- 9판 (사장님 2026-11-10 버그): **서버 순간이동**(밤 귀가·늦게 받은 베이스·개발 명령 /zone) 전에 부름 —
+--   순간이동으로 허브에 들어온 것은 배달로 치지 않음 (BaseService.serverTeleport · DevCommands)
+function EggService.returnCarriedToNest(player: Player): boolean
 	local egg = EggService.getCarried(player)
 	if not egg then
-		return
+		return false
 	end
 	clearCarry(player)
 	EggService.lost:fire(player)
@@ -762,6 +766,12 @@ function EggService.confiscate(player: Player)
 	if not returnToNest(egg) then
 		destroyEgg(egg)
 	end
+	return true
+end
+
+-- 치트 의심 배달: 알을 원래 둥지(없으면 같은 구역 빈 둥지)로 돌려보냄, 둥지가 없으면 없앰
+function EggService.confiscate(player: Player)
+	EggService.returnCarriedToNest(player)
 end
 
 -- 서버가 알 든 사람을 순간이동시켰을 때: 배달 거리 검사 기준점을 새 위치로

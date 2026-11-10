@@ -270,18 +270,27 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"알을 든 채(2단계) 밤이 되면 서버가 베이스로 옮기고 → 가방에 들어가 3단계 (밤에도 튜토리얼이 안 막힘)",
+		"알을 든 채(2단계) 밤이 되면 서버가 베이스로 옮기지만 배달은 안 됨 (9판 버그 수정) → 씨앗은 둥지로, 튜토리얼은 1단계(다시 훔치기), 아침에 다시 하면 3단계",
 		function()
 			local w = world()
-			local player, _, data = join(w, 1001, "Night")
-			steal(w, player)
+			local player, session, data = join(w, 1001, "Night")
+			local egg = steal(w, player)
 			T.eq(data.tutorialStep, 2)
 			w.H.advance(20)
 			w.H.setPhase("Night")
 			w.H.advance(1)
-			T.eq(#data.eggs, 1, "밤 귀가로 배달됨")
+			T.eq(#data.eggs, 0, "밤 귀가는 배달이 아님 (8판까지는 여기서 가방에 들어갔음)")
+			T.eq(egg:GetAttribute("EggState"), "Nest", "씨앗은 둥지로 돌아감")
+			T.eq(w.EggService.getCarried(player), nil)
+			T.truthy(w.H.hasNotify(player, "info", "밤이 되어 씨앗이 둥지로 돌아갔어요"))
+			T.eq(data.tutorialStep, 1, "씨앗을 놓쳤으니 다시 1단계 (훔치기)")
+			-- 아침: 다시 훔쳐서 걸어 들어오면 정상 배달 → 3단계
+			w.H.setPhase("Intermission", 2)
+			w.H.setPhase("Day", 2)
+			steal(w, player)
+			walkIntoHub(w, player, session)
+			T.eq(#data.eggs, 1, "스스로 걸어 들어온 배달은 그대로")
 			T.eq(data.tutorialStep, 3)
-			-- 밤에는 훔칠 수 없으니 3단계(놓기)로만 진행 가능: 놓기는 밤에도 됨
 			w.H.uninstall()
 		end
 	)
@@ -462,12 +471,12 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"5판에서 튜토리얼을 끝낸 사람도 6판은 새 게임 → 1단계부터, 속도·트레일·러닝머신은 그대로, 저장하면 7판(스키마 7) 모양",
+		"5판에서 튜토리얼을 끝낸 사람도 6판은 새 게임 → 1단계부터, 속도·트레일·러닝머신은 그대로, 저장하면 9판(스키마 8) 모양",
 		function()
 			local w = world()
 			w.H.store.data["player_3001"] = { data = v5() }
 			local p, _, d = join(w, 3001, "Old")
-			T.eq(d.version, 7)
+			T.eq(d.version, 8)
 			T.eq(d.tutorialStep, 1, "6판 튜토리얼 1단계부터")
 			T.eq(lastView(w, p).step, 1, "TutorialUpdate 1단계")
 			T.eq(d.speed, 10020, "속도 그대로")
@@ -478,7 +487,7 @@ return function(T, Loader)
 			T.eq(d.stats.eggsStolen, 0)
 			leave(w, p)
 			local stored = w.H.store.data["player_3001"].data
-			T.eq(stored.version, 7)
+			T.eq(stored.version, 8)
 			T.eq(stored.tutorialStep, 1)
 			T.eq(stored.equipped, nil, "저장된 모양에도 장착 칸 없음")
 			T.eq(stored.resetFromVersion, nil)

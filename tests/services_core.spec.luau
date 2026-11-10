@@ -239,21 +239,19 @@ return function(T, Loader)
 		end
 	)
 
-	T.test(
-		"코인 2배 게임패스 플래그가 켜지면 뽑아서 팔기 값 × 2 (1차 버전은 꺼 둠)",
-		function()
-			local w = world()
-			local PetService = w.H.server("Services/PetService")
-			w.session.plotIndex = 1
-			local daisy = addPlant(w, "sprout_daisy")
-			local pen = w.H.MapLayout.penRect(1)
-			w.H.spawn(w.player, (pen.xMin + pen.xMax) / 2, 3, (pen.zMin + pen.zMax) / 2)
-			T.falsy(w.session.hasMoneyPass)
-			w.session.hasMoneyPass = true
-			T.eq(PetService.sellPlant(w.player, daisy.uid), w.GardenRules.sellPrice(daisy) * 2)
-			w.H.uninstall()
-		end
-	)
+	T.test("9판 로벅스 코인 2배 (data.moneyPass)면 뽑아서 팔기 값 × 2 (기본은 꺼짐)", function()
+		local w = world()
+		local PetService = w.H.server("Services/PetService")
+		w.session.plotIndex = 1
+		local daisy = addPlant(w, "sprout_daisy")
+		local pen = w.H.MapLayout.penRect(1)
+		w.H.spawn(w.player, (pen.xMin + pen.xMax) / 2, 3, (pen.zMin + pen.zMax) / 2)
+		T.falsy(w.data.moneyPass)
+		T.eq(w.session.hasMoneyPass, nil, "9판: 세션 플래그 없앰 → 저장 칸 data.moneyPass")
+		w.data.moneyPass = true
+		T.eq(PetService.sellPlant(w.player, daisy.uid), w.GardenRules.sellPrice(daisy) * 2)
+		w.H.uninstall()
+	end)
 
 	------------------------------------------------------------------
 	T.suite("6판: 자동 수입 없음 (IncomeService·오프라인 수입 RewardService 삭제)")

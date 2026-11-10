@@ -6,7 +6,7 @@
 	Snapshot.section(player, "pets")   → Remote "DataUpdate" ("pets", payload)  (일부만)
 
 	6판 섹션: "pets"(정원의 성체 식물) · "incubators"(정원에 심어 자라는 씨앗) · "eggs"(씨앗 가방) · "fruits"(열매 가방) ·
-	  "index" · "upgrades" · "tools" · "special"(사쿠라 크리스탈) · "tutorial"
+	  "index" · "upgrades"(9판: + treadmillBoost · moneyPass) · "tools" · "special"(사쿠라 크리스탈) · "tutorial"
 	  (없앤 것: 장착만 보내던 Snapshot.equipment, payload 의 equipped·incomePerSecond·sakuraUnlocked·shrineUsed)
 	섹션 종류와 payload 모양은 docs/REMOTES.md 참고.
 	코인·속도처럼 자주 바뀌는 값은 Player Attribute 로 복제 (Tags.PlayerAttributes).
@@ -59,6 +59,9 @@ function Snapshot.build(player: Player): Types.Snapshot?
 		saveEnabled = session.saveEnabled,
 		sakuraCrystals = data.sakuraCrystals,
 		tutorial = TutorialRules.view(data.tutorialStep),
+		-- 9판 로벅스 상품
+		treadmillBoost = data.treadmillBoost,
+		moneyPass = data.moneyPass,
 	}
 end
 
@@ -103,6 +106,8 @@ function Snapshot.section(player: Player, section: Section)
 			trails = data.trails,
 			equippedTrail = data.equippedTrail,
 			trailMultiplier = Economy.trailMultiplier(data.equippedTrail),
+			treadmillBoost = data.treadmillBoost, -- 9판 로벅스 러닝머신 부스트 배수 (1 = 없음)
+			moneyPass = data.moneyPass, -- 9판 로벅스 코인 2배 (영원히)
 		}
 	elseif section == "tools" then
 		payload = { tools = data.tools }

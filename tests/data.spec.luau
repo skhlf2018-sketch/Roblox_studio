@@ -405,23 +405,38 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("크기 확률 합 100, 돌연변이 6종 (자연 3 + 먹이기 원소 3)", function()
-		local sum = 0
-		for _, s in Sizes.list do
-			sum += s.chance
+	T.test(
+		"크기 확률 합 100, 돌연변이 6종 (자연 3 + 옛 먹이기 원소 3 — 9판: 먹이기 없앰)",
+		function()
+			local sum = 0
+			for _, s in Sizes.list do
+				sum += s.chance
+			end
+			T.eq(sum, 100)
+			T.eq(#Mutations.list, 6)
+			T.eq(Mutations.get("silver").naturalChance, 0.05)
+			T.eq(Mutations.get("golden").naturalChance, 0.02)
+			T.eq(Mutations.get("rainbow").naturalChance, 0.005)
+			T.eq(Mutations.get("golden").name, "황금")
+			T.eq(Mutations.get("rainbow").name, "무지개")
+			T.eq(Mutations.get("frozen").name, "얼음")
+			T.eq(Mutations.get("burning").name, "불")
+			T.eq(Mutations.get("bloom"), nil, "블룸은 6판에서 없앰 (사쿠라 씨앗으로)")
+			T.eq(Mutations.feed, nil, "9판: 열매 먹이기 삭제 — 먹이기 목록 없음")
+			T.eq(Mutations.FEED_MAX_CHANCE, nil)
+			for _, id in { "frozen", "burning", "shocked" } do
+				local m = Mutations.get(id)
+				T.eq(m.group, "element", id)
+				T.eq(
+					m.naturalChance,
+					0,
+					id .. " 은 새로 안 생김 (옛 저장 식물 값 계산용으로만 남음)"
+				)
+				T.eq(m.source, "legacy", id)
+				T.eq(m.feedChance, nil, id)
+			end
 		end
-		T.eq(sum, 100)
-		T.eq(#Mutations.list, 6)
-		T.eq(Mutations.get("silver").naturalChance, 0.05)
-		T.eq(Mutations.get("golden").naturalChance, 0.02)
-		T.eq(Mutations.get("rainbow").naturalChance, 0.005)
-		T.eq(Mutations.get("golden").name, "황금")
-		T.eq(Mutations.get("rainbow").name, "무지개")
-		T.eq(Mutations.get("frozen").name, "얼음")
-		T.eq(Mutations.get("burning").name, "불")
-		T.eq(Mutations.get("bloom"), nil, "블룸은 6판에서 없앰 (사쿠라 씨앗으로)")
-		T.eq(#Mutations.feed, 5, "먹이기로 얻는 것: 황금·무지개·얼음·불·번개")
-	end)
+	)
 
 	T.test("업그레이드 표: 정원 11, 러닝머신 20 (6판: 최대 1초 1M), 트레일 11", function()
 		T.eq(#Upgrades.Pen, 11)
@@ -447,7 +462,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"Config 7판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…5000, 성장 3배, 스키마 7",
+		"Config 7판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…5000, 성장 3배, 스키마 8 (9판)",
 		function()
 			local stages = Config.GROWTH_STAGES
 			T.eq(#stages, 4)
@@ -490,7 +505,7 @@ return function(T, Loader)
 			end
 			T.eq(Config.NIGHT_GROWTH_MULTIPLIER, 30)
 			T.eq(Config.PLANT_SELL_FRUIT_MULTIPLIER, 20)
-			T.eq(Config.SCHEMA_VERSION, 7)
+			T.eq(Config.SCHEMA_VERSION, 8, "9판: 로벅스 상품 칸 3개 추가")
 		end
 	)
 

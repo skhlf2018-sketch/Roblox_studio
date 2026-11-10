@@ -2,7 +2,7 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 7 (7판 — 칸 모양은 6판 "씨앗을 훔치세요" 그대로). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 8 (9판 — 7판 모양 + 로벅스 상품 칸 3개). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 식물 id, 잘못된 숫자, 중복 uid, 정원 칸 수 초과 등은 고치거나 버림)
 	6판 용어: pets = 정원의 성체 식물, incubators = 정원에 심어 자라는 씨앗, eggs = 씨앗 가방, fruits = 열매 가방, money = 코인
 
@@ -16,6 +16,9 @@
 	  7 (7판): 칸 모양은 6 그대로. 성장 3배(Config.GROWTH_SPEED_MULTIPLIER) → 씨앗 Required = 표 시간 ÷ 3.
 	     6 → 7: 정원·가방 씨앗의 progress 를 "자란 비율" 이 같게 새 Required 에 맞춤 (rescaleProgress). 등급 16개로
 	     바뀌었지만 저장 데이터에는 등급 id 가 없고(식물 id 만) 옛 슈퍼 울트라디바인 식물 2종은 id 그대로라 보정할 것 없음.
+	  8 (9판 로벅스 상품): + treadmillBoost(러닝머신 부스트 배수, 기본 1 — 산 것 중 가장 큰 것) · moneyPass(코인 2배, 기본 false)
+	     · receipts(지급한 영수증 PurchaseId, 최근 100개 — 중복 지급 방지). 7 → 8: 칸만 추가 (옛 데이터는 기본값).
+	     열매 먹이기는 9판에서 없앴지만 옛 식물에 붙은 원소 돌연변이(얼음·불·번개)는 그대로 둠 (cleanMutations 는 알려진 것만 남김).
 	  보정: 정원(자라는 씨앗 + 성체)이 정원 칸 수를 넘으면 자라는 씨앗은 가방으로, 그래도 넘치는 성체는 코인으로 바꿈
 	        (팔기 값 = GardenRules.sellPrice). 자리가 깨진 씨앗·성체는 빈 격자 자리로.
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
@@ -31,6 +34,7 @@ local Sizes = require(Shared.Data.Sizes)
 local Mutations = require(Shared.Data.Mutations)
 local Upgrades = require(Shared.Data.Upgrades)
 local Weapons = require(Shared.Data.Weapons)
+local Products = require(Shared.Data.Products)
 local Economy = require(Shared.Economy)
 local EggPlacement = require(Shared.EggPlacement)
 local GardenRules = require(Shared.GardenRules)
@@ -74,6 +78,10 @@ function DataSchema.default(_now: number): PlayerData
 		eggs = {},
 		tutorialStep = 1, -- 처음 온 사람은 튜토리얼 1단계부터
 		fruits = {},
+		-- 8 (9판 로벅스 상품)
+		treadmillBoost = 1,
+		moneyPass = false,
+		receipts = {},
 	}
 end
 
@@ -220,8 +228,45 @@ local function gardenSpot(e: { [string]: unknown }, size: string, petId: string,
 	end
 	return EggPlacement.firstFreeGrid(size, taken, petId)
 end
+-- 9판: 저장된 러닝머신 부스트 → 파는 배수 중 그 값 이하 가장 큰 것 (1 = 없음). 이상한 값(NaN·음수·글자)은 1
+function DataSchema.cleanTreadmillBoost(value: unknown): number
+	if typeof(value) ~= "number" then
+		return 1
+	end
+	local n = value :: number
+	if n ~= n then
+		return 1
+	end
+	local best = 1
+	for _, multiplier in Products.BOOST_MULTIPLIERS do
+		if multiplier <= n and multiplier > best then
+			best = multiplier
+		end
+	end
+	return best
+end
+
+-- 9판: 지급한 영수증 PurchaseId 목록 → 글자(1~64자)만, 중복 없이, 최근 RECEIPT_HISTORY_MAX 개 (뒤가 최신)
+function DataSchema.cleanReceipts(value: unknown): { string }
+	local result: { string } = {}
+	if typeof(value) ~= "table" then
+		return result
+	end
+	local seen: { [string]: boolean } = {}
+	for _, id in value :: { unknown } do
+		if typeof(id) == "string" and #(id :: string) > 0 and #(id :: string) <= 64 and not seen[id :: string] then
+			seen[id :: string] = true
+			table.insert(result, id :: string)
+		end
+	end
+	while #result > Config.RECEIPT_HISTORY_MAX do
+		table.remove(result, 1)
+	end
+	return result
+end
+
 ------------------------------------------------------------------
--- reconcile: 아무 값이나 받아 올바른 PlayerData 로 (버전 6 모양)
+-- reconcile: 아무 값이나 받아 올바른 PlayerData 로 (버전 8 모양)
 ------------------------------------------------------------------
 
 function DataSchema.reconcile(raw: unknown, now: number): PlayerData
@@ -419,6 +464,11 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	-- 6판 초기화로 온 사람은 migrate 가 1 을 넣어 둠)
 	data.tutorialStep = TutorialRules.clean(src.tutorialStep, TutorialRules.DONE)
 
+	-- 8 (9판 로벅스 상품): 러닝머신 부스트 = 파는 배수(Products.BOOST_MULTIPLIERS) 중 저장값 이하 가장 큰 것 (없으면 1)
+	data.treadmillBoost = DataSchema.cleanTreadmillBoost(src.treadmillBoost)
+	data.moneyPass = src.moneyPass == true
+	data.receipts = DataSchema.cleanReceipts(src.receipts)
+
 	-- uid 카운터는 기존 uid 보다 항상 크게
 	data.nextUid = math.max(integerIn(src.nextUid, 1, 2 ^ 52, 1), maxUid + 1)
 
@@ -505,6 +555,10 @@ function DataSchema.migrate(raw: unknown): unknown
 			end
 		end
 		version = 7
+	end
+	if version < 8 then
+		-- 7 → 8 (9판 로벅스 상품): 칸만 추가 (treadmillBoost 1 · moneyPass false · receipts {}) — reconcile 이 기본값으로 채움
+		version = 8
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

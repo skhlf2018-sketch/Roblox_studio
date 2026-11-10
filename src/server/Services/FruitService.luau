@@ -8,12 +8,10 @@
 	- Remote PickFruit(plantUid | "all"): 내 정원 GARDEN_ACTION_RADIUS(20) 안에서 그 성체(또는 전부)의 열매를 전부 따서
 	    열매 가방(data.fruits)으로 (가방 자리만큼만). 열매 1개 값 = 딸 때의 FruitRules.fruitValue (크기·돌연변이)
 	    → FruitPicked { plantUid, petId, count, value } (식물마다) + DataUpdate("fruits"/"pets")
-	- Remote SellFruits(): 판매 가판대 SELL_RADIUS(14) 안에서 가방의 열매를 전부 팜 → 코인 (코인 2배 게임패스면 × 2)
+	- Remote SellFruits(): 판매 가판대 SELL_RADIUS(14) 안에서 가방의 열매를 전부 팜 → 코인 (9판 로벅스 "코인 2배" data.moneyPass 면 × 2)
 	    → FruitsSold { count, coins } + Notify + FruitService.sold:fire(player, count, coins) (튜토리얼 5단계)
-	- Remote FeedFruit(plantUid, fruitId): 내 정원 20 안에서 가방의 그 열매(fruitId = 열매를 맺은 식물 id) 1개를
-	    성체에게 먹임 → 확률로 돌연변이 (FruitRules.feedOptions: 황금·무지개·얼음·불·번개). 더 붙을 것이 없는
-	    식물이면 거부(열매 그대로). → FeedResult { plantUid, fruitId, mutation? } + Notify
-	- 플레이어 Attr FruitCount(가방 열매 수) · FruitBagValue(다 팔면 받는 코인, 게임패스 배율 전)
+	- 9판 (사장님 2026-11-10): 열매 먹이기(Remote FeedFruit → FeedResult, 확률로 돌연변이)는 완전히 없앰 — 열매는 팔기만
+	- 플레이어 Attr FruitCount(가방 열매 수) · FruitBagValue(다 팔면 받는 코인, 코인 2배 배율 전)
 	(자동 수입 IncomeService 는 6판에서 없앰)
 ]]
 
@@ -21,8 +19,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
-local Plants = require(Shared.Data.Plants)
-local Mutations = require(Shared.Data.Mutations)
 local Economy = require(Shared.Economy)
 local FruitRules = require(Shared.FruitRules)
 local Format = require(Shared.Format)
@@ -47,18 +43,8 @@ local FruitService = {}
 -- 열매를 팖 (player, count, coins) → TutorialService (5단계 "열매 따서 팔기")
 FruitService.sold = Signal.new()
 
-local rng = Random.new()
-local function rand(): number
-	return rng:NextNumber()
-end
-
 local function coins(n: number): string
 	return Format.number(n) .. " 코인"
-end
-
-local function plantName(petId: string): string
-	local plant = Plants.get(petId)
-	return if plant then plant.name else petId
 end
 
 -- 가방 Attribute (HUD 배지·가판대 미리보기)
@@ -103,7 +89,7 @@ local function fruitTick(dt: number): ...any
 end
 
 ------------------------------------------------------------------
--- 따기 / 팔기 / 먹이기
+-- 따기 / 팔기 (9판: 먹이기 없앰)
 ------------------------------------------------------------------
 
 -- PickFruit: 그 성체("all" 이면 전부)의 열매를 가방으로. 딴 열매 수
@@ -193,53 +179,6 @@ function FruitService.sellAll(player: Player): number?
 	return earned
 end
 
--- FeedFruit: 가방의 열매(fruitId = 식물 id) 1개를 성체에게 → 확률로 돌연변이. 붙은 돌연변이 id (안 붙거나 못 하면 nil)
-function FruitService.feed(player: Player, plantUid: string, fruitId: string): string?
-	local _, data = Sessions.getLoaded(player)
-	if not data then
-		return nil
-	end
-	local plant = PetService.findPlant(player, plantUid)
-	local stack = data.fruits[fruitId]
-	if not plant or not stack or stack.count < 1 then
-		return nil -- 내 성체가 아니거나 그 열매가 가방에 없음 (조용히)
-	end
-	if not PetService.isNearOwnPen(player, Config.GARDEN_ACTION_RADIUS) then
-		Net.notify(player, "error", "내 정원 가까이에서 열매를 먹일 수 있어요!")
-		return nil
-	end
-	if #FruitRules.feedOptions(fruitId, plant.mutations) == 0 then
-		Net.notify(player, "error", plantName(plant.petId) .. " 에게는 더 생길 돌연변이가 없어요!")
-		return nil
-	end
-	FruitRules.takeOne(data.fruits, fruitId)
-	local mutationId = FruitRules.rollFeed(fruitId, plant.mutations, rand)
-	if mutationId then
-		plant.mutations = FruitRules.applyMutation(plant.mutations, mutationId)
-	end
-	data.stats.fruitsFed = (data.stats.fruitsFed or 0) + 1
-	syncBag(player, data)
-	Snapshot.section(player, "fruits")
-	PetService.changed(player)
-	Net.fire(player, Remotes.ToClient.FeedResult, { plantUid = plant.uid, fruitId = fruitId, mutation = mutationId })
-	local mutation = if mutationId then Mutations.get(mutationId) else nil
-	if mutation then
-		Net.notify(
-			player,
-			"success",
-			string.format(
-				"%s 에 %s 돌연변이가 생겼어요! 열매 값 ×%s",
-				plantName(plant.petId),
-				mutation.name,
-				tostring(mutation.multiplier)
-			)
-		)
-	else
-		Net.notify(player, "info", "냠냠… 이번엔 아무 일도 없었어요. 다른 열매도 먹여 보세요!")
-	end
-	return mutationId
-end
-
 ------------------------------------------------------------------
 -- 플레이어 / 시작
 ------------------------------------------------------------------
@@ -266,13 +205,6 @@ function FruitService.start()
 	end)
 	Net.on(Remotes.ToServer.SellFruits, function(player: Player)
 		FruitService.sellAll(player)
-	end)
-	Net.on(Remotes.ToServer.FeedFruit, function(player: Player, uid: unknown, fruit: unknown)
-		local plantUid = Validate.uid(uid)
-		local fruitId = Validate.uid(fruit)
-		if plantUid and fruitId and Plants.get(fruitId) then
-			FruitService.feed(player, plantUid, fruitId)
-		end
 	end)
 
 	task.spawn(function()

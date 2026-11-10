@@ -1,4 +1,12 @@
-# Remote 목록 (서버 ↔ 클라) — 8판 "씨앗을 훔치세요"
+# Remote 목록 (서버 ↔ 클라) — 9판 "씨앗을 훔치세요"
+> **[9판] 열매 먹이기 삭제 · 로벅스 상품 · 밤 귀가 배달 버그 (수석, 2026-11-10 — 사장님 지시 2026-11-10)** — 설계: `docs/SEED_GAME_DESIGN.md` 9장 52~57번. 저장 스키마 **8**. 선임 할 일: **8-9장**. 아빠 할 일: `docs/ROBUX_SETUP.md`.
+> - **없앤 Remote**: 클라→서버 `FeedFruit` · 서버→클라 `FeedResult` (열매 먹이기 완전 삭제 — 열매는 **팔기만**). `FruitRules.feedOptions/feedChance/rollFeed/canGain/applyMutation/takeOne`, `Mutations.feed`·`feedChance`·`feedBiomes`·`FEED_*` 도 없음. 옛 먹이기로 붙은 원소 돌연변이(얼음·불·번개)는 저장된 식물에 그대로 남고 열매 값에도 그대로 곱함 (새로 안 생김).
+> - **새 Remote** 서버 → 클라 **`ProductGranted`** `Types.ProductGrant = { key: string, kind: string }` — 로벅스 상품(`shared/Data/Products`)이 지급됨 (나에게만). 바뀐 값은 같이 오는 `DataUpdate("upgrades")`·Attr 로. **서버로 "사 줘" Remote 는 없음** (위조 방지): 클라가 `MarketplaceService:PromptProductPurchase(LocalPlayer, product.productId)` 로 로블록스 구매창을 열면, 돈은 로블록스가 받고 서버 `MarketplaceService.ProcessReceipt`(`ProductService`)만 지급함.
+> - **상품 표** `Data/Products`: `treadmillBoosts`(11: `boost_2` … `boost_2048`, 값 = 배수 = R$) · `treadmillSkips`(20: `tskip_1` … `tskip_20`, 값 = 그 레벨) · `shop`(5: `money_pass` 199 · `coins_1m` 99 · `coins_1b` 199 · `speed_10m` 199 · `speed_100m` 259). `Products.get(key)` · `byProductId(id)` · `nextTreadmillSkip(level)` · `isConfigured(product)` (= `productId > 0`, 지금은 **전부 0** → 화면은 "준비 중").
+> - **효과**: 러닝머신 부스트 = 산 것 중 **가장 큰 배수 하나** (곱 아님), 러닝머신 1초 이득 = 레벨 이득 × 트레일 × 부스트 (`Economy.treadmillGainPerSecond(level, trail?, boost?)`, 걷는 속도에는 안 곱함) · 러닝머신 레벨 = 지금 레벨 + 1 상품만 (안 맞으면 다음 1칸, 최대면 속도 600M) · 코인/속도 더하기 · 코인 2배 = 열매 판매·성체 팔기 × 2 (영원히).
+> - **Attr** `TreadmillBoost`(number, 1 = 없음) · `MoneyPass`(bool). **Snapshot** + `DataUpdate("upgrades")` 에 `treadmillBoost` · `moneyPass`. 개발 명령 `/buy <key>` (스튜디오 무료 지급).
+> - **버그 수정**: 씨앗을 든 채 밤이 되면(서버가 베이스로 순간이동) 씨앗이 가방에 들어가던 것 → 이제 **둥지로 돌아감** + `Notify` info "밤이 되어 씨앗이 둥지로 돌아갔어요." (`EggDelivered` 없음). 다른 서버 순간이동(늦게 받은 베이스 → 집, `/zone`)도 같음. 스스로 걸어서 허브에 들어온 배달은 그대로.
+
 > **[8판 추가] 크기 곡선 · 거대 식물 · 특별 추첨 0.00012% (수석, 2026-11-09 — 사장님 지시 2026-11-09)** — **Remote·Attribute·Snapshot 모양은 그대로** (새 Remote 없음). 설계: `docs/SEED_GAME_DESIGN.md` 9장 45~50번.
 > - **크기**: `Config.RARITY_PLANT_SCALE` 곡선 1 → 6 (울트라디바인 6, 해커 글리치 칸 6.16 = 간격용). 맨 위 등급(`Config.LOBBY_FILL_RARITY` = hacker_glitch)은 **모양만** × `LOBBY_FILL_SCALE` 16 — `GardenRules.plantScale`(모양) ↔ `GardenRules.spacingScale`(간격, `EggPlacement.footprint`), `GardenRules.isLobbyFill(petId)`. 모양 적용은 그대로 `PlantVisualService`(plantScale) — `VisualHeight` Attr 이 키 약 67 까지 커짐, 흙 둔덕만 `PlantVisualService.groundScale`.
 > - **PlaceEgg 거부 이유 `"giant"`** (`EggPlacement.check` → `Notify` "거대 식물은 정원에 하나만 심을 수 있어요! …"): 정원(자라는 씨앗 + 성체)에 거대 식물이 이미 1그루면 (`LOBBY_FILL_MAX_PER_GARDEN`). 클라 미리보기도 같은 함수라 빨강 + 같은 글.
@@ -25,9 +33,9 @@
 > **[6판] 씨앗을 훔치세요 (수석, 2026-10-27)** — 사장님이 만든 게임으로 바꿈 (설계: `docs/SEED_GAME_DESIGN.md`). **서버·공유 규칙은 다 됨, 클라 화면은 선임** (8장 "선임 할 일").
 > - **용어** (Remote·모듈·태그 이름은 5판 그대로 둔 것이 많음): 알 → **씨앗** · 우리 → **정원** · 부화 → **성체가 됨**(저절로, 심은 그 자리에서) · 펫 → **성체 식물** · 돈 → **코인** · 쓰다듬기 → **물 주기**.
 >   `PlaceEgg` = 씨앗 심기, `PickUpPlacedEgg` = 심은 씨앗 다시 줍기, `IncubatingEgg` 태그 = 자라는 씨앗, `snap.pets` = 정원의 성체 식물, `petId` = 식물 id (`Data/Plants`, `Data/Pets` 는 같은 표).
-> - **흐름**: 구역에서 씨앗 훔치기 → 허브(안전 구역)에 들어오면 씨앗 가방 → `PlaceEgg` 로 정원에 심기 → 새싹 → 줄기 → 봉오리 → **성체**(`PlantGrown`) → 열매가 맺힘(식물마다 최대 5개) → `PickFruit` 로 따서 열매 가방 → 판매 가판대에서 `SellFruits` → 코인. 코인으로 `SkipGrowth`(건너뛰기)·정원/러닝머신/트레일 업그레이드. 가방의 열매를 성체에게 `FeedFruit` → 확률로 돌연변이(열매 값 ↑). 남는 성체는 `SellPlant`(열매 값 × 20) 또는 사쿠라 나무에 `SakuraOffer`(크리스탈) → `SakuraDraw`(특별 씨앗).
+> - **흐름**: 구역에서 씨앗 훔치기 → 허브(안전 구역)에 들어오면 씨앗 가방 → `PlaceEgg` 로 정원에 심기 → 새싹 → 줄기 → 봉오리 → **성체**(`PlantGrown`) → 열매가 맺힘(식물마다 최대 5개) → `PickFruit` 로 따서 열매 가방 → 판매 가판대에서 `SellFruits` → 코인. 코인으로 `SkipGrowth`(건너뛰기)·정원/러닝머신/트레일 업그레이드. (6판: 가방의 열매를 성체에게 `FeedFruit` → 확률로 돌연변이 — **9판에서 없앰**). 남는 성체는 `SellPlant`(열매 값 × 20) 또는 사쿠라 나무에 `SakuraOffer`(크리스탈) → `SakuraDraw`(특별 씨앗).
 > - **없앤 Remote** — 서버→클라: `HatchResult`(→ `PlantGrown`), `OfflineIncome`, `FusionResult`, `AltarUpdate`, `ShrineResult`, `PetsSold`, `IncomeTick` / 클라→서버: `HatchEgg`(성체는 저절로), `EquipPet`, `UnequipPet`, `EquipBest`(장착 없음), `FuseRequest`, `AltarOffer`, `ShrineFuse`, `SakuraApply`(→ `SakuraDraw`), `SellPet`(→ `SellPlant`).
-> - **새 Remote** — 서버→클라: `PlantGrown`, `FruitPicked`, `FruitsSold`, `FeedResult` / 클라→서버: `PickFruit`, `SellFruits`, `FeedFruit`, `SkipGrowth`, `SellPlant`, `SakuraDraw`. **뜻이 바뀐 Remote**: `SakuraOffer(plantUid)`(학 해금 → 성체 바치고 크리스탈), `SakuraResult`(kind `"offered"`/`"draw"`), `EggGranted`(source `"sakura"`/`"dev"`).
+> - **새 Remote** — 서버→클라: `PlantGrown`, `FruitPicked`, `FruitsSold`, `FeedResult`(9판 없앰) / 클라→서버: `PickFruit`, `SellFruits`, `FeedFruit`(9판 없앰), `SkipGrowth`, `SellPlant`, `SakuraDraw`. **뜻이 바뀐 Remote**: `SakuraOffer(plantUid)`(학 해금 → 성체 바치고 크리스탈), `SakuraResult`(kind `"offered"`/`"draw"`), `EggGranted`(source `"sakura"`/`"dev"`).
 > - **없앤 것**: 장착·보관함(`equipped`, `petInventoryMax`, 보관함 500·자동 판매), 자동 수입·오프라인 수입(Attr `IncomePerSecond`), 퓨전 머신(`FusionMachine` 태그, `plot.fusion`), 제단·비밀 통로(`Altar`·`Shrine` 태그, `MapLayout.specials.altarLight/altarDark/shrine`, `shrineUsed`), 사쿠라 해금(`sakuraUnlocked`, Attr `SakuraUnlocked`), 블룸 돌연변이, 우리에 놓는 알 8개 상한(`PLACED_EGG_MAX` → 정원 칸 = 자라는 씨앗 + 성체).
 > - **저장 스키마 6**: 5판 이하 데이터는 속도·트레일·장착 트레일·러닝머신 레벨만 남기고 초기화, 튜토리얼 1단계부터 (SEED 15장).
 > - **러닝머신 최대 1초 1M** (사장님 추가 지시): 20레벨, 1초 속도 = 걸음당 속도 × 4 → 20레벨이면 **1,000,000** (`docs/GAME_DESIGN.md` 9-2 표). 상점 창이 10레벨을 가정한 곳이 없는지 선임 확인 (8장).
@@ -84,7 +92,7 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `biomes[i]` | `{ id, index, zMin, zMax, centerZ, name, nameEn }` 21개 (Biomes.list 순서, 8판) | 구역 바닥·표지판 |
 | `NIGHT_WALL` | `{ z = 0, xMin = -110, xMax = 110, height = 60, thickness = 2 }` | NightWall 태그 파트 |
 | `plots[i]` (`plot(i)`) | `{ index, side "left"/"right", center {x,z}, size {w=60(z 방향), d=70(x 방향)}, facing (+1 = +x 를 봄 / -1), rect, penRect, yardRect, spawn, treadmill, sellStall, signs = { owner, penUpgrade, treadmillUpgrade } }` | 베이스 전부 |
-| `penRect(i)` | 정원(5판 우리) = 뒤쪽 46 (벽 쪽) | 울타리·정원 바닥 · **6판: 씨앗을 심는 곳 (PlaceEgg) = 성체 식물이 서 있는 곳**, 열매 따기·먹이기·성체 팔기·물 주기 거리(20)도 이 사각형 기준 |
+| `penRect(i)` | 정원(5판 우리) = 뒤쪽 46 (벽 쪽) | 울타리·정원 바닥 · **6판: 씨앗을 심는 곳 (PlaceEgg) = 성체 식물이 서 있는 곳**, 열매 따기·성체 팔기 거리(20)도 이 사각형 기준 (9판: 먹이기 없음) |
 | `petRect(i)` | 우리 뒤쪽 (울타리 쪽 16 빼고, 가장자리 3 여유) | [6판: 서버는 안 씀 — 성체는 심은 자리(`PetRecord.x, z`)에 GardenPlant 파트로] |
 | **`toLocal(i, pos)` / `toWorld(i, lx, lz)`** (2판 수정) | 베이스 기준 좌표 ↔ 월드. `lx = (x - 가운데 x) × facing` (+35 = 복도 쪽 앞 가장자리, -35 = 뒤 벽), `lz = z - 가운데 z`. 왼쪽·오른쪽 베이스가 거울이라 로컬 모양이 같음 | `snap.incubators[].x, z` 가 이 좌표 → 월드는 `toWorld(PlotIndex, x, z)` |
 | **`PEN_LOCAL`**, `isInPenLocal(lx, lz, inset?)` | 우리를 로컬로: `lx -35 ~ 11, lz -30 ~ 30` (모든 베이스 같음) | 씨앗 심기 미리보기 |
@@ -133,8 +141,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`LeaderboardUpdate`** (5판) | 10초마다 서버 전체 + 새로 온 사람에게 한 번 | `{ money: { LeaderboardEntry }, speed: { LeaderboardEntry } }` — `LeaderboardEntry = { name, value, userId }`, 큰 값부터 최대 10줄. money = 코인 |
 | **`PlantGrown`** (6판) | 정원에 심은 씨앗이 **그 자리에서 성체가 됨** (1초 틱 · 건너뛰기 · 물 주기 다음 틱 · 접속 때 오프라인 성장 — 접속 때는 `Notify` 는 한 번에 모아서 1줄) | `{ plant: PetRecord, isNew: boolean (도감 첫 발견), fruitValue: number (열매 1개 값), fruitInterval: number (초) }` — 같은 uid 의 `IncubatingEgg` 파트가 없어지고 `GardenPlant` 파트가 생김. 열매 `Config.FRUITS_ON_ADULT`(1)개 달린 채 |
 | **`FruitPicked`** (6판) | `PickFruit` 로 열매를 따서 열매 가방에 넣음 — **식물마다 1번** (`"all"` 이면 여러 번) | `{ plantUid: string, petId: string, count: number, value: number (이번에 딴 열매 값 합, 코인) }` → 그 식물(`GardenPlant` Attr `PlantUid`) 위 "+열매 3" 팝업 |
-| **`FruitsSold`** (6판) | 판매 가판대에서 `SellFruits` 로 열매를 팜 | `{ count: number, coins: number }` (코인 2배 게임패스면 이미 × 2) — `Notify` success 도 같이 옴 |
-| **`FeedResult`** (6판) | `FeedFruit` 결과 (열매는 먹었음) | `{ plantUid: string, fruitId: string, mutation: string? }` — `mutation` = 새로 붙은(또는 더 좋은 것으로 바뀐) 돌연변이 id, nil = 이번엔 안 붙음. `Notify` 도 같이 옴 |
+| **`FruitsSold`** (6판) | 판매 가판대에서 `SellFruits` 로 열매를 팜 | `{ count: number, coins: number }` (9판 로벅스 "코인 2배"(`moneyPass`)면 이미 × 2) — `Notify` success 도 같이 옴 |
+| **`ProductGranted`** (9판) | 로벅스 상품을 받음 (`ProcessReceipt` 지급 · 개발 명령 `/buy`) — 나에게만. 9판: 6판 `FeedResult`(열매 먹이기 결과)는 없앰 | `Types.ProductGrant` = `{ key: string (Data/Products 의 key — "boost_8", "tskip_3", "coins_1m", "money_pass" …), kind: "treadmillBoost"|"treadmillSkip"|"coins"|"speed"|"moneyPass" }` — `Notify` success/info 도 같이 옴. 러닝머신·코인 2배면 `DataUpdate("upgrades")`(treadmillLevel·treadmillBoost·moneyPass), 코인·속도는 Attr `Money`·`BaseSpeed` 로 |
 | **`TreadmillTouched`** (8판) | 내 러닝머신 벨트에 **올라서는 순간** 1번 (0레벨 = 잠김이어도, 내려왔다 다시 올라서면 또). 서 있는 동안은 Attr `TreadmillTouching` | `Types.TreadmillTouch` = `{ level: number (0 = 잠김), nextLevel: number?, nextCost: number? (코인 — 0레벨이면 해금 500), maxed: boolean (20레벨), gainPerSecond: number (지금 1초 속도, 트레일 전), nextGainPerSecond: number? }` → "레벨 n → n+1 올리기 (가격)" 창, 버튼 `PurchaseUpgrade("Treadmill")` |
 
 `EggInfo` = `{ uid, petId, biomeId, rarity, size, mutations: {string}, special: boolean }` (`petId` = 식물 id)
@@ -159,10 +167,9 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | **`PlaceEgg`** (6판: 씨앗 심기) | `eggUid: string`, `x: number`, `z: number` (심을 자리 = **월드** x, z — 정원 바닥을 클릭/터치한 점) | uid 형식·x·z 유한한 숫자, **가방에 그 씨앗**, 내 베이스가 있음, **정원에 빈칸** (자라는 씨앗 + 성체 < 정원 칸 수 `Economy.penSlots(penLevel)`, `GardenRules.hasRoom`), 내가 내 베이스 안에 서 있거나 그 자리 14 안, 그 자리가 내 정원 안(울타리에서 2 안쪽), **다른 자라는 씨앗·성체 식물과 간격** (`EggPlacement`, 크기별 지름). 성공: 가방 → `incubators`, 그 자리에 `IncubatingEgg` 파트(Stage `"sprout"`), `DataUpdate("eggs")` + `DataUpdate("incubators")`. 실패: `Notify` error (`EggPlacement.message`, 예 "정원이 가득 찼어요") | 5 / 3 |
 | **`PickUpPlacedEgg`** | `eggUid: string` (정원에서 **아직 자라는** 씨앗) | `Config.ALLOW_EGG_PICKUP`, 내 정원에 심은 씨앗, 가방에 빈칸. 자란 만큼 그대로 가방으로 (성체는 못 주움 → 팔기·바치기) | 5 / 3 |
 | **`PickFruit`** (6판) | `plantUid: string` 또는 `"all"` | 내 정원(`penRect`)에서 **20 스터드 안**(`Config.GARDEN_ACTION_RADIUS`), uid 면 내 정원의 성체인지(아니면 조용히 무시). 그 성체(들)의 열매를 전부 **열매 가방 자리만큼** 땀 (열매 1개 값 = 딸 때 크기·돌연변이 반영, `FruitRules.fruitValue`). → 식물마다 `FruitPicked` + `DataUpdate("fruits")` + `DataUpdate("pets")`. 열매가 없으면 `Notify` info, 가방이 가득 차면 `Notify` error | 10 / 5 |
-| **`SellFruits`** (6판) | 없음 | **판매 가판대 14 스터드 안** (`SellStall` 태그 파트 표면 또는 `MapLayout.sellSpots()` — 허브 1 + 베이스마다 1), 가방에 열매가 1개 이상. 가방을 전부 팖 → 코인 (`FruitRules.bagValue` × 코인 2배 게임패스) → `FruitsSold` + `Notify` + `DataUpdate("fruits")`. 튜토리얼 5단계는 이걸로 끝남 | 3 / 1 |
-| **`FeedFruit`** (6판) | `plantUid: string`, `fruitId: string` (열매 가방의 칸 = 그 열매를 맺은 **식물 id**) | 내 정원 20 안, 내 정원의 성체, 가방에 그 열매가 1개 이상, **붙을 수 있는 돌연변이가 남아 있음** (`FruitRules.feedOptions(fruitId, plant.mutations)` 가 비면 거부 — 열매 그대로, `Notify` error). 통과: 열매 1개를 먹고 `FruitRules.rollFeed` 확률로 돌연변이 1개 (자연: 황금·무지개는 더 좋은 것으로만 바뀜 / 원소: 얼음·불·번개 중 하나만, 그 구역 열매면 ×3, 높은 등급 열매일수록 ↑, 합 상한 90%) → `FeedResult` + `Notify` + `DataUpdate("fruits"/"pets")`. 미리보기 확률은 `FruitRules.feedChance` | 5 / 2 |
+| **`SellFruits`** (6판) | 없음 | **판매 가판대 14 스터드 안** (`SellStall` 태그 파트 표면 또는 `MapLayout.sellSpots()` — 허브 1 + 베이스마다 1), 가방에 열매가 1개 이상. 가방을 전부 팖 → 코인 (`FruitRules.bagValue` × 9판 로벅스 코인 2배 `moneyPass` 면 2) → `FruitsSold` + `Notify` + `DataUpdate("fruits")`. 튜토리얼 5단계는 이걸로 끝남 | 3 / 1 |
 | **`SkipGrowth`** (6판) | `eggUid: string` (정원에서 자라는 씨앗), `mode: "all"\|"half"` (`Remotes.SkipModes`) | 내 정원의 자라는 씨앗, 남은 시간 > 0, **코인 충분** (가격 = `GardenRules.skipCost(petId, progress, required, mode)` = 올림(건너뛸 분) × 10 코인 × 등급 배수, 일반 1 … 슈퍼 500 … 해커 글리치 5000. 남은 시간은 씨앗 위 타이머 숫자(밤에도 같은 "성장 초" — 7판: 성장 3배가 적용된 Required 기준)). `"all"` 이면 바로 성체(`PlantGrown`), `"half"` 면 남은 시간 절반. 화면 버튼이라 거리 검사 없음. 코인 부족은 `Notify` error | 5 / 2 |
-| **`SellPlant`** (6판, 5판 `SellPet` 자리) | `plantUid: string` (내 정원의 **성체**) | 내 정원 20 안 **또는** 판매 가판대 14 안, 내 정원의 성체. 값 = 열매 1개 값 × 20 (`GardenRules.sellPrice(plant)`, 코인 2배 게임패스면 × 2) → 정원 자리가 빔 (달린 열매도 같이 없어짐 — 먼저 따세요) → `Notify` + `DataUpdate("pets")` | 10 / 4 |
+| **`SellPlant`** (6판, 5판 `SellPet` 자리) | `plantUid: string` (내 정원의 **성체**) | 내 정원 20 안 **또는** 판매 가판대 14 안, 내 정원의 성체. 값 = 열매 1개 값 × 20 (`GardenRules.sellPrice(plant)`, 9판 로벅스 코인 2배(`moneyPass`)면 × 2) → 정원 자리가 빔 (달린 열매도 같이 없어짐 — 먼저 따세요) → `Notify` + `DataUpdate("pets")` | 10 / 4 |
 | **`SakuraDraw`** (6판) | 없음 | 사쿠라 나무 14 안, 크리스탈 ≥ `Config.SAKURA_DRAW_COST`(8판 추가 2: 100, 7판 10), 씨앗 가방에 빈칸 (가득 차면 거부, 크리스탈 그대로). 뽑기: 벚꽃 씨앗(벚꽃 요정 나무·코스믹) 97.5% / 정령 벚꽃 씨앗(정령 벚꽃 나무·비밀) 2.5% (`Config.SAKURA_SEEDS`), 크기·자연 돌연변이는 둥지 씨앗처럼 → `EggGranted`(source `"sakura"`) + `SakuraResult` draw | 5 / 2 |
 
 - **씨앗 줍기**는 Remote 가 아니라 서버가 만든 `ProximityPrompt`(E 키, 씨앗 파트 안의 `StealPrompt`)로 합니다. 서버가 거리·낮인지·이미 들고 있는지 확인합니다.
@@ -171,6 +178,8 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 - **정원에 씨앗 심기**: 클라가 할 일 = 씨앗 창(핫바/가방, `snap.eggs`)에서 씨앗 고르기 → 심기 모드 → 내 정원 바닥 클릭/터치 → `PlaceEgg(uid, hit.X, hit.Z)`. 미리보기는 `EggPlacement.check(MapLayout.toLocal(PlotIndex, hit).x, ...z, egg.size, 정원 자리들, nil)` 로 초록/빨강 (자리 = 자라는 씨앗 + 성체 `x, z`).
 - **성체 되기는 Remote 없음**: 다 자라면 서버가 저절로 바꿈 (`PlantGrown`). 5판 `HatchEgg`·"부화" 버튼은 없어짐.
 - **러닝머신**: 내 베이스 러닝머신 벨트에 올라서면 서버가 자동으로 태움 (`OnTreadmill`, 1레벨 이상). 내릴 때만 `TreadmillLeave`. 8판: 올라서는 순간 `TreadmillTouched`(0레벨도) → 업그레이드 창 → `PurchaseUpgrade("Treadmill")`.
+- **로벅스 상품 (9판)**: Remote 없음 (일부러). 클라 `MarketplaceService:PromptProductPurchase(LocalPlayer, product.productId)` → 로블록스 구매창 → 돈은 로블록스가 받고 서버 `ProcessReceipt` 가 지급 → `ProductGranted`. `Products.isConfigured(product)` 가 false(id 0)면 창을 열지 말고 "준비 중". 9판: 열매 먹이기 `FeedFruit` 는 없앰.
+- **배달은 걸어서만 (9판 버그 수정)**: 서버 순간이동(밤 귀가 · 늦게 받은 베이스 · `/zone`)으로 허브에 들어오면 배달이 아님 — 순간이동 전에 든 씨앗은 둥지로 (`Notify` info "밤이 되어 씨앗이 둥지로 돌아갔어요." / "순간이동해서 들고 있던 씨앗이 둥지로 돌아갔어요.").
 - 도구: 서버가 Backpack 에 `Tool`(이름 = kind, `RequiresHandle = false`, Attribute `ToolKind`, 무기는 `WeaponId`·`Range`, 곰덫은 `Count`)을 넣어 줌. `ToolController` 가 `Activated` 때 `UseTool` 을 보냄.
 
 ## 3. Attribute 로 복제되는 값 (자주 바뀌는 숫자)
@@ -193,10 +202,12 @@ local zone = MapLayout.zoneAt(rootPart.Position.Z) -- 구역 id | "hub" | nil (�
 | `InSafeZone`, `CurrentZone` | 허브(z < 0) 안 / 지금 있는 곳 (구역 id \| `"hub"` \| `""`) |
 | `OnTreadmill` | 러닝머신 위에 고정돼 달리는 중 |
 | **`TreadmillTouching`** (8판) | 내 러닝머신 벨트 위(수평)에 서 있음 — 0레벨이어도 (업그레이드 창 열기/닫기) |
+| **`TreadmillBoost`** (9판) | 로벅스 러닝머신 부스트 배수 (number, 1 = 없음 · 2 … 2048) — 산 것 중 가장 큰 것. 러닝머신 1초 이득에만 곱함 → HUD "×8" 배지 · 스피드 배수 창 |
+| **`MoneyPass`** (9판) | 로벅스 "코인 2배 (영원히)"를 샀나 (bool) → 열매 판매·성체 팔기 × 2 |
 | `DataLoaded`, `SaveEnabled` | 데이터 로딩 끝났는지, 저장되는 세션인지 |
 | `SakuraCrystals` | 사쿠라 크리스탈 개수 (6판: `SakuraUnlocked` 없앰 — 나무는 처음부터 씀) |
 | **`FruitCount`** (6판) | 열매 가방 속 열매 수 → HUD 배지 "열매 12 / 300" (`snap.fruitBagMax`) |
-| **`FruitBagValue`** (6판) | 열매 가방을 다 팔면 받는 코인 (게임패스 배율 전) → 판매 가판대 미리보기 |
+| **`FruitBagValue`** (6판) | 열매 가방을 다 팔면 받는 코인 (코인 2배 배율 전 — `MoneyPass` 면 × 2) → 판매 가판대 미리보기 |
 | `MoveWarnings` | 비정상 이동 경고 수 (5 = Kick) |
 
 (6판에서 없앰: `IncomePerSecond`, `SakuraUnlocked`.) leaderstats 에는 `코인`, `Speed` 가 보기 좋은 글자(StringValue, 예 `"1.5K"`)로 들어 있습니다.
@@ -242,6 +253,8 @@ fruitBagMax,                       -- 6판: 300
 plotIndex, saveEnabled,
 sakuraCrystals,
 tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 사람은 done = true, step 6)
+treadmillBoost,                    -- 9판: 로벅스 러닝머신 부스트 배수 (1 = 없음)
+moneyPass,                         -- 9판: 로벅스 코인 2배 (영원히)
 -- 6판에서 없앰: incomePerSecond, equipped, sakuraUnlocked, shrineUsed, petInventoryMax
 ```
 
@@ -249,12 +262,12 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 
 | section | payload |
 |---|---|
-| `"pets"` | `{ pets, penSlots }` — 정원의 성체 (성체가 됨·열매가 맺힘/따짐·먹이기·팔기·바치기 때). 6판: `equipped`·`incomePerSecond` 없음 |
+| `"pets"` | `{ pets, penSlots }` — 정원의 성체 (성체가 됨·열매가 맺힘/따짐·팔기·바치기 때). 6판: `equipped`·`incomePerSecond` 없음 |
 | `"incubators"` | `{ incubators }` — 자라는 씨앗 (심기·다시 줍기·성체가 됨·건너뛰기 때) |
 | `"eggs"` | `{ eggs }` — 씨앗 가방 (배달·선물 씨앗·심기·다시 줍기 때) |
-| **`"fruits"`** (6판) | `{ fruits }` — 열매 가방 (따기·팔기·먹이기·개발 명령 `/fruit`) |
+| **`"fruits"`** (6판) | `{ fruits }` — 열매 가방 (따기·팔기·개발 명령 `/fruit`) |
 | `"index"` | `{ indexDiscovered, indexClaimed, indexCompleteClaimed, unlockedWeapons }` |
-| `"upgrades"` | `{ penLevel, penSlots, placedEggMax, treadmillLevel, trails, equippedTrail, trailMultiplier }` |
+| `"upgrades"` | `{ penLevel, penSlots, placedEggMax, treadmillLevel, trails, equippedTrail, trailMultiplier, treadmillBoost, moneyPass }` — 9판: + `treadmillBoost`·`moneyPass` (로벅스 상품 지급 때도 옴) |
 | `"tools"` | `{ tools }` |
 | `"special"` | `{ sakuraCrystals }` (6판: `sakuraUnlocked`·`shrineUsed` 없음) |
 | `"tutorial"` | `{ tutorial = TutorialView }` |
@@ -273,8 +286,9 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 | 자라는 씨앗 (정원 위 + "자라는 씨앗" 패널) | `IncubatingEgg` 파트 `Stage`/`Progress`/`Required` 또는 `State.get().incubators` + `GardenRules.stage/stageName`, **건너뛰기 버튼 "전부 / 절반"** + 가격 `GardenRules.skipCost(petId, progress, required, mode)` → `SkipGrowth(uid, mode)`, 다시 줍기 → `PickUpPlacedEgg(uid)`, 물 주기 → `PetPet(uid)` |
 | 성체가 됨 연출 | `PlantGrown { plant, isNew, fruitValue, fruitInterval }` (5판 부화 카드 자리 — `HatchController` 가 임시로 같은 카드) |
 | 성체 식물 (정원 위) | `GardenPlant` 파트 (`Fruits`/`FruitMax`, `FruitInterval - FruitProgress`) + ProximityPrompt "열매 따기" → `PickFruit(PlantUid)`|
-| 정원 식물 창 (5판 펫 보관함 자리) | `State.get().pets` — 식물마다 열매 수·열매 1개 값(`FruitRules.fruitValue`)·다음 열매, "모두 따기" → `PickFruit("all")`, "뽑아서 팔기" → `SellPlant(uid)` (가격 `GardenRules.sellPrice`), "열매 먹이기" → `FeedFruit(uid, fruitId)` |
-| 열매 가방 창 | `State.get().fruits` — 칸마다 식물 이름·개수·값, 먹이기 미리보기 `FruitRules.feedOptions(fruitId, plant.mutations)` · `FruitRules.feedChance`, 결과 `FeedResult` |
+| 정원 식물 창 (5판 펫 보관함 자리) | `State.get().pets` — 식물마다 열매 수·열매 1개 값(`FruitRules.fruitValue`)·다음 열매, "모두 따기" → `PickFruit("all")`, "뽑아서 팔기" → `SellPlant(uid)` (가격 `GardenRules.sellPrice`). 9판: 열매 먹이기 없음 |
+| 열매 가방 창 | `State.get().fruits` — 칸마다 식물 이름·개수·값 (9판: 먹이기 없음 — 판매 가판대에서 팔기만) |
+| 로벅스 상점·스피드 배수·러닝머신 창 (9판) | `Products.shop` · `Products.treadmillBoosts` · `Products.nextTreadmillSkip(TreadmillLevel)`, 가격 `product.robux`, `Products.isConfigured` false 면 "준비 중", 사기 = `MarketplaceService:PromptProductPurchase`, 결과 `ProductGranted`, Attr `TreadmillBoost`·`MoneyPass` |
 | 판매 가판대 | `SellStall` 근처(14) ProximityPrompt "열매 팔기 (12개 · 3.4K 코인)" → `SellFruits()`, 결과 `FruitsSold { count, coins }` |
 | 도감(인덱스) + 모두 획득 | `indexDiscovered/indexClaimed` (식물 id), `Progression.biomeProgress`, `ClaimIndexReward("all")`. 보상 코인 = 열매 1개 값 × 10 |
 | 상점 (정원/러닝머신/트레일) | `Upgrades` + `Economy.nextPenCost/nextTreadmillCost`, `PurchaseUpgrade(kind, id)`. 러닝머신 **20레벨**, 1초 속도 `Economy.treadmillGainPerSecond(level)` |
@@ -292,13 +306,23 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 - **열매** (`FruitService`, `shared/FruitRules`): 성체마다 `fruitIntervalSeconds`(Data/Plants, 일반 30초 … 슈퍼 9초)마다 +1, 최대 5. 밤에도 빠르기 그대로, 오프라인에도 맺음. 열매 1개 값 = 식물 열매 값 × 크기(보통 1 · 큼 1.5 · 거대 3 · 초거대 6) × 돌연변이(곱). 가방 300개. **자동 수입 없음**.
 - **건너뛰기** (`GardenRules.skipCost`): 올림(남은 분) × 10 코인 × 등급 배수 (전부 / 절반).
 - **성체 팔기** (`GardenRules.sellPrice`): 열매 1개 값 × 20.
-- **열매 먹이기 돌연변이** (`Data/Mutations` + `FruitRules`): 자연(황금 4% · 무지개 1% — 더 좋은 것으로만) · 원소(얼음 5% · 불 5% · 번개 3% — 하나만). 그 구역 열매 ×3, 열매 등급 보너스 1 + (등급 순서 - 1) × 0.1, 합 상한 90%.
+- **열매 먹이기는 9판에서 없앰** (사장님 2026-11-10): 열매는 팔기만. 돌연변이는 둥지 씨앗의 자연 돌연변이(실버·황금·무지개)만 새로 생김, 옛 원소(얼음·불·번개)는 저장된 식물에만 남음.
+- **로벅스 상품** (`ProductService`, `Data/Products`, 9판): `ProcessReceipt` → 영수증 `PurchaseId` 중복 확인(`data.receipts` 최근 100개) → 지급 → 저장 → `PurchaseGranted` (플레이어 없음·불러오는 중·저장 실패·모르는 id = `NotProcessedYet`).
 - **사쿠라 나무** (`SakuraService`, `shared/SakuraRules`): 성체 바치기 → 크리스탈 (일반은 못 바침), 100개 → 특별 씨앗 뽑기 (97.5% / 2.5%, 8판 추가 2).
-- **러닝머신** (`TreadmillService`): 1초마다 속도 += 걸음당 속도 × 4 (`Config.TREADMILL_MULTIPLIER`) + `TreadmillStep`. 20레벨 = 1초 1,000,000.
+- **러닝머신** (`TreadmillService`): 1초마다 속도 += 걸음당 속도 × 4 (`Config.TREADMILL_MULTIPLIER`) × 트레일 × 9판 로벅스 부스트 + `TreadmillStep`. 20레벨 = 1초 1,000,000 (트레일·부스트 전).
 - **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+1,000 코인, 8판). 튜토리얼 씨앗 = 숲 강아지풀(1초).
-- **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id`.
+- **개발 명령** (Studio·허용 목록만, `DevCommands`): `/coins n`(= `/money`), `/speed n`, `/seed 식물id`(씨앗 가방에), `/plant 식물id 개수`(정원 빈자리에 바로 성체, 열매 1개), `/fruit 개수 [식물id]`(열매 가방에), `/grow`(자라는 씨앗 전부 성체), `/skip`(지금 낮/밤/대기를 바로 끝냄), `/trap n`, `/crystal n`, `/tutorial reset`, `/zone 구역id` (9판: 씨앗을 들고 있으면 둥지로 돌아감), `/buy 상품key` (9판: 로벅스 상품 무료 지급).
 
 ## 8. 선임 할 일
+
+### 8-9. 9판 선임 체크리스트 (수석 2026-11-10 — 로벅스 상품 · 열매 먹이기 삭제)
+- [ ] **열매 먹이기 화면 전부 지우기**: 열매 가방 "먹이기" 버튼·성체 카드 "먹이기"·먹이기 확률 미리보기·`FeedResult` 연출·먹이기 소리 (`Remotes.ToServer.FeedFruit`·`ToClient.FeedResult` 는 이제 **없는 이름** — 남아 있으면 `crossrefs.spec` "코드에서 쓰는 Remotes.X 는 전부 실제 이름" 이 실패). 튜토리얼·도움말 글에 "먹이기" 가 있으면 지우기.
+- [ ] **구매창**: `MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)` (클라만 — 서버로 보내는 "사 줘" Remote 는 없음). **`Products.isConfigured(product)` 가 false(지금은 전부 — id 0)면 창을 열지 말고 "준비 중" 안내**. 연타 방지는 클라에서.
+- [ ] **지급 연출**: `ProductGranted { key, kind }` (나에게만) → 축하 글·소리. 실제 값은 `DataUpdate("upgrades")` (`treadmillLevel`·`treadmillBoost`·`moneyPass`) · Attr `TreadmillBoost`·`MoneyPass`·`TreadmillLevel`·`Money`·`BaseSpeed` 로 옴 (`ProductGranted` 만 보고 숫자를 바꾸지 말 것).
+- [ ] **러닝머신 창**: 코인 버튼(`PurchaseUpgrade("Treadmill")`) 옆에 로벅스 버튼 = `Products.nextTreadmillSkip(TreadmillLevel)` (지금 레벨 + 1 상품만, 최대면 숨김). 가격 `product.robux`. 1초 이득 표시 = `Economy.treadmillGainPerSecond(level, trailMultiplier, TreadmillBoost)` (`TreadmillTouched.gainPerSecond` 는 트레일·부스트 전 숫자).
+- [ ] **스피드 배수 창**: `Products.treadmillBoosts` 11장 — 지금 `TreadmillBoost` 이하 카드는 "가짐" (또 사도 그대로 — 환불 없음 안내), 큰 것만 사게.
+- [ ] **상점 창**: `Products.shop` 5개 (코인 2배 · 코인 1M · 1B · 속도 10M · 100M). `MoneyPass` 면 코인 2배 카드 "가짐".
+- 개발 명령 `/buy <key>` 로 스튜디오에서 무료로 받아 볼 수 있음. 스튜디오 테스트 구매(로블록스 구매창)도 무료지만 상품 id 가 있어야 함 (`docs/ROBUX_SETUP.md`).
 
 ### 8-8. 8판 선임 체크리스트 (수석 2026-11-08 — 지금은 `[8판 수석 임시]` 로 안 깨질 만큼만)
 > **선임 완료 (2026-11-08, 2차)**: 아래 전부 됨 — `[8판 수석 임시]` 주석 없음. 자세한 모양·이름은 `docs/UI.md` 0-8b장. 배경음 3개는 7판처럼 새 무료 id 를 못 골라 옛 음악 빠르기만 바꿈(선사시대 북 ×1.3 · 벚꽃 현악기 ×0.82 · 마법의 숲 ×1.12). 스튜디오에서 볼 것: 거대 경비가 둥지 무리를 덮는지, 경비 마지막 0.3초 돌진 걸음, 튜토리얼 1단계 화살표가 숲 둥지(x ≈ −82, z ≈ 204)를 가리키는지 (`docs/STUDIO_CHECKLIST.md` 45~54번).
@@ -369,7 +393,7 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 **새 Remote 붙이기** (붙이면 `tests/crossrefs.spec.luau` 의 `AWAITING_CLIENT` 에서 그 이름을 지우세요 — 안 지우면 테스트가 알려 줌)
 - [x] **`SellFruits()`**: 판매 가판대(`SellStall` 태그, 허브 + 베이스마다)에 ProximityPrompt "열매 팔기" — 글에 `FruitCount`·`FruitBagValue` (예 "열매 12개 · 3.4K 코인"). `FruitsSold { count, coins }` → "+3.4K 코인" 연출·소리 (`SoundController` 에 임시 소리 있음)
 - [x] **`SkipGrowth(uid, "all" | "half")`**: 자라는 씨앗 패널(`IncubatorController`)·씨앗 위에 "건너뛰기" 버튼 2개 + 가격 `GardenRules.skipCost(petId, progress, required, mode)` (코인이 모자라면 회색) + 확인 창. 남은 시간은 1초마다 줄어드니 가격도 1초마다 다시 계산
-- [x] **`FeedFruit(plantUid, fruitId)`**: 열매 가방 창(새로) → 열매 고르기 → 성체 고르기(정원 식물 창 또는 `GardenPlant` 프롬프트). 붙을 수 있는 것 `FruitRules.feedOptions`, 확률 `FruitRules.feedChance` 미리보기, `FeedResult` 연출 (붙으면 반짝 + 돌연변이 색 `Visuals.mutationLooks`, 안 붙으면 "냠냠")
+- [x] ~~**`FeedFruit(plantUid, fruitId)`**~~ (9판에서 삭제 — 8-9장): 열매 가방 창(새로) → 열매 고르기 → 성체 고르기(정원 식물 창 또는 `GardenPlant` 프롬프트). 붙을 수 있는 것 `FruitRules.feedOptions`, 확률 `FruitRules.feedChance` 미리보기, `FeedResult` 연출 (붙으면 반짝 + 돌연변이 색 `Visuals.mutationLooks`, 안 붙으면 "냠냠")
 
 **정원·식물 모양**
 - [x] **자라는 씨앗 모양**: `IncubatingEgg` 파트 Attr `Stage` 로 씨앗(땅에 묻힘) → 새싹 → 줄기 → 봉오리 (지금은 서버가 만든 공 + 이름표). 등급 아우라 `Rarities.aura` (11개: none · lime_glow · blue_sparkle · purple_flame · gold_ring · red_lightning · stardust_swirl · black_mist · white_clock · rainbow_beam · sky_pillar)
@@ -400,5 +424,5 @@ tutorial: TutorialView             -- { step, total, text, hint, done } (끝난 
 
 - 1초마다 `HumanoidRootPart` 수평 이동 거리 > `WalkSpeed × 1.5 + 30` (경과초 비례) → 마지막 정상 위치로 되돌림 + 경고, 5번이면 Kick (경고는 2분마다 1개씩 줄어듦). 래그돌·곰덫·서버 순간이동 직후는 검사 쉼.
 - 씨앗을 든 사람: 0.2초에 `WalkSpeed × 0.2 × 1.5 + 8` 스터드보다 멀리 가면 씨앗을 이전 위치에 떨어뜨림. 배달은 주운 곳 → 배달한 곳 거리 ÷ (`WalkSpeed × 1.3`) 보다 빨리 오면 거부(씨앗은 둥지로).
-- "근처여야 하는" 요청은 전부 서버가 거리 확인: 씨앗 줍기(12), 크리스탈 줍기(12), 판매 가판대(14 — `SellFruits`, `SellPlant`), 내 정원(20 — `PickFruit`, `FeedFruit`, `SellPlant`), 사쿠라 나무(14 — `SakuraOffer`, `SakuraDraw`). 배달·러닝머신·허브는 `MapLayout` 사각형으로 판정. `SkipGrowth`·`PurchaseUpgrade` 는 화면 버튼이라 거리 검사 없음 (코인만 씀).
+- "근처여야 하는" 요청은 전부 서버가 거리 확인: 씨앗 줍기(12), 크리스탈 줍기(12), 판매 가판대(14 — `SellFruits`, `SellPlant`), 내 정원(20 — `PickFruit`, `SellPlant`), 사쿠라 나무(14 — `SakuraOffer`, `SakuraDraw`). 배달·러닝머신·허브는 `MapLayout` 사각형으로 판정. `SkipGrowth`·`PurchaseUpgrade` 는 화면 버튼이라 거리 검사 없음 (코인만 씀).
 - 코인 = 서버만 바꿈 (열매 팔기·성체 팔기·도감·튜토리얼 보상·개발 명령). 열매 값은 딸 때 서버가 정해 가방에 저장 (클라가 보낸 값은 안 씀).

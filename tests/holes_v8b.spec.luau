@@ -2261,7 +2261,6 @@ return function(T, Loader)
 				local clientRemotes = {
 					"PickFruit",
 					"SellFruits",
-					"FeedFruit",
 					"SkipGrowth",
 					"SellPlant",
 					"SakuraOffer",
@@ -2387,9 +2386,6 @@ return function(T, Loader)
 						local a1, a2, a3
 						if name == "PickFruit" then
 							a1 = if rand() < 0.3 then "all" else uidArg()
-						elseif name == "FeedFruit" then
-							a1 = uidArg()
-							a2 = if rand() < 0.6 then pick({ "static_world_tree", "owl_oak", "nope" }) else pick(junk)
 						elseif name == "SkipGrowth" then
 							a1, a2 = uidArg(), if rand() < 0.75 then pick({ "all", "half" }) else pick(junk)
 						elseif name == "PlaceEgg" then

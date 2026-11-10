@@ -387,16 +387,10 @@ return function(T, Loader)
 				T.truthy((weights.hacker_glitch or 0) > 0, row[1] .. " 해커 글리치가 나옴")
 			end
 			T.eq(Plants.count, 182)
-			-- 먹이기 ×3 구역에 하나씩
-			local found = {}
+			-- (8판: 먹이기 ×3 구역에 하나씩 → 9판 열매 먹이기 삭제로 먹이기 구역 칸 자체가 없음)
 			for _, m in Mutations.list do
-				for _, id in m.feedBiomes or {} do
-					found[id] = m.id
-				end
+				T.eq(m.feedBiomes, nil, m.id .. " 9판: 먹이기 구역 칸 없음")
 			end
-			T.eq(found.robot_factory, "shocked")
-			T.eq(found.clock_tower, "golden")
-			T.eq(found.rainbow_sky, "rainbow")
 		end
 	)
 

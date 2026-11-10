@@ -506,10 +506,10 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("SEED 13장 ↔ Mutations (자연 3 + 원소 3)")
+	T.suite("SEED 13장 ↔ Mutations (자연 3 + 옛 원소 3 — 9판: 열매 먹이기 삭제)")
 
 	T.test(
-		"6종: 이름(id)·열매 값 배율·묶음·자연 등장·먹이기 확률·먹이기 구역(×3)이 같음",
+		"6종: 이름(id)·열매 값 배율·묶음·자연 등장이 같음 (9판: 먹이기 확률·먹이기 구역 칸 없앰)",
 		function()
 			local GROUPS = { ["자연"] = "natural", ["원소"] = "element" }
 			local function percentOrZero(cell)
@@ -522,6 +522,7 @@ return function(T, Loader)
 			for _, line in seed["13"] do
 				local cells = splitCells(line)
 				if cells and cells[2] and hasText(cells[2], "×") then
+					T.eq(#cells, 4, "13장 표는 4칸 (9판: 먹이기 칸 없앰) — " .. cells[1])
 					local name, id = string.match(cells[1], "^(.-) %((%w+)%)$")
 					local mutation = Mutations.get(id)
 					T.truthy(mutation, "모르는 돌연변이 " .. cells[1])
@@ -529,19 +530,8 @@ return function(T, Loader)
 					T.eq(parseNumber(cells[2]), mutation.multiplier, id .. " 배율")
 					T.eq(GROUPS[cells[3]], mutation.group, id .. " 묶음")
 					T.near(percentOrZero(cells[4]), mutation.naturalChance, 1e-12, id .. " 자연 등장")
-					T.near(percentOrZero(cells[5]), mutation.feedChance or 0, 1e-12, id .. " 먹이기 확률")
-					local biomes = {}
-					if cells[6] ~= "-" then
-						for _, biomeName in splitDot(cells[6]) do
-							T.truthy(biomeIdByName[biomeName], "모르는 구역 " .. biomeName)
-							table.insert(biomes, biomeIdByName[biomeName])
-						end
-					end
-					T.eq(
-						table.concat(biomes, ","),
-						table.concat(mutation.feedBiomes or {}, ","),
-						id .. " 먹이기 구역"
-					)
+					T.eq(mutation.feedChance, nil, id .. " 먹이기 칸 없음")
+					T.eq(mutation.feedBiomes, nil, id .. " 먹이기 구역 칸 없음")
 					checked += 1
 				end
 			end
@@ -550,11 +540,13 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("먹이기 보너스 숫자: 그 구역 열매 ×3, 등급 보너스 0.1, 상한 90%", function()
-		T.eq(Mutations.FEED_BIOME_BONUS, 3)
-		T.truthy(hasText(SEED, "이 구역 열매면 ×" .. Mutations.FEED_BIOME_BONUS))
-		T.truthy(hasText(SEED, "(등급 순서 - 1) × " .. Mutations.FEED_RARITY_BONUS_PER_ORDER))
-		T.truthy(hasText(SEED, "합 상한 " .. pct(Mutations.FEED_MAX_CHANCE)))
+	T.test("9판 열매 먹이기 삭제: SEED 9장 52번 결정 · 13장 안내 · 먹이기 상수 없음", function()
+		T.truthy(hasText(SEED, "52. **열매 먹이기 완전 삭제**"), "SEED 9장 52번")
+		T.truthy(hasText(SEED, "원소 3개(얼음·불·번개)는 9판부터 새로 안 생김"), "SEED 13장 안내")
+		T.eq(Mutations.feed, nil)
+		T.eq(Mutations.FEED_BIOME_BONUS, nil)
+		T.eq(Mutations.FEED_RARITY_BONUS_PER_ORDER, nil)
+		T.eq(Mutations.FEED_MAX_CHANCE, nil)
 	end)
 
 	------------------------------------------------------------------

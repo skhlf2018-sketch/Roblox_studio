@@ -17,6 +17,8 @@
 	  /fruit 20 [식물id]  열매 가방에 열매 받기 (식물 id 를 안 쓰면 정원 첫 성체의 열매, 없으면 아기 데이지)
 	  /tutorial reset   튜토리얼을 1단계부터 다시 (보상도 다시 받음)
 	  /zone lake        그 구역 입구로 순간이동 (구역 id 또는 번호 1~21 (8판), "hub" = 허브 기본 스폰) — 긴 복도 시험용
+	                    (9판: 씨앗을 들고 있었으면 순간이동 전에 둥지로 돌아감 — /zone hub 로 배달 못 함)
+	  /buy boost_8      9판 로벅스 상품을 무료로 받기 (Data/Products 의 key — ProductService.grant, 영수증 없이. 스튜디오/DEV 만)
 ]]
 
 local RunService = game:GetService("RunService")
@@ -27,6 +29,7 @@ local Config = require(ReplicatedStorage.Shared.Data.Config)
 local Plants = require(ReplicatedStorage.Shared.Data.Plants)
 local MapLayout = require(ReplicatedStorage.Shared.Data.MapLayout)
 local FruitRules = require(ReplicatedStorage.Shared.FruitRules)
+local Products = require(ReplicatedStorage.Shared.Data.Products)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
@@ -45,11 +48,25 @@ local TutorialService = require(script.Parent.TutorialService)
 local EggService = require(script.Parent.EggService)
 local BaseService = require(script.Parent.BaseService)
 local FruitService = require(script.Parent.FruitService)
+local ProductService = require(script.Parent.ProductService)
 
 local DevCommands = {}
 
-local COMMAND_NAMES =
-	{ "coins", "money", "speed", "skip", "grow", "trap", "crystal", "seed", "plant", "fruit", "tutorial", "zone" }
+local COMMAND_NAMES = {
+	"coins",
+	"money",
+	"speed",
+	"skip",
+	"grow",
+	"trap",
+	"crystal",
+	"seed",
+	"plant",
+	"fruit",
+	"tutorial",
+	"zone",
+	"buy",
+}
 
 local function isAllowed(player: Player): boolean
 	if #Config.DEV_USER_IDS > 0 then
@@ -78,6 +95,8 @@ local function teleportTo(player: Player, target: MapLayout.XZ): boolean
 		return false
 	end
 	local position = Vector3.new(target.x, MapLayout.FLOOR_Y + 4, target.z)
+	-- 9판 (버그 수정): 서버 순간이동으로는 씨앗을 옮길 수 없음 — 들고 있던 씨앗은 먼저 둥지로 (/zone hub 로 배달 금지)
+	BaseService.returnCarriedBeforeTeleport(player)
 	Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
 	character:PivotTo(CFrame.new(position))
 	EggService.resetCarryOrigin(player, position)
@@ -171,6 +190,13 @@ local function handle(player: Player, message: string)
 	elseif command == "zone" then
 		local target = zoneTarget(arg or "")
 		if not target or not teleportTo(player, target) then
+			return
+		end
+	elseif command == "buy" then
+		-- 9판: 로벅스 상품 무료 지급 (테스트용 — 영수증 기록 없음)
+		local key = arg or ""
+		if not Products.get(key) or not ProductService.grant(player, key, "dev") then
+			Net.notify(player, "error", "[개발] 모르는 상품: " .. key .. " (Data/Products 의 key)")
 			return
 		end
 	else

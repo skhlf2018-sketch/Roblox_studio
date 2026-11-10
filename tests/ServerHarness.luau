@@ -683,7 +683,16 @@ function ServerHarness.install(Loader, T, options)
 	end
 
 	-- 알(EggService): 누가 알을 들고 있는지 H.carry(player, egg) 로 정함
-	H.eggs = { carried = {}, taken = 0, confiscated = 0, droppedAt = {}, specials = {}, knockouts = {}, dropped = {} }
+	H.eggs = {
+		carried = {},
+		taken = 0,
+		confiscated = 0,
+		returned = 0,
+		droppedAt = {},
+		specials = {},
+		knockouts = {},
+		dropped = {},
+	}
 	if not options.realEgg then
 		H.eggs.pickedUp = Signal.new()
 		H.eggs.lost = Signal.new()
@@ -715,6 +724,16 @@ function ServerHarness.install(Loader, T, options)
 				H.eggs.carried[player] = nil
 				H.eggs.confiscated += 1
 				lose(player, had)
+			end,
+			-- 9판: 서버 순간이동 전에 든 씨앗을 둥지로 (밤 귀가 등) — H.eggs.returned 에 셈
+			returnCarriedToNest = function(player)
+				local had = H.eggs.carried[player]
+				H.eggs.carried[player] = nil
+				if had then
+					H.eggs.returned += 1
+				end
+				lose(player, had)
+				return had ~= nil
 			end,
 			dropCarriedAt = function(player, position)
 				local had = H.eggs.carried[player]

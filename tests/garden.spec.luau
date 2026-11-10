@@ -1,9 +1,9 @@
 --!nocheck
 --[[
-	6판 "씨앗을 훔치세요" 정원·열매 테스트: FruitService (열매 맺기 · PickFruit · SellFruits · FeedFruit · 오프라인 열매)
+	6판 "씨앗을 훔치세요" 정원·열매 테스트: FruitService (열매 맺기 · PickFruit · SellFruits · 오프라인 열매 — 9판: FeedFruit 없앰)
 	+ 정원 파트(GardenPlant Attribute).
 	진짜 서비스 코드(FruitService, PetService, BaseService, Wallet, Snapshot) + 진짜 shared 규칙을 ServerHarness 위에서 (가상 시간).
-	순수 규칙 경계(FruitRules.produce·가방·먹이기 확률)는 tests/rules_boundary.spec, 팔기 가격은 services_core.
+	순수 규칙 경계(FruitRules.produce·가방)는 tests/rules_boundary.spec, 팔기 가격은 services_core.
 ]]
 
 return function(T, Loader)
@@ -26,7 +26,7 @@ return function(T, Loader)
 		w.player = H.newPlayer(1001, "Gardener")
 		w.session, w.data = H.login(w.player)
 		w.session.plotIndex = 1
-		w.FruitService.start() -- PickFruit·SellFruits·FeedFruit 처리기 + 1초 열매 틱
+		w.FruitService.start() -- PickFruit·SellFruits 처리기 + 1초 열매 틱
 		w.PetService.start() -- SellPlant 처리기
 		return w
 	end
@@ -292,11 +292,11 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("내 베이스 판매 가판대에서도 됨, 코인 2배 게임패스면 × 2", function()
+	T.test("내 베이스 판매 가판대에서도 됨, 9판 로벅스 코인 2배(data.moneyPass)면 × 2", function()
 		local w = world()
 		local spot = w.H.MapLayout.plot(1).sellStall
 		w.H.spawn(w.player, spot.x, 3, spot.z)
-		w.session.hasMoneyPass = true
+		w.data.moneyPass = true
 		w.data.fruits.sprout_daisy = { count = 1, value = 10 }
 		w.H.client(w.player, "SellFruits")
 		T.eq(w.data.money, 20)
@@ -323,134 +323,51 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("6판 정원: FeedFruit (열매 먹이기 → 확률로 돌연변이)")
+	T.suite("9판 정원: 열매 먹이기 삭제 (사장님 2026-11-10 — 열매는 팔기만)")
 
 	T.test(
-		"먹이면 열매 1개가 줄고 FeedResult·Notify, 붙은 돌연변이는 식물 기록에 (조합 규칙 지킴)",
+		"FeedFruit·FeedResult Remote 가 없고, FruitService.feed·FruitRules 먹이기 함수·Mutations.feed 도 없음",
 		function()
 			local w = world()
-			local plant = addPlant(w, "sprout_daisy")
-			w.data.fruits.crystal_snowdrop = { count = 50, value = 50 * 8000 }
-			standInGarden(w)
-			local got = nil
-			for _ = 1, 50 do
-				local before = w.data.fruits.crystal_snowdrop.count
-				w.H.client(w.player, "FeedFruit", plant.uid, "crystal_snowdrop")
-				w.H.advance(1) -- 레이트 리밋 (5 / 2)
-				T.eq(w.data.fruits.crystal_snowdrop.count, before - 1, "먹일 때마다 1개")
-				local results = payloads(w, "FeedResult")
-				local last = results[#results]
-				T.eq(last.plantUid, plant.uid)
-				T.eq(last.fruitId, "crystal_snowdrop")
-				if last.mutation then
-					got = last.mutation
-					break
-				end
+			local Remotes = w.H.shared("Remotes")
+			T.eq(Remotes.ToServer.FeedFruit, nil, "클라→서버 FeedFruit 없음")
+			T.eq(Remotes.ToClient.FeedResult, nil, "서버→클라 FeedResult 없음")
+			T.eq(Remotes.RateLimits.FeedFruit, nil, "레이트 리밋 칸도 없음")
+			T.eq(w.H.remotes.FeedFruit, nil, "서버가 RemoteEvent 를 안 만듦")
+			T.eq(w.H.remotes.FeedResult, nil)
+			T.eq(w.FruitService.feed, nil)
+			for _, name in
+				{ "feedOptions", "feedChance", "rollFeed", "canGain", "rarityBonus", "applyMutation", "takeOne" }
+			do
+				T.eq(w.FruitRules[name], nil, "FruitRules." .. name .. " 없앰")
 			end
-			T.truthy(got, "50번 안에 뭔가 붙음 (한 번 약 39%)")
-			T.truthy(table.find(plant.mutations, got), "식물에 붙음")
-			T.truthy(w.Economy.isValidMutationSet(plant.mutations))
-			T.truthy(w.H.hasNotify(w.player, "success", "돌연변이가 생겼어요"))
-			T.truthy(w.data.stats.fruitsFed >= 1)
+			T.eq(w.Mutations.feed, nil)
+			T.eq(w.Mutations.FEED_BIOME_BONUS, nil)
 			w.H.uninstall()
 		end
 	)
 
 	T.test(
-		"눈 구역 열매(수정 설강화)는 얼음이 다른 원소보다 훨씬 자주 (그 구역 열매 ×3)",
+		"옛 먹이기로 원소 돌연변이(얼음)가 붙은 저장 식물은 그대로 — 딴 열매 값에 황금 ×2 · 얼음 ×1.5 가 곱해짐, 저장 불러오기에도 남음",
 		function()
 			local w = world()
-			local plant = addPlant(w, "sprout_daisy")
+			local plant = addPlant(w, "sprout_daisy", { mutations = { "golden", "frozen" }, fruits = 2 })
 			standInGarden(w)
-			local counts = {}
-			for _ = 1, 400 do
-				plant.mutations = {}
-				w.data.fruits.crystal_snowdrop = { count = 1, value = 8000 }
-				w.FruitService.feed(w.player, plant.uid, "crystal_snowdrop")
-				local id = plant.mutations[1]
-				if id then
-					counts[id] = (counts[id] or 0) + 1
-				end
-			end
-			local frozen, burning = counts.frozen or 0, counts.burning or 0
-			-- 기대: 얼음 0.05 × 3 × 1.4(전설 보너스) = 21% ≈ 84번, 불 7% ≈ 28번
-			T.truthy(frozen > burning * 1.5, "얼음 " .. frozen .. " / 불 " .. burning)
-			T.truthy(frozen > 50 and frozen < 130, "얼음 " .. frozen)
-			T.eq(counts.silver, nil, "실버는 먹이기로 안 나옴")
-			w.H.uninstall()
-		end
-	)
-
-	T.test(
-		"붙을 수 있는 것만: 황금은 무지개로만 바뀌고 실버로 안 내려감, 원소가 있으면 다른 원소 안 붙음",
-		function()
-			local w = world()
-			local plant = addPlant(w, "sprout_daisy")
-			standInGarden(w)
-			for _ = 1, 300 do
-				plant.mutations = { "golden", "frozen" }
-				w.data.fruits.crystal_snowdrop = { count = 1, value = 8000 }
-				w.FruitService.feed(w.player, plant.uid, "crystal_snowdrop")
-				T.truthy(w.Economy.isValidMutationSet(plant.mutations), table.concat(plant.mutations, ","))
-				T.falsy(table.find(plant.mutations, "silver"))
-				T.falsy(table.find(plant.mutations, "burning"))
-				T.falsy(table.find(plant.mutations, "shocked"))
-				T.eq(#plant.mutations, 2)
-			end
-			w.H.uninstall()
-		end
-	)
-
-	T.test(
-		"더 붙을 게 없는 식물(무지개 + 원소)이면 거부 — 열매 그대로, FeedResult 없음",
-		function()
-			local w = world()
-			local plant = addPlant(w, "sprout_daisy", { mutations = { "rainbow", "burning" } })
-			w.data.fruits.crystal_snowdrop = { count = 3, value = 24000 }
-			standInGarden(w)
-			w.H.client(w.player, "FeedFruit", plant.uid, "crystal_snowdrop")
-			T.eq(w.data.fruits.crystal_snowdrop.count, 3)
-			T.eq(#payloads(w, "FeedResult"), 0)
-			T.truthy(w.H.hasNotify(w.player, "error", "더 생길 돌연변이가 없어요"))
-			w.H.uninstall()
-		end
-	)
-
-	T.test(
-		"멀면 거부, 가방에 없는 열매·모르는 열매·남의 식물·이상한 인자는 조용히 무시",
-		function()
-			local w = world()
-			local plant = addPlant(w, "sprout_daisy")
-			w.data.fruits.crystal_snowdrop = { count = 3, value = 24000 }
-			standFar(w)
-			w.H.client(w.player, "FeedFruit", plant.uid, "crystal_snowdrop")
-			T.eq(w.data.fruits.crystal_snowdrop.count, 3)
-			T.truthy(w.H.hasNotify(w.player, "error", "정원 가까이"))
-			standInGarden(w)
-			local other = w.H.newPlayer(1002, "Other")
-			local otherSession, otherData = w.H.login(other)
-			otherSession.plotIndex = 2
-			otherData.nextUid = 500
-			local theirs = addPlant(w, "owl_oak", { player = other, data = otherData })
-			w.H.clearSent()
-			local calls = {
-				{ plant.uid, "owl_oak" }, -- 가방에 없음
-				{ plant.uid, "chicken" }, -- 5판 펫 id
-				{ plant.uid, "없는식물" },
-				{ theirs.uid, "crystal_snowdrop" },
-				{ "i1", "crystal_snowdrop" },
-				{ plant.uid, 5 },
-				{ nil, "crystal_snowdrop" },
-				{ plant.uid },
-			}
-			for _, args in calls do
-				w.H.advance(1)
-				w.H.client(w.player, "FeedFruit", args[1], args[2])
-			end
-			T.eq(w.data.fruits.crystal_snowdrop.count, 3)
-			T.eq(#payloads(w, "FeedResult"), 0)
-			T.eq(#theirs.mutations, 0)
-			T.eq(#w.H.notifications(w.player), 0, "조용히")
+			w.H.client(w.player, "PickFruit", plant.uid)
+			local base = w.Economy.fruitValue("sprout_daisy", "normal", {})
+			T.eq(w.data.fruits.sprout_daisy.count, 2)
+			T.near(
+				w.data.fruits.sprout_daisy.value,
+				2 * base * 2 * 1.5,
+				1e-9,
+				"열매 값 = 기본 × 황금 2 × 얼음 1.5"
+			)
+			local saved = w.DataSchema.reconcile({ version = 7, pets = { plant } }, 0)
+			T.eq(
+				table.concat(saved.pets[1].mutations, ","),
+				"golden,frozen",
+				"스키마 7 → 8 불러와도 원소 돌연변이 그대로"
+			)
 			w.H.uninstall()
 		end
 	)
@@ -485,21 +402,24 @@ return function(T, Loader)
 
 	T.suite("6판 정원: Remote 계약")
 
-	T.test("PickFruit·SellFruits·FeedFruit 는 레이트 리밋이 있고 Net.on 처리기가 하나씩", function()
-		local w = world()
-		local Remotes = w.H.shared("Remotes")
-		for _, name in { "PickFruit", "SellFruits", "FeedFruit" } do
-			T.truthy(Remotes.ToServer[name], name)
-			T.truthy(Remotes.RateLimits[name], name .. " 레이트 리밋")
+	T.test(
+		"PickFruit·SellFruits 는 레이트 리밋이 있고 Net.on 처리기가 하나씩 (9판: FeedFruit 없음)",
+		function()
+			local w = world()
+			local Remotes = w.H.shared("Remotes")
+			for _, name in { "PickFruit", "SellFruits" } do
+				T.truthy(Remotes.ToServer[name], name)
+				T.truthy(Remotes.RateLimits[name], name .. " 레이트 리밋")
+			end
+			for _, name in { "PickFruit", "SellFruits" } do
+				T.eq(#w.H.remotes[name].OnServerEvent.handlers, 1, name .. " 처리기 1개")
+			end
+			for _, name in { "FruitPicked", "FruitsSold", "PlantGrown" } do
+				T.truthy(Remotes.ToClient[name], name)
+			end
+			w.H.uninstall()
 		end
-		for _, name in { "PickFruit", "SellFruits", "FeedFruit" } do
-			T.eq(#w.H.remotes[name].OnServerEvent.handlers, 1, name .. " 처리기 1개")
-		end
-		for _, name in { "FruitPicked", "FruitsSold", "FeedResult", "PlantGrown" } do
-			T.truthy(Remotes.ToClient[name], name)
-		end
-		w.H.uninstall()
-	end)
+	)
 
 	T.test(
 		"PickFruit 연타: 레이트 리밋(10 / 5)을 넘는 요청은 버려짐 (열매가 다시 맺혀도 1초에 5번까지만)",

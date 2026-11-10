@@ -29,6 +29,9 @@
 	0.2초마다 구역 표시: 플레이어 Attr CurrentZone(구역 id | "hub" | ""), InSafeZone(허브 안),
 	    새 구역에 들어가면 ZoneEntered { biomeId, name, nameEn } 1회 (허브는 안 보냄)
 	밤이 되면: 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 순간이동 (밤 벽에 안 갇히게). 베이스가 없으면 허브 기본 스폰.
+	    9판 (사장님 2026-11-10 버그 수정): 씨앗을 들고 있었으면 배달로 치지 않고 **둥지로 돌려보냄** + Notify
+	    "밤이 되어 씨앗이 둥지로 돌아갔어요". 서버 순간이동(serverTeleport: 밤 귀가·늦게 받은 베이스·리스폰 집으로)은 전부
+	    순간이동 전에 씨앗을 둥지로 (returnCarriedBeforeTeleport) — 스스로 걸어서 허브에 들어온 것만 배달.
 	오프라인 동안에도 심은 씨앗은 자랍니다 (밤 가속 없이 실제 시간, 상한 24시간) — 접속하면 다 자란 것은 바로 성체.
 
 	정원 파트 (선임이 모양을 꾸미는 자리, 서버는 단순한 공 + 이름표만 만듦):
@@ -381,12 +384,35 @@ function BaseService.assignPlot(player: Player): number
 	return 0
 end
 
--- 서버 순간이동 (위치 검증 쉼 + 씨앗 배달 기준점 옮김). look 방향을 바라봄
-local function serverTeleport(player: Player, session: Sessions.Session, spot: MapLayout.XZ, look: Vector3)
+-- 9판 (사장님 2026-11-10 버그): 서버 순간이동 때 들고 있던 씨앗 안내 (밤 귀가는 따로)
+BaseService.TELEPORT_EGG_TEXT = "순간이동해서 들고 있던 씨앗이 둥지로 돌아갔어요."
+BaseService.NIGHT_EGG_TEXT = "밤이 되어 씨앗이 둥지로 돌아갔어요."
+
+-- 서버가 순간이동시키기 전: 들고 있던 씨앗은 **배달로 치지 않고** 둥지로 돌려보냄 (9판 버그 수정 — 밤 귀가로 허브(베이스)에
+-- 들어오면 다음 틱에 배달되어 씨앗이 가방에 들어가던 구멍). 돌려보냈으면 true (안내 eggText)
+function BaseService.returnCarriedBeforeTeleport(player: Player, eggText: string?): boolean
+	if not EggService.returnCarriedToNest(player) then
+		return false
+	end
+	carryTracks[player] = nil
+	Net.notify(player, "info", eggText or BaseService.TELEPORT_EGG_TEXT)
+	return true
+end
+
+-- 서버 순간이동 (위치 검증 쉼 + 씨앗 배달 기준점 옮김). look 방향을 바라봄.
+-- 9판: 씨앗을 들고 있었으면 먼저 둥지로 돌려보냄 (서버 순간이동으로는 씨앗을 허브로 옮길 수 없음)
+local function serverTeleport(
+	player: Player,
+	session: Sessions.Session,
+	spot: MapLayout.XZ,
+	look: Vector3,
+	eggText: string?
+)
 	local character = player.Character
 	if not character then
 		return
 	end
+	BaseService.returnCarriedBeforeTeleport(player, eggText)
 	local destination = Vector3.new(spot.x, floorAt(spot) + 4, spot.z)
 	Sessions.exemptMovement(session, Config.MOVE_CHECK_EXEMPT_AFTER_TELEPORT)
 	character:PivotTo(CFrame.lookAt(destination, destination + look))
@@ -394,29 +420,29 @@ local function serverTeleport(player: Player, session: Sessions.Session, spot: M
 	carryTracks[player] = nil
 end
 
--- 내 베이스 앞마당 스폰 자리로 (복도 가운데를 바라봄)
-function BaseService.teleportHome(player: Player)
+-- 내 베이스 앞마당 스폰 자리로 (복도 가운데를 바라봄). eggText = 들고 있던 씨앗을 둥지로 돌려보낼 때 안내
+function BaseService.teleportHome(player: Player, eggText: string?)
 	local session = Sessions.get(player)
 	if not session or not player.Character or session.plotIndex == 0 then
 		return
 	end
 	local plot = MapLayout.plot(session.plotIndex)
 	if plot then
-		serverTeleport(player, session, plot.spawn, Vector3.new(plot.facing, 0, 0))
+		serverTeleport(player, session, plot.spawn, Vector3.new(plot.facing, 0, 0), eggText)
 	end
 end
 
 -- 내 베이스로, 베이스가 없으면(8번째 사람) 허브 기본 스폰(MapLayout.hubSpots.mainSpawn)으로
-function BaseService.teleportToSafety(player: Player)
+function BaseService.teleportToSafety(player: Player, eggText: string?)
 	local session = Sessions.get(player)
 	if not session or not player.Character then
 		return
 	end
 	if session.plotIndex > 0 then
-		BaseService.teleportHome(player)
+		BaseService.teleportHome(player, eggText)
 		return
 	end
-	serverTeleport(player, session, MapLayout.hubSpots.mainSpawn, Vector3.new(0, 0, 1))
+	serverTeleport(player, session, MapLayout.hubSpots.mainSpawn, Vector3.new(0, 0, 1), eggText)
 end
 
 -- 늦게 베이스를 받은 사람: 정원 파트 + 집으로 + 상태 다시 보내기
@@ -959,7 +985,8 @@ function BaseService.start()
 	end)
 
 	-- 밤: 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 (밤 벽이 허브 경계 z = 0 을 막으므로 밖에 갇히지 않게).
-	--   씨앗을 들고 있었으면 베이스(허브 안)에 도착하자마자 다음 틱에 가방으로 배달
+	--   9판 (사장님 2026-11-10 버그 수정): 씨앗을 들고 있었으면 **배달 안 됨** — 순간이동 전에 둥지로 돌려보냄
+	--   ("밤이 되어 씨앗이 둥지로 돌아갔어요"). 8판까지는 베이스(허브 안)에 도착한 다음 틱에 가방으로 배달됐음
 	CycleService.changed:connect(function(phase: Types.Phase)
 		if phase ~= "Night" then
 			return
@@ -967,7 +994,7 @@ function BaseService.start()
 		for player in Sessions.all() do
 			local root = Character.getRoot(player)
 			if root and not MapLayout.isInHub(root.Position) then
-				BaseService.teleportToSafety(player)
+				BaseService.teleportToSafety(player, BaseService.NIGHT_EGG_TEXT)
 			end
 		end
 	end)

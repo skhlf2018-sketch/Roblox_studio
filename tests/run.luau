@@ -50,6 +50,9 @@ local specs = {
 	{ "holes_v8.spec", require("./holes_v8.spec") },
 	-- 8판 주임 검수 (경비 시간 잡기 · 드롭 규칙 · 둥지 무리 · 크기/간격 · 러닝머신 · 무작위 요청)
 	{ "holes_v8b.spec", require("./holes_v8b.spec") },
+	-- 9판 (사장님 2026-11-10): 로벅스 상품 · 열매 먹이기 삭제 · 밤 귀가 배달 버그
+	{ "products.spec", require("./products.spec") },
+	{ "night_carry.spec", require("./night_carry.spec") },
 }
 
 local filters: { string } = {}

@@ -81,6 +81,9 @@ Tags.PlayerAttributes = {
 	FruitBagValue = "FruitBagValue", -- 열매 가방을 다 팔면 받는 코인 (판매 가판대 미리보기)
 	-- 8판
 	TreadmillTouching = "TreadmillTouching", -- 내 러닝머신 벨트 위에 서 있음 (bool, 0레벨이어도 — 업그레이드 창 열기/닫기)
+	-- 9판 로벅스 상품 (Data/Products, 서버 ProductService)
+	TreadmillBoost = "TreadmillBoost", -- 러닝머신 부스트 배수 (number, 1 = 없음) — 러닝머신 1초 이득에만 곱함
+	MoneyPass = "MoneyPass", -- 코인 2배 (영원히)를 샀나 (bool)
 }
 
 -- ReplicatedStorage.GameState 폴더 Attribute

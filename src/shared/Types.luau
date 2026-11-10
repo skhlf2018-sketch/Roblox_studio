@@ -59,7 +59,7 @@ export type FruitStack = {
 }
 export type FruitBag = { [string]: FruitStack }
 
--- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 6)
+-- DataStore 에 저장되는 플레이어 데이터 (스키마 버전 8 — DataSchema.VERSION)
 export type PlayerData = {
 	version: number,
 	money: number, -- 코인
@@ -83,7 +83,17 @@ export type PlayerData = {
 	tutorialStep: number, -- 튜토리얼 단계 1~5, 6(Data/Tutorial.DONE) = 끝남
 	-- 버전 6 (6판)
 	fruits: FruitBag, -- 열매 가방 (열매 합 최대 Config.FRUIT_BAG_MAX)
+	-- 버전 8 (9판 로벅스 상품 — Data/Products, 서버 ProductService)
+	treadmillBoost: number, -- 러닝머신 부스트 배수 (기본 1) = 산 boost_N 중 가장 큰 N (곱 아님)
+	moneyPass: boolean, -- money_pass 를 샀나 (영원히 열매 판매·성체 팔기 코인 × 2)
+	receipts: { string }, -- 지급한 영수증 PurchaseId (최근 Config.RECEIPT_HISTORY_MAX 개 고리) — 중복 지급 방지
 	-- (6판에서 없앤 칸: equipped(장착), sakuraUnlocked(인큐베이터 해금), shrineUsed(비밀 통로))
+}
+
+-- 9판: 로벅스 상품 지급됨 (ProductGranted, 나에게만). 바뀐 값은 같이 오는 DataUpdate section·Player Attr 로
+export type ProductGrant = {
+	key: string, -- Data/Products 의 key ("boost_8", "tskip_3", "coins_1m", "money_pass" …)
+	kind: string, -- "treadmillBoost" | "treadmillSkip" | "coins" | "speed" | "moneyPass"
 }
 
 -- 씨앗 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)
@@ -113,7 +123,7 @@ export type TreadmillTouch = {
 	nextLevel: number?, -- 다음 레벨 (최대 레벨이면 nil)
 	nextCost: number?, -- 다음 레벨 가격 (코인, 0레벨이면 해금 가격 500) — 최대면 nil
 	maxed: boolean, -- 20레벨 끝
-	gainPerSecond: number, -- 지금 1초 속도 (트레일 전, 0레벨이면 0)
+	gainPerSecond: number, -- 지금 1초 속도 (트레일·9판 부스트 전, 0레벨이면 0)
 	nextGainPerSecond: number?, -- 다음 레벨 1초 속도 (트레일 전)
 }
 
@@ -157,6 +167,9 @@ export type Snapshot = {
 	saveEnabled: boolean,
 	sakuraCrystals: number,
 	tutorial: TutorialView,
+	-- 9판 로벅스 상품 (DataUpdate "upgrades" 에도 같이)
+	treadmillBoost: number, -- 러닝머신 부스트 배수 (1 = 없음)
+	moneyPass: boolean, -- 코인 2배 (영원히)
 	-- (6판에서 없앤 칸: incomePerSecond, equipped, sakuraUnlocked, shrineUsed, petInventoryMax)
 }
 

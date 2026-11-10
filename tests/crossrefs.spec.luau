@@ -162,8 +162,11 @@ return function(T, Loader)
 			--      클라→서버 -9 (HatchEgg, EquipPet, UnequipPet, EquipBest, FuseRequest, AltarOffer, ShrineFuse, SakuraApply, SellPet)
 			--      +6 (PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw) → 17, 물 주기 삭제 -1 (PetPet) → 16
 			-- 8판: +1 (TreadmillTouched) → 21
+			-- 9판: 서버→클라 -1 (FeedResult) +1 (ProductGranted) → 21, 클라→서버 -1 (FeedFruit) → 15 (로벅스 "사 줘" Remote 는 일부러 없음)
 			T.eq(#sorted(codeClient), 21)
-			T.eq(#sorted(codeServer), 16)
+			T.eq(#sorted(codeServer), 15)
+			T.falsy(codeClient.FeedResult or codeServer.FeedFruit, "9판: 열매 먹이기 Remote 삭제")
+			T.truthy(codeClient.ProductGranted, "9판: 로벅스 상품 지급 알림")
 		end
 	)
 
@@ -203,7 +206,7 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("클라→서버 Remote 20개 전부 서버에 처리기(Net.on)가 있음", function()
+	T.test("클라→서버 Remote 전부 서버에 처리기(Net.on)가 있음", function()
 		local handled = scan(SERVER, "Net%.on%(%s*Remotes%.ToServer%.([%w_]+)")
 		for name in Remotes.ToServer do
 			T.truthy(handled[name], name .. " 를 받는 Net.on 이 서버에 없음")
@@ -213,7 +216,7 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("서버→클라 Remote 24개 전부 서버 코드 어딘가에서 보냄 (Net.fire 에 쓰임)", function()
+	T.test("서버→클라 Remote 전부 서버 코드 어딘가에서 보냄 (Net.fire 에 쓰임)", function()
 		local sent = scan(SERVER, "Remotes%.ToClient%.([%w_]+)")
 		for name in Remotes.ToClient do
 			T.truthy(sent[name], name .. " 를 보내는 코드가 서버에 없음 (죽은 Remote)")
@@ -227,7 +230,7 @@ return function(T, Loader)
 
 	-- [2판 마무리 임시] 서버가 먼저 만들고 선임이 버튼을 붙이는 중인 Remote. 클라가 보내기 시작하면
 	-- 아래 두 번째 테스트가 실패해서 "이 목록에서 지우라"고 알려 줌 (목록이 저절로 남아 있지 않게).
-	--   6판 선임: FeedFruit(열매 가방 → 먹이기) · SellFruits(판매 가판대 "열매 팔기") · SkipGrowth(건너뛰기 창) 을 붙여서 비움
+	--   6판 선임: FeedFruit(열매 가방 → 먹이기, 9판 삭제) · SellFruits(판매 가판대 "열매 팔기") · SkipGrowth(건너뛰기 창) 을 붙여서 비움
 	local AWAITING_CLIENT: { [string]: boolean } = {}
 
 	T.test(
@@ -252,7 +255,6 @@ return function(T, Loader)
 					DropEgg = "ChaseController",
 					SellPlant = "PetsController", -- 6판: 5판 SellPet 자리 (성체 뽑아서 팔기)
 					SellFruits = "FruitBagController", -- 6판: 판매 가판대 "열매 팔기"
-					FeedFruit = "FruitBagController", -- 6판: 열매 먹이기
 					SkipGrowth = "IncubatorController", -- 6판: 건너뛰기 창 (전부 / 절반)
 					TreadmillLeave = "TreadmillController",
 				}
@@ -319,6 +321,8 @@ return function(T, Loader)
 				"PlantGrown",
 				"FruitsSold",
 				"TutorialUpdate",
+				-- 9판
+				"ProductGranted",
 			}
 		do
 			T.truthy(listened[name], name .. " 를 받는 클라 코드가 없음")

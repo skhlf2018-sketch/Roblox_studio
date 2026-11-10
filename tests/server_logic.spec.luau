@@ -75,11 +75,14 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"기본값 (7판): 버전 7, 빈 정원·씨앗 가방·열매 가방, 튜토리얼 1단계, 옛 칸 없음",
+		"기본값 (9판): 버전 8, 빈 정원·씨앗 가방·열매 가방, 튜토리얼 1단계, 옛 칸 없음, 로벅스 칸 기본값",
 		function()
 			local d = DataSchema.default(0)
-			T.eq(Config.SCHEMA_VERSION, 7)
-			T.eq(d.version, 7)
+			T.eq(Config.SCHEMA_VERSION, 8)
+			T.eq(d.version, 8)
+			T.eq(d.treadmillBoost, 1, "9판: 러닝머신 부스트 없음")
+			T.eq(d.moneyPass, false, "9판: 코인 2배 없음")
+			T.eq(#d.receipts, 0, "9판: 영수증 기록 없음")
 			T.eq(d.money, Config.STARTING_MONEY)
 			T.eq(d.speed, Config.STARTING_SPEED)
 			T.eq(d.penLevel, 1)
@@ -306,11 +309,11 @@ return function(T, Loader)
 				nextUid = 77,
 			}
 			local migrated = DataSchema.migrate(v5)
-			T.eq(migrated.version, 7)
+			T.eq(migrated.version, Config.SCHEMA_VERSION)
 			T.eq(migrated.pets, nil)
 			T.eq(migrated.money, nil)
 			local d = DataSchema.reconcile(migrated, 0)
-			T.eq(d.version, 7)
+			T.eq(d.version, Config.SCHEMA_VERSION)
 			T.eq(d.speed, 123456, "속도 남김")
 			T.eq(#d.trails, 2, "트레일 남김")
 			T.eq(d.equippedTrail, "grey", "장착 트레일 남김")
@@ -330,18 +333,18 @@ return function(T, Loader)
 			T.eq(d.resetFromVersion, nil, "기록용 칸은 저장 데이터에 안 남음")
 			-- version 이 없던 아주 옛 데이터도 1 로 보고 초기화
 			local v0 = DataSchema.reconcile(DataSchema.migrate({ money = 1, speed = 500 }), 0)
-			T.eq(v0.version, 7)
+			T.eq(v0.version, Config.SCHEMA_VERSION)
 			T.eq(v0.money, 0)
 			T.eq(v0.speed, 500)
 		end
 	)
 
 	T.test(
-		"스키마 2 이하 → 7: 장착 트레일 칸이 없던 데이터는 가진 것 중 최고 배율을 장착 (속도 그대로)",
+		"스키마 2 이하 → 8: 장착 트레일 칸이 없던 데이터는 가진 것 중 최고 배율을 장착 (속도 그대로)",
 		function()
 			local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 			local migrated = DataSchema.migrate({ version = 2, trails = { "grey", "purple", "blue", "가짜", 7 } })
-			T.eq(migrated.version, 7)
+			T.eq(migrated.version, Config.SCHEMA_VERSION)
 			T.eq(migrated.equippedTrail, "purple")
 			local d = DataSchema.reconcile(migrated, 0)
 			T.eq(d.equippedTrail, "purple")
@@ -357,16 +360,18 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음, 7 은 그대로",
+		"새 버전 서버가 저장한 데이터는 표시만 하고 버전을 내리지 않음, 8 은 그대로 (9판)",
 		function()
-			T.truthy(DataSchema.isNewerVersion({ version = 8 }))
+			T.truthy(DataSchema.isNewerVersion({ version = 9 }))
+			T.falsy(DataSchema.isNewerVersion({ version = 8 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 7 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 6 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 5 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 1 }))
 			T.falsy(DataSchema.isNewerVersion(nil))
-			T.eq(DataSchema.migrate({ version = 8 }).version, 8)
-			T.eq(DataSchema.migrate({ version = 8, money = 5 }).money, 5, "새 버전 데이터는 안 건드림")
+			T.eq(DataSchema.migrate({ version = 9 }).version, 9)
+			T.eq(DataSchema.migrate({ version = 9, money = 5 }).money, 5, "새 버전 데이터는 안 건드림")
+			T.eq(DataSchema.migrate({ version = 7, money = 5 }).version, 8, "7 → 8 은 칸만 추가")
 			local six = DataSchema.migrate({ version = 6, money = 77, pets = {} })
 			T.eq(six.money, 77, "6 은 초기화하지 않음")
 			T.eq(six.tutorialStep, nil)

@@ -259,7 +259,7 @@ return function(T, Loader)
 				T.truthy(limit.burst >= 1 and limit.perSecond > 0, name)
 				T.truthy(limit.burst <= 20, name .. " burst 가 너무 큼")
 			end
-			for _, name in { "PickFruit", "SellPlant", "SkipGrowth", "FeedFruit", "PurchaseUpgrade", "UseTool" } do
+			for _, name in { "PickFruit", "SellPlant", "SkipGrowth", "PurchaseUpgrade", "UseTool" } do
 				T.truthy(Remotes.RateLimits[name].burst >= 2, name)
 			end
 		end
@@ -280,7 +280,7 @@ return function(T, Loader)
 	end)
 
 	------------------------------------------------------------------
-	T.suite("경계: 6판 정원 (성장 단계·건너뛰기·열매·먹이기)")
+	T.suite("경계: 6판 정원 (성장 단계·건너뛰기·열매 — 9판: 먹이기 없앰)")
 
 	T.test(
 		"성장 단계 경계: 24.99% 새싹 / 25% 줄기 / 59.99% 줄기 / 60% 봉오리 / 99.99% 봉오리 / 100% 성체",
@@ -351,7 +351,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"열매 가방 경계: 자리만큼만 넣고, 1개 꺼내면 평균 값이 빠지고, 다 꺼내면 칸이 사라짐",
+		"열매 가방 경계: 자리만큼만 넣고, 가득 차면 0, 소수는 내림·음수는 0 (9판: 먹이기용 takeOne 없앰)",
 		function()
 			local bag = {}
 			T.eq(FruitRules.addToBag(bag, "sprout_daisy", Config.FRUIT_BAG_MAX - 1, 10), Config.FRUIT_BAG_MAX - 1)
@@ -359,30 +359,12 @@ return function(T, Loader)
 			T.eq(FruitRules.bagRoom(bag), 0)
 			T.eq(FruitRules.addToBag(bag, "owl_oak", 5, 180), 0)
 			T.eq(FruitRules.bagCount(bag), Config.FRUIT_BAG_MAX)
-			T.eq(FruitRules.takeOne(bag, "owl_oak"), 180)
-			T.eq(bag.owl_oak, nil, "다 꺼내면 칸이 사라짐")
-			T.eq(FruitRules.takeOne(bag, "owl_oak"), nil)
+			T.eq(bag.owl_oak.count, 1)
+			T.eq(bag.owl_oak.value, 180)
+			T.eq(FruitRules.bagValue(bag), (Config.FRUIT_BAG_MAX - 1) * 10 + 180)
+			T.eq(FruitRules.takeOne, nil, "9판: 열매는 팔기만 (먹이기 삭제)")
 			T.eq(FruitRules.addToBag({}, "x", -3, 10), 0)
 			T.eq(FruitRules.addToBag({}, "x", 2.7, 10), 2, "소수는 내림")
-		end
-	)
-
-	T.test(
-		"먹이기 확률 경계: 합은 0.9 를 넘지 않음, 더 붙을 것이 없으면 0, 무지개 가진 식물은 자연 돌연변이가 더 안 붙음",
-		function()
-			for _, plant in Loader.require("ReplicatedStorage/Shared/Data/Plants").list do
-				local chance = FruitRules.feedChance(plant.id, {})
-				T.truthy(chance > 0 and chance <= 0.9 + 1e-12, plant.id .. " " .. chance)
-			end
-			T.eq(FruitRules.feedChance("sprout_daisy", { "rainbow", "frozen" }), 0)
-			T.eq(#FruitRules.feedOptions("없는식물", {}), 0)
-			for _, option in FruitRules.feedOptions("ghost_lily", { "rainbow" }) do
-				T.truthy(option.id ~= "golden" and option.id ~= "rainbow", option.id)
-			end
-			T.falsy(FruitRules.canGain({ "golden" }, "silver"), "황금 → 실버는 내려감")
-			T.truthy(FruitRules.canGain({ "silver" }, "golden"))
-			T.falsy(FruitRules.canGain({ "burning" }, "frozen"), "원소는 하나만")
-			T.falsy(FruitRules.canGain({}, "모름"))
 		end
 	)
 

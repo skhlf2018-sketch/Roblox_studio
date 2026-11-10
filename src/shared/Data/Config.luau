@@ -20,6 +20,9 @@
 	  LOBBY_FILL_MAX_PER_GARDEN), 정원 프롬프트 높이 상한(PLANT_PROMPT_MAX_HEIGHT). 특별 추첨 확률은 Data/EggSpawn
 	8판 추가 2 (사장님 2026-11-09 "사쿠라 뽑기가 너무 쉬움"): SAKURA_DRAW_COST 10 → 100, SAKURA_OFFER_CRYSTALS 낮은 등급을 짜게
 	  (일반 0 = 못 바침 · 고급 1 · 에픽 5 · 코스믹 40 · 슈퍼 200 · 해커 글리치 700)
+9판 (사장님 2026-11-10): 열매 먹이기 삭제 (열매는 팔기만). 로벅스 상품(Data/Products, 서버 ProductService) —
+  코인 2배 게임패스 플래그(GAMEPASS_MONEY_MULTIPLIER) → 로벅스 상품 money_pass (MONEY_PASS_MULTIPLIER, 저장 data.moneyPass),
+  영수증 기록 RECEIPT_HISTORY_MAX, 저장 스키마 8
 ]]
 
 local Config = {
@@ -98,7 +101,7 @@ local Config = {
 	FRUITS_ON_ADULT = 1, -- [수석] 성체가 되는 순간 달려 있는 열매 (튜토리얼 5단계 "열매 따서 팔기" 를 바로 할 수 있게)
 	FRUIT_BAG_MAX = 300, -- [추정] 열매 가방에 넣어 둘 수 있는 열매 수 (가득 차면 판매 가판대에서 팔기)
 	PLANT_SELL_FRUIT_MULTIPLIER = 20, -- 성체 뽑아서 팔기 값 = 그 식물 열매 1개 값 × 20 (FruitRules.fruitValue)
-	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·먹이기·성체 뽑기: 내 정원(울타리 사각형)에서 이 거리 안
+	GARDEN_ACTION_RADIUS = 20, -- 열매 따기·성체 뽑기: 내 정원(울타리 사각형)에서 이 거리 안 (9판: 먹이기 없앰)
 	-- 건너뛰기 (SkipGrowth): 가격 = ceil(건너뛸 남은 시간(분)) × SKIP_COINS_PER_MINUTE × 등급 배수. "half" 는 남은 시간의 절반만
 	SKIP_COINS_PER_MINUTE = 10,
 	SKIP_FRUIT_FACTOR = 10, -- 사장님(2026-10-29 "올려"): 건너뛰기 가격에 (건너뛸 비율 × 그 식물 열매 1개 값 × 10) 을 더함 — 높은 등급이 거의 공짜였던 것 수정
@@ -134,7 +137,8 @@ local Config = {
 	--   밤 30배·게임패스 2배와는 곱 (밤 + 3배 = 표 시간의 1/90). 열매 맺는 빠르기(FRUIT_SPEED_MULTIPLIER)와는 따로
 	GROWTH_SPEED_MULTIPLIER = 3,
 	GAMEPASS_GROWTH_MULTIPLIER = 2, -- 게임패스 "성장 속도 2배" (1차 버전에서는 플래그만)
-	GAMEPASS_MONEY_MULTIPLIER = 2, -- 게임패스 "코인 2배" (플래그만 — 6판: 열매 판매 값에 곱함)
+	-- 9판: 로벅스 상품 "코인 2배 (영원히)" (Data/Products money_pass, 저장 data.moneyPass) — 열매 판매·성체 팔기 코인에 곱함
+	MONEY_PASS_MULTIPLIER = 2,
 	DAY_CLOCK_TIME = 14,
 	NIGHT_CLOCK_TIME = 0,
 
@@ -349,7 +353,15 @@ local Config = {
 	--   pets = 정원 성체 식물(x, z, fruits, fruitProgress), equipped·sakuraUnlocked·shrineUsed 칸 없앰 (Logic/DataSchema)
 	-- 7 (7판): 칸 모양은 6 그대로. 성장 3배라 저장된 씨앗 진행도(progress)를 새 Required 에 맞춰 같은 비율로 줄임
 	--   (6 → 7 마이그레이션, Logic/DataSchema). 등급 id 는 저장하지 않으므로 옛 super_ultradivine 보정은 없음
-	SCHEMA_VERSION = 7,
+	-- 8 (9판 로벅스 상품): + treadmillBoost(1) · moneyPass(false) · receipts({}) — 옛 데이터는 기본값으로 채움 (7 → 8 은 칸만 추가)
+	SCHEMA_VERSION = 8,
+	RECEIPT_HISTORY_MAX = 100, -- 지급한 로벅스 영수증 PurchaseId 를 최근 이만큼 저장 (중복 지급 방지, 고리)
+
+	------------------------------------------------------------------
+	-- 9판 로벅스 상품 (Data/Products, ProductService)
+	------------------------------------------------------------------
+	-- 러닝머신 레벨 올리기(tskip)를 샀는데 이미 최대 레벨이면 대신 주는 속도 = 최대 레벨 1초 속도(1M) × 이 초 [추정] (= 600M)
+	PRODUCT_MAXED_SKIP_SECONDS = 600,
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

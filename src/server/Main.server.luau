@@ -6,8 +6,9 @@
 	특수 장소 서비스(사쿠라 나무)는 MapBuilder 다음이어야 함 (맵에 파트가 없으면 임시 파트를 만듦).
 	5판: 퀘스트(QuestService)·무료 보상(RewardService.start) 없앰. TutorialService 는 BaseService·PetService 뒤
 	     (그 신호에 연결), LeaderboardService(10초마다 랭킹판) 추가.
-	6판 "씨앗을 훔치세요": PlantVisualService(선임: 씨앗 단계·성체 식물 모양) 추가. FruitService(열매 맺기·따기·팔기·먹이기) 추가 — TutorialService 가 그 신호에 연결하므로 그보다 먼저.
+	6판 "씨앗을 훔치세요": PlantVisualService(선임: 씨앗 단계·성체 식물 모양) 추가. FruitService(열매 맺기·따기·팔기) 추가 — TutorialService 가 그 신호에 연결하므로 그보다 먼저.
 	     없앤 것: IncomeService(자동 수입), RewardService(오프라인 수입), FusionService(퓨전 머신), AltarService(제단·비밀 통로)
+	9판: ProductService(로벅스 개발자 상품 — MarketplaceService.ProcessReceipt) 추가. FruitService 열매 먹이기는 없앰 (따기·팔기만).
 ]]
 
 local Server = script.Parent
@@ -34,6 +35,7 @@ local TreadmillService = require(Services.TreadmillService)
 local ToolService = require(Services.ToolService)
 local SakuraService = require(Services.SakuraService)
 local LeaderboardService = require(Services.LeaderboardService)
+local ProductService = require(Services.ProductService)
 local DevCommands = require(Services.DevCommands)
 local PlayerLifecycle = require(Services.PlayerLifecycle)
 
@@ -109,6 +111,9 @@ boot("SakuraService", function()
 end)
 boot("LeaderboardService", function()
 	LeaderboardService.start()
+end)
+boot("ProductService", function()
+	ProductService.start()
 end)
 boot("DevCommands", function()
 	DevCommands.start()

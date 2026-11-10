@@ -6,7 +6,9 @@
 	    플레이어 Attr OnTreadmill = true, WalkSpeed 0 (WASD 무시), 캐릭터를 벨트 가운데로 옮겨 복도 쪽을 보게 함.
 	    (HumanoidRootPart Anchored·PlatformStand 안 씀 → 점프는 됨)
 	- 1초(TREADMILL_TICK_SECONDS)마다 걸음 1번: 속도 += 걸음당 속도(Upgrades 러닝머신 레벨) × TREADMILL_MULTIPLIER(6판 4)
+	    × 장착 트레일 배율 × 9판 로벅스 러닝머신 부스트(data.treadmillBoost, 산 것 중 가장 큰 배수 — Attr TreadmillBoost)
 	    → Wallet.addSpeed + TreadmillStep { amount } (클라 "+500" 분홍 팝업)
+	    (TreadmillTouched 의 gainPerSecond·nextGainPerSecond 는 트레일·부스트 전 숫자 그대로)
 	- 내리기: 클라가 점프할 때 TreadmillLeave() → 벨트 앞(복도 쪽)으로 내려 줌.
 	    클라가 안 보내도 점프하면 몸통이 TREADMILL_MAX_HEIGHT(8) 위로 떠서 서버가 내려 줌 (그 자리 착지 → 걸어서 나가면 됨).
 	    서버도 0.2초마다 확인해서 벨트 위를 벗어났거나(높이 TREADMILL_MAX_HEIGHT 위로 떴거나) 알을 들었거나
@@ -175,10 +177,12 @@ local function stepTick(): ...any
 	for player, session in Sessions.all() do
 		local data = session.data
 		if session.onTreadmill and session.loaded and data and data.treadmillLevel >= 1 then
+			-- 사장님 2026-10-28: 러닝머신 이득도 장착한 트레일 배율만큼 · 9판: × 로벅스 러닝머신 부스트 (data.treadmillBoost)
 			local gain = Economy.treadmillGainPerSecond(
 				data.treadmillLevel,
-				Economy.trailMultiplier(data.equippedTrail)
-			) * Config.TREADMILL_TICK_SECONDS -- 사장님 2026-10-28: 러닝머신 이득도 장착한 트레일 배율만큼
+				Economy.trailMultiplier(data.equippedTrail),
+				data.treadmillBoost
+			) * Config.TREADMILL_TICK_SECONDS
 			if gain > 0 then
 				Wallet.addSpeed(player, gain)
 				Net.fire(player, Remotes.ToClient.TreadmillStep, { amount = gain })

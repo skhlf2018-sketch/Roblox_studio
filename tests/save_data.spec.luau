@@ -303,7 +303,7 @@ return function(T, Loader)
 		"5판 데이터: 속도·트레일·장착 트레일·러닝머신만 남고 나머지는 새 사람처럼 (튜토리얼 1단계)",
 		function()
 			local migrated = DataSchema.migrate(v5Save())
-			T.eq(migrated.version, 7, "5 → 6(초기화) → 7 한 번에")
+			T.eq(migrated.version, 8, "5 → 6(초기화) → 7 → 8 한 번에")
 			local d = DataSchema.reconcile(migrated, 1700001000)
 			T.eq(checkValid(d), nil)
 			T.eq(d.speed, 987654321, "속도")
@@ -380,18 +380,22 @@ return function(T, Loader)
 		T.eq(canonical(once), canonical(twice))
 	end)
 
-	T.test("더 새 버전(8, 7.5, 1e9)은 새 버전으로 인식 — 변환하지 않음", function()
-		for _, v in { 8, 7.5, 1e9 } do
-			T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
-			local raw = { version = v, money = 5, pets = { "미래 모양" } }
-			local migrated = DataSchema.migrate(raw)
-			T.eq(migrated.version, v)
-			T.eq(migrated.money, 5)
+	T.test(
+		"더 새 버전(9, 8.5, 1e9)은 새 버전으로 인식 — 변환하지 않음 (9판: 지금은 8)",
+		function()
+			for _, v in { 9, 8.5, 1e9 } do
+				T.truthy(DataSchema.isNewerVersion({ version = v }), tostring(v))
+				local raw = { version = v, money = 5, pets = { "미래 모양" } }
+				local migrated = DataSchema.migrate(raw)
+				T.eq(migrated.version, v)
+				T.eq(migrated.money, 5)
+			end
+			T.falsy(DataSchema.isNewerVersion({ version = 8 }))
+			T.falsy(DataSchema.isNewerVersion({ version = 7 }))
+			T.falsy(DataSchema.isNewerVersion({ version = 6 }))
+			T.falsy(DataSchema.isNewerVersion({ version = 5 }))
 		end
-		T.falsy(DataSchema.isNewerVersion({ version = 7 }))
-		T.falsy(DataSchema.isNewerVersion({ version = 6 }))
-		T.falsy(DataSchema.isNewerVersion({ version = 5 }))
-	end)
+	)
 
 	------------------------------------------------------------------
 	T.suite("저장 데이터: 6 → 7 (7판 성장 3배 — 자라던 씨앗은 같은 비율로 이어짐)")
@@ -457,7 +461,7 @@ return function(T, Loader)
 		"정원·가방 씨앗의 progress 가 자란 비율 그대로 새 Required(표 ÷ 3)에 맞춰짐, 다른 칸은 그대로",
 		function()
 			local migrated = DataSchema.migrate(v6Save())
-			T.eq(migrated.version, 7)
+			T.eq(migrated.version, 8, "6 → 7 → 8")
 			local d = DataSchema.reconcile(migrated, 0)
 			T.eq(checkValid(d), nil)
 			T.eq(d.money, 1234, "코인 그대로 (6 → 7 은 초기화 아님)")

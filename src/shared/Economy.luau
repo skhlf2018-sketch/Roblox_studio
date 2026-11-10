@@ -182,12 +182,27 @@ function Economy.treadmillPerStep(level: number): number
 	return entry.perStep
 end
 
--- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × 러닝머신 배율(6판 4) × 초당 걸음 × 부스터 (20레벨 = 1,000,000/초)
-function Economy.treadmillGainPerSecond(level: number, boost: number?): number
+-- 배율 칸 정리: 없거나 1 미만·NaN·inf 면 1
+local function multiplierOrOne(value: number?): number
+	if typeof(value) ~= "number" then
+		return 1
+	end
+	local n = value :: number
+	if n ~= n or n < 1 or n == math.huge then
+		return 1
+	end
+	return n
+end
+
+-- 러닝머신 위 1초당 속도 증가 = 걸음당 속도 × 러닝머신 배율(6판 4) × 초당 걸음 (20레벨 = 1,000,000/초)
+--   × trailMultiplier (장착한 트레일 배율, 사장님 2026-10-28) × treadmillBoost (9판 로벅스 러닝머신 부스트 ×2 … ×2048,
+--   산 것 중 가장 큰 배수 하나 — data.treadmillBoost). 부스트는 러닝머신 탈 때만 (걷는 속도 배수 아님)
+function Economy.treadmillGainPerSecond(level: number, trailMultiplier: number?, treadmillBoost: number?): number
 	return Economy.treadmillPerStep(level)
 		* Config.TREADMILL_MULTIPLIER
 		* Config.TREADMILL_STEPS_PER_SECOND
-		* (boost or 1)
+		* multiplierOrOne(trailMultiplier)
+		* multiplierOrOne(treadmillBoost)
 end
 
 -- 다음 러닝머신 레벨 비용 (0 → 1 은 해금 비용, 최대면 nil)

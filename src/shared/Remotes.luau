@@ -13,9 +13,12 @@
 	  없앤 것 — 서버→클라: HatchResult(→ PlantGrown), OfflineIncome, FusionResult, AltarUpdate, ShrineResult, PetsSold, IncomeTick
 	            클라→서버: HatchEgg(성체는 저절로), EquipPet, UnequipPet, EquipBest(장착 없음), FuseRequest, AltarOffer,
 	                       ShrineFuse, SakuraApply(→ SakuraDraw), SellPet(→ SellPlant)
-	  새것 — 서버→클라: PlantGrown, FruitPicked, FruitsSold, FeedResult
-	         클라→서버: PickFruit, SellFruits, FeedFruit, SkipGrowth, SellPlant, SakuraDraw
+	  새것 — 서버→클라: PlantGrown, FruitPicked, FruitsSold (FeedResult 는 9판에서 없앰)
+	         클라→서버: PickFruit, SellFruits, SkipGrowth, SellPlant, SakuraDraw (FeedFruit 는 9판에서 없앰)
 	  8판 새것 — 서버→클라: TreadmillTouched (러닝머신 벨트에 올라섬 → 업그레이드 창, 0레벨도)
+	  9판 (사장님 2026-11-10): 열매 먹이기 완전 삭제 — FeedFruit(클라→서버)·FeedResult(서버→클라) 없앰 (열매는 팔기만)
+	       새것 — 서버→클라: ProductGranted (로벅스 상품 지급됨). 구매창은 클라 MarketplaceService:PromptProductPurchase —
+	       서버로 "사 줘" Remote 는 일부러 없음 (위조 방지: 돈은 로블록스가 받고 서버 ProcessReceipt 만 지급)
 ]]
 
 local Remotes = {
@@ -45,9 +48,10 @@ local Remotes = {
 		PlantGrown = "PlantGrown", -- { plant: PetRecord, isNew, fruitValue, fruitInterval } 심은 씨앗이 그 자리에서 성체가 됨
 		FruitPicked = "FruitPicked", -- { plantUid, petId, count, value } 열매를 따서 가방에 넣음 (식물마다 1번, "all" 이면 여러 번)
 		FruitsSold = "FruitsSold", -- { count, coins } 판매 가판대에서 열매를 팜
-		FeedResult = "FeedResult", -- { plantUid, fruitId, mutation: string? } 열매 먹이기 결과 (nil = 아무것도 안 붙음)
 		-- 8판
 		TreadmillTouched = "TreadmillTouched", -- Types.TreadmillTouch 내 러닝머신 벨트에 올라선 순간 (0레벨도) → 업그레이드 창
+		-- 9판
+		ProductGranted = "ProductGranted", -- Types.ProductGrant { key, kind } 로벅스 상품(Data/Products) 지급됨 (나에게만)
 	},
 
 	-- 클라 → 서버 (전부 서버에서 인자 검증 + 레이트 리밋)
@@ -67,7 +71,6 @@ local Remotes = {
 		-- 6판
 		PickFruit = "PickFruit", -- (plantUid | "all") 내 정원 성체의 열매를 전부 따서 열매 가방으로
 		SellFruits = "SellFruits", -- () 판매 가판대 근처에서 열매 가방을 전부 팔기 → 코인
-		FeedFruit = "FeedFruit", -- (plantUid, fruitId) 가방의 열매(식물 id) 1개를 성체에게 먹임 → 확률로 돌연변이
 		SkipGrowth = "SkipGrowth", -- (eggUid, "all" | "half") 코인으로 자라는 씨앗의 남은 시간 전부/절반 건너뛰기
 		SellPlant = "SellPlant", -- (plantUid) 성체를 뽑아서 팔기 (열매 값 × 20 코인) → 정원 자리가 빔
 		SakuraDraw = "SakuraDraw", -- () 사쿠라 나무 근처에서 크리스탈로 특별 씨앗 뽑기 → 씨앗 가방
@@ -87,7 +90,6 @@ local Remotes = {
 		PickUpPlacedEgg = { burst = 5, perSecond = 3 },
 		PickFruit = { burst = 10, perSecond = 5 },
 		SellFruits = { burst = 3, perSecond = 1 },
-		FeedFruit = { burst = 5, perSecond = 2 },
 		SkipGrowth = { burst = 5, perSecond = 2 },
 		SellPlant = { burst = 10, perSecond = 4 },
 		SakuraDraw = { burst = 5, perSecond = 2 },

@@ -30,7 +30,7 @@ export type Session = {
 	carrySpeed: number,
 	walkSpeed: number,
 	hasGrowthPass: boolean,
-	hasMoneyPass: boolean, -- 6판: 열매 판매 코인 × 2 (플래그만)
+	-- (9판: hasMoneyPass 플래그 없앰 → 로벅스 상품 "코인 2배"는 저장 칸 data.moneyPass — PetService.coinMultiplier)
 	inSafeZone: boolean,
 	cooldowns: { [string]: number },
 	moveExemptUntil: number, -- 이 시각(os.clock)까지 위치 검증 쉼 (서버 순간이동·래그돌)
@@ -70,7 +70,6 @@ function Sessions.create(player: Player): Session
 		carrySpeed = 0,
 		walkSpeed = 16,
 		hasGrowthPass = false, -- 게임패스는 1차 버전에서 꺼 둠 (플래그만)
-		hasMoneyPass = false,
 		inSafeZone = false,
 		cooldowns = {},
 		moveExemptUntil = 0,

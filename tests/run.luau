@@ -61,6 +61,8 @@ local specs = {
 	{ "holes_touch_catch.spec", require("./holes_touch_catch.spec") },
 	-- 2026-11-10 해커 글리치 = 마지막 구역 특별 추첨(0.0001%)만 주임 검수 J 시리즈
 	{ "holes_glitch_only_last.spec", require("./holes_glitch_only_last.spec") },
+	-- 2026-11-10 슈퍼 씨앗(seed_super) · 경비 1.78초 깨어남 주임 검수 K 시리즈
+	{ "holes_seed_and_wake.spec", require("./holes_seed_and_wake.spec") },
 }
 
 local filters: { string } = {}

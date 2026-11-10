@@ -105,8 +105,13 @@ function GuardLogic.isWaking(stolenAt: number?, now: number, wakeSeconds: number
 	if stolenAt == nil or stolenAt ~= stolenAt or now ~= now or wakeSeconds ~= wakeSeconds then
 		return false
 	end
+	-- 주임 K-1: 집은 시각이 미래·무한이면 (경과 < 0) 영원히 자는 중이 되지 않게 — 자는 중 아님
+	local elapsed = now - stolenAt
+	if elapsed < 0 then
+		return false
+	end
 	-- 1e-6 = os.clock 소수 오차 (정확히 1.78초가 지난 틱은 깬 것으로)
-	return now - stolenAt < wakeSeconds - 1e-6
+	return elapsed < wakeSeconds - 1e-6
 end
 
 -- 상대 위치가 (ax, az) → (bx, bz) 로 곧게 움직였을 때 원점(경비)에 가장 가까웠던 거리

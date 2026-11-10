@@ -212,27 +212,49 @@ return function(T, Loader)
 	T.suite("9판 ProductService.grant (종류마다 지급)")
 
 	T.test(
-		"러닝머신 부스트: 산 것 중 가장 큰 배수 (곱 아님) · 작은 것을 또 사면 그대로(안내) · Attr TreadmillBoost · ProductGranted · DataUpdate(upgrades)",
+		"러닝머신 부스트: 순서대로만 열림 (2→4→…) · 순서대로 사면 그 배수 (곱 아님) · 가진 것·건너뛴 것은 산 R$ 만큼만 (남은 값은 속도) · Attr TreadmillBoost · ProductGranted · DataUpdate(upgrades)",
 		function()
 			local w = world()
 			local PS = w.ProductService
+			local RATE = Config.PRODUCT_SPEED_PER_ROBUX
 			T.eq(w.data.treadmillBoost, 1)
-			T.truthy(PS.grant(w.player, "boost_8", "purchase"))
-			T.eq(w.data.treadmillBoost, 8)
-			T.eq(w.player.attrs.TreadmillBoost, 8)
+			local speed = w.data.speed
+			T.truthy(PS.grant(w.player, "boost_2", "purchase"))
+			T.eq(w.data.treadmillBoost, 2, "1 → 2 는 순서대로")
+			T.eq(w.player.attrs.TreadmillBoost, 2)
+			T.eq(w.data.speed, speed, "순서대로면 속도는 안 늘어남")
 			local g = granted(w)
-			T.eq(g[1].key, "boost_8")
+			T.eq(g[1].key, "boost_2")
 			T.eq(g[1].kind, "treadmillBoost")
-			T.eq(lastSection(w, "upgrades").treadmillBoost, 8)
+			T.eq(lastSection(w, "upgrades").treadmillBoost, 2)
+			T.truthy(w.H.hasNotify(w.player, "success", "러닝머신 부스트 x2"))
 			T.truthy(PS.grant(w.player, "boost_4"))
-			T.eq(w.data.treadmillBoost, 8, "더 작은 것은 그대로 (8 × 4 = 32 가 아님)")
-			T.truthy(w.H.hasNotify(w.player, "info", "가장 큰 것 하나만"))
-			T.eq(#granted(w), 2, "그래도 소비 처리 (환불 없음) — ProductGranted 는 감")
-			T.truthy(PS.grant(w.player, "boost_8"))
-			T.eq(w.data.treadmillBoost, 8)
-			T.truthy(PS.grant(w.player, "boost_2048"))
+			T.eq(w.data.treadmillBoost, 4, "2 → 4 (2 × 4 = 8 이 아님, 곱 아님)")
+			-- 가진 것을 또 삼 (두 번 누름): 배수 그대로, 산 값 4 R$ 는 속도로
+			speed = w.data.speed
+			T.truthy(PS.grant(w.player, "boost_4"))
+			T.eq(w.data.treadmillBoost, 4, "그대로")
+			T.eq(w.data.speed, speed + 4 * RATE, "산 값만큼 속도")
+			T.truthy(w.H.hasNotify(w.player, "success", "산 값(R$ 4)만큼"))
+			T.eq(#granted(w), 3, "그래도 소비 처리 (환불 없음) — ProductGranted 는 감")
+			-- 건너뛰기 (잠긴 것을 위조로 삼): 4 에서 boost_64 (64 R$) → 8(8)+16(16)+32(32) = 56 까지, 남은 8 R$ 는 속도
+			speed = w.data.speed
+			T.truthy(PS.grant(w.player, "boost_64"))
+			T.eq(w.data.treadmillBoost, 32, "64 가 아니라 32 (56 R$ 어치만)")
+			T.eq(w.player.attrs.TreadmillBoost, 32, "Attr 도 같음")
+			T.eq(w.data.speed, speed + 8 * RATE, "남은 8 R$ 는 속도")
+			T.eq(lastSection(w, "upgrades").treadmillBoost, 32, "DataUpdate 도 같음")
+			-- 끝까지 순서대로: 64 … 2048
+			for _, key in { "boost_64", "boost_128", "boost_256", "boost_512", "boost_1024", "boost_2048" } do
+				T.truthy(PS.grant(w.player, key))
+				T.eq(w.data.treadmillBoost, w.Products.get(key).value, key .. " 순서대로")
+			end
 			T.eq(w.data.treadmillBoost, 2048)
-			T.eq(w.data.stats.productsBought, 4)
+			T.eq(
+				w.data.stats.productsBought,
+				10,
+				"모든 지급이 구매 횟수에 셈 (2·4·4·64·64·128·256·512·1024·2048)"
+			)
 			w.H.uninstall()
 		end
 	)
@@ -254,7 +276,8 @@ return function(T, Loader)
 			w.data.treadmillLevel = 5 -- 걸음당 80 → 320/초
 			w.data.trails = { "green" }
 			w.data.equippedTrail = "green" -- ×2
-			w.ProductService.grant(w.player, "boost_8") -- ×8
+			w.data.treadmillBoost = 8 -- ×8 (순서대로 사는 것은 위 테스트가 검사 — 여기서는 곱셈만)
+			w.ProductService.onPlayerReady(w.player)
 			local plot = w.H.MapLayout.plot(1)
 			w.H.spawn(w.player, plot.treadmill.x, 3, plot.treadmill.z)
 			w.H.advance(0.5)
@@ -610,10 +633,19 @@ return function(T, Loader)
 			local w = world()
 			local DevCommands = w.H.server("Services/DevCommands")
 			DevCommands.start()
-			w.player.Chatted:Fire("/buy boost_16")
-			T.eq(w.data.treadmillBoost, 16)
+			w.player.Chatted:Fire("/buy boost_2")
+			T.eq(w.data.treadmillBoost, 2, "순서대로 (1 → 2)")
 			T.eq(#w.data.receipts, 0, "영수증 기록 없음")
 			T.eq(w.data.stats.productsBought, nil, "개발 지급은 구매 횟수에 안 셈")
+			w.H.advance(2)
+			-- /buy 도 같은 grant: 처음에 /buy boost_16 을 치면 ×8 + 남은 2 R$ 속도 (순서대로 열림)
+			local speed = w.data.speed
+			w.player.Chatted:Fire("/buy boost_16")
+			T.eq(w.data.treadmillBoost, 8, "2 에서 boost_16 → 4(4)+8(8) = 12 R$ 어치만 ×8")
+			T.eq(w.data.speed, speed + 4 * Config.PRODUCT_SPEED_PER_ROBUX, "남은 4 R$ 는 속도")
+			w.H.advance(2)
+			w.player.Chatted:Fire("/buy boost_16")
+			T.eq(w.data.treadmillBoost, 16, "이제 바로 다음 배수라 그대로 16")
 			w.H.advance(2)
 			w.player.Chatted:Fire("/buy tskip_1")
 			T.eq(w.data.treadmillLevel, 1)

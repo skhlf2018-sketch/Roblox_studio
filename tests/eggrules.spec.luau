@@ -1,5 +1,6 @@
 --!nocheck
--- 잡혔을 때 알 처리 규칙 (구역 안 → 둥지, 밖 → 그 자리). 2판: "구역 안" = MapLayout.zoneAt(z) 가 알의 구역
+-- 잡혔을 때 알 처리 규칙 (2026-11-10 사장님: 그 씨앗의 구역 안에서 놓치면 원인과 상관없이 바로 둥지, 밖이면 그 자리 → 5초 뒤 둥지).
+-- 2판: "구역 안" = MapLayout.zoneAt(z) 가 알의 구역
 
 return function(T, Loader)
 	local EggRules = Loader.require("ReplicatedStorage/Shared/EggRules")
@@ -28,18 +29,29 @@ return function(T, Loader)
 		T.eq(EggRules.dropOutcome("guard", "lake", MapLayout.zoneAt(239.9)), "DropHere", "경계 바로 앞")
 	end)
 
-	T.test("다른 플레이어(방망이/곰덫)한테 당함 → 구역 안이라도 그 자리", function()
-		T.eq(EggRules.dropOutcome("player", "lake", "lake"), "DropHere")
+	T.test(
+		"다른 플레이어(방망이/곰덫)한테 당함 → 구역 안이면 바로 둥지, 밖이면 그 자리 (2026-11-10)",
+		function()
+			T.eq(EggRules.dropOutcome("player", "lake", "lake"), "ReturnToNest")
+			T.eq(EggRules.dropOutcome("player", "lake", "forest"), "DropHere", "구역 밖")
+			T.eq(EggRules.dropOutcome("player", "lake", "hub"), "DropHere")
+			T.eq(EggRules.dropOutcome("player", "lake", nil), "DropHere")
+		end
+	)
+
+	T.test("스스로 버림(DropEgg) → 구역 안이면 바로 둥지, 밖이면 그 자리 (2026-11-10)", function()
+		T.eq(EggRules.dropOutcome("drop", "lake", "lake"), "ReturnToNest")
+		T.eq(EggRules.dropOutcome("drop", "lake", "forest"), "DropHere", "구역 밖")
+		T.eq(EggRules.dropOutcome("drop", "lake", "hub"), "DropHere")
 	end)
 
-	T.test("스스로 버림(DropEgg) → 구역 안이라도 그 자리", function()
-		T.eq(EggRules.dropOutcome("drop", "lake", "lake"), "DropHere")
-	end)
-
-	T.test("죽거나 나가면 경비와 같은 규칙", function()
-		T.eq(EggRules.dropOutcome("death", "forest", "forest"), "ReturnToNest")
-		T.eq(EggRules.dropOutcome("leave", "forest", "lake"), "DropHere")
-	end)
+	T.test(
+		"죽거나 나가면 어떤 원인이든 같은 규칙 (구역 안 → 둥지, 밖 → 그 자리)",
+		function()
+			T.eq(EggRules.dropOutcome("death", "forest", "forest"), "ReturnToNest")
+			T.eq(EggRules.dropOutcome("leave", "forest", "lake"), "DropHere")
+		end
+	)
 
 	T.test("알의 구역 정보가 없으면 그 자리", function()
 		T.eq(EggRules.dropOutcome("guard", nil, "forest"), "DropHere")

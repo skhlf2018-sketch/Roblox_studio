@@ -6,6 +6,8 @@
 	- 카드 11장 (Products.treadmillBoosts: boost_2 … boost_2048): "2배 스피드" · "4배" … "2048배" + 가격 버튼 "R$ 2" …
 	  누르면 Purchase.prompt(key) (상품 id 가 아직 0 이면 "준비 중이에요…" 토스트).
 	  이미 가진 배수 이하 카드 = 회색 "보유 중" (지금 적용 배수 카드는 "적용 중"). 위에 "지금 ×N 적용 중".
+	  **순서대로만 열림** (사장님 2026-11-10): 바로 다음 배수 카드만 초록 가격 버튼, 그 뒤는 회색 "🔒 R$ N" + "N배를 먼저 사요"
+	  (Products.treadmillBoostState — 서버도 Products.treadmillBoostOutcome 으로 같은 순서를 지킴).
 	  설명: "러닝머신을 탈 때 속도가 N배로 올라요 (걷는 속도가 아니에요)".
 	- 지금 배수 = 플레이어 Attr TreadmillBoost (없으면 Snapshot treadmillBoost, 없으면 1). 효과·지급은 전부 서버.
 	- 격자 스크롤 (폰은 창 배율로 작아짐, 버튼 46px 이상).
@@ -50,15 +52,10 @@ function BoostController.current(): number
 	return 1
 end
 
--- 카드 상태: "active"(지금 적용) | "owned"(더 작은 배수 = 이미 가진 것보다 아래) | "buy"
+-- 카드 상태: "active"(지금 적용) | "owned"(이미 지나온 배수) | "buy"(바로 다음 — 살 수 있음) | "locked"(앞의 것을 먼저)
+--   사장님 2026-11-10: 순서대로만 열림 (2배를 사야 4배가 열림)
 function BoostController.cardState(value: number): string
-	local now = BoostController.current()
-	if value == now then
-		return "active"
-	elseif value < now then
-		return "owned"
-	end
-	return "buy"
+	return Products.treadmillBoostState(BoostController.current(), value)
 end
 
 local function title(value: number, first: boolean): string
@@ -146,9 +143,17 @@ function BoostController.start()
 					Ui.setButton(entry.button, Purchase.robux(product.robux), C.shopGreen, true)
 					entry.state.Text = if Purchase.ready(product.key) then "" else "준비 중"
 					entry.card.BackgroundColor3 = Color3.fromRGB(70, 60, 40)
+				elseif s == "locked" then
+					-- 앞의 배수를 먼저 사야 열림: 가격은 보이되 못 누름
+					local need = Products.nextTreadmillBoost(now)
+					Ui.setButton(entry.button, "🔒 " .. Purchase.robux(product.robux), C.gray, false)
+					entry.state.Text = if need
+						then string.format("%d배를 먼저 사요", need.value or 2)
+						else "잠겨 있어요"
+					entry.card.BackgroundColor3 = Color3.fromRGB(48, 48, 54)
 				else
 					Ui.setButton(entry.button, if s == "active" then "적용 중" else "보유 중", C.gray, false)
-					entry.state.Text = if s == "active" then "지금 이 배수!" else "더 큰 배수가 있어요"
+					entry.state.Text = if s == "active" then "지금 이 배수!" else "샀어요 ✔"
 					entry.card.BackgroundColor3 = Color3.fromRGB(60, 62, 70)
 				end
 			end

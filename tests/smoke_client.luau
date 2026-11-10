@@ -1129,9 +1129,96 @@ local function body()
 			"카드 제목 '2배 스피드' · '4배' · '2048배'"
 		)
 		check(
-			b2.Text == "R$ 2" and b4.Text == "R$ 4" and b2048.Text == "R$ 2,048",
-			"가격 'R$ 2' · 'R$ 4' · 'R$ 2,048' (" .. b2048.Text .. ")"
+			b2.Text == "R$ 2" and b4.Text == "🔒 R$ 4" and b2048.Text == "🔒 R$ 2,048",
+			"가격 'R$ 2' · '🔒 R$ 4' · '🔒 R$ 2,048' (바로 다음 것만 열림): "
+				.. b4.Text
+				.. " / "
+				.. b2048.Text
 		)
+		-- 2026-11-10 순서대로만 열림 ("2배를 사야 4배가 열려요"): 배수 1 이면 boost_2 만 살 수 있음
+		local ProductsB = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Products"))
+		local function buyable()
+			local values = {}
+			for _, product in ProductsB.treadmillBoosts do
+				local b = cardBtn(product.value)
+				if b and b.Active ~= false then
+					table.insert(values, product.value)
+				end
+			end
+			return table.concat(values, ",")
+		end
+		local function stateOf(v)
+			local _, c = cardBtn(v)
+			return c:FindFirstChild("State").Text
+		end
+		check(buyable() == "2", "배수 1: 살 수 있는 카드는 2배 하나뿐: " .. buyable())
+		local allLocked = true
+		for _, product in ProductsB.treadmillBoosts do
+			if product.value >= 4 then
+				local b = cardBtn(product.value)
+				allLocked = allLocked
+					and b.Active == false
+					and string.sub(b.Text, 1, #"🔒") == "🔒"
+					and b.BackgroundColor3 == roblox.Color3.fromRGB(160, 160, 170)
+			end
+		end
+		check(allLocked, "배수 1: 4배 … 2048배는 전부 회색 꺼진 버튼 + 🔒")
+		check(
+			stateOf(4) == "2배를 먼저 사요" and stateOf(2048) == "2배를 먼저 사요",
+			"잠긴 카드 글 '2배를 먼저 사요': " .. stateOf(4)
+		)
+		-- 상품 id 를 붙인 척 (구매창이 뜨는지 보려고): 잠긴 카드를 눌러도 Purchase.prompt 가 안 불림, 바로 다음 카드만 구매창
+		for _, product in ProductsB.treadmillBoosts do
+			product.productId = 7000 + product.value
+		end
+		local promptsBefore = #marketPrompts
+		click(b4)
+		click(b2048)
+		check(#marketPrompts == promptsBefore, "배수 1: 잠긴 4배·2048배 카드를 눌러도 구매창 안 뜸")
+		click(b2)
+		check(
+			#marketPrompts == promptsBefore + 1 and marketPrompts[#marketPrompts].id == 7002,
+			"배수 1: 2배 카드는 구매창 (productId 7002)"
+		)
+		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7002, false)
+		-- 2배를 사서 배수 2 가 되면 4배가 열림 (8배는 아직 잠김)
+		player:SetAttribute("TreadmillBoost", 2)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
+		check(buyable() == "4", "배수 2: 살 수 있는 카드는 4배 하나뿐: " .. buyable())
+		check(
+			b2.Text == "적용 중" and b4.Text == "R$ 4" and cardBtn(8).Text == "🔒 R$ 8",
+			"배수 2: 2배 '적용 중' · 4배 'R$ 4' · 8배 '🔒 R$ 8'"
+		)
+		check(
+			stateOf(2) == "지금 이 배수!" and stateOf(8) == "4배를 먼저 사요",
+			"배수 2: 글 '지금 이 배수!' · '4배를 먼저 사요': " .. stateOf(8)
+		)
+		click(cardBtn(8))
+		click(b2048)
+		click(b2)
+		check(
+			#marketPrompts == promptsBefore + 1,
+			"배수 2: 잠긴 8배·2048배·가진 2배를 눌러도 구매창 안 뜸"
+		)
+		click(b4)
+		check(
+			#marketPrompts == promptsBefore + 2 and marketPrompts[#marketPrompts].id == 7004,
+			"배수 2: 4배 카드는 구매창 (productId 7004)"
+		)
+		MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7004, false)
+		-- 끝 (2048 가짐): 살 수 있는 카드 0장, 나머지는 '샀어요 ✔'
+		player:SetAttribute("TreadmillBoost", 2048)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
+		check(buyable() == "", "배수 2048: 살 수 있는 카드 0장: " .. buyable())
+		check(
+			b2048.Text == "적용 중" and stateOf(2048) == "지금 이 배수!" and stateOf(1024) == "샀어요 ✔",
+			"배수 2048: 2048배 '적용 중' · 나머지 '샀어요 ✔'"
+		)
+		for _, product in ProductsB.treadmillBoosts do
+			product.productId = 0
+		end
+		player:SetAttribute("TreadmillBoost", nil)
+		sigOf(player, "Attr_TreadmillBoost"):Fire()
 		local hint = bw:FindFirstChild("Hint", true)
 		check(
 			hint and string.find(hint.Text, "걷는 속도가 아니에요", 1, true) ~= nil,
@@ -1869,14 +1956,14 @@ local function body()
 	})
 	check(string.find(runBanner.SpeedWarning.Text, "속도가 부족", 1, true) ~= nil, "속도 부족 경고")
 	check(
-		string.find(runBanner.SpeedWarning.Text, "1.0초 뒤 잡혀요", 1, true) ~= nil
+		string.find(runBanner.SpeedWarning.Text, "경비에 닿으면 잡혀요", 1, true) ~= nil
 			and string.find(runBanner.SpeedLine.Text, "내 속도", 1, true) ~= nil,
-		"8판: 많이 모자라면 '1.0초 뒤 잡혀요!' + 작은 속도 줄: " .. runBanner.SpeedWarning.Text
+		"8판: 많이 모자라면 '경비에 닿으면 잡혀요' + 작은 속도 줄: " .. runBanner.SpeedWarning.Text
 	)
 	fire("RunAlert", { egg = { uid = "e1", petId = "puppy_grass" }, guardSpeed = 1000, yourSpeed = 900 })
 	check(
-		string.find(runBanner.SpeedWarning.Text, "2.5초 뒤 잡혀요", 1, true) ~= nil,
-		"8판: 조금 모자라면 '2.5초 뒤 잡혀요!': " .. runBanner.SpeedWarning.Text
+		string.find(runBanner.SpeedWarning.Text, "경비에 닿으면 잡혀요", 1, true) ~= nil,
+		"8판: 조금 모자라면 '경비에 닿으면 잡혀요': " .. runBanner.SpeedWarning.Text
 	)
 	fire("RunAlert", { egg = { uid = "e1", petId = "puppy_grass" }, guardSpeed = 10, yourSpeed = 5000 })
 	check(

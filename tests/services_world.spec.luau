@@ -387,18 +387,36 @@ return function(T, Loader)
 		end
 	)
 
-	T.test("다른 사람(방망이·곰덫)에게 당하면 구역 안이어도 그 자리에 떨어짐", function()
-		local w = eggWorld()
-		local egg = nestEgg(w.H, "forest")
-		pressE(w, egg)
-		local cx, cz = zoneCenter(w, "forest")
-		w.H.teleport(w.player, cx + 10, 3, cz)
-		w.EggService.knockOut(w.player, w.H.vec(cx, 3, cz), "player", "Bob", 1.5)
-		T.eq(egg:GetAttribute("EggState"), "Dropped")
-		T.eq(egg.Position.X, cx + 10)
-		T.eq(w.H.sent(w.player, "Caught")[1][1].cause, "player")
-		w.H.uninstall()
-	end)
+	T.test(
+		"다른 사람(방망이·곰덫)에게 당하면 (2026-11-10) 구역 안이면 바로 둥지로, 구역 밖이면 그 자리에 떨어졌다가 5초 뒤 둥지로",
+		function()
+			local w = eggWorld()
+			local egg = nestEgg(w.H, "forest")
+			local home = egg.Position
+			pressE(w, egg)
+			local cx, cz = zoneCenter(w, "forest")
+			w.H.teleport(w.player, cx + 10, 3, cz)
+			w.EggService.knockOut(w.player, w.H.vec(cx, 3, cz), "player", "Bob", 1.5)
+			T.eq(egg:GetAttribute("EggState"), "Nest", "구역 안: 방망이에 맞아도 바로 둥지로")
+			T.eq(egg.Position.X, home.X, "원래 둥지 자리 (맞은 자리 아님)")
+			T.eq(egg.Position.Z, home.Z)
+			T.eq(egg:GetAttribute("ReturnsToNest"), nil, "바닥 표시 없음")
+			local caught = w.H.sent(w.player, "Caught")[1][1]
+			T.eq(caught.cause, "player")
+			T.eq(caught.eggOutcome, "ReturnToNest")
+			-- 구역 밖(허브)에서 맞으면 그 자리에 떨어졌다가 5초 뒤 둥지로
+			w.H.advance(w.Config.RAGDOLL_SECONDS + 0.2)
+			pressE(w, egg)
+			w.H.teleport(w.player, 0, 3, -60)
+			w.EggService.knockOut(w.player, w.H.vec(5, 3, -60), "player", "Bob", 1.5)
+			T.eq(egg:GetAttribute("EggState"), "Dropped", "구역 밖: 그 자리에 떨어짐")
+			T.eq(egg.Position.Z, -60)
+			T.eq(egg:GetAttribute("ReturnsToNest"), true)
+			w.H.advance(5.2)
+			T.eq(egg:GetAttribute("EggState"), "Nest", "5초 뒤 둥지로")
+			w.H.uninstall()
+		end
+	)
 
 	T.test(
 		"죽으면 구역 규칙(안 → 둥지), 나가면(leave) 구역 밖이면 그 자리 / 알이 없으면 eggOutcome = None",
@@ -461,7 +479,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"8판 드롭한 씨앗: 그 구역 안이면 그 자리에 그대로(카운트다운 없음, 둥지도 안 채움 — 다음 초기화까지), 밖이면 5초 뒤 같은 둥지로, 다시 주우면 표시 지움",
+		"드롭한 씨앗 (2026-11-10): 그 구역 안이면 바로 둥지로 (바닥 씨앗 0, 카운트다운 없음, 둥지가 다시 채워지지도 않음), 밖이면 그 자리 → 5초 뒤 같은 둥지로, 다시 주우면 표시 지움",
 		function()
 			local w = eggWorld()
 			local before = #eggParts(w.H)
@@ -472,25 +490,28 @@ return function(T, Loader)
 			w.H.teleport(w.player, x + 7, 3, z) -- 알의 구역 안
 			local t0 = w.H.clock() -- 가짜 workspace:GetServerTimeNow() = 가상 시계
 			w.H.client(w.player, "DropEgg")
-			T.eq(egg:GetAttribute("EggState"), "Dropped")
-			T.eq(egg.Position.X, x + 7, "둥지로 안 가고 그 자리")
-			T.eq(egg:GetAttribute("DroppedAt"), t0)
-			T.eq(egg:GetAttribute("ExpiresAt"), nil, "구역 안: 카운트다운 없음 (그대로 남음)")
-			T.eq(egg:GetAttribute("ReturnsToNest"), false)
-			T.truthy(w.H.hasNotify(w.player, "info", "누구나 다시 주울 수 있어요"))
-			-- 다시 주우면 표시 지움, 다시 버려도 그대로
+			T.eq(egg:GetAttribute("EggState"), "Nest", "구역 안에서 내려놓으면 바로 둥지로")
+			T.eq(egg.Position.X, nestX, "내려놓은 자리 (x+7) 가 아니라 원래 둥지")
+			T.eq(egg.Position.Z, nestZ)
+			T.eq(egg:GetAttribute("DroppedAt"), nil, "바닥 씨앗 표시 없음 (t0 = " .. tostring(t0) .. ")")
+			T.eq(egg:GetAttribute("ExpiresAt"), nil, "카운트다운 없음")
+			T.eq(egg:GetAttribute("ReturnsToNest"), nil)
+			T.eq(w.player.attrs.CarryingEgg, "", "더는 안 들고 있음")
+			T.truthy(w.H.hasNotify(w.player, "info", "씨앗을 내려놓았어요"))
+			-- 다시 줍고 또 내려놓아도 바로 둥지로 (반복해도 바닥에 안 쌓임)
 			w.H.advance(10)
 			pressE(w, egg)
 			T.eq(egg:GetAttribute("DroppedAt"), nil, "들고 있는 동안은 표시 없음")
 			T.eq(egg:GetAttribute("ReturnsToNest"), nil)
 			w.H.teleport(w.player, x + 7, 3, z)
 			w.EggService.dropEgg(w.player)
-			-- 한참 지나도(2분) 그 자리에 그대로, 그 둥지도 비어 있음 (낮 30초 다시 채우기 안 함)
+			T.eq(egg:GetAttribute("EggState"), "Nest", "두 번째도 바로 둥지")
+			-- 한참 지나도(2분) 둥지에 그대로, 그 둥지는 이 씨앗이 채우고 있어서 새 씨앗이 안 생김
 			w.H.advance(120)
 			T.falsy(egg.destroyed, "2분 뒤에도 그대로")
-			T.eq(egg:GetAttribute("EggState"), "Dropped")
-			T.eq(egg.Position.X, x + 7)
-			T.eq(#eggParts(w.H), before, "떨어진 알이 있는 동안은 둥지를 안 채움")
+			T.eq(egg:GetAttribute("EggState"), "Nest")
+			T.eq(egg.Position.X, nestX)
+			T.eq(#eggParts(w.H), before, "돌아온 씨앗이 둥지를 채워서 새 씨앗이 또 생기지 않음")
 			-- 주워서 구역 밖(호수)으로 가져가 떨어뜨리면 5초 뒤 같은 둥지로
 			pressE(w, egg)
 			w.H.teleport(w.player, 0, 3, 300) -- 호수 = 숲 씨앗의 구역 밖
@@ -590,6 +611,10 @@ return function(T, Loader)
 			w.EggService.dropCarriedAt(w.player, w.H.vec(50, 0, 60))
 			T.eq(egg3:GetAttribute("EggState"), "Dropped")
 			T.eq(egg3.Position.X, 50)
+			-- 2026-11-10: 치트 의심 위치(dropCarriedAt)는 구역 안이어도 바닥에 놓임 — 그래도 "Stay" 는 없어서 5초 뒤 둥지로
+			T.eq(egg3:GetAttribute("ReturnsToNest"), true, "구역 안 바닥이어도 카운트다운 (Stay 없음)")
+			w.H.advance(w.Config.DROPPED_EGG_RETURN_SECONDS + 0.2)
+			T.eq(egg3:GetAttribute("EggState"), "Nest", "5초 뒤 둥지로")
 			w.H.uninstall()
 		end
 	)
@@ -618,23 +643,34 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"DropEgg: 알의 구역 안이어도 그 자리에 떨어짐(둥지로 안 감) + 안내, 알이 없으면 아무 일 없음, 레이트 리밋",
+		"DropEgg (2026-11-10): 알의 구역 안이면 바로 둥지로(바닥 씨앗 0), 구역 밖이면 그 자리에 떨어짐 + 안내, 알이 없으면 아무 일 없음, 레이트 리밋",
 		function()
 			local w = eggWorld()
 			local egg = nestEgg(w.H, "forest")
+			local home = egg.Position
 			pressE(w, egg)
 			local x, z = w.H.zoneSpot("forest")
 			w.H.teleport(w.player, x + 7, 3, z)
 			w.H.client(w.player, "DropEgg")
-			T.eq(egg:GetAttribute("EggState"), "Dropped")
-			T.eq(egg.Position.X, x + 7, "그 자리")
-			T.eq(egg.Position.Z, z)
+			T.eq(egg:GetAttribute("EggState"), "Nest", "구역 안: 바로 둥지로")
+			T.eq(egg.Position.X, home.X, "내려놓은 자리가 아니라 원래 둥지")
+			T.eq(egg.Position.Z, home.Z)
 			T.eq(w.player.attrs.CarryingEgg, "")
 			T.eq(w.player.attrs.CarryWeightKg, 0)
 			T.truthy(w.H.hasNotify(w.player, "info", "씨앗을 내려놓았어요"))
 			local before = #w.H.notifications(w.player)
 			w.H.client(w.player, "DropEgg") -- 알 없음
 			T.eq(#w.H.notifications(w.player), before)
+			-- 구역 밖(허브): 그 자리에 떨어짐
+			w.H.advance(1)
+			pressE(w, egg)
+			w.H.teleport(w.player, 3, 3, -60)
+			w.H.client(w.player, "DropEgg")
+			T.eq(egg:GetAttribute("EggState"), "Dropped", "구역 밖: 그 자리에 떨어짐")
+			T.eq(egg.Position.X, 3)
+			T.eq(egg.Position.Z, -60)
+			T.eq(w.player.attrs.CarryingEgg, "")
+			T.truthy(w.H.hasNotify(w.player, "info", "5초 뒤 둥지로 돌아가요"))
 			w.H.uninstall()
 		end
 	)
@@ -651,12 +687,28 @@ return function(T, Loader)
 			T.eq(carried.chaseSeconds, 0, "둥지에서 주우면 0")
 			carried.chaseBy = w.player -- 경비가 0.7초 쫓았다고 치고
 			carried.chaseSeconds = 0.7
+			-- 2026-11-10: 구역 안에서 버리면 바로 둥지로 돌아가 0 부터 / 구역 밖(허브)에서 버리면 바닥에 있다가 다시 주울 때 이어짐
+			w.H.teleport(w.player, 0, 3, -60)
 			w.EggService.dropEgg(w.player)
+			T.eq(egg:GetAttribute("EggState"), "Dropped", "구역 밖 드롭: 바닥")
 			w.H.advance(0.5)
 			pressE(w, egg)
 			carried = w.EggService.getCarried(w.player)
-			T.eq(carried.chaseSeconds, 0.7, "버렸다 다시 주워도 이어짐 (버렸다 줍기로 못 버팀)")
+			T.eq(
+				carried.chaseSeconds,
+				0.7,
+				"구역 밖에서 버렸다 다시 주워도 이어짐 (버렸다 줍기로 못 버팀)"
+			)
 			local cx, cz = zoneCenter(w, "forest")
+			w.H.teleport(w.player, cx, 3, cz)
+			w.EggService.dropEgg(w.player)
+			T.eq(egg:GetAttribute("EggState"), "Nest", "구역 안 드롭: 바로 둥지")
+			T.eq(carried.chaseSeconds, 0, "둥지로 돌아간 씨앗은 0부터")
+			T.eq(carried.chaseBy, nil)
+			pressE(w, egg)
+			carried = w.EggService.getCarried(w.player)
+			carried.chaseBy = w.player
+			carried.chaseSeconds = 0.7
 			w.H.teleport(w.player, cx, 3, cz)
 			T.eq(w.EggService.dropCarried(w.player, "guard"), "ReturnToNest")
 			T.eq(carried.chaseSeconds, 0, "둥지로 돌아가면 0")
@@ -845,39 +897,66 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"8판 잡힘 = 시간: 조금 모자람(추격 기준의 70% 이상) 2.5초 / 많이 모자람 1초 — 거리와 상관없이 (100 스터드 밖에서도), 잡히면 knockOut(guard) + 대상 해제 + ChaseEnded caught",
+		"잡힘 = 닿아야만 (2026-11-10): 추격 시간(조금 모자람 2.5초 / 많이 모자람 1초)이 지나도 멀리 있으면 안 잡히고 경비 WalkSpeed 도 안 변함 (돌진 없음) — 닿으면(수평 거리 ≤ 잡힘 거리) 그 틱에 한 번만 잡힘: knockOut(guard) + 대상 해제 + ChaseEnded caught",
 		function()
 			local w = guardWorld()
 			local forest = w.Biomes.get("forest")
-			-- 조금 모자람: 속도 8 × (1 - 0.1) = 7.2 ≥ 0.7 × 8.91
+			local model = guardOf(w, "forest")
+			local humanoid = humanoidOf(model)
+			local chase = w.SpeedMath.guardChaseSpeed(forest.guardSpeed)
+			-- 조금 모자람: 속도 8 × (1 - 0.1) = 7.2 ≥ 0.7 × 8.91 → 2.5초
 			carryForest(w, w.player, 8, 0.10)
 			T.eq(w.SpeedMath.catchSeconds(forest.guardSpeed, w.session.carrySpeed), 2.5)
-			place(w, w.player, 30, -60) -- 경비 집에서 100 스터드 넘게 떨어짐
-			w.H.advance(2.3)
-			T.eq(#w.H.eggs.knockouts, 0, "2.3초: 아직")
-			T.eq(guardOf(w, "forest"):GetAttribute("State"), "Chase")
-			w.H.advance(0.4)
-			T.eq(#w.H.eggs.knockouts, 1, "2.7초: 잡힘 (2.5초 + 틱)")
+			place(w, w.player, 30, -60) -- 경비 집에서 100 스터드 넘게 떨어짐 (경비는 가짜라 안 걸어옴)
+			w.H.advance(2)
+			T.near(humanoid.WalkSpeed, chase, 1e-9, "2초: 구역 고정 추격 속도")
+			w.H.advance(0.8) -- 2.8초: 추격 시간 2.5초가 지남
+			T.eq(#w.H.eggs.knockouts, 0, "2.8초: 시간이 지나도 멀리 있으면 안 잡힘")
+			T.near(
+				humanoid.WalkSpeed,
+				chase,
+				1e-9,
+				"시간이 지나도 WalkSpeed 는 그대로 (2026-11-10: 돌진 없음)"
+			)
+			w.H.advance(10)
+			T.eq(#w.H.eggs.knockouts, 0, "13초가 지나도 멀리 있으면 안 잡힘")
+			T.eq(model:GetAttribute("State"), "Chase", "계속 쫓음")
+			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId)
+			T.truthy(w.H.eggs.carried[w.player] ~= nil, "씨앗도 그대로 들고 있음")
+			-- 잡힘 거리(키 28 → 13) 바로 밖은 안 잡힘, 바로 안은 그 틱에 잡힘
+			local reach = model:GetAttribute("CatchDistance")
+			T.eq(reach, 13)
+			nearGuard(w, w.player, reach + 0.5, 0)
+			w.H.advance(1)
+			T.eq(#w.H.eggs.knockouts, 0, "잡힘 거리 + 0.5: 안 닿음")
+			nearGuard(w, w.player, 0, -(reach - 0.5))
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 1, "잡힘 거리 - 0.5: 그 틱에 잡힘")
 			local k = w.H.eggs.knockouts[1]
 			T.eq(k.player, w.player)
 			T.eq(k.cause, "guard")
 			T.eq(k.by, "덥석 파리지옥")
 			T.eq(k.outcome, nil, "씨앗은 놓친 규칙대로 (구역 안이면 둥지)")
-			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), 0)
+			T.eq(model:GetAttribute("TargetUserId"), 0)
 			local ended = w.H.sent(w.player, "ChaseEnded")
 			T.eq(ended[#ended][1].reason, "caught")
-			-- 많이 모자람: 속도 5 × 0.9 = 4.5 < 0.7 × 8.91 → 1초. 마지막 0.3초는 빠르게 다가감 (≤ 400)
+			w.H.advance(2)
+			T.eq(#w.H.eggs.knockouts, 1, "한 번만 (씨앗이 없어서 또 안 잡힘)")
+			-- 많이 모자람: 속도 5 × 0.9 = 4.5 < 0.7 × 8.91 → 1초. 시간이 지나도 멀리 있으면 안 잡히고 WalkSpeed 도 그대로
 			table.clear(w.H.eggs.knockouts)
-			w.H.advance(0.3)
 			carryForest(w, w.player, 5, 0.10)
 			T.eq(w.SpeedMath.catchSeconds(forest.guardSpeed, w.session.carrySpeed), 1)
-			w.H.advance(0.9)
+			place(w, w.player, 30, -60)
+			w.H.advance(0.5)
+			T.near(humanoid.WalkSpeed, chase, 1e-9, "0.5초: 평소 속도")
+			w.H.advance(0.4)
 			T.eq(#w.H.eggs.knockouts, 0, "0.9초: 아직")
-			local humanoid = humanoidOf(guardOf(w, "forest"))
-			T.truthy(humanoid.WalkSpeed > w.SpeedMath.guardChaseSpeed(forest.guardSpeed), "마지막 0.3초: 빠르게")
-			T.truthy(humanoid.WalkSpeed <= w.Config.GUARD_CATCH_RUSH_MAX_WALKSPEED, "상한 400")
-			w.H.advance(0.3)
-			T.eq(#w.H.eggs.knockouts, 1, "1.2초: 잡힘")
+			T.near(humanoid.WalkSpeed, chase, 1e-9, "1초가 지나도 WalkSpeed 는 그대로")
+			w.H.advance(0.6)
+			T.eq(#w.H.eggs.knockouts, 0, "1.5초: 시간이 지나도 멀리 있으면 안 잡힘")
+			nearGuard(w, w.player, 3, 3)
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 1, "닿으면 잡힘")
 			-- Config 숫자 (사장님 지시)
 			T.eq(w.Config.GUARD_CATCH_CLOSE_SECONDS, 2.5)
 			T.eq(w.Config.GUARD_CATCH_FAR_SECONDS, 1)
@@ -887,15 +966,22 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"8판: 도망칠 수 있는 속도면 경비 바로 옆(거리 0)에 30초 붙어 있어도 안 잡힘 (쫓아오기만 함)",
+		'도망칠 수 있는 빠른 사람도 경비에 닿으면 잡힘 (2026-11-10 "부딪혀도 안 날아가는 버그") · 멀리서는 30초가 지나도 안 잡힘 · 경비 바로 옆에 30초 붙어 있을 수도 없음 (첫 틱에 잡힘)',
 		function()
 			local w = guardWorld()
-			carryForest(w, w.player, 100, 0.10) -- 90 > 8.91
-			nearGuard(w, w.player, 0, 0)
+			carryForest(w, w.player, 100, 0.10) -- 90 > 8.91: 도망칠 수 있음
+			place(w, w.player, 30, -60)
 			w.H.advance(30)
-			T.eq(#w.H.eggs.knockouts, 0)
+			T.eq(#w.H.eggs.knockouts, 0, "멀리서는 안 잡힘 (쫓아오기만 함)")
 			T.eq(guardOf(w, "forest"):GetAttribute("State"), "Chase")
 			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), w.player.UserId)
+			nearGuard(w, w.player, 0, 0) -- 경비와 부딪힘
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 1, "부딪히면 빠른 사람도 잡힘")
+			T.eq(w.H.eggs.knockouts[1].cause, "guard")
+			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), 0)
+			w.H.advance(5)
+			T.eq(#w.H.eggs.knockouts, 1, "한 번만")
 			w.H.uninstall()
 		end
 	)
@@ -926,11 +1012,16 @@ return function(T, Loader)
 			carryForest(w, other, 5, 0.10)
 			w.H.eggs.carried[other].uid = "e2"
 			carryForest(w, w.player, 5, 0.10)
-			nearGuard(w, other, 0, 0) -- 경비 바로 옆 = 경비가 이 사람을 쫓음
+			nearGuard(w, other, 20, 0) -- 경비 가까이(잡힘 거리 13 밖, 안 닿음) = 경비가 이 사람을 쫓음
 			w.H.teleport(w.player, 40, 3, forest.zMax + 5)
 			w.H.advance(0.1)
-			T.eq(#w.H.eggs.knockouts, 1)
+			T.eq(
+				#w.H.eggs.knockouts,
+				1,
+				"경계를 넘은 사람만 잡힘 (다른 사람은 안 닿아서 안 잡힘)"
+			)
 			T.eq(w.H.eggs.knockouts[1].player, w.player)
+			T.eq(w.H.eggs.carried[other] ~= nil, true, "쫓기는 사람은 씨앗 그대로")
 			T.eq(w.H.eggs.knockouts[1].outcome, "ReturnToNest")
 			-- 도망칠 수 있으면 다음 구역에 가도 자유
 			table.clear(w.H.eggs.knockouts)
@@ -945,7 +1036,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"8판: 여러 명이면 도망칠 수 없는 사람을 먼저 쫓음 (더 가까운 빠른 사람보다)",
+		"여러 명이면 도망칠 수 없는 사람을 먼저 쫓음 (더 가까운 빠른 사람보다) — 둘 다 닿아야만 잡힘 (2026-11-10)",
 		function()
 			local w = guardWorld()
 			local other = w.H.newPlayer(1002, "Fast")
@@ -953,14 +1044,33 @@ return function(T, Loader)
 			w.H.spawn(other, 0, 3, 50)
 			carryForest(w, other, 100, 0.10)
 			w.H.eggs.carried[other].uid = "e2"
-			nearGuard(w, other, 2, 0) -- 빠른 사람이 경비 바로 옆
+			nearGuard(w, other, 20, 0) -- 빠른 사람이 경비 가까이 (잡힘 거리 13 밖)
 			carryForest(w, w.player, 5, 0.10)
 			place(w, w.player, 30, -60) -- 느린 사람은 멀리
 			w.H.advance(0.2)
-			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), w.player.UserId)
+			T.eq(
+				guardOf(w, "forest"):GetAttribute("TargetUserId"),
+				w.player.UserId,
+				"느린(도망칠 수 없는) 사람을 먼저"
+			)
 			w.H.advance(1.2)
+			T.eq(#w.H.eggs.knockouts, 0, "시간이 지나도 둘 다 안 닿았으면 아무도 안 잡힘")
+			T.eq(guardOf(w, "forest"):GetAttribute("TargetUserId"), w.player.UserId)
+			nearGuard(w, w.player, 3, 0) -- 느린 사람이 경비에 닿음
+			w.H.advance(0.2)
 			T.eq(#w.H.eggs.knockouts, 1)
-			T.eq(w.H.eggs.knockouts[1].player, w.player)
+			T.eq(w.H.eggs.knockouts[1].player, w.player, "닿은 느린 사람이 잡힘")
+			w.H.advance(0.2)
+			T.eq(
+				guardOf(w, "forest"):GetAttribute("TargetUserId"),
+				other.UserId,
+				"이제 남은 빠른 사람을 쫓음 (아직 안 닿음)"
+			)
+			T.eq(#w.H.eggs.knockouts, 1)
+			nearGuard(w, other, 4, 0) -- 빠른 사람도 닿으면 잡힘
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 2)
+			T.eq(w.H.eggs.knockouts[2].player, other)
 			w.H.uninstall()
 		end
 	)
@@ -1002,6 +1112,11 @@ return function(T, Loader)
 			local model = guardOf(w, "forest")
 			w.H.advance(0.2)
 			T.eq(model:GetAttribute("CatchDistance"), 13, "Visuals 키 28")
+			-- 2026-11-10 잡힘 = 닿아야만 (수평 거리 ≤ 잡힘 거리): 키 28(13) 이면 14 떨어진 사람은 안 닿음
+			carryForest(w, w.player, 5, 0.10)
+			nearGuard(w, w.player, 14, 0)
+			w.H.advance(0.2)
+			T.eq(#w.H.eggs.knockouts, 0, "키 28 → 잡힘 거리 13: 14 떨어지면 안 닿음")
 			-- 선임 PetVisualService 처럼 겉모습 모델(이름 = Visuals.guards.forest.model "flytrap_monster")에 Height 40
 			local height = 40
 			local visual = {
@@ -1016,15 +1131,12 @@ return function(T, Loader)
 			table.insert(model.children, visual)
 			w.H.advance(0.2)
 			T.eq(model:GetAttribute("CatchDistance"), 16, "키 40 → 6 + 10 = 16")
-			-- 8판: 잡힘 판정은 시간 — 이 거리는 경비가 곧 잡을 사람 바로 뒤(거리의 절반)에 붙어 따라가는 데만 씀
-			carryForest(w, w.player, 5, 0.10)
-			nearGuard(w, w.player, 12, 0)
-			w.H.advance(0.2)
-			T.eq(#w.H.eggs.knockouts, 0, "8판: 가까워도 시간 전엔 안 잡힘")
-			local humanoid = humanoidOf(model)
-			local p = w.player.Character.root.Position
-			T.near(humanoid.moveTarget.X, p.X - 8, 0.5, "바로 뒤 (키 40 → 16 의 절반 = 8)")
-			w.H.eggs.carried[w.player] = nil
+			T.eq(
+				#w.H.eggs.knockouts,
+				1,
+				"키 40 → 잡힘 거리 16: 같은 14 떨어진 자리가 이제 닿음 → 그 틱에 잡힘"
+			)
+			T.eq(w.H.eggs.knockouts[1].player, w.player)
 			w.H.advance(0.3)
 			-- 겉모습이 작으면 (키 8) 8 까지만
 			height = 8
@@ -1100,8 +1212,10 @@ return function(T, Loader)
 		T.eq(ended[1][1].reason, "dropped")
 		T.eq(ended[2][1].reason, "night")
 		w.H.setPhase("Day")
-		place(w, w.player, 3, 0)
-		w.H.advance(1.2) -- 8판: 느린 사람은 1초 뒤 잡힘
+		place(w, w.player, 30, 0)
+		w.H.advance(0.2) -- 경비가 쫓기 시작
+		nearGuard(w, w.player, 3, 0) -- 2026-11-10: 경비에 닿아야 잡힘
+		w.H.advance(0.2)
 		ended = w.H.sent(w.player, "ChaseEnded")
 		T.eq(ended[#ended][1].reason, "caught")
 		w.H.uninstall()

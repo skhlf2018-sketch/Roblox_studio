@@ -166,12 +166,8 @@ function ChaseController.start()
 
 	-- 남은 시간 글 (0.1초마다·신호 받을 때)
 	local function catchText(): string
-		local total = catchSecs or 0
-		local left = math.max(0, total - (chased[chaseUid] or 0))
-		if left <= 0.05 then
-			return "곧 잡혀요! 속도가 부족해요!"
-		end
-		return string.format("%.1f초 뒤 잡혀요! 속도가 부족해요!", left)
+		-- 2026-11-10 (사장님 "아직도 초잖아"): 초 카운트다운은 안 보여 줌 — 잡힘은 경비가 닿을 때만
+		return "속도가 부족해요! 경비에 닿으면 잡혀요!"
 	end
 	function ChaseController.catchText(): string
 		return if catchSecs then catchText() else ""
@@ -190,7 +186,7 @@ function ChaseController.start()
 		if guardSlow then
 			setWarn(catchText(), C.yellow)
 		elseif guard > 0 then
-			setWarn("도망칠 수 있어요! 안전 구역으로!", C.moneyGreen)
+			setWarn("도망칠 수 있어요! 경비에 닿지만 마세요!", C.moneyGreen)
 		else
 			setWarn("", C.yellow)
 		end

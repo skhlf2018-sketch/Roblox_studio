@@ -70,6 +70,21 @@ return function(T, Loader)
 		return current, budget
 	end
 
+	-- 사장님 2026-11-10 "스피드 배수는 2배를 사야 4배가 열리는 식" 규칙의 기준 계산 (서버·Products 코드와 따로):
+	--   부스트 상품 boost_v (값 = 가격 = v R$) 를 지금 배수 current (1, 2, 4 … 2048) 에서 샀을 때 (새 배수, 속도로 받을 R$)
+	--   바로 다음 배수(current × 2)면 v · 아니면 예산 = v R$ 로 current × 2 부터 차례로 빼며 살 수 있는 만큼, 남은 R$ 는 속도
+	local function boostExpect(current, v)
+		if current < 2048 and v == current * 2 then
+			return v, 0
+		end
+		local budget, now = v, current
+		while now < 2048 and now * 2 <= budget do
+			budget -= now * 2
+			now *= 2
+		end
+		return now, budget
+	end
+
 	-- 소스에서 주석(--[[ ... ]] 블록과 -- 줄 주석)을 뺀 코드 글자
 	local function stripComments(text)
 		text = string.gsub(text, "%-%-%[%[.-%]%]", "")
@@ -260,7 +275,8 @@ return function(T, Loader)
 				fakeConfigure(w)
 				enableSaving(w)
 				local speed0 = w.data.speed
-				for _, key in { "coins_1b", "speed_10m", "boost_8", "tskip_1", "money_pass" } do
+				-- boost_2 → boost_8 : 8 은 바로 다음이 아니라서 (2 → 4 → 8 순서) ×4 + 남은 4 R$ 속도 — 그 속도도 영수증이 또 와도 한 번만
+				for _, key in { "coins_1b", "speed_10m", "boost_2", "boost_8", "tskip_1", "money_pass" } do
 					local r = receipt(w, key, "once-" .. key)
 					T.eq(process(w, r), GRANTED, key .. " 첫 영수증")
 					local money, speed, boost, level, pass =
@@ -274,17 +290,21 @@ return function(T, Loader)
 					T.eq(w.data.moneyPass, pass)
 					T.eq(grantedCount(w, key), 1, key .. ": ProductGranted 1번")
 				end
-				T.eq(#w.data.receipts, 5)
-				T.eq(w.data.stats.productsBought, 5)
+				T.eq(#w.data.receipts, 6)
+				T.eq(w.data.stats.productsBought, 6)
 				T.eq(w.data.money, 1e9)
-				T.eq(w.data.speed, speed0 + 1e7)
-				T.eq(w.data.treadmillBoost, 8)
+				T.eq(
+					w.data.speed,
+					speed0 + 1e7 + 4 * Config.PRODUCT_SPEED_PER_ROBUX,
+					"속도: 상품 + 건너뛴 부스트의 남은 4 R$ (한 번씩만)"
+				)
+				T.eq(w.data.treadmillBoost, 4, "boost_2 → 2, boost_8 은 순서가 안 맞아 ×4")
 				T.eq(w.data.treadmillLevel, 1)
 				T.eq(w.data.moneyPass, true)
 				local s = stored(w)
-				T.eq(#s.receipts, 5, "저장소에도 5개")
+				T.eq(#s.receipts, 6, "저장소에도 6개")
 				T.eq(s.money, 1e9)
-				T.eq(s.treadmillBoost, 8)
+				T.eq(s.treadmillBoost, 4)
 				T.eq(s.moneyPass, true)
 			end)
 		end
@@ -802,16 +822,25 @@ return function(T, Loader)
 					local function r(productId, purchaseId)
 						return { PlayerId = w.player.UserId, ProductId = productId, PurchaseId = purchaseId }
 					end
+					local RATE = Config.PRODUCT_SPEED_PER_ROBUX
 					T.eq(process(w, r(5001, "p1")), GRANTED)
 					T.eq(w.data.treadmillBoost, 2)
+					local speed = w.data.speed
 					T.eq(process(w, r(5002, "p2")), GRANTED)
-					T.eq(w.data.treadmillBoost, 2048)
+					T.eq(
+						w.data.treadmillBoost,
+						1024,
+						"2 에서 boost_2048 (2048 R$) 을 바로 사면: 4~1024 (2044 R$) 까지만 — 2048 은 순서대로 열려야 함"
+					)
+					T.eq(w.data.speed, speed + 4 * RATE, "남은 4 R$ 는 속도")
+					speed = w.data.speed
 					T.eq(
 						process(w, r(5001, "p3")),
 						GRANTED,
-						"더 작은 부스트를 또 사도 (돈은 받았으니) 처리됨"
+						"가진 부스트를 또 사도 (돈은 받았으니) 처리됨 — 배수는 그대로, 2 R$ 는 속도"
 					)
-					T.eq(w.data.treadmillBoost, 2048, "그래도 최댓값")
+					T.eq(w.data.treadmillBoost, 1024, "배수 그대로")
+					T.eq(w.data.speed, speed + 2 * RATE)
 					T.eq(process(w, r(5003, "p4")), GRANTED)
 					T.eq(w.data.treadmillLevel, 1)
 					T.eq(process(w, r(5004, "p5")), GRANTED)
@@ -822,7 +851,7 @@ return function(T, Loader)
 					T.eq(process(w, r(0, "p7")), NOT_YET)
 					T.eq(process(w, r(5009, "p8")), NOT_YET)
 					T.eq(w.data.money, 1e6)
-					T.eq(w.data.treadmillBoost, 2048)
+					T.eq(w.data.treadmillBoost, 1024)
 					T.eq(#w.data.receipts, 6)
 				end
 			)
@@ -916,26 +945,58 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"부스트는 산 것 중 최댓값 (곱 아님): 11개를 무작위 순서로 60번 사도 가진 최댓값 그대로 · 2048 가진 뒤 2 를 사도 2048 · Attr 도 같이",
+		"부스트는 순서대로만 열림 (곱 아님): 11개를 무작위 순서로 60번 사도 treadmillBoostOutcome 모델과 정확히 같고 · 낸 R$ 합보다 많이 받지 못함 (배수 값 + 속도로 받은 R$ = 낸 R$) · 2048 이 된 뒤 2 를 사도 2048 · Attr 도 같이",
 		function()
 			inWorld(nil, function(w)
 				local PS = w.ProductService
 				local E = w.H.shared("Economy")
+				local RATE = Config.PRODUCT_SPEED_PER_ROBUX
 				local rand = T.rng(2048)
 				local list = w.Products.treadmillBoosts
-				local best = 1
+				local boost, paid, bought = 1, 0, 0
+				local speed0 = w.data.speed
+				local function buy(p, label)
+					local before = boost
+					local speed = w.data.speed
+					T.truthy(PS.grant(w.player, p.key, "purchase"), label)
+					bought += 1
+					paid += p.robux
+					local want, leftover = boostExpect(before, p.value)
+					-- 진짜 순수 함수도 같은 답
+					local pureBoost, pureLeft = w.Products.treadmillBoostOutcome(before, p)
+					T.eq(pureBoost, want, label .. ": treadmillBoostOutcome 배수")
+					T.eq(pureLeft, leftover, label .. ": treadmillBoostOutcome 남은 R$")
+					boost = want
+					T.eq(w.data.treadmillBoost, boost, label)
+					T.eq(w.player.attrs.TreadmillBoost, boost, label .. ": Attr")
+					T.eq(w.data.speed, speed + leftover * RATE, label .. ": 속도")
+					T.truthy(boost >= before, label .. ": 배수는 내려가지 않음")
+					-- 보존: (배수 값 2N-2 = 2·4·…·N 가격 합) + 속도로 받은 R$ = 낸 R$
+					T.eq(
+						2 * boost - 2 + (w.data.speed - speed0) / RATE,
+						paid,
+						label .. ": 낸 R$ = 배수 값 + 속도 값"
+					)
+				end
 				for i = 1, 60 do
 					local p = list[math.floor(rand() * #list) + 1]
-					T.truthy(PS.grant(w.player, p.key, "purchase"), p.key)
-					best = math.max(best, p.value)
-					T.eq(w.data.treadmillBoost, best, i .. "번째 " .. p.key)
-					T.eq(w.player.attrs.TreadmillBoost, best)
+					buy(p, i .. "번째 " .. p.key)
 				end
-				PS.grant(w.player, "boost_2048")
-				PS.grant(w.player, "boost_2")
+				-- 끝까지 가 봄: 2048 상품만 계속 사도 순서대로 (1024 → 2048) 에서 멈추고 더는 안 오름
+				local guard = 0
+				while boost < 2048 and guard < 20 do
+					guard += 1
+					buy(w.Products.get("boost_2048"), "2048 향해 " .. guard)
+				end
+				T.eq(boost, 2048, "결국 2048")
+				buy(w.Products.get("boost_2"), "2048 뒤 boost_2")
 				T.eq(w.data.treadmillBoost, 2048)
 				T.eq(E.treadmillGainPerSecond(20, 1, w.data.treadmillBoost), 1e6 * 2048)
-				T.eq(w.data.stats.productsBought, 62, "전부 구매로 셈 (낮은 부스트도 돈은 받았음)")
+				T.eq(
+					w.data.stats.productsBought,
+					bought,
+					"전부 구매로 셈 (남은 R$ 만 받은 것도 돈은 받았음)"
+				)
 			end)
 		end
 	)
@@ -958,8 +1019,8 @@ return function(T, Loader)
 				w.data.treadmillLevel = 20
 				w.data.trails = { bestTrail.id }
 				w.data.equippedTrail = bestTrail.id
-				w.ProductService.grant(w.player, "boost_2048")
-				w.ProductService.grant(w.player, "boost_8")
+				w.data.treadmillBoost = 2048 -- 순서대로 사서 2048 이 되는 길은 위 테스트와 holes_boost_order 가 검사 — 여기서는 곱셈만
+				w.ProductService.grant(w.player, "boost_8") -- 가진 것을 또 삼: 배수 그대로 (남은 값은 속도 — 아래 before 는 이 뒤에 잼)
 				local plot = w.H.MapLayout.plot(1)
 				w.H.spawn(w.player, plot.treadmill.x, 3, plot.treadmill.z)
 				w.H.advance(0.5)
@@ -1251,7 +1312,22 @@ return function(T, Loader)
 			inWorld(nil, function(w)
 				local PS = w.ProductService
 				local Snapshot = w.H.server("Snapshot")
-				for _, key in { "boost_64", "tskip_1", "tskip_2", "money_pass", "coins_1m", "speed_10m" } do
+				-- 부스트는 순서대로 2 · 4 · … · 64 (건너뛰면 64 가 안 됨)
+				for _, key in
+					{
+						"boost_2",
+						"boost_4",
+						"boost_8",
+						"boost_16",
+						"boost_32",
+						"boost_64",
+						"tskip_1",
+						"tskip_2",
+						"money_pass",
+						"coins_1m",
+						"speed_10m",
+					}
+				do
 					T.truthy(PS.grant(w.player, key))
 				end
 				local function check()
@@ -1972,8 +2048,21 @@ return function(T, Loader)
 					T.eq(after.receipts == before.receipts, false, label .. ": 영수증 기록됨")
 					local value = product.value
 					if product.kind == "treadmillBoost" then
-						expect.boost = math.max(expect.boost, value)
-						T.eq(after.boost, expect.boost, label .. ": 부스트 최댓값")
+						-- 2026-11-10 순서대로만 열림: 기준 모델 (boostExpect) 과 똑같아야 하고, 남은 R$ 는 속도
+						local leftover
+						expect.boost, leftover = boostExpect(expect.boost, value)
+						T.eq(after.boost, expect.boost, label .. ": 부스트 (순서대로만 열림)")
+						if leftover > 0 then
+							local wantSpeed =
+								math.min(Cfg.SPEED_MAX, before.speed + leftover * Cfg.PRODUCT_SPEED_PER_ROBUX)
+							T.truthy(after.speed >= wantSpeed, label .. ": 남은 R$ 만큼 속도")
+						elseif not (onTreadmill or A.attrs.OnTreadmill) then
+							T.eq(
+								after.speed,
+								before.speed,
+								label .. ": 순서대로 산 부스트는 속도 안 늘어남"
+							)
+						end
 					elseif product.kind == "moneyPass" then
 						expect.pass = true
 						T.eq(after.pass, true)

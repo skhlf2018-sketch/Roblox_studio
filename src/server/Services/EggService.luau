@@ -893,7 +893,7 @@ function EggService.dropEgg(player: Player): boolean
 		return false
 	end
 	EggService.dropCarried(player, "drop")
-	-- 8판: 그 씨앗 구역 밖이면 5초 뒤 둥지로, 안이면 그 자리에 그대로
+	-- 2026-11-10: 그 씨앗 구역 안이면 바로 둥지로, 밖이면 5초 뒤 둥지로
 	if egg.state == "Dropped" and egg.returnAt then
 		Net.notify(
 			player,
@@ -904,7 +904,11 @@ function EggService.dropEgg(player: Player): boolean
 			)
 		)
 	else
-		Net.notify(player, "info", "씨앗을 내려놓았어요. 누구나 다시 주울 수 있어요!")
+		Net.notify(
+			player,
+			"info",
+			"씨앗을 내려놓았어요. 이 씨앗의 구역 안이라 바로 둥지로 돌아갔어요!"
+		)
 	end
 	return true
 end

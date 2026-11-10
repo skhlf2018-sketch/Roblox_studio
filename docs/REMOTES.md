@@ -3,7 +3,7 @@
 > - **없앤 Remote**: 클라→서버 `FeedFruit` · 서버→클라 `FeedResult` (열매 먹이기 완전 삭제 — 열매는 **팔기만**). `FruitRules.feedOptions/feedChance/rollFeed/canGain/applyMutation/takeOne`, `Mutations.feed`·`feedChance`·`feedBiomes`·`FEED_*` 도 없음. 옛 먹이기로 붙은 원소 돌연변이(얼음·불·번개)는 저장된 식물에 그대로 남고 열매 값에도 그대로 곱함 (새로 안 생김).
 > - **새 Remote** 서버 → 클라 **`ProductGranted`** `Types.ProductGrant = { key: string, kind: string }` — 로벅스 상품(`shared/Data/Products`)이 지급됨 (나에게만). 바뀐 값은 같이 오는 `DataUpdate("upgrades")`·Attr 로. **서버로 "사 줘" Remote 는 없음** (위조 방지): 클라가 `MarketplaceService:PromptProductPurchase(LocalPlayer, product.productId)` 로 로블록스 구매창을 열면, 돈은 로블록스가 받고 서버 `MarketplaceService.ProcessReceipt`(`ProductService`)만 지급함.
 > - **상품 표** `Data/Products`: `treadmillBoosts`(11: `boost_2` … `boost_2048`, 값 = 배수 = R$) · `treadmillSkips`(20: `tskip_1` … `tskip_20`, 값 = 그 레벨) · `shop`(5: `money_pass` 199 · `coins_1m` 99 · `coins_1b` 199 · `speed_10m` 199 · `speed_100m` 259). `Products.get(key)` · `byProductId(id)` · `nextTreadmillSkip(level)` · `isConfigured(product)` (= `productId > 0`, 지금은 **전부 0** → 화면은 "준비 중").
-> - **효과**: 러닝머신 부스트 = 산 것 중 **가장 큰 배수 하나** (곱 아님), 러닝머신 1초 이득 = 레벨 이득 × 트레일 × 부스트 (`Economy.treadmillGainPerSecond(level, trail?, boost?)`, 걷는 속도에는 안 곱함) · 러닝머신 레벨 = 지금 레벨 + 1 상품만 (안 맞으면 산 R$ 만큼만 — 살 수 있는 레벨 + 남은 R$ × 386,100 속도, 주임 F-3) · 코인/속도 더하기 · 코인 2배 = 열매 판매·성체 팔기 × 2 (영원히).
+> - **효과**: 러닝머신 부스트 = 산 것 중 **가장 큰 배수 하나** (곱 아님), **순서대로만 열림** (`Products.nextTreadmillBoost` · 안 맞게 산 것은 낸 R$ 만큼만 — `treadmillBoostOutcome`), 러닝머신 1초 이득 = 레벨 이득 × 트레일 × 부스트 (`Economy.treadmillGainPerSecond(level, trail?, boost?)`, 걷는 속도에는 안 곱함) · 러닝머신 레벨 = 지금 레벨 + 1 상품만 (안 맞으면 산 R$ 만큼만 — 살 수 있는 레벨 + 남은 R$ × 386,100 속도, 주임 F-3) · 코인/속도 더하기 · 코인 2배 = 열매 판매·성체 팔기 × 2 (영원히).
 > - **Attr** `TreadmillBoost`(number, 1 = 없음) · `MoneyPass`(bool). **Snapshot** + `DataUpdate("upgrades")` 에 `treadmillBoost` · `moneyPass`. 개발 명령 `/buy <key>` (스튜디오 무료 지급).
 > - **버그 수정**: 씨앗을 든 채 밤이 되면(서버가 베이스로 순간이동) 씨앗이 가방에 들어가던 것 → 이제 **둥지로 돌아감** + `Notify` info "밤이 되어 씨앗이 둥지로 돌아갔어요." (`EggDelivered` 없음). 다른 서버 순간이동(늦게 받은 베이스 → 집, `/zone`)도 같음. 스스로 걸어서 허브에 들어온 배달은 그대로.
 
@@ -321,7 +321,7 @@ moneyPass,                         -- 9판: 로벅스 코인 2배 (영원히)
 - [x] **구매창**: `MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)` (클라만 — 서버로 보내는 "사 줘" Remote 는 없음). **`Products.isConfigured(product)` 가 false(지금은 전부 — id 0)면 창을 열지 말고 "준비 중" 안내**. 연타 방지는 클라에서.
 - [x] **지급 연출**: `ProductGranted { key, kind }` (나에게만) → 축하 글·소리. 실제 값은 `DataUpdate("upgrades")` (`treadmillLevel`·`treadmillBoost`·`moneyPass`) · Attr `TreadmillBoost`·`MoneyPass`·`TreadmillLevel`·`Money`·`BaseSpeed` 로 옴 (`ProductGranted` 만 보고 숫자를 바꾸지 말 것).
 - [x] **러닝머신 창**: 코인 버튼(`PurchaseUpgrade("Treadmill")`) 옆에 로벅스 버튼 = `Products.nextTreadmillSkip(TreadmillLevel)` (지금 레벨 + 1 상품만, 최대면 숨김). 가격 `product.robux`. 1초 이득 표시 = `Economy.treadmillGainPerSecond(level, trailMultiplier, TreadmillBoost)` (`TreadmillTouched.gainPerSecond` 는 트레일·부스트 전 숫자).
-- [x] **스피드 배수 창**: `Products.treadmillBoosts` 11장 — 지금 `TreadmillBoost` 이하 카드는 "가짐" (또 사도 그대로 — 환불 없음 안내), 큰 것만 사게.
+- [x] **스피드 배수 창**: `Products.treadmillBoosts` 11장 — 지금 `TreadmillBoost` 이하 카드는 "가짐", **바로 다음 배수 카드만 사게** (그 뒤는 "🔒 R$ N" 잠김 — `Products.treadmillBoostState(current, value)` = active·owned·buy·locked, 사장님 2026-11-10 "2배를 사야 4배가 열림").
 - [x] **상점 창**: `Products.shop` 5개 (코인 2배 · 코인 1M · 1B · 속도 10M · 100M). `MoneyPass` 면 코인 2배 카드 "가짐".
 - 개발 명령 `/buy <key>` 로 스튜디오에서 무료로 받아 볼 수 있음. 스튜디오 테스트 구매(로블록스 구매창)도 무료지만 상품 id 가 있어야 함 (`docs/ROBUX_SETUP.md`).
 

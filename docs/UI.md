@@ -244,7 +244,7 @@
 | 사쿠라 창 | SakuraController | "성체 바치기"(카드에 `SakuraRules.crystalsFor` → `SakuraOffer`, 일반은 회색 카드 + "너무 흔해서 사쿠라 나무가 안 받아요") / "씨앗 뽑기 · 크리스탈 100"(모자라면 회색 → `SakuraDraw`), `SakuraResult` 꽃잎·꽃 팝업 |
 | 도감 | IndexController | "식물 도감", 구역 탭 18(7판), 등급 16개 색·영어 이름(신성·슈퍼·울트라디바인 무지개 띠, 해커 글리치 깨진 띠), "열매 1개 N 코인 · N초마다", 보상 코인·속도, 모두 획득 |
 | 상점 | ShopController | 정원 업그레이드 "정원 칸 7 → 8"(최대면 "(최대!)") · 러닝머신 "○○ 러닝머신: 1초에 속도 +N"(`Economy.treadmillGainPerSecond`, 20레벨 "+1M") + "⏩ 건너뛰기 · R$ N" · 트레일 · 속도(10M·100M) · 코인(코인 2배·1M·1B) 탭 (9판, "추천" 없음) |
-| 스피드 배수 | BoostController | 9판 `BoostWindow`: 카드 11장 "2배 스피드 · R$ 2" … "2048배 · R$ 2,048", 보유 중/적용 중 회색, HUD 속도 옆 "×N" |
+| 스피드 배수 | BoostController | 9판 `BoostWindow`: 카드 11장 "2배 스피드 · R$ 2" … "2048배 · R$ 2,048", 보유 중/적용 중 회색, 바로 다음 배수만 초록 · 그 뒤는 "🔒 R$ N" 잠김, HUD 속도 옆 "×N" |
 | 러닝머신 | TreadmillController | `OnTreadmill` 동안 입력 끔, 점프 → `TreadmillLeave`, `TreadmillStep` → 위 가운데 속도 배지 "👟 +1M" (8판), 벨트에 올라서면 **러닝머신 창** "올리기 · N 코인" (8판, 0장) |
 | 랭킹판 | LeaderboardController | 코인 / 속도 탭 + 허브 3D 판 |
 

@@ -13,7 +13,9 @@
 	    5) 영수증을 먼저 적고(yield 전) grant → 저장(DataService.save) 성공이면 PurchaseGranted.
 	       저장 실패면 NotProcessedYet (영수증은 메모리에 남아 이번 접속에서 다시 와도 두 번 안 줌 — 다시 오면 저장부터 다시 해 봄). 메모리 모드는 스튜디오만 저장 없이 PurchaseGranted
 	- 지급 ProductService.grant(player, key, source) — 순수 지급 로직 (테스트·개발 명령 /buy 가 같이 씀, 영수증 확인 없음):
-	    treadmillBoost : data.treadmillBoost = max(지금, 배수) (곱 아님). 이하를 또 사면 그대로 (소비 처리, 안내). Attr TreadmillBoost
+	    treadmillBoost : 순서대로만 열림 (2배 → 4배 → … 사장님 2026-11-10). 바로 다음 배수를 사면 그 배수 (곱 아님).
+	                     순서가 안 맞으면 (잠긴 것을 위조로 삼·가진 것을 또 삼) **산 로벅스만큼만** — 다음 배수부터 차례로,
+	                     남은 로벅스는 속도 (Products.treadmillBoostOutcome). Attr TreadmillBoost
 	                     러닝머신 1초 이득 = 레벨 이득 × 트레일 배율 × 부스트 (TreadmillService — 러닝머신 탈 때만)
 	    treadmillSkip  : tskip_N 은 지금 레벨이 N-1 이면 N 으로 (코인 안 듦). 레벨이 안 맞으면 (창이 늦게 바뀜·두 번 누름·위조)
 	                     **산 로벅스만큼만** — 다음 레벨 가격부터 차례로 빼며 살 수 있는 레벨만, 남은 로벅스는 속도
@@ -81,24 +83,31 @@ function ProductService.grant(player: Player, key: string, source: string?): boo
 	local value = product.value or 0
 	local kind = product.kind
 	if kind == Kinds.treadmillBoost then
-		if value > data.treadmillBoost then
-			data.treadmillBoost = value
+		-- 사장님 2026-11-10: 순서대로만 열림 (2배 → 4배 → …). 순서가 안 맞게 산 것은 산 로벅스만큼만 (남은 값은 속도)
+		local before = data.treadmillBoost
+		local boost, leftover = Products.treadmillBoostOutcome(before, product)
+		data.treadmillBoost = boost
+		if leftover <= 0 then
 			Net.notify(
 				player,
 				"success",
 				string.format(
 					"러닝머신 부스트 x%s! 러닝머신에서 오르는 속도가 %s배예요.",
-					Format.number(value),
-					Format.number(value)
+					Format.number(boost),
+					Format.number(boost)
 				)
 			)
 		else
+			local speed = leftover * Config.PRODUCT_SPEED_PER_ROBUX
+			Wallet.addSpeed(player, speed)
 			Net.notify(
 				player,
-				"info",
+				"success",
 				string.format(
-					"이미 러닝머신 부스트 x%s 가 있어서 그대로예요. (부스트는 가장 큰 것 하나만 적용돼요)",
-					Format.number(data.treadmillBoost)
+					"스피드 배수는 순서대로 열려요. 산 값(R$ %d)만큼 받았어요: 지금 부스트 x%s · 속도 +%s",
+					product.robux,
+					Format.number(boost),
+					Format.number(speed)
 				)
 			)
 		end

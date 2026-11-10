@@ -10,6 +10,7 @@
 
 	kind (효과는 서버 ProductService.grant):
 	  - "treadmillBoost": 러닝머신 부스트 ×value (영구). 산 것 중 **가장 큰 배수**만 적용 (곱이 아님).
+	      **순서대로만 열림** (2배를 사야 4배가 열림 — Products.nextTreadmillBoost · treadmillBoostState · treadmillBoostOutcome)
 	      러닝머신 1초 이득 = 레벨 이득 × 트레일 배율 × 부스트 (러닝머신 탈 때만, 걷는 속도 배수 아님)
 	  - "treadmillSkip": 러닝머신을 value 레벨로 바로 올림 (코인 안 듦). 지금 레벨 + 1 = value 일 때 파는 상품
 	  - "coins": 코인 +value · "speed": 속도 +value
@@ -195,6 +196,57 @@ function Products.treadmillSkipOutcome(level: number, product: Product): (number
 		current += 1
 	end
 	return current, budget
+end
+
+-- 스피드 배수는 순서대로만 열림 (사장님 2026-11-10: "2배를 사야 4배가 열리는 식") ------------------------
+-- 지금 배수 바로 다음 상품 (1 → boost_2, 2 → boost_4 …, 최대(2048)면 nil). 이것 하나만 살 수 있음
+function Products.nextTreadmillBoost(current: number): Product?
+	local now = if current == current then current else 1
+	for _, product in treadmillBoosts do
+		if (product.value or 0) > now then
+			return product
+		end
+	end
+	return nil
+end
+
+-- 카드 상태 (순수 — 클라 BoostController 가 씀):
+--   "active" 지금 적용 중 · "owned" 이미 지나온 배수 · "buy" 바로 다음 (살 수 있음) · "locked" 앞의 것을 먼저 사야 함
+function Products.treadmillBoostState(current: number, value: number): string
+	local now = if current == current then current else 1
+	if value == now then
+		return "active"
+	elseif value < now then
+		return "owned"
+	end
+	local nextProduct = Products.nextTreadmillBoost(now)
+	if nextProduct and nextProduct.value == value then
+		return "buy"
+	end
+	return "locked"
+end
+
+-- 부스트 상품을 지금 배수에서 샀을 때 받는 것 (순수 — 서버 ProductService.grant 가 씀): (새 배수, 남은 로벅스).
+--   - 바로 다음 배수면 그 배수 (남는 것 0)
+--   - 순서가 안 맞으면 (잠긴 것을 위조 클라로 삼 · 가진 것을 또 삼 · 두 번 누름): 예산 = 그 상품 로벅스. 다음 배수 가격부터
+--     차례로 빼며 살 수 있는 만큼만 올림, 남은 예산은 서버가 속도로 바꿔 줌 (× Config.PRODUCT_SPEED_PER_ROBUX).
+--     → boost_8 (8 R$) 하나로 2·4배 값(6 R$)을 건너뛸 수 없음 (×4 + 남은 2 R$ 는 속도). 돈을 받았으니 언제나 뭔가 줌
+function Products.treadmillBoostOutcome(current: number, product: Product): (number, number)
+	local now = if current == current then math.max(1, current) else 1
+	local nextProduct = Products.nextTreadmillBoost(now)
+	if nextProduct and nextProduct.key == product.key then
+		return nextProduct.value or now, 0
+	end
+	local budget = math.max(0, product.robux)
+	for _ = 1, #treadmillBoosts do
+		local step = Products.nextTreadmillBoost(now)
+		if not step or step.robux > budget then
+			break
+		end
+		budget -= step.robux
+		now = step.value or now
+	end
+	return now, budget
 end
 
 -- Creator Dashboard 에서 만든 id 가 붙어 있나 (false 면 클라는 "준비 중")

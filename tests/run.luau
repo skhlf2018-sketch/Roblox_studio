@@ -55,6 +55,10 @@ local specs = {
 	{ "night_carry.spec", require("./night_carry.spec") },
 	-- 9판 주임 검수 (로벅스 영수증 안전성 · 효과 · 먹이기 잔재 · 밤 귀가 · 상품 켜기 시나리오 · 무작위 요청+영수증)
 	{ "holes_v9.spec", require("./holes_v9.spec") },
+	-- 2026-11-10 스피드 배수 순서대로 열림 (2배를 사야 4배가 열림) 주임 검수 G 시리즈
+	{ "holes_boost_order.spec", require("./holes_boost_order.spec") },
+	-- 2026-11-10 닿아야만 잡힘 · 구역 안 드롭 = 바로 둥지 주임 검수 H 시리즈
+	{ "holes_touch_catch.spec", require("./holes_touch_catch.spec") },
 }
 
 local filters: { string } = {}

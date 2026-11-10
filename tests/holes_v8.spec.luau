@@ -1,7 +1,7 @@
 --!nocheck
 --[[
 	8판 (수석 2026-11-08, 사장님 지시 2026-11-08 8가지) — 새 규칙 테스트
-	  1 떨어뜨린 씨앗: 그 구역 안 = 그대로 / 밖 = 5초 뒤 둥지로 (EggRules.groundFate, 진짜 EggService)
+	  1 떨어뜨린 씨앗: 그 구역 안 = 바로 둥지로 (2026-11-10 사장님, 예전 "그대로 Stay" 는 없어짐) / 밖 = 바닥 → 5초 뒤 둥지로 (EggRules.groundFate = 언제나 Return, 진짜 EggService)
 	  2 튜토리얼 보상 1,000 코인
 	  3 러닝머신 가격 전부 ÷ 2 (해금 500)
 	  4 러닝머신 터치 신호 (TreadmillTouched · Attr TreadmillTouching, 0레벨도)
@@ -48,26 +48,44 @@ return function(T, Loader)
 	T.suite("8판: 1 떨어뜨린 씨앗 · 2 튜토리얼 1,000 · 3 러닝머신 ÷2")
 
 	T.test(
-		"groundFate: 그 씨앗 구역 안이면 그대로(Stay), 밖(앞·뒤 구역·허브·맵 밖·모름)이면 둥지로(Return)",
+		"groundFate (2026-11-10): 언제나 Return — Stay 는 안 나옴 (구역 안·구역 시작선·끝 바로 앞·앞뒤 구역·허브·맵 밖·모름 전부) · 구역 안은 dropOutcome 이 바로 둥지로 보냄",
 		function()
-			T.eq(EggRules.groundFate("lake", "lake"), "Stay")
-			T.eq(EggRules.groundFate("lake", MapLayout.zoneAt(240)), "Stay", "구역 시작선")
-			T.eq(EggRules.groundFate("lake", MapLayout.zoneAt(479.9)), "Stay", "구역 끝 바로 앞")
-			T.eq(EggRules.groundFate("lake", "forest"), "Return", "앞 구역")
-			T.eq(EggRules.groundFate("lake", "desert"), "Return", "뒤 구역")
-			T.eq(EggRules.groundFate("lake", "hub"), "Return")
+			for _, zoneHere in { "lake", MapLayout.zoneAt(240), MapLayout.zoneAt(479.9), "forest", "desert", "hub" } do
+				T.eq(
+					EggRules.groundFate("lake", zoneHere),
+					"Return",
+					"씨앗 구역 lake, 떨어진 곳 " .. tostring(zoneHere)
+				)
+			end
 			T.eq(EggRules.groundFate("lake", nil), "Return", "맵 밖")
 			T.eq(EggRules.groundFate(nil, "lake"), "Return", "구역을 모르는 씨앗")
+			T.eq(EggRules.groundFate(nil, nil), "Return")
 			T.eq(Config.DROPPED_EGG_RETURN_SECONDS, 5, "사장님: 돌아가는 시간 5초")
 			T.eq(Config.DROPPED_EGG_LIFETIME, nil, "7판 60초 사라짐 없앰")
-			-- 잡힘 결과(dropOutcome)는 7판 그대로
-			T.eq(EggRules.dropOutcome("guard", "lake", "lake"), "ReturnToNest")
-			T.eq(EggRules.dropOutcome("drop", "lake", "lake"), "DropHere")
+			-- 2026-11-10: 그 씨앗의 구역 안에서 놓치면 원인과 상관없이 바로 둥지로, 밖이면 그 자리
+			for _, cause in { "guard", "drop", "player", "death", "leave" } do
+				T.eq(EggRules.dropOutcome(cause, "lake", "lake"), "ReturnToNest", cause .. " 구역 안")
+				T.eq(
+					EggRules.dropOutcome(cause, "lake", MapLayout.zoneAt(240)),
+					"ReturnToNest",
+					cause .. " 구역 시작선"
+				)
+				T.eq(
+					EggRules.dropOutcome(cause, "lake", MapLayout.zoneAt(479.9)),
+					"ReturnToNest",
+					cause .. " 구역 끝 바로 앞"
+				)
+				for _, outside in { "forest", "desert", "hub" } do
+					T.eq(EggRules.dropOutcome(cause, "lake", outside), "DropHere", cause .. " 구역 밖 " .. outside)
+				end
+				T.eq(EggRules.dropOutcome(cause, "lake", nil), "DropHere", cause .. " 맵 밖")
+				T.eq(EggRules.dropOutcome(cause, nil, "lake"), "DropHere", cause .. " 구역을 모르는 씨앗")
+			end
 		end
 	)
 
 	T.test(
-		"진짜 EggService: 방망이(player)·DropEgg 로 구역 안에 떨어진 씨앗은 다음 초기화까지 그대로, 구역 밖 DropEgg 는 5초 카운트다운 뒤 원래 둥지로",
+		"진짜 EggService (2026-11-10): 방망이(player)·DropEgg 로 구역 안에서 놓친 씨앗은 바로 둥지로 (바닥 씨앗 0), 구역 밖 DropEgg 는 5초 카운트다운 뒤 원래 둥지로",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local EggService = H.server("Services/EggService")
@@ -90,18 +108,30 @@ return function(T, Loader)
 					H.teleport(p, egg.Position.X, egg.Position.Y, egg.Position.Z)
 					egg:FindFirstChild("StealPrompt").Triggered:Fire(p)
 				end
-				-- 방망이에 맞아 구역 안에 떨어짐 → 그대로 (5분 가까이)
+				local function droppedCount()
+					local n = 0
+					for _, part in H.map.folders.Eggs.children do
+						if part:GetAttribute("EggState") == "Dropped" then
+							n += 1
+						end
+					end
+					return n
+				end
+				-- 방망이에 맞아 구역 안에서 놓침 → 바로 둥지로 (바닥에 안 남음)
 				local egg = nestEgg("desert")
+				local nestHome = egg.Position
 				pick(egg)
 				local x, z = H.zoneSpot("desert")
 				H.teleport(p, x, 3, z)
 				EggService.knockOut(p, H.vec(x + 3, 3, z), "player", "Bob", 1)
-				T.eq(egg:GetAttribute("EggState"), "Dropped")
+				T.eq(egg:GetAttribute("EggState"), "Nest", "구역 안: 방망이에 맞아도 바로 둥지로")
 				T.eq(egg:GetAttribute("ExpiresAt"), nil, "카운트다운 없음")
+				T.eq(egg.Position.X, nestHome.X)
+				T.eq(droppedCount(), 0, "바닥 씨앗 0")
 				H.advance(280)
-				T.eq(egg:GetAttribute("EggState"), "Dropped", "280초 뒤에도 그대로")
-				T.eq(egg.Position.X, x)
-				-- 다음 초기화에 사라지고 둥지는 새 씨앗
+				T.eq(egg:GetAttribute("EggState"), "Nest", "280초 뒤에도 둥지")
+				T.eq(droppedCount(), 0)
+				-- 다음 초기화: 새 씨앗
 				H.setPhase("Intermission", 2)
 				T.truthy(egg.destroyed)
 				H.setPhase("Day", 2)
@@ -689,7 +719,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"진짜 GuardianService + 진짜 EggService: 느린 사람(1초)은 둥지에서 주운 뒤 약 1초에 잡혀 씨앗이 둥지로 · 다음 구역 경계를 넘으면 즉시 둥지로 · 추천 속도면 계속 자유",
+		"진짜 GuardianService + 진짜 EggService (2026-11-10 닿아야 잡힘): 느린 사람(1초)도 시간이 지났다고 안 잡힘 · 경비에 닿으면 그 틱에 잡혀 씨앗이 둥지로 · 다음 구역 경계를 넘으면 즉시 둥지로 · 추천 속도 사람도 닿으면 잡힘, 안 닿으면 자유",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local EggService = H.server("Services/EggService")
@@ -722,9 +752,19 @@ return function(T, Loader)
 				H.advance(0.8)
 				T.eq(egg:GetAttribute("EggState"), "Carried", "0.8초: 아직")
 				H.advance(0.5)
-				T.eq(egg:GetAttribute("EggState"), "Nest", "약 1초: 잡혀서 둥지로 (구역 안)")
+				T.eq(egg:GetAttribute("EggState"), "Carried", "1초가 지나도 경비에 안 닿았으면 안 잡힘")
+				H.advance(4)
+				T.eq(egg:GetAttribute("EggState"), "Carried", "5초가 지나도 안 닿았으면 안 잡힘")
+				T.eq(#H.sent(p, "Caught"), 0)
+				-- 경비에 닿음 (경비 집 바로 옆) → 그 틱에 잡혀 씨앗은 둥지로 (구역 안)
+				local guardHome = MapLayout.guardHome("lake")
+				session.moveExemptUntil = H.clock() + 5
+				H.teleport(p, guardHome.x + 3, 3, guardHome.z)
+				H.advance(0.3)
+				T.eq(egg:GetAttribute("EggState"), "Nest", "닿으면 잡혀서 둥지로 (구역 안)")
 				T.eq(egg.Position.X, home.X)
 				local caught = H.sent(p, "Caught")
+				T.eq(#caught, 1, "한 번만")
 				T.eq(caught[#caught][1].cause, "guard")
 				T.eq(caught[#caught][1].eggOutcome, "ReturnToNest")
 				-- 기절이 풀린 뒤, 다음 구역(사막) 경계를 넘으면 즉시
@@ -748,8 +788,14 @@ return function(T, Loader)
 				session.moveExemptUntil = H.clock() + 5
 				H.teleport(p, -60, 3, lake.zMax + 30)
 				H.advance(3)
-				T.eq(#H.sent(p, "Caught"), before, "도망칠 수 있으면 자유")
+				T.eq(#H.sent(p, "Caught"), before, "도망칠 수 있으면 멀리서는 자유")
 				T.eq(egg3:GetAttribute("EggState"), "Carried")
+				-- 그래도 경비에 닿으면 빠른 사람도 잡힘 (2026-11-10)
+				session.moveExemptUntil = H.clock() + 5
+				H.teleport(p, guardHome.x + 3, 3, guardHome.z)
+				H.advance(0.3)
+				T.eq(#H.sent(p, "Caught"), before + 1, "빠른 사람도 경비에 닿으면 잡힘")
+				T.eq(egg3:GetAttribute("EggState"), "Nest")
 			end)
 		end
 	)

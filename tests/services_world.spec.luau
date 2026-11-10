@@ -1336,21 +1336,27 @@ return function(T, Loader)
 
 	------------------------------------------------------------------
 	T.suite(
-		"65번 경비: 둥지 무리 오른쪽(벽 쪽)에서 자고, 둥지에서 훔친 지 1.78초 뒤에 깨어남 (사장님 2026-11-10)"
+		"65·66번 경비: 둥지 무리 오른쪽(벽 쪽)에서 자고, 둥지에서 훔치면 바로 빨간 느낌표(State Alert) → Config.GUARD_WAKE_SECONDS 뒤에 쫓아옴 (사장님 2026-11-10)"
 	)
 
-	local WAKE = 1.78
+	-- 숫자를 박지 않음: 깨어나는 시간·경비 한 틱은 Config 에서 (66번: 훔치면 바로 느낌표, 0.5초 뒤 쫓아옴)
+	local ConfigData = Loader.require("ReplicatedStorage/Shared/Data/Config")
+	local WAKE = ConfigData.GUARD_WAKE_SECONDS
+	local TICK = ConfigData.GUARD_TICK_SECONDS
+	local STEP = 0.01 -- watch 가 시간을 흘리는 단위
+	local ALERT_BY = TICK + 0.02 -- 훔친 뒤 이 시간이 지나면 (첫 경비 틱이 한 번은 돌았으므로) State 는 Alert
 
 	-- 숲 씨앗을 "둥지에서 방금" 집은 것처럼 (fake EggService 씨앗에 stolenAt = 지금)
 	local function stealForest(w, player, speed, stolenAt)
 		return carryForest(w, player, speed, 0.10, { stolenAt = stolenAt or w.H.clock() })
 	end
 
-	-- 0.01초씩 limit 초 동안: 처음 잡힌 때 · 처음 대상이 된 때 · 그 전까지 State 가 계속 Sleeping 이었나
+	-- 0.01초씩 limit 초 동안: 처음 잡힌 때 · 처음 대상이 된 때 · 본 State 들(seen) · 처음 Alert 가 된 때(alertAt)
+	--   · 훔친 지 ALERT_BY 가 지난 뒤에 Alert 가 아니었던 State(notAlert, 없으면 nil)
 	local function watch(w, player, model, limit, t0)
 		local start = t0 or w.H.clock()
 		local caughtAt, targetAt = nil, nil
-		local sleptUntil = 0
+		local seen, alertAt, notAlert = {}, nil, nil
 		local before = 0
 		for _, k in w.H.eggs.knockouts do
 			if k.player == player then
@@ -1358,7 +1364,7 @@ return function(T, Loader)
 			end
 		end
 		while w.H.clock() - start < limit - 1e-9 do
-			w.H.advance(0.01)
+			w.H.advance(STEP)
 			local elapsed = w.H.clock() - start
 			local n = 0
 			for _, k in w.H.eggs.knockouts do
@@ -1372,21 +1378,30 @@ return function(T, Loader)
 			if not targetAt and model:GetAttribute("TargetUserId") == player.UserId then
 				targetAt = elapsed
 			end
-			if model:GetAttribute("State") == "Sleeping" and sleptUntil >= elapsed - 0.011 then
-				sleptUntil = elapsed
+			local state = model:GetAttribute("State")
+			seen[state] = true
+			if state == "Alert" and not alertAt then
+				alertAt = elapsed
+			end
+			if state ~= "Alert" and elapsed >= ALERT_BY and not notAlert then
+				notAlert = state
 			end
 		end
-		return caughtAt, targetAt, sleptUntil
+		return caughtAt, targetAt, seen, alertAt, notAlert
 	end
 
 	T.test(
-		"자는 자리 (순수): 21구역 전부 경비 집은 둥지 무리의 오른쪽 = 벽 쪽(−x) — 모든 둥지보다 x 가 작고, 벽(−110) 안쪽 10, 가장 벽 쪽 둥지에서 약 10.4 · 무리와 같은 z · 표지판·장식은 경비에서 25 이상 (거대 경비 겉모습 밖) · Config.GUARD_WAKE_SECONDS = 1.78 · GuardLogic.isWaking 경계 (1.77 자는 중 / 1.78·1.79 깸 / nil·NaN = 바로 깸)",
+		"자는 자리 (순수): 21구역 전부 경비 집은 둥지 무리의 오른쪽 = 벽 쪽(−x) — 모든 둥지보다 x 가 작고, 벽(−110) 안쪽 10, 가장 벽 쪽 둥지에서 약 10.4 · 무리와 같은 z · 표지판·장식은 경비에서 25 이상 (거대 경비 겉모습 밖) · Config.GUARD_WAKE_SECONDS 는 사람이 느낌표를 볼 만큼(경비 한 틱 이상) 짧고(1초 이하) · GuardLogic.isWaking 경계 (WAKE − 0.01 느낌표 중 / WAKE · WAKE + 0.01 깸 / nil·NaN = 바로 깸)",
 		function()
 			local H = ServerHarness.install(Loader, T)
 			local MapLayout = H.shared("Data/MapLayout")
 			local Config = H.shared("Data/Config")
 			local GuardLogic = H.server("Logic/GuardLogic")
 			T.eq(Config.GUARD_WAKE_SECONDS, WAKE)
+			T.truthy(
+				WAKE >= TICK and WAKE <= 1,
+				"깨어나는 시간 " .. WAKE .. " = 경비 한 틱(" .. TICK .. ") 이상 1초 이하"
+			)
 			T.eq(MapLayout.NEST_CLUSTER.guardDx, -18)
 			local function dist(a, b)
 				return math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2)
@@ -1415,10 +1430,11 @@ return function(T, Loader)
 			end
 			T.eq(zones, 21)
 			local t = 5000
-			T.truthy(GuardLogic.isWaking(t, t, WAKE), "집은 순간: 자는 중")
-			T.truthy(GuardLogic.isWaking(t, t + 1.77, WAKE), "1.77초: 아직 자는 중")
-			T.falsy(GuardLogic.isWaking(t, t + 1.78, WAKE), "1.78초: 깸")
-			T.falsy(GuardLogic.isWaking(t, t + 1.79, WAKE), "1.79초: 깸")
+			T.truthy(GuardLogic.isWaking(t, t, WAKE), "집은 순간: 아직 안 쫓음 (느낌표)")
+			T.truthy(GuardLogic.isWaking(t, t + WAKE - 0.01, WAKE), "WAKE − 0.01: 아직 안 쫓음")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE, WAKE), "WAKE: 쫓기 시작")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE + 0.01, WAKE), "WAKE + 0.01: 쫓기 시작")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE + TICK, WAKE), "WAKE + 한 틱: 쫓기 시작")
 			T.falsy(GuardLogic.isWaking(nil, t, WAKE), "바닥에서 주움(nil): 바로 깸")
 			T.falsy(GuardLogic.isWaking(0 / 0, t, WAKE), "NaN: 바로 깸 (안 터짐)")
 			T.falsy(GuardLogic.isWaking(t, 0 / 0, WAKE))
@@ -1427,30 +1443,38 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지에서 훔치고 경비 몸에 닿은 채 서 있어도 1.77초까지는 안 잡히고 안 쫓음 (State Sleeping · TargetUserId 0) → 1.78초가 지난 첫 틱(1.78 ~ 1.89초)에 잡힘 · 한 번만",
+		"둥지에서 훔치고 경비 몸에 닿은 채 서 있어도 WAKE − 0.01초까지는 안 잡히고 안 쫓음 (State Alert — Sleeping 아님 · TargetUserId 0 · 경비 안 움직임) → WAKE 가 지난 첫 틱(WAKE ~ WAKE + 한 틱)에 잡힘 · 한 번만",
 		function()
 			local w = guardWorld()
 			local model = guardOf(w, "forest")
+			local humanoid = humanoidOf(model)
 			local t0 = w.H.clock()
 			stealForest(w, w.player, 5, t0) -- 많이 모자람 (도망 못 침)
 			nearGuard(w, w.player, 0, 0)
-			local caughtAt, targetAt, sleptUntil = watch(w, w.player, model, 1.77, t0)
-			T.eq(caughtAt, nil, "1.77초: 닿아 있어도 안 잡힘")
-			T.eq(targetAt, nil, "1.77초: 안 쫓음")
-			T.eq(model:GetAttribute("State"), "Sleeping", "1.77초: 계속 잠")
+			local moves0 = humanoid.moves
+			local caughtAt, targetAt, seen, alertAt, notAlert = watch(w, w.player, model, WAKE - 0.01, t0)
+			T.eq(caughtAt, nil, "WAKE − 0.01: 닿아 있어도 안 잡힘")
+			T.eq(targetAt, nil, "WAKE − 0.01: 안 쫓음")
+			T.eq(model:GetAttribute("State"), "Alert", "WAKE − 0.01: 느낌표 (Sleeping 아님)")
 			T.eq(model:GetAttribute("TargetUserId"), 0)
-			T.truthy(sleptUntil >= 1.76, "처음부터 계속 Sleeping " .. sleptUntil)
+			T.eq(notAlert, nil, "첫 틱 뒤로는 계속 Alert " .. tostring(notAlert))
+			T.truthy(alertAt ~= nil and alertAt <= TICK + STEP + 1e-6, "첫 틱에 Alert " .. tostring(alertAt))
+			T.truthy(not seen.Chase and not seen.Return, "Chase·Return 은 한 번도 안 봄")
+			T.eq(humanoid.moves, moves0, "Alert 동안 경비는 걸으라는 명령을 안 받음 (제자리)")
 			local mid = w.H.clock() - t0
 			local later = watch(w, w.player, model, 0.2)
-			T.truthy(w.H.clock() - t0 > 1.9, "1.97초까지 봄")
-			T.eq(#w.H.eggs.knockouts, 1, "1.78초가 지나면 닿는 틱에 잡힘 (한 번)")
+			T.truthy(w.H.clock() - t0 >= WAKE + 0.15, "WAKE + 0.15초까지 봄")
+			T.eq(#w.H.eggs.knockouts, 1, "WAKE 가 지나면 닿는 틱에 잡힘 (한 번)")
 			local k = w.H.eggs.knockouts[1]
 			T.eq(k.cause, "guard")
 			T.eq(k.outcome, nil, "보통 잡힘 (경계 잡힘 아님)")
 			T.truthy(later ~= nil, "잡힌 때를 기록")
-			-- 잡힌 때 = 1.78 ~ 1.89초 (1.78초가 지난 첫 경비 틱)
+			-- 잡힌 때 = WAKE ~ WAKE + 한 틱 (WAKE 가 지난 첫 경비 틱)
 			local caughtElapsed = mid + (later or 0)
-			T.truthy(caughtElapsed >= WAKE - 1e-6 and caughtElapsed <= WAKE + 0.12, "잡힌 때 " .. caughtElapsed)
+			T.truthy(
+				caughtElapsed >= WAKE - 1e-6 and caughtElapsed <= WAKE + TICK + STEP + 1e-6,
+				"잡힌 때 " .. caughtElapsed
+			)
 			w.H.advance(3)
 			T.eq(#w.H.eggs.knockouts, 1, "또 안 잡힘")
 			w.H.uninstall()
@@ -1458,31 +1482,32 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지에서 훔치고 멀리 있으면: 1.77초까지는 대상이 아님 (Sleeping) → 1.78초가 지난 첫 틱부터 Chase · 그 사람이 대상 · 그 뒤 10초가 지나도 닿지 않으면 안 잡힘 (1.78초는 깨어나는 시간일 뿐)",
+		"둥지에서 훔치고 멀리 있으면: WAKE − 0.01초까지는 대상이 아님 (State Alert) → WAKE 가 지난 첫 틱부터 Chase · 그 사람이 대상 · 그 뒤 10초가 지나도 닿지 않으면 안 잡힘 (WAKE 는 깨어나는 시간일 뿐)",
 		function()
 			local w = guardWorld()
 			local model = guardOf(w, "forest")
 			local t0 = w.H.clock()
 			stealForest(w, w.player, 5, t0)
 			place(w, w.player, 30, -60) -- 경비 집에서 멂
-			local caughtAt, targetAt, sleptUntil = watch(w, w.player, model, 1.77, t0)
-			T.eq(targetAt, nil, "1.77초: 아직 대상 아님")
+			local caughtAt, targetAt, _, _, notAlert = watch(w, w.player, model, WAKE - 0.01, t0)
+			T.eq(targetAt, nil, "WAKE − 0.01: 아직 대상 아님")
 			T.eq(caughtAt, nil)
-			T.truthy(sleptUntil >= 1.76, "1.77초까지 Sleeping " .. sleptUntil)
-			local _, target2 = watch(w, w.player, model, 0.15) -- 1.77 → 1.92
-			T.truthy(target2 ~= nil, "1.92초 안에 대상이 됨")
+			T.eq(model:GetAttribute("State"), "Alert", "WAKE − 0.01: 느낌표")
+			T.eq(notAlert, nil, "첫 틱 뒤로는 계속 Alert " .. tostring(notAlert))
+			local _, target2 = watch(w, w.player, model, TICK + 0.05) -- WAKE − 0.01 → WAKE + 한 틱 + 0.04
+			T.truthy(target2 ~= nil, "WAKE + 한 틱 안에 대상이 됨")
 			T.eq(model:GetAttribute("State"), "Chase", "깨어나 쫓음")
 			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId)
 			w.H.uninstall()
-			-- 처음 대상이 된 때 = 1.78 ~ 1.89초
+			-- 처음 대상이 된 때 = WAKE ~ WAKE + 한 틱
 			local w2 = guardWorld()
 			local model2 = guardOf(w2, "forest")
 			local s0 = w2.H.clock()
 			stealForest(w2, w2.player, 5, s0)
 			place(w2, w2.player, 30, -60)
-			local _, firstTarget = watch(w2, w2.player, model2, 2.0, s0)
+			local _, firstTarget = watch(w2, w2.player, model2, WAKE + 0.2, s0)
 			T.truthy(
-				firstTarget ~= nil and firstTarget >= WAKE - 1e-6 and firstTarget <= WAKE + 0.12,
+				firstTarget ~= nil and firstTarget >= WAKE - 1e-6 and firstTarget <= WAKE + TICK + STEP + 1e-6,
 				"처음 대상이 된 때 " .. tostring(firstTarget)
 			)
 			w2.H.advance(10)
@@ -1493,15 +1518,17 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"바닥에 떨어진 씨앗을 다시 주우면 (stolenAt 없음) 지연 없음: 첫 틱에 쫓고, 닿아 있으면 첫 틱(0.1초 안)에 잡힘 — 내려놓고 다시 줍기로 1.78초 무적을 반복하지 못함",
+		"바닥에 떨어진 씨앗을 다시 주우면 (stolenAt 없음) 지연 없음: 느낌표(Alert) 없이 첫 틱에 쫓고, 닿아 있으면 첫 틱(0.1초 안)에 잡힘 — 내려놓고 다시 줍기로 깨어나는 시간 무적을 반복하지 못함",
 		function()
 			local w = guardWorld()
 			local model = guardOf(w, "forest")
 			carryForest(w, w.player, 5, 0.10) -- 바닥에서 주운 씨앗 = stolenAt 없음
 			place(w, w.player, 30, -60)
 			local t0 = w.H.clock()
-			local _, targetAt = watch(w, w.player, model, 0.15, t0)
-			T.truthy(targetAt ~= nil and targetAt <= 0.12, "첫 틱에 쫓음 " .. tostring(targetAt))
+			local _, targetAt, seen = watch(w, w.player, model, TICK + 0.05, t0)
+			T.truthy(targetAt ~= nil and targetAt <= TICK + STEP + 1e-6, "첫 틱에 쫓음 " .. tostring(targetAt))
+			T.truthy(not seen.Alert, "바닥에서 주운 씨앗은 느낌표(Alert) 없이 바로 Chase")
+			T.eq(model:GetAttribute("State"), "Chase")
 			nearGuard(w, w.player, 0, 0)
 			local t1 = w.H.clock()
 			local caughtAt = watch(w, w.player, model, 0.15, t1)
@@ -1511,7 +1538,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"경비가 이미 다른 사람(A, 바닥에서 주움 · 도망 가능 · 멀리)을 쫓는 중에 B 가 둥지에서 훔침: B 는 1.77초까지 대상도 아니고 닿아도 안 잡힘 (경비는 A 를 계속 쫓음) → 1.78초가 지나면 B 가 대상 (도망 못 치는 사람 먼저) · 닿아 있던 C 는 그 틱에 잡힘",
+		"경비가 이미 다른 사람(A, 바닥에서 주움 · 도망 가능 · 멀리)을 쫓는 중에 B 가 둥지에서 훔침: B 는 WAKE − 0.01초까지 대상도 아니고 닿아도 안 잡힘 (경비는 A 를 계속 쫓음 — State 는 Alert 가 아니라 Chase 그대로) → WAKE 가 지나면 B 가 대상 (도망 못 치는 사람 먼저) · 닿아 있던 C 는 그 틱에 잡힘",
 		function()
 			local w = guardWorld()
 			local model = guardOf(w, "forest")
@@ -1531,12 +1558,14 @@ return function(T, Loader)
 			place(w, b, 20, -40)
 			stealForest(w, c, 5, t0) -- 도망 못 침 · 경비 몸에 닿음
 			nearGuard(w, c, 1, 0)
-			local _, bTarget = watch(w, b, model, 1.77, t0)
-			T.eq(bTarget, nil, "1.77초: B 는 대상 아님")
-			T.eq(model:GetAttribute("TargetUserId"), a.UserId, "1.77초: 계속 A")
-			T.eq(#w.H.eggs.knockouts, 0, "1.77초: 닿아 있는 C 도 안 잡힘")
-			watch(w, b, model, 0.15)
-			T.eq(model:GetAttribute("TargetUserId"), b.UserId, "1.92초: 도망 못 치는 B 가 대상")
+			local _, bTarget, seen = watch(w, b, model, WAKE - 0.01, t0)
+			T.eq(bTarget, nil, "WAKE − 0.01: B 는 대상 아님")
+			T.eq(model:GetAttribute("TargetUserId"), a.UserId, "WAKE − 0.01: 계속 A")
+			T.eq(model:GetAttribute("State"), "Chase", "A 를 쫓는 중에는 Alert 가 아니라 Chase 그대로")
+			T.truthy(not seen.Alert, "A 를 쫓는 동안 느낌표는 안 뜸")
+			T.eq(#w.H.eggs.knockouts, 0, "WAKE − 0.01: 닿아 있는 C 도 안 잡힘")
+			watch(w, b, model, TICK + 0.05)
+			T.eq(model:GetAttribute("TargetUserId"), b.UserId, "WAKE + 한 틱: 도망 못 치는 B 가 대상")
 			local caughtC = 0
 			for _, k in w.H.eggs.knockouts do
 				if k.player == c then
@@ -1550,7 +1579,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"경계 규칙은 1.78초와 상관없음: 둥지에서 방금 훔친 사람도 도망 못 치는 채로 다음 구역 경계(zMax)를 넘으면 0.25초 안에 잡히고 씨앗은 둥지로 (ReturnToNest) · 도망 칠 수 있으면 넘어가도 자유",
+		"경계 규칙은 깨어나는 시간(WAKE)과 상관없음: 둥지에서 방금 훔친 사람도 도망 못 치는 채로 다음 구역 경계(zMax)를 넘으면 0.25초 안에 잡히고 씨앗은 둥지로 (ReturnToNest) · 도망 칠 수 있으면 넘어가도 자유",
 		function()
 			local w = guardWorld()
 			local model = guardOf(w, "forest")
@@ -1560,9 +1589,10 @@ return function(T, Loader)
 			w.H.teleport(w.player, -50, 3, zMax - 0.5)
 			w.H.advance(0.05)
 			w.H.teleport(w.player, -50, 3, zMax + 0.5)
+			local w0 = w.H.clock()
 			local caughtAt = watch(w, w.player, model, 0.3)
 			T.truthy(caughtAt ~= nil and caughtAt <= 0.25, "경계를 넘으면 즉시 " .. tostring(caughtAt))
-			T.truthy(w.H.clock() - t0 < WAKE, "1.78초 전에 잡힘")
+			T.truthy(w0 + (caughtAt or math.huge) - t0 < WAKE, "깨어나기(WAKE) 전에 잡힘 (경계는 즉시)")
 			local k = w.H.eggs.knockouts[1]
 			T.eq(k.outcome, "ReturnToNest", "씨앗은 둥지로")
 			-- 도망 칠 수 있으면 방금 훔쳐도 넘어가도 자유 (닿지 않는 한)
@@ -1576,7 +1606,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"진짜 EggService: 둥지에서 집으면 egg.stolenAt = 집은 시각 · 구역 밖 바닥에서 다시 주우면 nil (지연 없음) · 둥지로 돌아간 씨앗은 지워짐 · 진짜 경비도 1.78초 동안 안 쫓고 그 뒤 쫓음",
+		"진짜 EggService: 둥지에서 집으면 egg.stolenAt = 집은 시각 · 구역 밖 바닥에서 다시 주우면 nil (지연 없음) · 둥지로 돌아간 씨앗은 지워짐 · 진짜 경비도 WAKE 동안 느낌표(Alert)만 띄우고 안 쫓다가 그 뒤 쫓음",
 		function()
 			local w = eggWorld()
 			local GuardianService = w.H.server("Services/GuardianService")
@@ -1593,11 +1623,11 @@ return function(T, Loader)
 			T.eq(obj.stolenAt, t0, "둥지에서 집은 시각")
 			local range = w.H.MapLayout.biome("forest")
 			w.H.teleport(w.player, 30, 3, range.centerZ) -- 구역 안, 경비에서 멂
-			w.H.advance(1.7)
-			T.eq(model:GetAttribute("TargetUserId"), 0, "1.7초: 안 쫓음")
-			T.eq(model:GetAttribute("State"), "Sleeping")
-			w.H.advance(0.25)
-			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId, "1.95초: 쫓음")
+			w.H.advance(WAKE - 0.01)
+			T.eq(model:GetAttribute("TargetUserId"), 0, "WAKE − 0.01: 안 쫓음")
+			T.eq(model:GetAttribute("State"), "Alert", "WAKE − 0.01: 느낌표 (Sleeping 아님)")
+			w.H.advance(TICK + 0.05)
+			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId, "WAKE + 한 틱: 쫓음")
 			T.eq(model:GetAttribute("State"), "Chase")
 			-- 구역 밖(허브 — 이 세상엔 배달이 없음)에서 내려놓고 5초 안에 다시 주움 → stolenAt 없음
 			w.H.teleport(w.player, 30, 3, -10)

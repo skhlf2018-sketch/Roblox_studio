@@ -1633,3 +1633,9 @@ Lune **599 통과 · 실패 0** (588 + 새 11, 건너뜀 3) · smoke client OK �
 **공짜 씨앗이 무한히 쌓이는 길: 없음.** 산 씨앗만 상한을 넘고, 심어서 49 이하가 돼야 보통 씨앗이 들어옴 (정원에서 다시 뽑은 씨앗은 bought 가 사라지고 가방 50 미만일 때만). **시간만 지나면 잡히는 길: 없음** (60초도 안 잡힘).
 발견: **K-1 낮음** `GuardLogic.luau:104-109` `isWaking` 은 stolenAt 이 미래·+inf 면 경과가 음수라 영원히 자는 중(무적) — 서버만 os.clock() 으로 쓰므로 지금은 닿을 길 없음, `now - stolenAt >= 0` 하한만 넣으면 됨 (T.skip 2개로 재현). **K-2 참고** 가방 상한 셈(`BaseService.luau:530·560·684`)은 산 씨앗까지 합친 `#data.eggs` 라서 슈퍼 씨앗을 N개 사면 N개를 심어 50 밑으로 내릴 때까지 보통 씨앗 배달·사쿠라·정원 뽑기가 막힘 (설계대로일 수 있음, 안내 글 없음). **K-3 참고** 산 씨앗 개수 상한은 코드에 없음 — 9,999개는 불러와지고 약 1.5MB, 약 28,000개(≈1.7억 R$)부터 DataStore 4MB 를 넘음 (현실적이지 않음).
 **검사**: Lune **644 통과 · 실패 0** (626 + 18, 건너뜀 5 = 3 + K-1 2) · smoke client OK · smoke visuals OK · stylua `src tests` 틀린 파일 0 · selene `src` 0/0 · luau-analyze 0/0/0/0. src 는 안 고침.
+
+## 32. 느낌표 0.3초 (L 시리즈, 주임, 2026-11-10)
+
+사장님 "훔치면 빨간 느낌표가 뜬 채로 있다가 쫓아와" → 본부장이 `GUARD_WAKE_SECONDS` 1.78 → 0.5 → **0.3** 으로 줄이고 경비 `State "Alert"` + 머리 위 `AlertMark` 를 넣음. 옛 시험 10개(services_world 5 · holes_v8b 1 · holes_touch_catch 1 · holes_seed_and_wake 3)를 숫자 박지 않고 `Config.GUARD_WAKE_SECONDS`·`GUARD_TICK_SECONDS` 로 계산하게 고치고 (깨어나는 동안 State = Alert, "WAKE 가 지난 첫 틱"), 지킨 불변식(시간으로는 안 잡힘·한 번만·바닥 줍기 지연 없음) 그대로.
+새 검사 2개: L1 (holes_seed_and_wake, 21구역 × 멀리/닿음 — 훔친 첫 틱에 Alert · 경비 제자리 · 대상 0 · WAKE 뒤 Chase/잡힘) · smoke_visuals AlertMark (경비 21마리마다 1개, Alert 에서만 켜짐, SleepZ 꺼짐). src 문제: 없음.
+**검사**: Lune **647 통과 · 실패 0** (건너뜀 3) · smoke client OK · smoke visuals OK · stylua `src tests` 틀린 파일 0 · selene `src` 0/0 · luau-analyze 0/0/0/0

@@ -84,8 +84,8 @@ return function(T, Loader)
 		return nil
 	end
 
-	-- 65번 (2026-11-10): 둥지에서 집으면 경비는 1.78초(GUARD_WAKE_SECONDS) 뒤에 깨어남 — 그 규칙은 services_world 에서 따로 봄.
-	-- 이 파일의 시험은 "경비가 깨어난 뒤" 규칙이라, 집자마자 깨어난 것으로 침 (집은 시각을 1.78초 앞으로)
+	-- 65·66번 (2026-11-10): 둥지에서 집으면 경비는 빨간 느낌표(Alert)를 띄우고 GUARD_WAKE_SECONDS 뒤에 쫓아옴 — 그 규칙은 services_world 에서 따로 봄.
+	-- 이 파일의 시험은 "경비가 깨어난 뒤" 규칙이라, 집자마자 깨어난 것으로 침 (집은 시각을 GUARD_WAKE_SECONDS 앞으로)
 	local function pickUp(H, p, part)
 		H.teleport(p, part.Position.X, part.Position.Y + 1, part.Position.Z)
 		part:FindFirstChild("StealPrompt").Triggered:Fire(p)
@@ -2221,7 +2221,7 @@ return function(T, Loader)
 
 				-- 씨앗·경비 불변식
 				local VALID_STATE = { Nest = true, Carried = true, Dropped = true }
-				local VALID_GUARD = { Sleeping = true, Chase = true, Return = true }
+				local VALID_GUARD = { Sleeping = true, Alert = true, Chase = true, Return = true } -- 66번: Alert = 훔친 직후 느낌표
 				local seen = { stay = 0, ret = 0, carried = 0, nest = 0 }
 				local function checkWorld(label)
 					local carriedBy = {}

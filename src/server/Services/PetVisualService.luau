@@ -1209,6 +1209,7 @@ end
 -- 경비 겉모습 (거대함: 키 25~40 스터드)
 --   HumanoidRootPart 에 Weld "GuardPose" 로 붙임 (C0 를 바꿔 서기/자기 자세 전환).
 --   State == "Idle"/"Sleeping" → 자는 자세(낮추고 앞으로 살짝 엎드림) + 머리 위 파란 Z (BillboardGui "SleepZ")
+--   State == "Alert" (66번) → 일어선 자세 + 머리 위 빨간 느낌표 (BillboardGui "AlertMark"), 0.5초
 --   State == "Chase" → 일어선 자세 + 빨간 테두리(Highlight "GuardGlow"). 그 밖("Return" 등) → 일어섬, 테두리 끔
 ------------------------------------------------------------------
 
@@ -1222,6 +1223,7 @@ type GuardInfo = {
 	stand: CFrame,
 	sleep: CFrame,
 	z: BillboardGui,
+	alert: BillboardGui,
 	glow: Highlight,
 }
 local guardInfo: { [Model]: GuardInfo } = {}
@@ -1273,6 +1275,37 @@ local function sleepZ(adornee: BasePart, h: number): BillboardGui
 	return gui
 end
 
+-- 66번 (사장님 2026-11-10): 씨앗을 훔치면 경비 머리 위에 빨간 느낌표 (State "Alert" 동안 — BillboardGui "AlertMark")
+local function alertMark(adornee: BasePart, h: number): BillboardGui
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "AlertMark"
+	gui.Adornee = adornee
+	gui.LightInfluence = 0
+	gui.MaxDistance = 400
+	gui.AlwaysOnTop = true
+	local size = math.max(10, h * 0.5)
+	gui.Size = UDim2.fromScale(size, size)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, h + size * 0.45, 0)
+	gui.Enabled = false
+	local label = Instance.new("TextLabel")
+	label.Name = "Mark"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = "!"
+	label.TextColor3 = Color3.fromRGB(255, 40, 40)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(255, 255, 255)
+	stroke.Thickness = 4
+	stroke.LineJoinMode = Enum.LineJoinMode.Round
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
+	stroke.Parent = label
+	label.Parent = gui
+	gui.Parent = adornee
+	return gui
+end
+
 local function isSleeping(state: any): boolean
 	return state == nil or state == "Idle" or state == "Sleeping"
 end
@@ -1286,8 +1319,9 @@ local function applyGuardState(guard: Model)
 	local sleeping = isSleeping(state)
 	info.pose.C0 = if sleeping then info.sleep else info.stand
 	info.z.Enabled = sleeping
+	info.alert.Enabled = state == "Alert" -- 66번: 훔치면 0.5초 동안 빨간 느낌표 (일어선 자세)
 	info.glow.Enabled = state == "Chase"
-	setGuardFace(info.visual, state == "Chase") -- 쫓을 때만 눈 뜨고 화난 눈썹
+	setGuardFace(info.visual, state == "Chase" or state == "Alert") -- 쫓을 때·느낌표 때 눈 뜨고 화난 눈썹
 end
 
 local function dressGuard(guard: Model)
@@ -1344,6 +1378,7 @@ local function dressGuard(guard: Model)
 	pose.Parent = vroot
 
 	local z = sleepZ(vroot, h)
+	local alert = alertMark(vroot, h)
 
 	-- 쫓을 때만 빨간 테두리 (희귀도 Highlight 한계 관리 태그는 안 붙임: 추격 중인 경비만 켜짐)
 	local glow = Instance.new("Highlight")
@@ -1357,7 +1392,7 @@ local function dressGuard(guard: Model)
 
 	CollectionService:AddTag(visual, Visuals.Tags.GuardVisual)
 	visual.Parent = guard
-	guardInfo[guard] = { visual = visual, pose = pose, stand = stand, sleep = sleep, z = z, glow = glow }
+	guardInfo[guard] = { visual = visual, pose = pose, stand = stand, sleep = sleep, z = z, alert = alert, glow = glow }
 	applyGuardState(guard)
 	pcall(function()
 		root:SetNetworkOwner(nil) -- 용접으로 조립이 바뀌어도 서버가 계속 물리 담당

@@ -1,6 +1,7 @@
 --!nocheck
 --[[
-	K 시리즈 — 슈퍼 씨앗(seed_super, 개발자 상품 5999 R$) · 경비 1.78초 깨어남 구멍 찾기 (주임, 2026-11-10)
+	K 시리즈 — 슈퍼 씨앗(seed_super, 개발자 상품 5999 R$) · 경비 깨어남(GUARD_WAKE_SECONDS) 구멍 찾기 (주임, 2026-11-10)
+	L 시리즈 — 66번: 훔치면 바로 경비 머리 위 빨간 느낌표 (State "Alert") → WAKE(0.3초) 뒤 쫓아옴/잡힘
 	이미 있는 시험(products.spec 64번 · services_world 65번 · holes_touch_catch)과 겹치지 않게 "돈이 걸린 길 · 무한 이득 · 시간으로 잡히는 길" 위주.
 
 	슈퍼 씨앗 (ProductService.grant → rollSeed → BaseService.grantEgg(bought = true)):
@@ -13,12 +14,15 @@
 	  K6 스키마 8 → 9 (옛 씨앗은 보통 · 50개 초과 옛 데이터는 예전처럼 잘림, 진짜 DataService 저장·불러오기)
 	  K7 가방 씨앗은 밤·낮에도 · 남의 Remote 로도 안 뺏김
 
-	경비 1.78초 (GuardLogic.isWaking · Egg.stolenAt · GuardianService):
-	  K8 21구역 × 속도 3종: 둥지에서 집고 경비 몸 위에 서도 1.77초까지 안 잡히고 안 쫓음 · 1.78초 뒤 첫 틱에 잡힘
-	  K9 1.78초 뒤 안 닿으면 60초가 지나도 안 잡힘 (시간으로 잡히는 길 없음)
-	  K10 바닥에서 다시 줍기 = 지연 없음 · 둥지로 돌아간 씨앗을 다시 집으면 새 1.78초 · 두 사람이 0.5초 간격 = 각자 1.78초
-	  K11 지연 중 경계(zMax) 넘기 = 즉시 잡힘 · 밤 · 허브
+	경비 깨어남 (GuardLogic.isWaking · Egg.stolenAt · GuardianService) — 시간은 전부 Config.GUARD_WAKE_SECONDS(WAKE)·GUARD_TICK_SECONDS 에서 계산:
+	  K8 21구역 × 속도 3종: 둥지에서 집고 경비 몸 위에 서도 WAKE 전까지 안 잡히고 안 쫓음 (State Alert) · WAKE 뒤 첫 틱에 잡힘
+	  K9 WAKE 뒤 안 닿으면 60초가 지나도 안 잡힘 (시간으로 잡히는 길 없음)
+	  K10 바닥에서 다시 줍기 = 지연 없음 · 둥지로 돌아간 씨앗을 다시 집으면 새 WAKE · 세 사람이 겹치게 훔침 = 각자 자기 WAKE
+	  K11 지연 중 경계(zMax) 넘기 = 즉시 잡힘 · 밤 · 허브 (느낌표 없음)
 	  K12 GuardLogic.isWaking 경계 (NaN · nil · 미래 시각)
+	66번 느낌표 (State "Alert"):
+	  L1 21구역 × (멀리 · 닿음): 훔친 첫 틱에 Alert · 그동안 경비 제자리(MoveTo 안 부름)·대상 0·안 잡힘 · WAKE 뒤 멀리 = Chase (그 사람이 대상) / 닿음 = 잡힘
+	  (다른 사람을 쫓는 중 Chase 그대로 · 바닥 씨앗 = 느낌표 없음 은 services_world 65·66번, 허브·밤 = 느낌표 없음 은 K11)
 ]]
 
 return function(T, Loader)
@@ -37,6 +41,8 @@ return function(T, Loader)
 	local GRANTED = "ProductPurchaseDecision.PurchaseGranted"
 	local NOT_YET = "ProductPurchaseDecision.NotProcessedYet"
 	local WAKE = Config.GUARD_WAKE_SECONDS
+	local TICK = Config.GUARD_TICK_SECONDS
+	local ALERT_BY = TICK + 0.02 -- 훔친 뒤 이 시간이 지나면 (첫 경비 틱이 한 번은 돌았으므로) State 는 Alert
 	local MAX = Config.EGG_INVENTORY_MAX
 	local SUPER_SEEDS =
 		{ "rainbow_thunder_tree", "sky_pillar_flower", "circuit_sprout", "password_fern", "wifi_sunflower" }
@@ -1007,10 +1013,10 @@ return function(T, Loader)
 	local settle = Config.RAGDOLL_SECONDS + 3
 
 	------------------------------------------------------------------
-	T.suite("K8 둥지에서 집고 경비 몸 위에 서도 1.77초까지 안 잡힘 · 1.78초 뒤 첫 틱에 잡힘")
+	T.suite("K8 둥지에서 집고 경비 몸 위에 서도 WAKE 전까지 안 잡힘 · WAKE 뒤 첫 틱에 잡힘")
 
 	T.test(
-		"21구역 × 속도 3종 (느림 · 빠름 · 0): 둥지에서 집자마자 경비 몸 위(거리 0)로 가도 1.77초까지는 Caught 0 · State 가 Chase 로 안 바뀜 · TargetUserId 0 · 1.78초가 지난 첫 틱(1.78 ~ 1.90초)에 한 번 잡힘 · 구역 안이니 씨앗은 둥지로 · 서버 warn 0",
+		"21구역 × 속도 3종 (느림 · 빠름 · 0): 둥지에서 집자마자 경비 몸 위(거리 0)로 가도 WAKE 전까지는 Caught 0 · State 가 Chase 로 안 바뀜(첫 틱 뒤로는 Alert) · TargetUserId 0 · WAKE 가 지난 첫 틱(WAKE ~ WAKE + 한 틱)에 한 번 잡힘 · 구역 안이니 씨앗은 둥지로 · 서버 warn 0",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
@@ -1035,13 +1041,23 @@ return function(T, Loader)
 							end
 							if elapsed < WAKE - 0.005 then
 								T.eq(#H.sent(p, "Caught"), before, tag .. string.format(": %.2f초에 잡힘", elapsed))
-								T.truthy(model:GetAttribute("State") ~= "Chase", tag .. ": 자는 동안 State Chase")
-								T.eq(model:GetAttribute("TargetUserId"), 0, tag .. ": 자는 동안 대상 없음")
+								T.truthy(
+									model:GetAttribute("State") ~= "Chase",
+									tag .. ": 느낌표 동안 State Chase"
+								)
+								T.eq(model:GetAttribute("TargetUserId"), 0, tag .. ": 느낌표 동안 대상 없음")
+								if elapsed >= ALERT_BY then
+									T.eq(
+										model:GetAttribute("State"),
+										"Alert",
+										tag .. string.format(": %.2f초에 State", elapsed)
+									)
+								end
 							end
 						end
 						T.truthy(
-							caughtAt ~= nil and caughtAt >= WAKE - 1e-6 and caughtAt <= WAKE + 0.12,
-							tag .. ": 1.78초 뒤 첫 틱에 잡힘 " .. tostring(caughtAt)
+							caughtAt ~= nil and caughtAt >= WAKE - 1e-6 and caughtAt <= WAKE + TICK + 0.02,
+							tag .. ": WAKE 뒤 첫 틱에 잡힘 " .. tostring(caughtAt)
 						)
 						T.eq(#H.sent(p, "Caught"), before + 1, tag .. ": 한 번만")
 						T.eq(part:GetAttribute("EggState"), "Nest", tag .. ": 구역 안 = 둥지로")
@@ -1059,7 +1075,7 @@ return function(T, Loader)
 	T.suite("K9 시간으로 잡히는 길이 다시 생기지 않음")
 
 	T.test(
-		"21구역 × (도망 못 침 · 도망 침): 1.78초가 지난 뒤 잡힘 거리 + 0.3 밖에서 60초가 지나도 Caught 0 · 씨앗 계속 Carried · 경비 WalkSpeed 는 구역 고정 추격 속도 그대로(느려지지도 빨라지지도 않음) · 도망 못 치는 사람이 대상이 되어 쫓기는 중 · 거리 안으로 들어가야만 그 틱에 잡힘",
+		"21구역 × (도망 못 침 · 도망 침): WAKE 가 지난 뒤 잡힘 거리 + 0.3 밖에서 60초가 지나도 Caught 0 · 씨앗 계속 Carried · 경비 WalkSpeed 는 구역 고정 추격 속도 그대로(느려지지도 빨라지지도 않음) · 도망 못 치는 사람이 대상이 되어 쫓기는 중 · 거리 안으로 들어가야만 그 틱에 잡힘",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
@@ -1104,10 +1120,10 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("K10 지연이 다시 생기지 않음 · 각자 자기 1.78초")
+	T.suite("K10 지연이 다시 생기지 않음 · 각자 자기 WAKE")
 
 	T.test(
-		"바닥에서 주우면 지연 없음: 숲 씨앗을 집어 (둥지) 구역 밖(허브)으로 나가 1.78초가 지난 뒤 내려놓고(바닥, 5초 뒤 둥지로) → 바로 다시 줍고 경비 위에 서면 첫 틱(0.12초)에 잡힘 · 집은 지 0.1초 만에 내려놓았다 다시 주워도 새 1.78초가 안 생김 · 남이 떨어뜨린 것을 B 가 주워도 지연 없음 · 구역 안에서 내려놓아 둥지로 돌아간 씨앗을 다시 집으면 새 1.78초 (정상 규칙)",
+		"바닥에서 주우면 지연 없음: 숲 씨앗을 집어 (둥지) 구역 밖(허브)으로 나가 WAKE 가 지난 뒤 내려놓고(바닥, 5초 뒤 둥지로) → 바로 다시 줍고 경비 위에 서면 첫 틱(0.12초)에 잡힘 (느낌표 없음) · 집은 지 0.1초 만에 내려놓았다 다시 주워도 새 WAKE 가 안 생김 · 남이 떨어뜨린 것을 B 가 주워도 지연 없음 · 구역 안에서 내려놓아 둥지로 돌아간 씨앗을 다시 집으면 새 WAKE (정상 규칙)",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
@@ -1119,13 +1135,13 @@ return function(T, Loader)
 				local function snapshotCaught(p)
 					return #H.sent(p, "Caught")
 				end
-				-- (1) A: 집고 → 구역 밖(허브)으로 → 2초 뒤 내려놓음 → 다시 주움 → 경비 위
+				-- (1) A: 집고 → 구역 밖(허브)으로 → WAKE + 0.2초 뒤 내려놓음 → 다시 주움 → 경비 위
 				local part = nestEgg(H, id)
 				pickUpRaw(H, a, part)
 				setCarrySpeed(w, a, sa, da, threshold(id) * 0.4)
 				T.truthy(w.EggService.getCarried(a).stolenAt ~= nil, "둥지에서 집음 → 지연 시각")
 				H.teleport(a, hubX, 3, hubZ)
-				H.advance(2)
+				H.advance(WAKE + 0.2)
 				w.EggService.dropEgg(a)
 				T.eq(part:GetAttribute("EggState"), "Dropped", "구역 밖: 바닥")
 				H.advance(1)
@@ -1134,25 +1150,28 @@ return function(T, Loader)
 				nearGuard(H, a, id, 0, 0)
 				local before = snapshotCaught(a)
 				H.advance(0.15)
-				T.eq(snapshotCaught(a), before + 1, "첫 틱에 잡힘 (1.78초 안 기다림)")
+				T.eq(snapshotCaught(a), before + 1, "첫 틱에 잡힘 (WAKE 안 기다림)")
 				H.advance(settle)
 				-- (2) 집은 지 0.1초 만에 허브에서 내려놓고 0.1초 뒤 다시 주워도 새 지연 없음
 				part = nestEgg(H, id)
 				pickUpRaw(H, a, part)
+				local t0 = H.clock() -- 처음 집은 때
 				setCarrySpeed(w, a, sa, da, threshold(id) * 0.4)
-				H.advance(0.1)
+				H.advance(0.05)
 				H.teleport(a, hubX, 3, hubZ)
 				w.EggService.dropEgg(a)
 				T.eq(part:GetAttribute("EggState"), "Dropped")
-				H.advance(0.1)
+				H.advance(0.05)
 				pickUpRaw(H, a, part)
 				T.eq(w.EggService.getCarried(a).stolenAt, nil)
 				nearGuard(H, a, id, 0, 0)
 				before = snapshotCaught(a)
-				local t0 = H.clock()
-				H.advance(0.15)
-				T.eq(snapshotCaught(a), before + 1, "0.25초 만에 잡힘 (새 1.78초 없음)")
-				T.truthy(H.clock() - t0 < WAKE)
+				H.advance(TICK + 0.01)
+				T.eq(snapshotCaught(a), before + 1, "한 틱 만에 잡힘 (새 WAKE 없음)")
+				T.truthy(
+					H.clock() - t0 < WAKE,
+					"처음 집은 뒤 WAKE 가 안 지났는데 잡힘 " .. (H.clock() - t0)
+				)
 				H.advance(settle)
 				-- (3) A 가 허브에서 떨어뜨린 씨앗을 B 가 주움
 				part = nestEgg(H, id)
@@ -1168,11 +1187,11 @@ return function(T, Loader)
 				H.advance(0.15)
 				T.eq(snapshotCaught(b), before + 1, "B 도 첫 틱에 잡힘")
 				H.advance(settle)
-				-- (4) 정상 규칙: 구역 안에서 내려놓아 둥지로 돌아간 씨앗을 다시 집으면 새 1.78초
+				-- (4) 정상 규칙: 구역 안에서 내려놓아 둥지로 돌아간 씨앗을 다시 집으면 새 WAKE
 				part = nestEgg(H, id)
 				pickUpRaw(H, a, part)
 				setCarrySpeed(w, a, sa, da, threshold(id) * 0.4)
-				H.advance(1)
+				H.advance(WAKE * 0.6) -- 깨어나기 전에 (닿는 둥지에서 안 잡히게) 내려놓음
 				w.EggService.dropEgg(a)
 				T.eq(part:GetAttribute("EggState"), "Nest", "구역 안: 바로 둥지")
 				pickUpRaw(H, a, part)
@@ -1181,10 +1200,11 @@ return function(T, Loader)
 				T.near(again.stolenAt, H.clock(), 1e-6)
 				nearGuard(H, a, id, 0, 0)
 				before = snapshotCaught(a)
-				H.advance(1.7)
-				T.eq(snapshotCaught(a), before, "새 1.78초 안에는 안 잡힘")
-				H.advance(0.3)
-				T.eq(snapshotCaught(a), before + 1, "1.78초 뒤 잡힘")
+				H.advance(WAKE - 0.01)
+				T.eq(snapshotCaught(a), before, "새 WAKE 안에는 안 잡힘")
+				T.eq(model:GetAttribute("State"), "Alert", "다시 집으면 다시 느낌표")
+				H.advance(TICK + 0.05)
+				T.eq(snapshotCaught(a), before + 1, "WAKE 뒤 잡힘")
 				T.eq(#H.warnings, 0, "서버 warn " .. tostring(H.warnings[1]))
 				T.eq(model:GetAttribute("TargetUserId"), 0)
 			end)
@@ -1192,11 +1212,12 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"두 사람(세 사람)이 0.5초 간격으로 훔침 (21구역): 각자 자기 둥지 집은 시각 + 1.78초에 잡힘 (A 1.78 · B 2.28 · C 2.78) · A 가 잡힐 때 B·C 는 아직 안 잡힘 · 순서가 뒤바뀌지 않음",
+		"세 사람이 WAKE 의 0.4배 간격으로 겹치게 훔침 (21구역): 각자 자기 둥지 집은 시각 + WAKE 에 잡힘 (A · B · C 차례로) · A 가 잡힐 때 B·C 는 아직 안 잡힘 · 순서가 뒤바뀌지 않음",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
 				local people = {}
+				local gapSteps = math.max(1, math.floor(WAKE * 40 + 0.5)) -- WAKE × 0.4 초 (0.01 단위)
 				for i = 1, 3 do
 					local p, session, data = newRunner(H, 9930 + i, "P" .. i)
 					people[i] = { p = p, session = session, data = data }
@@ -1222,15 +1243,15 @@ return function(T, Loader)
 						pickedAt[i] = H.clock()
 						setCarrySpeed(w, who.p, who.session, who.data, thr * 0.4)
 						nearGuard(H, who.p, id, 0, 0)
-						-- 다음 사람이 훔치기 전까지 0.5초 (그동안 감시)
+						-- 다음 사람이 훔치기 전까지 GAP (WAKE 의 0.4배 — 세 사람의 느낌표가 겹침. 그동안 감시)
 						if i < 3 then
-							for _ = 1, 50 do
+							for _ = 1, gapSteps do
 								H.advance(0.01)
 								note()
 							end
 						end
 					end
-					while H.clock() - t0 < 3.3 do
+					while H.clock() - t0 < 2 * gapSteps * 0.01 + WAKE + 0.5 do
 						H.advance(0.01)
 						note()
 					end
@@ -1239,7 +1260,7 @@ return function(T, Loader)
 						T.truthy(caughtAt[i] ~= nil, tag .. ": 잡힘")
 						local wait = caughtAt[i] - pickedAt[i]
 						T.truthy(
-							wait >= WAKE - 1e-6 and wait <= WAKE + 0.12,
+							wait >= WAKE - 1e-6 and wait <= WAKE + TICK + 0.02,
 							tag .. string.format(": 집은 뒤 %.2f초에 잡힘", wait)
 						)
 						if i > 1 then
@@ -1257,7 +1278,7 @@ return function(T, Loader)
 	T.suite("K11 지연 중에도 경계(zMax) 즉시 잡힘 그대로 · 밤 · 허브")
 
 	T.test(
-		"21구역: 도망 못 치는 사람이 둥지에서 방금 훔치고 (1.78초 안에) 다음 구역 경계(zMax)를 넘으면 0.25초 안에 잡힘 (씨앗은 둥지로) · 도망 칠 수 있는 사람은 넘어도 안 잡힘",
+		"21구역: 도망 못 치는 사람이 둥지에서 방금 훔치고 (WAKE 안에) 다음 구역 경계(zMax)를 넘으면 0.25초 안에 잡힘 (씨앗은 둥지로) · 도망 칠 수 있는 사람은 넘어도 안 잡힘",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
@@ -1272,9 +1293,9 @@ return function(T, Loader)
 					local before = #H.sent(p, "Caught")
 					local t0 = H.clock()
 					H.teleport(p, 0, 3, range.zMax + 1)
-					H.advance(0.25)
+					H.advance(TICK + 0.05)
 					T.eq(#H.sent(p, "Caught"), before + 1, id .. ": 경계를 넘자 바로 잡힘")
-					T.truthy(H.clock() - t0 < WAKE, id .. ": 1.78초 안에")
+					T.truthy(H.clock() - t0 < WAKE, id .. ": WAKE 안에 " .. (H.clock() - t0))
 					T.eq(part:GetAttribute("EggState"), "Nest", id .. ": 씨앗은 둥지로")
 					H.advance(settle)
 					-- 도망 침
@@ -1295,7 +1316,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"지연 중 허브로 들어가거나 밤이 됨: 허브에선 안 쫓고 1.78초가 지나도 안 잡힘 (경비 Sleeping · 대상 0) → 구역으로 돌아와 닿으면 (지연은 집은 때부터 세므로 이미 끝남) 그 틱에 잡힘 · 지연이 끝나기 전에 돌아오면 남은 시간만 기다림 · 밤에는 안 잡힘 · 밤이 지나 새 낮에 다시 훔치면 새 1.78초 · 서버 warn 0",
+		"지연 중 허브로 들어가거나 밤이 됨: 허브에선 안 쫓고 WAKE 가 지나도 안 잡힘 (경비 Sleeping — 느낌표 없음 · 대상 0) → 구역으로 돌아와 닿으면 (지연은 집은 때부터 세므로 이미 끝남) 그 틱에 잡힘 · 지연이 끝나기 전에 돌아오면 남은 시간만 기다림 (다시 Alert) · 밤에는 안 잡힘 (느낌표도 없음) · 밤이 지나 새 낮에 다시 훔치면 새 WAKE · 서버 warn 0",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
@@ -1303,49 +1324,57 @@ return function(T, Loader)
 				local id = "forest"
 				local model = guardModel(H, id)
 				local hubX, hubZ = H.hubSpot()
-				-- (1) 허브로 갔다가 1.78초가 지난 뒤 돌아옴
+				-- (1) 허브로 갔다가 WAKE 가 지난 뒤 돌아옴
 				local part = nestEgg(H, id)
 				pickUpRaw(H, p, part)
 				setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
 				H.teleport(p, hubX, 3, hubZ)
-				H.advance(1)
+				H.advance(WAKE + 0.5)
 				T.eq(model:GetAttribute("TargetUserId"), 0)
 				H.advance(1.5)
 				T.eq(#H.sent(p, "Caught"), 0, "허브에서는 안 잡힘")
-				T.eq(model:GetAttribute("State"), "Sleeping")
+				T.eq(model:GetAttribute("State"), "Sleeping", "허브에서는 느낌표도 없음")
 				nearGuard(H, p, id, 0, 0)
 				H.advance(0.15)
 				T.eq(#H.sent(p, "Caught"), 1, "돌아와 닿자 바로 잡힘 (지연은 이미 끝)")
 				H.advance(settle)
-				-- (2) 지연 중에 허브로 갔다가 지연이 끝나기 전에 돌아옴
+				-- (2) 지연 중에 허브로 갔다가 지연이 끝나기 전에 돌아옴 (허브 한 틱 + 돌아와서 한 틱 = 2 × (TICK + 0.01) < WAKE)
+				T.truthy(
+					2 * (TICK + 0.01) < WAKE - 0.05,
+					"시험 전제: 허브 한 틱 + 돌아와 한 틱이 WAKE 안에 들어감"
+				)
 				part = nestEgg(H, id)
 				pickUpRaw(H, p, part)
 				setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
 				local t0 = H.clock()
 				H.teleport(p, hubX, 3, hubZ)
-				H.advance(0.5)
+				H.advance(TICK + 0.01)
+				T.eq(model:GetAttribute("State"), "Sleeping", "허브에 있는 동안은 느낌표 없음")
 				nearGuard(H, p, id, 0, 0)
-				H.advance(1)
-				T.eq(#H.sent(p, "Caught"), 1, "돌아왔지만 아직 1.5초 (1.78초 전) — 안 잡힘")
+				H.advance(TICK + 0.01)
+				T.eq(#H.sent(p, "Caught"), 1, "돌아왔지만 아직 WAKE 전 — 안 잡힘")
+				T.eq(model:GetAttribute("State"), "Alert", "돌아오면 남은 시간 동안 다시 느낌표")
 				while H.clock() - t0 < WAKE - 0.02 do
 					H.advance(0.01)
 				end
 				T.eq(#H.sent(p, "Caught"), 1)
-				H.advance(0.2)
-				T.eq(#H.sent(p, "Caught"), 2, "1.78초가 지난 첫 틱에 잡힘")
+				H.advance(TICK + 0.1)
+				T.eq(#H.sent(p, "Caught"), 2, "WAKE 가 지난 첫 틱에 잡힘")
 				H.advance(settle)
 				-- (3) 지연 중 밤이 됨
 				part = nestEgg(H, id)
 				pickUpRaw(H, p, part)
 				setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
 				nearGuard(H, p, id, 0, 0)
-				H.advance(0.5)
+				H.advance(WAKE * 0.4)
+				T.eq(model:GetAttribute("State"), "Alert", "밤 직전: 느낌표 중")
 				H.setPhase("Night", 1)
 				H.advance(5)
 				T.eq(#H.sent(p, "Caught"), 2, "밤에는 경비가 안 잡음")
 				T.truthy(model:GetAttribute("State") ~= "Chase")
+				T.eq(model:GetAttribute("State"), "Sleeping", "밤에는 느낌표도 없음")
 				T.eq(model:GetAttribute("TargetUserId"), 0)
-				-- 밤이 지나고 새 낮: 씨앗이 어디 있든 새로 훔치면 새 1.78초
+				-- 밤이 지나고 새 낮: 씨앗이 어디 있든 새로 훔치면 새 WAKE
 				H.setPhase("Intermission", 2)
 				H.setPhase("Day", 2)
 				H.advance(0.5)
@@ -1359,9 +1388,9 @@ return function(T, Loader)
 				setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
 				nearGuard(H, p, id, 0, 0)
 				local before = #H.sent(p, "Caught")
-				H.advance(1.7)
-				T.eq(#H.sent(p, "Caught"), before, "새 낮에도 1.78초 지연")
-				H.advance(0.3)
+				H.advance(WAKE - 0.01)
+				T.eq(#H.sent(p, "Caught"), before, "새 낮에도 WAKE 지연")
+				H.advance(TICK + 0.05)
 				T.eq(#H.sent(p, "Caught"), before + 1)
 				T.eq(#H.warnings, 0, "서버 warn " .. tostring(H.warnings[1]))
 			end)
@@ -1372,7 +1401,7 @@ return function(T, Loader)
 	T.suite("K12 GuardLogic.isWaking 경계 (NaN · nil · 미래 시각)")
 
 	T.test(
-		"순수 함수 경계: nil · NaN 은 바로 깸(false) · 1.77 자는 중 / 1.78 · 1.79 · 100 깸 · -inf 는 깸 · now 나 wakeSeconds 가 NaN 이면 깸 · wakeSeconds 0 · 음수 = 안 잠 · now 가 inf 면 깸",
+		"순수 함수 경계: nil · NaN 은 바로 깸(false) · WAKE − 0.01 느낌표 중 / WAKE · WAKE + 0.01 · WAKE + 한 틱 · 100 깸 · -inf 는 깸 · now 나 wakeSeconds 가 NaN 이면 깸 · wakeSeconds 0 · 음수 = 안 잠 · now 가 inf 면 깸",
 		function()
 			local nan = 0 / 0
 			local t = 1000
@@ -1380,11 +1409,12 @@ return function(T, Loader)
 			T.falsy(GuardLogic.isWaking(nan, t, WAKE), "NaN 집은 시각")
 			T.falsy(GuardLogic.isWaking(t, nan, WAKE), "NaN 지금")
 			T.falsy(GuardLogic.isWaking(t, t + 1, nan), "NaN wake")
-			T.truthy(GuardLogic.isWaking(t, t, WAKE), "0초: 자는 중")
-			T.truthy(GuardLogic.isWaking(t, t + 1.77, WAKE), "1.77")
-			T.truthy(GuardLogic.isWaking(t, t + 1.779, WAKE), "1.779")
-			T.falsy(GuardLogic.isWaking(t, t + 1.78, WAKE), "1.78")
-			T.falsy(GuardLogic.isWaking(t, t + 1.79, WAKE), "1.79")
+			T.truthy(GuardLogic.isWaking(t, t, WAKE), "0초: 느낌표 중")
+			T.truthy(GuardLogic.isWaking(t, t + WAKE - 0.01, WAKE), "WAKE − 0.01")
+			T.truthy(GuardLogic.isWaking(t, t + WAKE - 0.001, WAKE), "WAKE − 0.001")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE, WAKE), "WAKE")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE + 0.01, WAKE), "WAKE + 0.01")
+			T.falsy(GuardLogic.isWaking(t, t + WAKE + TICK, WAKE), "WAKE + 한 틱")
 			T.falsy(GuardLogic.isWaking(t, t + 100, WAKE), "100")
 			T.falsy(GuardLogic.isWaking(-math.huge, t, WAKE), "-inf")
 			T.falsy(GuardLogic.isWaking(t, math.huge, WAKE), "now inf")
@@ -1444,6 +1474,86 @@ return function(T, Loader)
 					H.advance(0.15)
 					T.eq(#H.sent(p, "Caught"), before + 1, "stolenAt " .. tostring(bad) .. ": 바로 잡힘")
 					H.advance(settle)
+				end
+				T.eq(#H.warnings, 0, "서버 warn " .. tostring(H.warnings[1]))
+			end)
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite(
+		"L 66번: 훔치면 바로 빨간 느낌표(State Alert) → WAKE 뒤 쫓아옴/잡힘 (사장님 2026-11-10)"
+	)
+
+	-- 느낌표 동안 (훔친 지 WAKE − 0.01 까지) 0.01초씩 지켜보며: State · 대상 · 잡힘 · 경비 걸음 명령(moves) 을 확인
+	--   mode "멀리" = 경비 몸에서 잡힘 거리 + 0.3 (안 닿음) · "닿음" = 경비 몸 위
+	local function stealAndWatchAlert(H, w, p, session, data, id, mode, tag)
+		local model = guardModel(H, id)
+		local humanoid = humanoidOf(model)
+		local reach = model:GetAttribute("CatchDistance")
+		local part = nestEgg(H, id)
+		pickUpRaw(H, p, part)
+		setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
+		nearGuard(H, p, id, if mode == "닿음" then 0 else reach + 0.3, 0)
+		local pos0 = model.PrimaryPart.Position
+		local moves0 = humanoid.moves
+		local before = #H.sent(p, "Caught")
+		local t0 = H.clock()
+		local alertAt
+		while H.clock() - t0 < WAKE - 0.01 do
+			H.advance(0.01)
+			local elapsed = H.clock() - t0
+			local state = model:GetAttribute("State")
+			if state == "Alert" and not alertAt then
+				alertAt = elapsed
+			end
+			if elapsed >= ALERT_BY then
+				T.eq(state, "Alert", tag .. string.format(": %.2f초에 State", elapsed))
+			end
+			T.eq(model:GetAttribute("TargetUserId"), 0, tag .. ": 느낌표 동안 대상 없음")
+			T.eq(
+				#H.sent(p, "Caught"),
+				before,
+				tag .. string.format(": %.2f초에 잡힘 (느낌표 동안 안 잡힘)", elapsed)
+			)
+		end
+		T.truthy(alertAt ~= nil and alertAt <= TICK + 0.011, tag .. ": 훔친 첫 틱에 Alert " .. tostring(alertAt))
+		T.eq(humanoid.moves, moves0, tag .. ": 느낌표 동안 경비는 걸으라는 명령을 안 받음")
+		local pos1 = model.PrimaryPart.Position
+		T.eq(pos1.X, pos0.X, tag .. ": 경비 x 제자리")
+		T.eq(pos1.Z, pos0.Z, tag .. ": 경비 z 제자리")
+		return part, model, humanoid, moves0, before
+	end
+
+	T.test(
+		"21구역 × (멀리 서 있음 · 경비 몸에 닿음): 둥지에서 훔친 첫 틱(한 틱 안)에 State Alert (대상 0 · 안 잡힘 · 경비 제자리 — MoveTo 안 부름) → WAKE 가 지나면 멀리 있는 사람은 Chase (그 사람이 대상 · 경비가 걷기 시작 · 안 잡힘) · 닿아 있는 사람은 그 틱에 한 번 잡힘 (씨앗은 둥지로) · 서버 warn 0",
+		function()
+			inWorld({ realEgg = true }, function(H)
+				local w = guardWorld(H)
+				local p, session, data = newRunner(H, 9981, "Alert")
+				for _, id in ALL_ZONES do
+					for _, mode in { "멀리", "닿음" } do
+						local tag = id .. " " .. mode
+						local part, model, humanoid, moves0, before =
+							stealAndWatchAlert(H, w, p, session, data, id, mode, tag)
+						H.advance(TICK + 0.05) -- WAKE 를 지나 한 틱
+						if mode == "멀리" then
+							T.eq(model:GetAttribute("State"), "Chase", tag .. ": WAKE 뒤 쫓음")
+							T.eq(model:GetAttribute("TargetUserId"), p.UserId, tag .. ": 그 사람이 대상")
+							T.truthy(humanoid.moves > moves0, tag .. ": WAKE 뒤에는 걸으라는 명령을 받음")
+							T.eq(#H.sent(p, "Caught"), before, tag .. ": 안 닿으면 안 잡힘")
+							T.eq(part:GetAttribute("EggState"), "Carried", tag)
+							w.EggService.dropEgg(p) -- 구역 안: 바로 둥지
+						else
+							T.eq(
+								#H.sent(p, "Caught"),
+								before + 1,
+								tag .. ": WAKE 뒤 닿아 있으면 잡힘 (한 번)"
+							)
+							T.eq(part:GetAttribute("EggState"), "Nest", tag .. ": 구역 안 = 둥지로")
+						end
+						H.advance(settle)
+					end
 				end
 				T.eq(#H.warnings, 0, "서버 warn " .. tostring(H.warnings[1]))
 			end)

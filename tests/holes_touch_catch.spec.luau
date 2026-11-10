@@ -9,8 +9,8 @@
 	  - EggRules.dropOutcome: 그 씨앗 구역 안이면 원인과 상관없이 ReturnToNest, 밖이면 DropHere.
 	    EggRules.groundFate 는 언제나 Return (구역 밖 바닥 씨앗은 5초 뒤 둥지, 주우면 취소 — Stay 없음).
 	진짜 EggService + 진짜 GuardianService (경비 몸은 가짜 Humanoid 라 스스로 안 걸음 → 사람을 경비 집 옆에 놓아 "닿음"을 만듦).
-65번 (2026-11-10): 둥지에서 집으면 경비는 1.78초 뒤에 깨어남 — 아래 pickUp 은 "이미 깨어난 뒤"로 치고 (H1~H5 는 깨어난 뒤 규칙),
-  1.78초 동안 안 잡히는 것은 "둥지 105개 전부" 시험(pickUpRaw)과 services_world 에서 봄.
+65·66번 (2026-11-10): 둥지에서 집으면 경비는 빨간 느낌표(State Alert)를 띄우고 GUARD_WAKE_SECONDS 뒤에 쫓아옴 — 아래 pickUp 은
+  "이미 깨어난 뒤"로 치고 (H1~H5 는 깨어난 뒤 규칙), 그 시간 동안 안 잡히는 것은 "둥지 105개 전부" 시험(pickUpRaw)과 services_world 에서 봄.
 
 	  H1 시간이 지나도 멀리 있으면 안 잡힘 · WalkSpeed 불변 (21구역 × 느림/빠름)
 	  H2 닿으면 느린·빠른 사람 모두 그 틱에 1번만 잡힘 (21구역) · 잡힘 거리 경계 ±0.3 · 높이 무시
@@ -77,14 +77,14 @@ return function(T, Loader)
 		return nil
 	end
 
-	-- 진짜로 집기만 (65번: 둥지에서 집으면 경비는 1.78초 뒤에 깨어남)
+	-- 진짜로 집기만 (65·66번: 둥지에서 집으면 경비는 느낌표를 띄우고 GUARD_WAKE_SECONDS 뒤에 깨어남)
 	local function pickUpRaw(H, p, part)
 		H.teleport(p, part.Position.X, part.Position.Y + 1, part.Position.Z)
 		part:FindFirstChild("StealPrompt").Triggered:Fire(p)
 	end
 
 	-- 집고 "경비가 이미 깨어난 뒤"로 침 (집은 시각을 GUARD_WAKE_SECONDS 앞으로) — 이 파일 H1~H5 는 깨어난 뒤의 닿음 규칙.
-	-- 1.78초 동안 안 잡히는 것은 아래 "둥지 105개 전부" 시험과 services_world 에서 봄
+	-- 깨어나는 시간 동안 안 잡히는 것은 아래 "둥지 105개 전부" 시험과 services_world 에서 봄
 	local function pickUp(H, p, part)
 		pickUpRaw(H, p, part)
 		local carried = H.server("Services/EggService").getCarried(p)
@@ -714,12 +714,17 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지 105개 전부 (65번 — 경비는 무리의 벽 쪽에서 잠, 가장 벽 쪽 둥지는 21구역 모두 잡힘 거리 안): 둥지에서 느리게 집고 그 자리에 서 있어도 1.78초 동안은 안 잡히고 안 쫓음(State Sleeping · TargetUserId 0) → 1.78초가 지나면 닿아 있는 둥지 자리는 그 틱에 잡힘(1.78 ~ 1.89초), 안 닿는 둥지 자리는 쫓기만 하고 안 잡힘",
+		"둥지 105개 전부 (65번 — 경비는 무리의 벽 쪽에서 잠, 가장 벽 쪽 둥지는 21구역 모두 잡힘 거리 안): 둥지에서 느리게 집고 그 자리에 서 있어도 WAKE 동안은 안 잡히고 안 쫓음(State Alert — 첫 틱 뒤로는 계속 · TargetUserId 0) → WAKE 가 지나면 닿아 있는 둥지 자리는 그 틱에 잡힘(WAKE ~ WAKE + 한 틱), 안 닿는 둥지 자리는 쫓기만 하고 안 잡힘",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
 				local WAKE = Config.GUARD_WAKE_SECONDS
-				T.eq(WAKE, 1.78)
+				local TICK = Config.GUARD_TICK_SECONDS
+				local STEP = 0.01
+				T.truthy(
+					WAKE >= TICK,
+					"깨어나는 시간 = 경비 한 틱 이상 (느낌표가 한 틱은 보여야 함)"
+				)
 				local caughtNests, chasedNests, total = 0, 0, 0
 				local userId = 9600
 				for _, id in ALL_ZONES do
@@ -733,7 +738,7 @@ return function(T, Loader)
 					T.truthy(
 						nearest < reach,
 						string.format(
-							"%s: 가장 벽 쪽 둥지 %.2f 는 잡힘 거리 %.2f 안 (그래서 1.78초가 필요)",
+							"%s: 가장 벽 쪽 둥지 %.2f 는 잡힘 거리 %.2f 안 (그래서 깨어나는 시간이 필요)",
 							id,
 							nearest,
 							reach
@@ -750,9 +755,9 @@ return function(T, Loader)
 							setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
 							local t0 = H.clock()
 							local caughtAt, chasedAt = nil, nil
-							local sleepingUntilWake = true
+							local alertUntilWake, firstAlertAt = true, nil
 							while H.clock() - t0 < WAKE + 0.3 do
-								H.advance(0.01)
+								H.advance(STEP)
 								local elapsed = H.clock() - t0
 								if not caughtAt and #H.sent(p, "Caught") > 0 then
 									caughtAt = elapsed
@@ -760,18 +765,29 @@ return function(T, Loader)
 								if not chasedAt and model:GetAttribute("TargetUserId") == p.UserId then
 									chasedAt = elapsed
 								end
-								if elapsed < WAKE - 1e-6 and model:GetAttribute("State") ~= "Sleeping" then
-									sleepingUntilWake = false
+								local state = model:GetAttribute("State")
+								if state == "Alert" and not firstAlertAt then
+									firstAlertAt = elapsed
+								end
+								-- 훔친 뒤 첫 경비 틱이 지나면 (TICK + 0.02) WAKE 전까지는 계속 Alert (Sleeping · Chase · Return 아님)
+								if elapsed < WAKE - 1e-6 and elapsed >= TICK + 0.02 and state ~= "Alert" then
+									alertUntilWake = false
 								end
 							end
-							T.truthy(sleepingUntilWake, tag .. ": 1.78초 전에는 State Sleeping 그대로")
+							T.truthy(alertUntilWake, tag .. ": WAKE 전에는 State Alert 그대로")
+							T.truthy(
+								firstAlertAt ~= nil and firstAlertAt <= TICK + STEP + 1e-6,
+								tag .. ": 훔친 첫 틱에 Alert " .. tostring(firstAlertAt)
+							)
 							if d <= reach then
 								caughtNests += 1
 								T.truthy(
-									caughtAt ~= nil and caughtAt >= WAKE - 1e-6 and caughtAt <= WAKE + 0.12,
+									caughtAt ~= nil
+										and caughtAt >= WAKE - 1e-6
+										and caughtAt <= WAKE + TICK + STEP + 1e-6,
 									tag
 										.. string.format(
-											" (거리 %.2f ≤ %.2f): 1.78초 뒤 첫 틱에 잡힘 ",
+											" (거리 %.2f ≤ %.2f): WAKE 뒤 첫 틱에 잡힘 ",
 											d,
 											reach
 										)
@@ -787,8 +803,10 @@ return function(T, Loader)
 									tag .. string.format(" (거리 %.2f > %.2f): 안 닿으면 안 잡힘", d, reach)
 								)
 								T.truthy(
-									chasedAt ~= nil and chasedAt >= WAKE - 1e-6 and chasedAt <= WAKE + 0.12,
-									tag .. ": 1.78초 뒤 첫 틱부터 쫓음 " .. tostring(chasedAt)
+									chasedAt ~= nil
+										and chasedAt >= WAKE - 1e-6
+										and chasedAt <= WAKE + TICK + STEP + 1e-6,
+									tag .. ": WAKE 뒤 첫 틱부터 쫓음 " .. tostring(chasedAt)
 								)
 								T.eq(model:GetAttribute("State"), "Chase", tag)
 								w.EggService.dropEgg(p) -- 구역 안: 바로 둥지
@@ -807,7 +825,7 @@ return function(T, Loader)
 				T.truthy(chasedNests >= 21, "닿지 않는 둥지 자리도 있음: " .. chasedNests)
 				print(
 					string.format(
-						"      (참고) 둥지 자리에서 1.78초 뒤 잡힘 %d곳 · 쫓기만 %d곳 (경비 잡힘 거리 안/밖)",
+						"      (참고) 둥지 자리에서 WAKE 뒤 잡힘 %d곳 · 쫓기만 %d곳 (경비 잡힘 거리 안/밖)",
 						caughtNests,
 						chasedNests
 					)

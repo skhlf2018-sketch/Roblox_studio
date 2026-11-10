@@ -96,7 +96,7 @@ type Guard = {
 	lastMoveAt: number,
 }
 
-export type GuardState = "Sleeping" | "Chase" | "Return"
+export type GuardState = "Sleeping" | "Alert" | "Chase" | "Return"
 
 local GuardianService = {}
 
@@ -393,6 +393,7 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 	local bestRoot: BasePart? = nil
 	local bestDistance = math.huge
 	local bestForced = false
+	local alerting = false -- 66번: 방금 둥지에서 훔친 사람이 있음 (빨간 느낌표를 띄울 0.5초)
 	local touchReach = GuardianService.catchDistance(guard.height)
 	if isDay then
 		for player, egg in carriers do
@@ -419,6 +420,7 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 						-- 65번 (사장님 2026-11-10 "훔치고 1.78초 후에 쫓아오게"): 둥지에서 집은 지 1.78초가 안 됨 →
 						--   이 사람에 대해서는 아직 자는 중: 쫓을 대상으로 안 고르고 **닿아도 안 잡음**
 						--   (다른 사람을 쫓고 있어도 마찬가지. 바닥에서 다시 주운 씨앗은 stolenAt = nil 이라 바로 평소 규칙)
+						alerting = true
 						continue
 					else
 						local rel = root.Position - guard.root.Position
@@ -511,7 +513,11 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 		guard.chase = nil
 		guard.humanoid.WalkSpeed = SpeedMath.guardBaseWalkSpeed(guard.biome.guardSpeed)
 		local away = Vector3.new(guard.root.Position.X - guard.home.X, 0, guard.root.Position.Z - guard.home.Z)
-		if away.Magnitude > Config.GUARD_HOME_TOLERANCE then
+		if alerting then
+			-- 66번 (사장님 2026-11-10): 훔치면 바로 깨서 **빨간 느낌표**를 띄운 채 GUARD_WAKE_SECONDS(0.5초) 동안 제자리 →
+			--   그 뒤 쫓아감. State "Alert" (선임 PetVisualService 가 느낌표 표시). 이 동안에도 안 쫓고 닿아도 안 잡음
+			setState(guard, "Alert")
+		elseif away.Magnitude > Config.GUARD_HOME_TOLERANCE then
 			setState(guard, "Return")
 			moveTo(guard, steer(guard, guard.home))
 		else

@@ -1751,6 +1751,66 @@ local function petsBody()
 		check(z ~= nil and z.Enabled == true, "다시 Idle 이면 Z 다시 보임")
 	end
 
+	-- 66번 (사장님 2026-11-10): 훔치면 경비 머리 위 빨간 느낌표 (BillboardGui "AlertMark" / TextLabel "Mark") — State "Alert" 에서만 켜짐
+	local alertOk, alertOnOk, alertOffOk, alertZOk = 0, 0, 0, 0
+	for biomeId, g in guards do
+		local visual = g.guard:FindFirstChild(g.model)
+		if visual then
+			local marks = {}
+			for _, d in visual:GetDescendants() do
+				if d.Name == "AlertMark" then
+					table.insert(marks, d)
+				end
+			end
+			local mark = marks[1]
+			local label = mark and mark:FindFirstChild("Mark")
+			local z = visual:FindFirstChild("SleepZ", true)
+			if
+				#marks == 1
+				and mark:IsA("BillboardGui")
+				and label ~= nil
+				and label:IsA("TextLabel")
+				and label.Text == "!"
+				and mark.Enabled == false -- Idle 로 시작: 꺼짐
+			then
+				alertOk += 1
+			end
+			g.guard:SetAttribute("State", "Alert")
+			fire(g.guard, "State")
+			if mark and mark.Enabled == true then
+				alertOnOk += 1
+			end
+			if z and z.Enabled == false then
+				alertZOk += 1
+			end
+			local offAll = true
+			for _, state in { "Sleeping", "Chase", "Return" } do
+				g.guard:SetAttribute("State", "Alert")
+				fire(g.guard, "State")
+				g.guard:SetAttribute("State", state)
+				fire(g.guard, "State")
+				if not mark or mark.Enabled ~= false then
+					offAll = false
+				end
+			end
+			if offAll then
+				alertOffOk += 1
+			end
+			g.guard:SetAttribute("State", "Idle")
+			fire(g.guard, "State")
+			if biomeId == "forest" then
+				check(mark ~= nil and mark.Enabled == false, "Idle 이면 느낌표 꺼짐")
+			end
+		end
+	end
+	check(
+		alertOk == 21,
+		"경비 겉모습마다 AlertMark(빨간 '!' 글자) 정확히 1개 · 처음엔 꺼짐: " .. alertOk .. "/21"
+	)
+	check(alertOnOk == 21, "State Alert 로 바꾸면 AlertMark 켜짐: " .. alertOnOk .. "/21")
+	check(alertZOk == 21, "State Alert 이면 SleepZ 꺼짐: " .. alertZOk .. "/21")
+	check(alertOffOk == 21, "Sleeping · Chase · Return 에서는 AlertMark 꺼짐: " .. alertOffOk .. "/21")
+
 	print("[둥지 옆 장식 식물]")
 	local spots = 0
 	for _, spot in tagged.ParentAnimalSpot or {} do

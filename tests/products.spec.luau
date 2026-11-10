@@ -45,16 +45,17 @@ return function(T, Loader)
 		{ "coins_1b", "coins", 199, 1e9 },
 		{ "speed_10m", "speed", 199, 1e7 },
 		{ "speed_100m", "speed", 259, 1e8 },
+		{ "seed_super", "seed", 5999, 1 }, -- 64번 슈퍼 씨앗 (값 = 씨앗 수)
 	}
 
 	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (holes_v9 와 같은 방법). 진짜 파일에 붙은 진짜 id 가 무엇이든 상관없게
-	-- **36칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움: patchedProducts({}) = 전부 0 (아직 아무것도 안 만든 상태)
+	-- **37칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움: patchedProducts({}) = 전부 0 (아직 아무것도 안 만든 상태)
 	local function patchedProducts(replacements)
 		return ProductsPatch.load(replacements, Config)
 	end
 
 	-- 가짜 세상: 진짜 Net · Sessions · Snapshot · Wallet · DataService · ProductService (+ 필요하면 더)
-	--   ids = { key = 숫자 } 를 주면 Products 를 36칸 전부 0 + 그 칸만 가짜 id 인 사본으로 (ProductService 도 그 사본을 씀). 안 주면 진짜 파일
+	--   ids = { key = 숫자 } 를 주면 Products 를 37칸 전부 0 + 그 칸만 가짜 id 인 사본으로 (ProductService 도 그 사본을 씀). 안 주면 진짜 파일
 	local function world(ids)
 		local H = ServerHarness.install(Loader, T)
 		if ids then
@@ -179,16 +180,16 @@ return function(T, Loader)
 	T.suite("9판 로벅스 상품 표 (Data/Products)")
 
 	T.test(
-		"표 36개 = 러닝머신 부스트 11 + 러닝머신 레벨 20 + 상점 5 — 키·종류·가격·값이 사장님 표 그대로, 키는 겹치지 않음",
+		"표 37개 = 러닝머신 부스트 11 + 러닝머신 레벨 20 + 상점 6 (64번 슈퍼 씨앗 포함) — 키·종류·가격·값이 사장님 표 그대로, 키는 겹치지 않음",
 		function()
 			T.eq(#Products.treadmillBoosts, 11)
 			T.eq(#Products.treadmillSkips, 20)
 			T.eq(#Products.treadmillSkips, Upgrades.TREADMILL_MAX_LEVEL, "러닝머신 레벨 수와 같음")
-			T.eq(#Products.shop, 5)
+			T.eq(#Products.shop, 6)
 			T.eq(
 				#Products.list,
-				36,
-				"11 + 20 + 5 (본부장 지시문의 '39개'는 셈 실수 — 계약 표는 36개)"
+				37,
+				"11 + 20 + 6 (본부장 지시문의 '39개'는 셈 실수 — 계약 표는 36개 + 64번 슈퍼 씨앗)"
 			)
 			local seen = {}
 			for _, p in Products.list do
@@ -219,7 +220,7 @@ return function(T, Loader)
 				end
 			end
 			T.eq(table.concat(Products.ESTIMATED_SKIP_LEVELS, ","), "18,19,20")
-			-- 상점 5개
+			-- 상점 6개 (64번 슈퍼 씨앗 = 6번째, 등급 super)
 			for i, row in SHOP do
 				local p = Products.shop[i]
 				T.eq(p.key, row[1])
@@ -227,9 +228,11 @@ return function(T, Loader)
 				T.eq(p.robux, row[3], p.key .. " 가격")
 				T.eq(p.value, row[4], p.key .. " 값")
 			end
+			T.eq(Products.get("seed_super").rarity, "super", "64번 슈퍼 씨앗 등급")
+			T.eq(Products.get("seed_super").name, "슈퍼 씨앗")
 			T.eq(Products.get("money_pass").value, Config.MONEY_PASS_MULTIPLIER)
 			T.eq(Products.get("없는상품"), nil)
-			-- 62번: 영구 = 게임패스 12개 (부스트 11 + money_pass), 소모품 = 개발자 상품 24개
+			-- 62번: 영구 = 게임패스 12개 (부스트 11 + money_pass), 소모품 = 개발자 상품 25개 (64번 슈퍼 씨앗 포함)
 			local passKeys, devCount = {}, 0
 			for _, p in Products.list do
 				T.eq(type(p.isPass), "boolean", p.key .. " isPass")
@@ -242,7 +245,7 @@ return function(T, Loader)
 				end
 			end
 			T.eq(#passKeys, 12)
-			T.eq(devCount, 24)
+			T.eq(devCount, 25)
 			T.eq(#Products.passes, 12)
 			for i, p in Products.passes do
 				T.eq(p.key, passKeys[i], "Products.passes 는 표 순서")
@@ -254,7 +257,7 @@ return function(T, Loader)
 
 	-- [I-1] 진짜 파일의 id 규칙 (진짜 숫자 값에는 기대지 않음 — 누가 id 를 고쳐 붙여도 규칙만 지키면 통과)
 	T.test(
-		"[I-1] 상품 id 는 Products.IDS 한 곳 (36칸): 모두 0(미설정) 이거나 0 보다 큰 정수 · 0 이 아닌 id 는 패스·상품 통틀어 안 겹침 · 부스트 패스는 2배부터 빈칸 없이 이어서 붙음 · 패스 id 는 byPassId 로만, 상품 id 는 byProductId 로만 찾아짐",
+		"[I-1] 상품 id 는 Products.IDS 한 곳 (37칸): 모두 0(미설정) 이거나 0 보다 큰 정수 · 0 이 아닌 id 는 패스·상품 통틀어 안 겹침 · 부스트 패스는 2배부터 빈칸 없이 이어서 붙음 · 패스 id 는 byPassId 로만, 상품 id 는 byProductId 로만 찾아짐",
 		function()
 			local count = 0
 			local used = {}
@@ -333,9 +336,9 @@ return function(T, Loader)
 		end
 	)
 
-	-- [I-2] 지금 진짜 파일은 36칸 전부 설정됨 — 누가 실수로 0 으로 되돌리면 여기서 잡힘 (값은 안 봄, 붙어 있는지만)
+	-- [I-2] 지금 진짜 파일은 37칸 전부 설정됨 — 누가 실수로 0 으로 되돌리면 여기서 잡힘 (값은 안 봄, 붙어 있는지만)
 	T.test(
-		"[I-2] 지금 진짜 Products 파일은 36칸 전부 id 가 붙어 있음 (isConfigured 36개 모두 true — 0 으로 되돌아가면 실패)",
+		"[I-2] 지금 진짜 Products 파일은 37칸 전부 id 가 붙어 있음 (isConfigured 37개 모두 true — 0 으로 되돌아가면 실패, 64번 seed_super 포함)",
 		function()
 			local configured, empty = 0, {}
 			for _, p in Products.list do
@@ -345,10 +348,10 @@ return function(T, Loader)
 					table.insert(empty, p.key)
 				end
 			end
-			T.eq(#Products.list, 36)
-			T.eq(configured, 36, "id 가 0 인 칸: " .. table.concat(empty, ","))
+			T.eq(#Products.list, 37)
+			T.eq(configured, 37, "id 가 0 인 칸: " .. table.concat(empty, ","))
 			T.eq(#empty, 0)
-			-- 패스 12개 · 개발자 상품 24개가 각각 그 표에서 찾아짐 (진짜 id 로 영수증/소유 확인이 연결됨)
+			-- 패스 12개 · 개발자 상품 25개가 각각 그 표에서 찾아짐 (진짜 id 로 영수증/소유 확인이 연결됨)
 			local passHits, productHits = 0, 0
 			for _, p in Products.list do
 				if p.isPass and Products.byPassId(p.productId) == p then
@@ -358,22 +361,22 @@ return function(T, Loader)
 				end
 			end
 			T.eq(passHits, 12, "byPassId 로 찾아지는 패스")
-			T.eq(productHits, 24, "byProductId 로 찾아지는 개발자 상품")
+			T.eq(productHits, 25, "byProductId 로 찾아지는 개발자 상품")
 		end
 	)
 
 	-- [I-3] id 가 전부 0 인 표 (아직 아무것도 안 만든 상태 = 전부 "준비 중") — 이제는 진짜 파일이 아니라 0 으로 만든 사본으로 봄
 	T.test(
-		"[I-3] id 를 전부 0 으로 만든 사본: 36칸 전부 isConfigured false · byProductId · byPassId 는 어떤 숫자로 물어도 nil · 사본이 진짜 모듈과 섞이지 않음",
+		"[I-3] id 를 전부 0 으로 만든 사본: 37칸 전부 isConfigured false · byProductId · byPassId 는 어떤 숫자로 물어도 nil · 사본이 진짜 모듈과 섞이지 않음",
 		function()
 			local P = patchedProducts({})
-			T.eq(#P.list, 36)
+			T.eq(#P.list, 37)
 			local n = 0
 			for key, id in P.IDS do
 				n += 1
 				T.eq(id, 0, key)
 			end
-			T.eq(n, 36)
+			T.eq(n, 37)
 			for _, p in P.list do
 				T.eq(p.productId, 0, p.key)
 				T.falsy(P.isConfigured(p), p.key)
@@ -782,19 +785,19 @@ return function(T, Loader)
 	)
 
 	------------------------------------------------------------------
-	T.suite("9판 저장 스키마 8 · Snapshot · 개발 명령 /buy")
+	T.suite("9판 저장 스키마 8 → 9 · Snapshot · 개발 명령 /buy")
 
 	T.test(
-		"스키마 8: 기본값(부스트 1 · 코인 2배 false · 영수증 {}) · 7 → 8 은 칸만 추가 · 이상한 값 보정",
+		"스키마 8 (+ 9): 기본값(부스트 1 · 코인 2배 false · 영수증 {}) · 7 → 8 은 칸만 추가 · 8 → 9 는 고칠 것 없음 · 이상한 값 보정",
 		function()
 			local DataSchema = Loader.require("ServerScriptService/Server/Logic/DataSchema")
 			local d = DataSchema.default(0)
-			T.eq(d.version, 8)
+			T.eq(d.version, 9)
 			T.eq(d.treadmillBoost, 1)
 			T.eq(d.moneyPass, false)
 			T.eq(#d.receipts, 0)
 			local old = DataSchema.reconcile(DataSchema.migrate({ version = 7, money = 50, treadmillLevel = 3 }), 0)
-			T.eq(old.version, 8)
+			T.eq(old.version, 9)
 			T.eq(old.money, 50)
 			T.eq(old.treadmillLevel, 3)
 			T.eq(old.treadmillBoost, 1)
@@ -1161,6 +1164,253 @@ return function(T, Loader)
 			T.eq(w.data.stats.productsBought, 2)
 			T.eq(w.H.store.data["player_9001"].data.treadmillBoost, 4)
 			w.H.uninstall()
+		end
+	)
+
+	------------------------------------------------------------------
+	T.suite("64번 로벅스 소모품 슈퍼 씨앗 (seed_super, 5999 R$ — 사장님 2026-11-10)")
+
+	local SUPER_SEEDS =
+		{ "rainbow_thunder_tree", "sky_pillar_flower", "circuit_sprout", "password_fern", "wifi_sunflower" }
+
+	local function seedEggs(w)
+		local bought, normal = {}, 0
+		for _, egg in w.data.eggs do
+			if egg.bought then
+				table.insert(bought, egg)
+			else
+				normal += 1
+			end
+		end
+		return bought, normal
+	end
+
+	-- 가방을 보통 씨앗으로 가득 (선물 씨앗 길 = /seed 와 같음)
+	local function fillBag(w)
+		local BaseService = w.H.server("Services/BaseService")
+		while #w.data.eggs < Config.EGG_INVENTORY_MAX do
+			T.truthy(BaseService.grantEgg(w.player, "sprout_daisy", "normal", {}, "dev"))
+		end
+		T.falsy(BaseService.canReceiveEgg(w.player), "가방 가득")
+		T.eq(
+			BaseService.grantEgg(w.player, "sprout_daisy", "normal", {}, "dev"),
+			nil,
+			"보통 선물 씨앗은 못 받음"
+		)
+	end
+
+	T.test(
+		"후보 = 슈퍼 등급 둥지 식물 5종 (유령 성 무지개 번개나무·하늘 기둥꽃 + 해커 연구소 회로 새싹·비밀번호 고사리·와이파이 해바라기 — 공지·사쿠라 전용 없음) · rollSeed 는 고르게 (난수 구간마다 하나씩, 서버 난수 5000번에 5종 모두 비슷하게)",
+		function()
+			local w = world()
+			local PS = w.ProductService
+			local Plants = w.H.shared("Data/Plants")
+			local list = PS.seedCandidates("super")
+			T.eq(table.concat(list, ","), table.concat(SUPER_SEEDS, ","))
+			local expected = 0
+			for _, plant in Plants.list do
+				if plant.rarity == "super" and plant.source == "nest" then
+					expected += 1
+				end
+				if plant.source ~= "nest" then
+					T.falsy(table.find(list, plant.id), plant.id .. " 는 공지·사쿠라 전용")
+				end
+			end
+			T.eq(#list, expected)
+			for _, id in list do
+				T.eq(Plants.get(id).rarity, "super", id)
+			end
+			T.eq(#PS.seedCandidates("없는등급"), 0)
+			T.eq(PS.rollSeed("없는등급"), nil)
+			for i, id in SUPER_SEEDS do
+				T.eq(PS.rollSeed("super", (i - 1) / 5), id, "구간 시작 " .. i)
+				T.eq(PS.rollSeed("super", (i - 0.001) / 5), id, "구간 끝 " .. i)
+			end
+			T.eq(PS.rollSeed("super", 0.99999999), SUPER_SEEDS[5])
+			T.eq(PS.rollSeed("super", 0 / 0), SUPER_SEEDS[1], "NaN 이어도 안 터짐")
+			local counts = {}
+			for _ = 1, 5000 do
+				local id = PS.rollSeed("super")
+				counts[id] = (counts[id] or 0) + 1
+			end
+			for _, id in SUPER_SEEDS do
+				T.truthy((counts[id] or 0) > 800 and (counts[id] or 0) < 1200, id .. " " .. tostring(counts[id]))
+			end
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"grant(seed_super): 슈퍼 씨앗 1개가 가방에 (보통 크기 · 돌연변이 없음 · bought = true · 자람 0) + EggGranted(source purchase) + DataUpdate(eggs) + ProductGranted { seed_super, seed } + Notify '슈퍼 씨앗! ○○ 씨앗을 가방에 받았어요' + 구매 횟수 · 개발 명령 /buy seed_super 도 같은 지급(구매 횟수엔 안 셈)",
+		function()
+			local w = world()
+			local PS = w.ProductService
+			local Plants = w.H.shared("Data/Plants")
+			T.truthy(PS.grant(w.player, "seed_super", "purchase"))
+			T.eq(#w.data.eggs, 1)
+			local egg = w.data.eggs[1]
+			T.truthy(table.find(SUPER_SEEDS, egg.petId), "슈퍼 후보 " .. egg.petId)
+			T.eq(egg.bought, true)
+			T.eq(egg.size, "normal")
+			T.eq(#egg.mutations, 0)
+			T.eq(egg.progress, 0)
+			T.eq(egg.biomeId, Plants.get(egg.petId).biome)
+			local eg = w.H.sent(w.player, "EggGranted")
+			T.eq(#eg, 1)
+			T.eq(eg[1][1].source, "purchase")
+			T.eq(eg[1][1].egg.uid, egg.uid)
+			T.eq(#lastSection(w, "eggs").eggs, 1, "DataUpdate(eggs)")
+			local g = granted(w)
+			T.eq(#g, 1)
+			T.eq(g[1].key, "seed_super")
+			T.eq(g[1].kind, "seed")
+			T.truthy(
+				w.H.hasNotify(
+					w.player,
+					"success",
+					"슈퍼 씨앗! " .. Plants.seedName(egg.petId) .. "을 가방에 받았어요"
+				),
+				"축하 안내"
+			)
+			T.eq(w.data.stats.productsBought, 1)
+			-- /buy seed_super (스튜디오 개발 명령) = 같은 grant
+			local DevCommands = w.H.server("Services/DevCommands")
+			DevCommands.start()
+			w.player.Chatted:Fire("/buy seed_super")
+			T.eq(#w.data.eggs, 2, "/buy 로도 한 개")
+			T.eq(w.data.eggs[2].bought, true)
+			T.eq(w.data.stats.productsBought, 1, "개발 지급은 구매 횟수에 안 셈")
+			T.eq(#granted(w), 2)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"돈을 받았으면 반드시: 가방이 가득(보통 씨앗 50)이어도 영수증 2장 → 슈퍼 씨앗 2개 (52개) · 같은 영수증 재전송은 그대로 · 저장소에 52개 · 나갔다 다시 접속(DataService.load)해도 52개 그대로 (산 씨앗 2개 bought, 보통 50) · 두 번 불러도 같음 · 그래도 보통 씨앗은 여전히 못 받음",
+		function()
+			local w = world()
+			fakeConfigure(w)
+			w.DataService.start()
+			w.session.saveEnabled = true
+			fillBag(w)
+			T.eq(process(w, receipt(w, "seed_super", "super-1")), GRANTED)
+			T.eq(process(w, receipt(w, "seed_super", "super-2")), GRANTED)
+			T.eq(process(w, receipt(w, "seed_super", "super-1")), GRANTED, "재전송")
+			T.eq(process(w, receipt(w, "seed_super", "super-2")), GRANTED, "재전송")
+			T.eq(
+				#w.data.eggs,
+				Config.EGG_INVENTORY_MAX + 2,
+				"가득 찬 가방에도 2개 (재전송은 안 늘어남)"
+			)
+			local bought, normal = seedEggs(w)
+			T.eq(#bought, 2, "산 씨앗 2개")
+			T.eq(normal, Config.EGG_INVENTORY_MAX)
+			for _, egg in bought do
+				T.truthy(table.find(SUPER_SEEDS, egg.petId), egg.petId)
+			end
+			T.eq(#granted(w), 2, "ProductGranted 2번")
+			T.eq(w.data.stats.productsBought, 2)
+			T.eq(w.H.server("Services/BaseService").grantEgg(w.player, "sprout_daisy", "normal", {}, "dev"), nil)
+			-- 저장소
+			local stored = w.H.store.data["player_9001"].data
+			T.eq(#stored.eggs, Config.EGG_INVENTORY_MAX + 2, "저장소에 52개")
+			T.eq(stored.version, 9)
+			-- 나감 → 다시 접속 (진짜 DataService 저장·불러오기)
+			local uids = {}
+			for _, egg in bought do
+				table.insert(uids, egg.uid)
+			end
+			T.truthy(w.H.run(function()
+				return w.DataService.save(w.player, true)
+			end))
+			w.H.leave(w.player)
+			local again = w.H.newPlayer(9001, "Buyer")
+			local data = w.H.run(function()
+				return w.DataService.load(again)
+			end, 60)
+			T.eq(#data.eggs, Config.EGG_INVENTORY_MAX + 2, "다시 접속해도 52개")
+			local keptBought, keptNormal = 0, 0
+			for _, egg in data.eggs do
+				if egg.bought then
+					keptBought += 1
+					T.truthy(table.find(uids, egg.uid), "산 씨앗 uid 그대로 " .. egg.uid)
+				else
+					keptNormal += 1
+				end
+			end
+			T.eq(keptBought, 2)
+			T.eq(keptNormal, Config.EGG_INVENTORY_MAX)
+			T.truthy(
+				table.find(data.receipts, "super-1") and table.find(data.receipts, "super-2"),
+				"영수증 기록도 남음"
+			)
+			-- 한 번 더 불러와도 같음 (reconcile 두 번)
+			local DataSchema = w.H.server("Logic/DataSchema")
+			local twice = DataSchema.reconcile(DataSchema.migrate(data), 0)
+			T.eq(#twice.eggs, Config.EGG_INVENTORY_MAX + 2)
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"저장 스키마 9 (DataSchema): 산 씨앗(bought)은 상한을 넘어도 안 자르고 상한 셈에도 안 넣음 — 산 씨앗이 앞에 있어도 보통 씨앗 50개는 그대로 · 보통 씨앗만 넘치면 50개까지 (옛 규칙 그대로) · bought 는 true 만 인정 · 8 → 9 는 고칠 것 없음 · 정원에서 넘친 씨앗은 보통 씨앗 자리만큼",
+		function()
+			local DataSchema = Loader.require("ServerScriptService/Server/Logic/DataSchema")
+			local MAX = Config.EGG_INVENTORY_MAX
+			local function egg(i, petId, bought)
+				return { uid = "i" .. i, petId = petId, size = "normal", mutations = {}, progress = 0, bought = bought }
+			end
+			-- 산 씨앗 3개가 앞 · 보통 씨앗 50개 뒤
+			local eggs = {}
+			for i = 1, 3 do
+				table.insert(eggs, egg(i, "circuit_sprout", true))
+			end
+			for i = 4, 3 + MAX do
+				table.insert(eggs, egg(i, "sprout_daisy", nil))
+			end
+			local d = DataSchema.reconcile(DataSchema.migrate({ version = 9, eggs = eggs }), 0)
+			T.eq(#d.eggs, MAX + 3, "산 씨앗 3 + 보통 50 전부 남음")
+			T.eq(d.eggs[1].bought, true)
+			T.eq(d.eggs[4].bought, nil, "보통 씨앗은 bought 없음")
+			T.eq(d.version, 9)
+			-- 보통 씨앗만 55개 (옛 데이터): 50개까지
+			local over = {}
+			for i = 1, MAX + 5 do
+				table.insert(over, egg(i, "sprout_daisy", nil))
+			end
+			T.eq(
+				#DataSchema.reconcile(DataSchema.migrate({ version = 8, eggs = over }), 0).eggs,
+				MAX,
+				"옛 규칙 그대로"
+			)
+			-- bought 는 true 만
+			for _, bad in { "yes", 1, false, {} } do
+				local r = DataSchema.reconcile({ version = 9, eggs = { egg(1, "sprout_daisy", bad) } }, 0)
+				T.eq(r.eggs[1].bought, nil, tostring(bad))
+			end
+			-- 8 → 9: 칸 그대로 (옛 가방 씨앗은 보통)
+			local m = DataSchema.migrate({ version = 8, money = 7, eggs = { egg(1, "owl_oak", nil) } })
+			T.eq(m.version, 9)
+			T.eq(m.money, 7)
+			T.eq(#m.eggs, 1)
+			-- 산 씨앗이 섞인 가방 + 정원에서 넘친 씨앗: 넘친 씨앗은 보통 씨앗 자리(50 - 보통 수)만큼만
+			local mixed = { egg(1, "circuit_sprout", true) }
+			for i = 2, MAX do
+				table.insert(mixed, egg(i, "sprout_daisy", nil)) -- 보통 49
+			end
+			local inc = {}
+			for i = 1, 20 do
+				table.insert(inc, { uid = "g" .. i, petId = "owl_oak", size = "normal", mutations = {}, progress = 0 })
+			end
+			local r = DataSchema.reconcile({ version = 9, penLevel = 1, eggs = mixed, incubators = inc }, 0)
+			local normal = 0
+			for _, e in r.eggs do
+				if not e.bought then
+					normal += 1
+				end
+			end
+			T.eq(normal, MAX, "보통 씨앗은 50개까지 (넘친 정원 씨앗으로 채움) " .. normal)
+			T.eq(#r.eggs - normal, 1, "산 씨앗 1개 그대로")
 		end
 	)
 end

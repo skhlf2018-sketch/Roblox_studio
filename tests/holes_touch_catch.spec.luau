@@ -9,6 +9,8 @@
 	  - EggRules.dropOutcome: 그 씨앗 구역 안이면 원인과 상관없이 ReturnToNest, 밖이면 DropHere.
 	    EggRules.groundFate 는 언제나 Return (구역 밖 바닥 씨앗은 5초 뒤 둥지, 주우면 취소 — Stay 없음).
 	진짜 EggService + 진짜 GuardianService (경비 몸은 가짜 Humanoid 라 스스로 안 걸음 → 사람을 경비 집 옆에 놓아 "닿음"을 만듦).
+65번 (2026-11-10): 둥지에서 집으면 경비는 1.78초 뒤에 깨어남 — 아래 pickUp 은 "이미 깨어난 뒤"로 치고 (H1~H5 는 깨어난 뒤 규칙),
+  1.78초 동안 안 잡히는 것은 "둥지 105개 전부" 시험(pickUpRaw)과 services_world 에서 봄.
 
 	  H1 시간이 지나도 멀리 있으면 안 잡힘 · WalkSpeed 불변 (21구역 × 느림/빠름)
 	  H2 닿으면 느린·빠른 사람 모두 그 틱에 1번만 잡힘 (21구역) · 잡힘 거리 경계 ±0.3 · 높이 무시
@@ -75,9 +77,20 @@ return function(T, Loader)
 		return nil
 	end
 
-	local function pickUp(H, p, part)
+	-- 진짜로 집기만 (65번: 둥지에서 집으면 경비는 1.78초 뒤에 깨어남)
+	local function pickUpRaw(H, p, part)
 		H.teleport(p, part.Position.X, part.Position.Y + 1, part.Position.Z)
 		part:FindFirstChild("StealPrompt").Triggered:Fire(p)
+	end
+
+	-- 집고 "경비가 이미 깨어난 뒤"로 침 (집은 시각을 GUARD_WAKE_SECONDS 앞으로) — 이 파일 H1~H5 는 깨어난 뒤의 닿음 규칙.
+	-- 1.78초 동안 안 잡히는 것은 아래 "둥지 105개 전부" 시험과 services_world 에서 봄
+	local function pickUp(H, p, part)
+		pickUpRaw(H, p, part)
+		local carried = H.server("Services/EggService").getCarried(p)
+		if carried and carried.stolenAt then
+			carried.stolenAt -= Config.GUARD_WAKE_SECONDS
+		end
 	end
 
 	local function guardModel(H, biomeId)
@@ -701,12 +714,14 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"둥지 105개 전부: 씨앗을 집는 자리는 경비 잡힘 거리 밖 (집자마자 닿아 잡히면 아무도 못 훔침) — 가장 가까운 둥지도 잡힘 거리보다 멀고, 실제로 집은 뒤 1초 동안 안 잡힘 (그 구역 씨앗을 느리게 들어도)",
+		"둥지 105개 전부 (65번 — 경비는 무리의 벽 쪽에서 잠, 가장 벽 쪽 둥지는 21구역 모두 잡힘 거리 안): 둥지에서 느리게 집고 그 자리에 서 있어도 1.78초 동안은 안 잡히고 안 쫓음(State Sleeping · TargetUserId 0) → 1.78초가 지나면 닿아 있는 둥지 자리는 그 틱에 잡힘(1.78 ~ 1.89초), 안 닿는 둥지 자리는 쫓기만 하고 안 잡힘",
 		function()
 			inWorld({ realEgg = true }, function(H)
 				local w = guardWorld(H)
-				local p, session, data = newRunner(H, 9601, "Thief")
-				local minGap, minGapZone = math.huge, nil
+				local WAKE = Config.GUARD_WAKE_SECONDS
+				T.eq(WAKE, 1.78)
+				local caughtNests, chasedNests, total = 0, 0, 0
+				local userId = 9600
 				for _, id in ALL_ZONES do
 					local model = guardModel(H, id)
 					local reach = model:GetAttribute("CatchDistance")
@@ -716,38 +731,88 @@ return function(T, Loader)
 						nearest = math.min(nearest, math.sqrt((nest.x - home.x) ^ 2 + (nest.z - home.z) ^ 2))
 					end
 					T.truthy(
-						nearest > reach,
-						string.format("%s: 가장 가까운 둥지 %.2f 가 잡힘 거리 %.2f 안", id, nearest, reach)
+						nearest < reach,
+						string.format(
+							"%s: 가장 벽 쪽 둥지 %.2f 는 잡힘 거리 %.2f 안 (그래서 1.78초가 필요)",
+							id,
+							nearest,
+							reach
+						)
 					)
-					if nearest - reach < minGap then
-						minGap, minGapZone = nearest - reach, id
-					end
-					-- 실제로: 가장 가까운 둥지의 씨앗을 느리게 집고 1초 서 있어도 안 잡힘
-					local best, bestDist = nil, math.huge
-					for _, part in H.map.folders.Eggs.children do
+					for _, part in table.clone(H.map.folders.Eggs.children) do
 						if part:GetAttribute("BiomeId") == id and part:GetAttribute("EggState") == "Nest" then
+							total += 1
+							userId += 1
+							local p, session, data = newRunner(H, userId, "Thief" .. userId)
+							local tag = string.format("%s 둥지 %s", id, tostring(part:GetAttribute("EggUid")))
 							local d = math.sqrt((part.Position.X - home.x) ^ 2 + (part.Position.Z - home.z) ^ 2)
-							if d < bestDist then
-								best, bestDist = part, d
+							pickUpRaw(H, p, part)
+							setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
+							local t0 = H.clock()
+							local caughtAt, chasedAt = nil, nil
+							local sleepingUntilWake = true
+							while H.clock() - t0 < WAKE + 0.3 do
+								H.advance(0.01)
+								local elapsed = H.clock() - t0
+								if not caughtAt and #H.sent(p, "Caught") > 0 then
+									caughtAt = elapsed
+								end
+								if not chasedAt and model:GetAttribute("TargetUserId") == p.UserId then
+									chasedAt = elapsed
+								end
+								if elapsed < WAKE - 1e-6 and model:GetAttribute("State") ~= "Sleeping" then
+									sleepingUntilWake = false
+								end
 							end
+							T.truthy(sleepingUntilWake, tag .. ": 1.78초 전에는 State Sleeping 그대로")
+							if d <= reach then
+								caughtNests += 1
+								T.truthy(
+									caughtAt ~= nil and caughtAt >= WAKE - 1e-6 and caughtAt <= WAKE + 0.12,
+									tag
+										.. string.format(
+											" (거리 %.2f ≤ %.2f): 1.78초 뒤 첫 틱에 잡힘 ",
+											d,
+											reach
+										)
+										.. tostring(caughtAt)
+								)
+								T.eq(#H.sent(p, "Caught"), 1, tag .. ": 한 번")
+								T.eq(part:GetAttribute("EggState"), "Nest", tag .. ": 구역 안 = 바로 둥지")
+							else
+								chasedNests += 1
+								T.eq(
+									caughtAt,
+									nil,
+									tag .. string.format(" (거리 %.2f > %.2f): 안 닿으면 안 잡힘", d, reach)
+								)
+								T.truthy(
+									chasedAt ~= nil and chasedAt >= WAKE - 1e-6 and chasedAt <= WAKE + 0.12,
+									tag .. ": 1.78초 뒤 첫 틱부터 쫓음 " .. tostring(chasedAt)
+								)
+								T.eq(model:GetAttribute("State"), "Chase", tag)
+								w.EggService.dropEgg(p) -- 구역 안: 바로 둥지
+								H.advance(0.2)
+							end
+							H.leave(p)
+							H.advance(0.2)
 						end
 					end
-					pickUp(H, p, best)
-					setCarrySpeed(w, p, session, data, threshold(id) * 0.4)
-					local before = #H.sent(p, "Caught")
-					H.advance(1)
-					T.eq(#H.sent(p, "Caught"), before, id .. ": 가장 가까운 둥지에서 집어도 안 잡힘")
-					w.EggService.dropEgg(p) -- 구역 안: 바로 둥지
-					H.advance(0.3)
 				end
+				T.eq(total, 105, "둥지 105개 전부")
+				T.truthy(
+					caughtNests >= 21,
+					"구역마다 적어도 가장 벽 쪽 둥지는 잡힘 거리 안: " .. caughtNests
+				)
+				T.truthy(chasedNests >= 21, "닿지 않는 둥지 자리도 있음: " .. chasedNests)
 				print(
 					string.format(
-						"      (참고) 둥지에서 경비 잡힘 거리까지 가장 빠듯한 구역: %s (여유 %.2f 스터드)",
-						tostring(minGapZone),
-						minGap
+						"      (참고) 둥지 자리에서 1.78초 뒤 잡힘 %d곳 · 쫓기만 %d곳 (경비 잡힘 거리 안/밖)",
+						caughtNests,
+						chasedNests
 					)
 				)
-				T.eq(#H.warnings, 0)
+				T.eq(#H.warnings, 0, "서버 warn " .. tostring(H.warnings[1]))
 			end)
 		end
 	)
@@ -770,7 +835,7 @@ return function(T, Loader)
 							local egg = nestEgg(H, id)
 							pickUp(H, p, egg)
 							setCarrySpeed(w, p, session, data, thr * class[2])
-							H.teleport(p, -50, 3, range.zMax - 0.5) -- 경계 바로 앞 (경비 집에서도 멈: x -58 에서 8, z 36)
+							H.teleport(p, -50, 3, range.zMax - 0.5) -- 경계 바로 앞 (경비 집에서도 멂: 65번 x -100 에서 50, z 36)
 							H.advance(0.1)
 							local before = #H.sent(p, "Caught")
 							H.teleport(p, -50, 3, range.zMax + 0.5)

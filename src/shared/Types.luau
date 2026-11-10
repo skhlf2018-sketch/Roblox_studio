@@ -34,6 +34,9 @@ export type BagEgg = {
 	special: boolean, -- 초기화 공지 씨앗이었나 (빛남 연출용)
 	progress: number, -- 지금까지 자란 시간(초) — 정원에서 다시 주운 씨앗은 그대로 남음
 	required: number, -- 성체까지 필요한 시간(초) = Data/Plants.growSeconds
+	-- 64번: 로벅스로 산 씨앗 (슈퍼 씨앗 seed_super). true 면 가방 상한(EGG_INVENTORY_MAX)을 넘어도 들어가고
+	-- 저장·불러오기에서 안 잘림 (돈을 받았으니). 심으면 사라지는 표시 (정원 씨앗·성체에는 없음)
+	bought: boolean?,
 }
 
 -- 정원에 심어 자라는 씨앗 1개 (저장됨). 다 자라면(progress >= required) 그 자리에서 PetRecord(성체)가 됨
@@ -93,7 +96,7 @@ export type PlayerData = {
 -- 9판: 로벅스 상품 지급됨 (ProductGranted, 나에게만). 바뀐 값은 같이 오는 DataUpdate section·Player Attr 로
 export type ProductGrant = {
 	key: string, -- Data/Products 의 key ("boost_8", "tskip_3", "coins_1m", "money_pass" …)
-	kind: string, -- "treadmillBoost" | "treadmillSkip" | "coins" | "speed" | "moneyPass"
+	kind: string, -- "treadmillBoost" | "treadmillSkip" | "coins" | "speed" | "moneyPass" | "seed" (64번 슈퍼 씨앗)
 }
 
 -- 씨앗 정보 (RunAlert, 공지 등에 쓰는 가벼운 모양)

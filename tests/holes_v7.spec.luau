@@ -718,7 +718,7 @@ return function(T, Loader)
 			{ uid = "g2", petId = "sprout_daisy", size = "big", mutations = {}, progress = 5 }, -- required 칸 없음 → 표 시간 기준
 		}
 		local data = DataSchema.reconcile(DataSchema.migrate(v6Save(entries, eggs)), 1000)
-		T.eq(data.version, 8)
+		T.eq(data.version, 9)
 		T.eq(#data.incubators, 9)
 		for i, ratio in ratios do
 			local rec = data.incubators[i]

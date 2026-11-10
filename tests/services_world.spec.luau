@@ -1334,5 +1334,288 @@ return function(T, Loader)
 		w.H.uninstall()
 	end)
 
+	------------------------------------------------------------------
+	T.suite(
+		"65번 경비: 둥지 무리 오른쪽(벽 쪽)에서 자고, 둥지에서 훔친 지 1.78초 뒤에 깨어남 (사장님 2026-11-10)"
+	)
+
+	local WAKE = 1.78
+
+	-- 숲 씨앗을 "둥지에서 방금" 집은 것처럼 (fake EggService 씨앗에 stolenAt = 지금)
+	local function stealForest(w, player, speed, stolenAt)
+		return carryForest(w, player, speed, 0.10, { stolenAt = stolenAt or w.H.clock() })
+	end
+
+	-- 0.01초씩 limit 초 동안: 처음 잡힌 때 · 처음 대상이 된 때 · 그 전까지 State 가 계속 Sleeping 이었나
+	local function watch(w, player, model, limit, t0)
+		local start = t0 or w.H.clock()
+		local caughtAt, targetAt = nil, nil
+		local sleptUntil = 0
+		local before = 0
+		for _, k in w.H.eggs.knockouts do
+			if k.player == player then
+				before += 1
+			end
+		end
+		while w.H.clock() - start < limit - 1e-9 do
+			w.H.advance(0.01)
+			local elapsed = w.H.clock() - start
+			local n = 0
+			for _, k in w.H.eggs.knockouts do
+				if k.player == player then
+					n += 1
+				end
+			end
+			if not caughtAt and n > before then
+				caughtAt = elapsed
+			end
+			if not targetAt and model:GetAttribute("TargetUserId") == player.UserId then
+				targetAt = elapsed
+			end
+			if model:GetAttribute("State") == "Sleeping" and sleptUntil >= elapsed - 0.011 then
+				sleptUntil = elapsed
+			end
+		end
+		return caughtAt, targetAt, sleptUntil
+	end
+
+	T.test(
+		"자는 자리 (순수): 21구역 전부 경비 집은 둥지 무리의 오른쪽 = 벽 쪽(−x) — 모든 둥지보다 x 가 작고, 벽(−110) 안쪽 10, 가장 벽 쪽 둥지에서 약 10.4 · 무리와 같은 z · 표지판·장식은 경비에서 25 이상 (거대 경비 겉모습 밖) · Config.GUARD_WAKE_SECONDS = 1.78 · GuardLogic.isWaking 경계 (1.77 자는 중 / 1.78·1.79 깸 / nil·NaN = 바로 깸)",
+		function()
+			local H = ServerHarness.install(Loader, T)
+			local MapLayout = H.shared("Data/MapLayout")
+			local Config = H.shared("Data/Config")
+			local GuardLogic = H.server("Logic/GuardLogic")
+			T.eq(Config.GUARD_WAKE_SECONDS, WAKE)
+			T.eq(MapLayout.NEST_CLUSTER.guardDx, -18)
+			local function dist(a, b)
+				return math.sqrt((a.x - b.x) ^ 2 + (a.z - b.z) ^ 2)
+			end
+			local zones = 0
+			for _, b in MapLayout.biomes do
+				zones += 1
+				local cl = MapLayout.nestCluster(b.id)
+				local home = MapLayout.guardHome(b.id)
+				T.eq(home.x, -100, b.id .. " 경비 집 x")
+				T.eq(home.z, cl.center.z, b.id .. " 무리와 같은 줄")
+				T.truthy(home.x >= -MapLayout.HALF_WIDTH + 10, b.id .. " 벽 안쪽 10 이상")
+				T.eq(MapLayout.zoneAt(home.z), b.id)
+				local nearest = math.huge
+				for i, n in cl.nests do
+					T.truthy(home.x < n.x, b.id .. " 둥지" .. i .. " 보다 벽 쪽(−x)")
+					nearest = math.min(nearest, dist(home, n))
+				end
+				T.truthy(nearest >= 10 and nearest <= 11, b.id .. " 가장 벽 쪽 둥지에서 " .. nearest)
+				T.truthy(dist(home, cl.sign) >= 25, b.id .. " 표지판은 경비 겉모습 밖")
+				T.truthy(cl.sign.x > cl.center.x, b.id .. " 표지판은 무리의 복도 쪽")
+				T.truthy(cl.sign.z < cl.center.z, b.id .. " 표지판은 무리 앞(입구 쪽)")
+				for k, d in cl.decor do
+					T.truthy(dist(home, d) >= 25, b.id .. " 장식" .. k .. " 은 경비 겉모습 밖")
+				end
+			end
+			T.eq(zones, 21)
+			local t = 5000
+			T.truthy(GuardLogic.isWaking(t, t, WAKE), "집은 순간: 자는 중")
+			T.truthy(GuardLogic.isWaking(t, t + 1.77, WAKE), "1.77초: 아직 자는 중")
+			T.falsy(GuardLogic.isWaking(t, t + 1.78, WAKE), "1.78초: 깸")
+			T.falsy(GuardLogic.isWaking(t, t + 1.79, WAKE), "1.79초: 깸")
+			T.falsy(GuardLogic.isWaking(nil, t, WAKE), "바닥에서 주움(nil): 바로 깸")
+			T.falsy(GuardLogic.isWaking(0 / 0, t, WAKE), "NaN: 바로 깸 (안 터짐)")
+			T.falsy(GuardLogic.isWaking(t, 0 / 0, WAKE))
+			H.uninstall()
+		end
+	)
+
+	T.test(
+		"둥지에서 훔치고 경비 몸에 닿은 채 서 있어도 1.77초까지는 안 잡히고 안 쫓음 (State Sleeping · TargetUserId 0) → 1.78초가 지난 첫 틱(1.78 ~ 1.89초)에 잡힘 · 한 번만",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			local t0 = w.H.clock()
+			stealForest(w, w.player, 5, t0) -- 많이 모자람 (도망 못 침)
+			nearGuard(w, w.player, 0, 0)
+			local caughtAt, targetAt, sleptUntil = watch(w, w.player, model, 1.77, t0)
+			T.eq(caughtAt, nil, "1.77초: 닿아 있어도 안 잡힘")
+			T.eq(targetAt, nil, "1.77초: 안 쫓음")
+			T.eq(model:GetAttribute("State"), "Sleeping", "1.77초: 계속 잠")
+			T.eq(model:GetAttribute("TargetUserId"), 0)
+			T.truthy(sleptUntil >= 1.76, "처음부터 계속 Sleeping " .. sleptUntil)
+			local mid = w.H.clock() - t0
+			local later = watch(w, w.player, model, 0.2)
+			T.truthy(w.H.clock() - t0 > 1.9, "1.97초까지 봄")
+			T.eq(#w.H.eggs.knockouts, 1, "1.78초가 지나면 닿는 틱에 잡힘 (한 번)")
+			local k = w.H.eggs.knockouts[1]
+			T.eq(k.cause, "guard")
+			T.eq(k.outcome, nil, "보통 잡힘 (경계 잡힘 아님)")
+			T.truthy(later ~= nil, "잡힌 때를 기록")
+			-- 잡힌 때 = 1.78 ~ 1.89초 (1.78초가 지난 첫 경비 틱)
+			local caughtElapsed = mid + (later or 0)
+			T.truthy(caughtElapsed >= WAKE - 1e-6 and caughtElapsed <= WAKE + 0.12, "잡힌 때 " .. caughtElapsed)
+			w.H.advance(3)
+			T.eq(#w.H.eggs.knockouts, 1, "또 안 잡힘")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"둥지에서 훔치고 멀리 있으면: 1.77초까지는 대상이 아님 (Sleeping) → 1.78초가 지난 첫 틱부터 Chase · 그 사람이 대상 · 그 뒤 10초가 지나도 닿지 않으면 안 잡힘 (1.78초는 깨어나는 시간일 뿐)",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			local t0 = w.H.clock()
+			stealForest(w, w.player, 5, t0)
+			place(w, w.player, 30, -60) -- 경비 집에서 멂
+			local caughtAt, targetAt, sleptUntil = watch(w, w.player, model, 1.77, t0)
+			T.eq(targetAt, nil, "1.77초: 아직 대상 아님")
+			T.eq(caughtAt, nil)
+			T.truthy(sleptUntil >= 1.76, "1.77초까지 Sleeping " .. sleptUntil)
+			local _, target2 = watch(w, w.player, model, 0.15) -- 1.77 → 1.92
+			T.truthy(target2 ~= nil, "1.92초 안에 대상이 됨")
+			T.eq(model:GetAttribute("State"), "Chase", "깨어나 쫓음")
+			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId)
+			w.H.uninstall()
+			-- 처음 대상이 된 때 = 1.78 ~ 1.89초
+			local w2 = guardWorld()
+			local model2 = guardOf(w2, "forest")
+			local s0 = w2.H.clock()
+			stealForest(w2, w2.player, 5, s0)
+			place(w2, w2.player, 30, -60)
+			local _, firstTarget = watch(w2, w2.player, model2, 2.0, s0)
+			T.truthy(
+				firstTarget ~= nil and firstTarget >= WAKE - 1e-6 and firstTarget <= WAKE + 0.12,
+				"처음 대상이 된 때 " .. tostring(firstTarget)
+			)
+			w2.H.advance(10)
+			T.eq(#w2.H.eggs.knockouts, 0, "닿지 않으면 시간이 지나도 안 잡힘")
+			T.eq(model2:GetAttribute("TargetUserId"), w2.player.UserId, "계속 쫓음")
+			w2.H.uninstall()
+		end
+	)
+
+	T.test(
+		"바닥에 떨어진 씨앗을 다시 주우면 (stolenAt 없음) 지연 없음: 첫 틱에 쫓고, 닿아 있으면 첫 틱(0.1초 안)에 잡힘 — 내려놓고 다시 줍기로 1.78초 무적을 반복하지 못함",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			carryForest(w, w.player, 5, 0.10) -- 바닥에서 주운 씨앗 = stolenAt 없음
+			place(w, w.player, 30, -60)
+			local t0 = w.H.clock()
+			local _, targetAt = watch(w, w.player, model, 0.15, t0)
+			T.truthy(targetAt ~= nil and targetAt <= 0.12, "첫 틱에 쫓음 " .. tostring(targetAt))
+			nearGuard(w, w.player, 0, 0)
+			local t1 = w.H.clock()
+			local caughtAt = watch(w, w.player, model, 0.15, t1)
+			T.truthy(caughtAt ~= nil and caughtAt <= 0.12, "닿으면 첫 틱에 잡힘 " .. tostring(caughtAt))
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"경비가 이미 다른 사람(A, 바닥에서 주움 · 도망 가능 · 멀리)을 쫓는 중에 B 가 둥지에서 훔침: B 는 1.77초까지 대상도 아니고 닿아도 안 잡힘 (경비는 A 를 계속 쫓음) → 1.78초가 지나면 B 가 대상 (도망 못 치는 사람 먼저) · 닿아 있던 C 는 그 틱에 잡힘",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			local a = w.player
+			carryForest(w, a, 100, 0.10) -- 도망 가능, stolenAt 없음
+			place(w, a, 30, -80)
+			w.H.advance(0.3)
+			T.eq(model:GetAttribute("TargetUserId"), a.UserId, "A 를 쫓는 중")
+			local b = w.H.newPlayer(1002, "B")
+			w.H.login(b).plotIndex = 2
+			w.H.spawn(b, 0, 3, 0)
+			local c = w.H.newPlayer(1003, "C")
+			w.H.login(c).plotIndex = 3
+			w.H.spawn(c, 0, 3, 0)
+			local t0 = w.H.clock()
+			stealForest(w, b, 5, t0) -- 도망 못 침 · A 보다 가까움
+			place(w, b, 20, -40)
+			stealForest(w, c, 5, t0) -- 도망 못 침 · 경비 몸에 닿음
+			nearGuard(w, c, 1, 0)
+			local _, bTarget = watch(w, b, model, 1.77, t0)
+			T.eq(bTarget, nil, "1.77초: B 는 대상 아님")
+			T.eq(model:GetAttribute("TargetUserId"), a.UserId, "1.77초: 계속 A")
+			T.eq(#w.H.eggs.knockouts, 0, "1.77초: 닿아 있는 C 도 안 잡힘")
+			watch(w, b, model, 0.15)
+			T.eq(model:GetAttribute("TargetUserId"), b.UserId, "1.92초: 도망 못 치는 B 가 대상")
+			local caughtC = 0
+			for _, k in w.H.eggs.knockouts do
+				if k.player == c then
+					caughtC += 1
+				end
+				T.truthy(k.player ~= a and k.player ~= b, "닿지 않은 A·B 는 안 잡힘")
+			end
+			T.eq(caughtC, 1, "닿아 있던 C 는 깨어난 틱에 잡힘")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"경계 규칙은 1.78초와 상관없음: 둥지에서 방금 훔친 사람도 도망 못 치는 채로 다음 구역 경계(zMax)를 넘으면 0.25초 안에 잡히고 씨앗은 둥지로 (ReturnToNest) · 도망 칠 수 있으면 넘어가도 자유",
+		function()
+			local w = guardWorld()
+			local model = guardOf(w, "forest")
+			local zMax = w.H.MapLayout.biome("forest").zMax
+			local t0 = w.H.clock()
+			stealForest(w, w.player, 5, t0)
+			w.H.teleport(w.player, -50, 3, zMax - 0.5)
+			w.H.advance(0.05)
+			w.H.teleport(w.player, -50, 3, zMax + 0.5)
+			local caughtAt = watch(w, w.player, model, 0.3)
+			T.truthy(caughtAt ~= nil and caughtAt <= 0.25, "경계를 넘으면 즉시 " .. tostring(caughtAt))
+			T.truthy(w.H.clock() - t0 < WAKE, "1.78초 전에 잡힘")
+			local k = w.H.eggs.knockouts[1]
+			T.eq(k.outcome, "ReturnToNest", "씨앗은 둥지로")
+			-- 도망 칠 수 있으면 방금 훔쳐도 넘어가도 자유 (닿지 않는 한)
+			local s0 = w.H.clock()
+			stealForest(w, w.player, 100, s0)
+			w.H.teleport(w.player, -50, 3, zMax + 20)
+			w.H.advance(4)
+			T.eq(#w.H.eggs.knockouts, 1, "도망 가능하면 자유")
+			w.H.uninstall()
+		end
+	)
+
+	T.test(
+		"진짜 EggService: 둥지에서 집으면 egg.stolenAt = 집은 시각 · 구역 밖 바닥에서 다시 주우면 nil (지연 없음) · 둥지로 돌아간 씨앗은 지워짐 · 진짜 경비도 1.78초 동안 안 쫓고 그 뒤 쫓음",
+		function()
+			local w = eggWorld()
+			local GuardianService = w.H.server("Services/GuardianService")
+			GuardianService.start()
+			w.session.moveExemptUntil = w.H.clock() + 1e6
+			w.data.speed = 5 -- 도망 못 침
+			w.H.server("Services/SpeedService").refresh(w.player)
+			local model = guardOf(w, "forest")
+			local egg = nestEgg(w.H, "forest")
+			local t0 = w.H.clock()
+			pressE(w, egg)
+			local obj = w.EggService.getCarried(w.player)
+			T.truthy(obj ~= nil, "들었음")
+			T.eq(obj.stolenAt, t0, "둥지에서 집은 시각")
+			local range = w.H.MapLayout.biome("forest")
+			w.H.teleport(w.player, 30, 3, range.centerZ) -- 구역 안, 경비에서 멂
+			w.H.advance(1.7)
+			T.eq(model:GetAttribute("TargetUserId"), 0, "1.7초: 안 쫓음")
+			T.eq(model:GetAttribute("State"), "Sleeping")
+			w.H.advance(0.25)
+			T.eq(model:GetAttribute("TargetUserId"), w.player.UserId, "1.95초: 쫓음")
+			T.eq(model:GetAttribute("State"), "Chase")
+			-- 구역 밖(허브 — 이 세상엔 배달이 없음)에서 내려놓고 5초 안에 다시 주움 → stolenAt 없음
+			w.H.teleport(w.player, 30, 3, -10)
+			w.H.advance(0.3)
+			w.EggService.dropEgg(w.player)
+			T.eq(egg:GetAttribute("EggState"), "Dropped")
+			w.H.advance(1)
+			pressE(w, egg)
+			local again = w.EggService.getCarried(w.player)
+			T.truthy(again ~= nil, "바닥에서 다시 주움")
+			T.eq(again.stolenAt, nil, "바닥에서 주우면 지연 없음")
+			-- 구역 안에서 내려놓으면 바로 둥지 → 둥지 씨앗은 stolenAt 지워짐
+			w.H.teleport(w.player, 30, 3, range.centerZ)
+			w.EggService.dropEgg(w.player)
+			T.eq(egg:GetAttribute("EggState"), "Nest")
+			w.H.uninstall()
+		end
+	)
+
 	ServerHarness.install(Loader, T).uninstall()
 end

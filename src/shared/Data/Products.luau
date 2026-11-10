@@ -6,7 +6,8 @@
 	  - 게임패스 12개 (isPass = true, 한 번만 삼): boost_2 … boost_2048 (11) + money_pass
 	      구매창 MarketplaceService:PromptGamePassPurchase(player, productId) (클라 Purchase). ProcessReceipt 는 안 옴 →
 	      서버 ProductService 가 UserOwnsGamePassAsync 로 소유를 확인해서 반영 (접속할 때 syncPasses + PromptGamePassPurchaseFinished)
-	  - 개발자 상품 24개 (isPass = false, 소모품): tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m
+	  - 개발자 상품 25개 (isPass = false, 소모품): tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m,
+	      seed_super (64번 — 사장님 2026-11-10 "5999로벅스로 슈퍼 등급 알을 살 수 있게 … 여러 번 살 수 있게 소모품")
 	      구매창 MarketplaceService:PromptProductPurchase(player, productId). 돈을 받으면 로블록스가 서버 ProcessReceipt 를 부르고,
 	      서버 ProductService 가 지급 → ProductGranted { key, kind } + Snapshot section.
 	  서버로 "사 줘" 하는 Remote 는 없음 (위조 방지).
@@ -23,7 +24,10 @@
 	  - "treadmillSkip": 러닝머신을 value 레벨로 바로 올림 (코인 안 듦). 지금 레벨 + 1 = value 일 때 파는 상품
 	  - "coins": 코인 +value · "speed": 속도 +value
 	  - "moneyPass" [게임패스]: 코인 2배 (영원히) — 열매 판매·성체 팔기 코인 × value(2)
-	가격(로벅스): 부스트 = 배수와 같은 숫자 · 러닝머신 레벨 = TREADMILL_SKIP_ROBUX (18~20레벨은 [추정]) · 상점 5개
+	  - "seed" [개발자 상품, 64번]: product.rarity 등급(Rarities id) 식물 중 하나를 서버 난수로 고르게 뽑아 **씨앗 value(1)개를 가방에**.
+	      후보 = Plants 의 rarity 가 같은 식물 (공지 전용 source "special"·사쿠라 전용 "sakura" 는 뺌 — ProductService.seedCandidates).
+	      돈을 받았으니 **가방이 가득 차 있어도 줌** (BagEgg.bought = true — 가방 상한을 넘어도 저장·불러오기에서 안 잘림, 스키마 9)
+	가격(로벅스): 부스트 = 배수와 같은 숫자 · 러닝머신 레벨 = TREADMILL_SKIP_ROBUX (18~20레벨은 [추정]) · 상점 6개 (슈퍼 씨앗 5999)
 ]]
 
 local Config = require(script.Parent.Config)
@@ -37,6 +41,7 @@ export type Product = {
 	productId: number,
 	value: number?,
 	isPass: boolean,
+	rarity: string?, -- kind "seed" 만: 뽑는 씨앗 등급 (Rarities id, 예 "super")
 }
 
 local Kinds = {
@@ -45,11 +50,13 @@ local Kinds = {
 	coins = "coins",
 	speed = "speed",
 	moneyPass = "moneyPass",
+	seed = "seed",
 }
 
 -- ★ 아빠가 Creator Dashboard 에서 만든 id 를 여기에 붙여 넣기 (0 = 아직 없음). 한 표지만 두 종류 — 섞지 말 것:
 --   [게임패스] Monetization → Passes 의 Pass ID : boost_2 … boost_2048, money_pass (12개)
---   [개발자 상품] Monetization → Developer Products 의 Product ID : tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m (24개)
+--   [개발자 상품] Monetization → Developer Products 의 Product ID : tskip_1 … tskip_20, coins_1m, coins_1b, speed_10m, speed_100m,
+--     seed_super (25개)
 local IDS: { [string]: number } = {
 	-- [게임패스] 러닝머신 부스트 (영구) — 2배부터 차례로 다 붙일 것
 	boost_2 = 2076130863,
@@ -91,6 +98,7 @@ local IDS: { [string]: number } = {
 	coins_1b = 3730161170,
 	speed_10m = 3730160982,
 	speed_100m = 3730161284,
+	seed_super = 3730164047,
 }
 
 -- 러닝머신 부스트 배수 (= 로벅스 가격)
@@ -181,6 +189,10 @@ add(shop, make("coins_1m", Kinds.coins, "코인 1M", 99, 1e6, false))
 add(shop, make("coins_1b", Kinds.coins, "코인 1B", 199, 1e9, false))
 add(shop, make("speed_10m", Kinds.speed, "속도 10M", 199, 1e7, false))
 add(shop, make("speed_100m", Kinds.speed, "속도 100M", 259, 1e8, false))
+-- 64번 (사장님 2026-11-10): 슈퍼 등급 씨앗 1개 (소모품 — 여러 번 삼). value = 씨앗 수
+local superSeed = make("seed_super", Kinds.seed, "슈퍼 씨앗", 5999, 1, false)
+superSeed.rarity = "super"
+add(shop, superSeed)
 
 local Products = {
 	Kinds = Kinds,

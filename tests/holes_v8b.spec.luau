@@ -84,9 +84,16 @@ return function(T, Loader)
 		return nil
 	end
 
+	-- 65번 (2026-11-10): 둥지에서 집으면 경비는 1.78초(GUARD_WAKE_SECONDS) 뒤에 깨어남 — 그 규칙은 services_world 에서 따로 봄.
+	-- 이 파일의 시험은 "경비가 깨어난 뒤" 규칙이라, 집자마자 깨어난 것으로 침 (집은 시각을 1.78초 앞으로)
 	local function pickUp(H, p, part)
 		H.teleport(p, part.Position.X, part.Position.Y + 1, part.Position.Z)
 		part:FindFirstChild("StealPrompt").Triggered:Fire(p)
+		local EggService = H.server("Services/EggService")
+		local carried = if EggService.getCarried then EggService.getCarried(p) else nil
+		if carried and carried.stolenAt then
+			carried.stolenAt -= Config.GUARD_WAKE_SECONDS
+		end
 	end
 
 	local function guardModel(H, biomeId)
@@ -1070,13 +1077,13 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"둥지 105개 전부: 구역 안·벽에서 20 이상·다음 구역 경계에서 29 이상·서로 8 이상(이웃 8~8.6)·경비 집/표지판/장식과 안 겹침, 모든 구역 같은 모양",
+		"둥지 105개 전부: 구역 안·벽에서 20 이상·다음 구역 경계에서 29 이상·서로 8 이상(이웃 8~8.6)·경비 집/표지판/장식과 안 겹침, 모든 구역 같은 모양 (65번: 경비 집은 무리의 벽 쪽 x −100)",
 		function()
 			local c = MapLayout.NEST_CLUSTER
 			T.eq(c.x, -82)
 			T.eq(c.endGap, 36)
-			T.eq(c.guardDx, 24)
-			T.eq(c.sign.dx, -14)
+			T.eq(c.guardDx, -18, "65번: 무리의 오른쪽 = 벽 쪽")
+			T.eq(c.sign.dx, 14, "65번: 표지판은 복도 쪽으로")
 			T.eq(c.sign.dz, -14)
 			local total = 0
 			local firstShape
@@ -1090,9 +1097,9 @@ return function(T, Loader)
 				T.eq(MapLayout.guardHome(b.id).x, cl.guard.x)
 				T.eq(MapLayout.guardHome(b.id).z, cl.guard.z)
 				T.eq(MapLayout.nestSign(b.id).z, cl.sign.z)
-				T.eq(cl.guard.x, -58, "경비 집 = 가운데 + (24, 0)")
+				T.eq(cl.guard.x, -100, "65번: 경비 집 = 가운데 + (-18, 0), 벽에서 10")
 				T.eq(cl.guard.z, cl.center.z)
-				T.eq(cl.sign.x, -96)
+				T.eq(cl.sign.x, -68)
 				T.eq(cl.sign.z, cl.center.z - 14)
 				local shape = {}
 				for i, n in cl.nests do
@@ -1125,20 +1132,32 @@ return function(T, Loader)
 				end
 				-- 경비 집 · 표지판 · 장식 · 둥지가 서로 안 겹침
 				for i, n in cl.nests do
-					T.truthy(dist(n, cl.guard) >= 15, b.id .. " 경비 집~둥지" .. i .. " " .. dist(n, cl.guard))
+					-- 65번: 경비는 모든 둥지보다 벽 쪽(-x) · 가장 가까운 둥지와도 둥지 파트·경비 몸(4)이 안 겹침 (8 이상)
+					T.truthy(cl.guard.x < n.x, b.id .. " 경비 집이 둥지" .. i .. " 보다 벽 쪽")
+					T.truthy(dist(n, cl.guard) >= 8, b.id .. " 경비 집~둥지" .. i .. " " .. dist(n, cl.guard))
 					T.truthy(dist(n, cl.sign) >= 12, b.id .. " 표지판~둥지" .. i .. " " .. dist(n, cl.sign))
 					for k, d in cl.decor do
 						T.truthy(dist(n, d) >= 9, b.id .. " 장식" .. k .. "~둥지" .. i .. " " .. dist(n, d))
 					end
 				end
-				T.truthy(dist(cl.guard, cl.sign) >= 30, b.id .. " 경비 집~표지판")
+				T.truthy(
+					dist(cl.guard, cl.sign) >= 30,
+					b.id .. " 경비 집~표지판 (65번: 거대 경비 겉모습 밖)"
+				)
 				for k, d in cl.decor do
-					T.truthy(dist(cl.guard, d) >= 12, b.id .. " 경비 집~장식" .. k)
+					T.truthy(
+						dist(cl.guard, d) >= 25,
+						b.id .. " 경비 집~장식" .. k .. " (65번: 거대 경비 겉모습 밖)"
+					)
 					T.truthy(dist(cl.sign, d) >= 20, b.id .. " 표지판~장식" .. k)
 				end
-				for _, spot in { cl.guard, cl.sign, cl.decor[1], cl.decor[2] } do
+				for k, spot in { cl.guard, cl.sign, cl.decor[1], cl.decor[2] } do
 					T.eq(MapLayout.zoneAt(spot.z), b.id)
-					T.truthy(math.abs(spot.x) <= MapLayout.HALF_WIDTH - 12, b.id .. " 벽 안쪽")
+					-- 65번: 경비 집만 벽에서 10 (무리의 벽 쪽), 나머지는 12 이상
+					T.truthy(
+						math.abs(spot.x) <= MapLayout.HALF_WIDTH - (if k == 1 then 10 else 12),
+						b.id .. " 벽 안쪽"
+					)
 					T.truthy(b.zMax - spot.z >= 20, b.id .. " 다음 구역 경계에서 20 이상")
 				end
 				-- 이웃 구역과도 안 겹침: 다음 구역 입구 아치(zMin + 10) 에서 멂

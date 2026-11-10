@@ -712,6 +712,134 @@ local function body()
 		kidLevels.TreadmillLevel = 20
 		MapBuilder.setPlotOwner(2, kid)
 	end
+	-- 9판 (사장님 2026-11-10): 베이스마다 등급 큰 표지판 RarityBoard 1개 — 16등급 낮은 것부터 · 앞마당 안 · 안 겹침 · 파트 3개
+	do
+		local Rarities9 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Rarities"))
+		local Layout9 = requireNode(Loader.get("ReplicatedStorage/Shared/Data/MapLayout"))
+		-- 파트의 월드 AABB (회전 반영)
+		local function aabb(part)
+			local cf, s = part.CFrame, part.Size
+			local r, u, l = cf.RightVector, cf.UpVector, cf.LookVector
+			local hx = (math.abs(r.X) * s.X + math.abs(u.X) * s.Y + math.abs(l.X) * s.Z) / 2
+			local hy = (math.abs(r.Y) * s.X + math.abs(u.Y) * s.Y + math.abs(l.Y) * s.Z) / 2
+			local hz = (math.abs(r.Z) * s.X + math.abs(u.Z) * s.Y + math.abs(l.Z) * s.Z) / 2
+			local p = cf.Position
+			return { p.X - hx, p.Y - hy, p.Z - hz }, { p.X + hx, p.Y + hy, p.Z + hz }
+		end
+		local function hit(a0, a1, b0, b1)
+			for k = 1, 3 do
+				if a0[k] >= b1[k] - 0.01 or b0[k] >= a1[k] - 0.01 then
+					return false
+				end
+			end
+			return true
+		end
+		local boards, textOk, yardOk, faceOk, partsOk, clearOk = 0, true, true, true, true, true
+		local clashes = {}
+		for i = 1, Layout9.PLOT_COUNT do
+			local plotFolder = map:FindFirstChild("Plot" .. i, true)
+			local found = {}
+			for _, d in (plotFolder and plotFolder:GetDescendants() or {}) do
+				if d.Name == "RarityBoard" then
+					table.insert(found, d)
+				end
+			end
+			boards += #found
+			local board = found[1]
+			if #found ~= 1 or not board then
+				textOk = false
+				continue
+			end
+			-- 글 16줄 (번호 + Rarities.displayName, 낮은 것부터) + 제목
+			local title = board:FindFirstChild("Title", true)
+			if not title or not string.find(title.Text, "RARITY", 1, true) then
+				textOk = false
+			end
+			local rows = 0
+			for _, d in board:GetDescendants() do
+				if d:IsA("TextLabel") and string.sub(d.Name, 1, 6) == "Rarity" then
+					rows += 1
+				end
+			end
+			for n, r in Rarities9.list do
+				local label = board:FindFirstChild("Rarity" .. n, true)
+				if not label or label.Text ~= n .. ". " .. r.displayName then
+					textOk = false
+				end
+			end
+			if rows ~= 16 or #Rarities9.list ~= 16 then
+				textOk = false
+			end
+			-- 파트 3개 (판 + 기둥 2), 부딪히는 건 판·기둥만
+			local own = { board }
+			for _, d in plotFolder:GetDescendants() do
+				if d:IsA("BasePart") and string.sub(d.Name, 1, 15) == "RarityBoardPost" then
+					table.insert(own, d)
+				end
+			end
+			if #own ~= 3 then
+				partsOk = false
+			end
+			-- 앞마당 안 (로컬 u 0~24, v -30~30) · 복도 쪽을 봄
+			local p = Layout9.plot(i)
+			local f = p.facing
+			local frontX = p.center.x + f * p.size.d / 2
+			for _, part in own do
+				local lo, hi = aabb(part)
+				for _, x in { lo[1], hi[1] } do
+					local u = (frontX - x) * f
+					if u < 0 or u > Layout9.YARD_DEPTH then
+						yardOk = false
+					end
+				end
+				for _, z in { lo[3], hi[3] } do
+					local v = z - p.center.z
+					if v < -p.size.w / 2 or v > p.size.w / 2 then
+						yardOk = false
+					end
+				end
+			end
+			if board.CFrame.LookVector:Dot(roblox.Vector3.new(f, 0, 0)) < 0.99 then
+				faceOk = false
+			end
+			-- 안 겹침: 베이스 안 다른 모든 파트 (바닥 판·바닥 무늬처럼 높이 0.3 아래는 빼고)
+			-- (Lune 은 같은 파트라도 표 열쇠로는 다르게 볼 수 있어 == 로 비교)
+			local function isOwn(x)
+				for _, part in own do
+					if part == x then
+						return true
+					end
+				end
+				return false
+			end
+			for _, other in plotFolder:GetDescendants() do
+				if other:IsA("BasePart") and not isOwn(other) then
+					local o0, o1 = aabb(other)
+					if o1[2] > 0.3 then
+						for _, part in own do
+							local a0, a1 = aabb(part)
+							if hit(a0, a1, o0, o1) then
+								clearOk = false
+								table.insert(clashes, i .. ":" .. part.Name .. "↔" .. other.Name)
+							end
+						end
+					end
+				end
+			end
+		end
+		check(boards == 7, "9판: 등급 표지판 RarityBoard 베이스마다 1개 (" .. boards .. ")")
+		check(textOk, "등급 표지판 글 16줄 = '번호. Rarities.displayName' 낮은 것부터 + 제목 RARITY")
+		check(partsOk, "등급 표지판 파트 3개 (판 1 + 기둥 2)")
+		check(
+			yardOk and faceOk,
+			"등급 표지판이 앞마당 안 · 복도 쪽을 봄 (왼쪽·오른쪽 베이스 둘 다)"
+		)
+		check(
+			clearOk,
+			"등급 표지판이 가게·업그레이드·건너뛰기·주인 표지판·러닝머신·가로등과 안 겹침 "
+				.. table.concat(clashes, ", ")
+		)
+	end
 	local sign = MapBuilder.getPlot(2).sign
 	local title = sign and sign:FindFirstChild("Title", true)
 	check(title and title.Text == "Kid의 베이스", "주인 이름 간판: " .. tostring(title and title.Text))

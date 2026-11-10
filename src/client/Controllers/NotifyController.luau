@@ -272,6 +272,9 @@ function NotifyController.start()
 	local extra = E :: { [string]: string }
 	onOptional(extra.EggGranted, function(p)
 		-- 선물 씨앗도 씨앗 가방으로 (대기 줄 없음, payload.queued 는 안 봄)
+		if p.source == "purchase" then
+			return -- 64번 로벅스 슈퍼 씨앗: 서버 Notify("슈퍼 씨앗! … 받았어요")가 이미 알림 (두 번 안 뜨게)
+		end
 		local egg = p.egg or p.record or {}
 		local from = SOURCES[tostring(p.source)] or "선물"
 		NotifyController.toast(

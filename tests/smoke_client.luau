@@ -953,6 +953,89 @@ local function body()
 			"코인 2배를 가졌으면 '보유 중' 회색"
 		)
 		player:SetAttribute("MoneyPass", nil)
+		-- 9판 (사장님 2026-11-10): "씨앗" 탭 — 슈퍼 씨앗 (seed_super, R$ 5,999, 개발자 상품). 진짜 IDS 숫자는 안 건드림:
+		--   Products.get 만 잠깐 바꿔서 (수석이 아직 안 넣었으면 가짜 상품, 넣었으면 진짜 상품에 가짜 id 7777) 보고 되돌림
+		do
+			local P = productsForSmoke
+			local realGet = P.get
+			local realSeed = realGet("seed_super")
+			local seedProduct = realSeed
+				or {
+					key = "seed_super",
+					kind = "seed",
+					name = "슈퍼 씨앗",
+					robux = 5999,
+					productId = 0,
+					isPass = false,
+					rarity = "super",
+				}
+			local oldId = seedProduct.productId
+			local present = true
+			P.get = function(key)
+				if key == "seed_super" then
+					return if present then seedProduct else nil
+				end
+				return realGet(key)
+			end
+			local ok, err = pcall(function()
+				-- 없을 때: 에러 없이 카드 없음
+				present = false
+				check(
+					click(playerGui:FindFirstChild("Tab_seed", true)),
+					"9판: 상점 '씨앗' 탭 (seed_super 없을 때도 에러 없음)"
+				)
+				check(
+					shopWin:FindFirstChild("Product_seed_super", true) == nil
+						and shopWin:FindFirstChild("Empty", true) ~= nil,
+					"seed_super 가 없으면 카드 없음 · '곧 나와요!'"
+				)
+				-- 있을 때: 카드 · 글 · 무지개 띠 · 누르면 그 상품 id 로 구매창
+				present = true
+				seedProduct.productId = 7777
+				check(click(playerGui:FindFirstChild("Tab_seed", true)), "씨앗 탭 다시 (seed_super 있음)")
+				local seedCard = shopWin:FindFirstChild("Product_seed_super", true)
+				local seedBtn = seedCard and seedCard:FindFirstChild("BuyProduct")
+				local titleOk, descOk = false, false
+				for _, d in (seedCard and seedCard:GetDescendants() or {}) do
+					if d:IsA("TextLabel") and d.Text == "슈퍼 씨앗" then
+						titleOk = true
+					end
+					if d:IsA("TextLabel") and string.find(d.Text, "슈퍼(Super) 등급 씨앗 1개를", 1, true) then
+						descOk = true
+					end
+				end
+				check(
+					seedCard ~= nil
+						and titleOk
+						and descOk
+						and seedBtn
+						and seedBtn.Text == "R$ 5,999"
+						and seedCard:GetAttribute("Description") == "슈퍼(Super) 등급 씨앗 1개를 가방에 받아요 · 여러 번 살 수 있어요"
+						and seedCard:FindFirstChild("RarityBand") ~= nil,
+					"씨앗 탭: '슈퍼 씨앗' 카드 · 'R$ 5,999' · 설명 · 무지개 띠 — "
+						.. tostring(seedBtn and seedBtn.Text)
+				)
+				local beforeSeed = #marketPrompts
+				check(click(seedBtn), "슈퍼 씨앗 사기 누름")
+				check(
+					#marketPrompts == beforeSeed + 1
+						and marketPrompts[#marketPrompts].id == 7777
+						and marketPrompts[#marketPrompts].pass == false,
+					"슈퍼 씨앗 → PromptProductPurchase(나, 7777) — 개발자 상품 (여러 번)"
+				)
+				MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7777, false)
+				check(
+					click(seedBtn) and #marketPrompts == beforeSeed + 2,
+					"구매창을 닫으면 또 살 수 있음 (여러 번)"
+				)
+				MarketplaceStub.PromptProductPurchaseFinished:Fire(77, 7777, false)
+			end)
+			seedProduct.productId = oldId
+			P.get = realGet
+			if not ok then
+				error(err, 0)
+			end
+		end
 		click(playerGui:FindFirstChild("Tab_upgrades", true))
 		local tcard = shopWin:FindFirstChild("TreadmillCard", true)
 		local skipBtn = tcard and tcard:FindFirstChild("SkipRobux")

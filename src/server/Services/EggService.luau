@@ -45,6 +45,8 @@
 	  - 8판: 경비 잡힘은 추격 시간으로 정함 (GuardianService) — 알마다 chaseBy/chaseSeconds 에 쌓이고 둥지로 돌아가면 0.
 	    같은 사람이 버렸다 다시 주우면 이어서 쌓임 (버렸다 줍기 반복으로 못 버팀). 7판 줍기 유예(GRACE)는 없앰
 	  - 플레이어 Attr CarryWeightKg = 든 알 무게 (Sizes.carryKg, 표시용), 알 파트 Attr WeightKg 도 같음.
+	  - 65번 (사장님 2026-11-10): **둥지에서** 집으면 egg.stolenAt = 그 시각 → 경비는 GUARD_WAKE_SECONDS(1.78초) 뒤에 깨어남
+	    (GuardianService). 바닥 씨앗을 다시 주우면 stolenAt = nil (지연 없음), 둥지로 돌아가면 지움
 
 	5판 신호 (튜토리얼): pickedUp(player, EggInfo) = 알을 들었음 / lost(player) = 든 알을 놓침
 	  (잡힘·무기·곰덫·DropEgg·죽음·나감·치트 의심 압수 — 배달(takeCarried)은 lost 아님)
@@ -107,6 +109,9 @@ export type Egg = {
 	returnAt: number?, -- 바닥 씨앗이 둥지로 돌아가는 시각 (os.clock, 구역 밖에 떨어졌을 때만). nil = 그 자리에 그대로
 	chaseBy: Player?, -- 이 씨앗으로 쫓긴 사람 (GuardianService 가 씀)
 	chaseSeconds: number, -- chaseBy 가 도망칠 수 없는 채로 쫓긴 시간 합 (초) — 둥지로 돌아가면 0
+	-- 65번: **둥지에서** 집은 시각 (os.clock). 경비는 이 뒤 GUARD_WAKE_SECONDS(1.78초) 동안 이 씨앗을 든 사람을 안 쫓고 닿아도
+	-- 안 잡음 (GuardianService). 바닥 씨앗을 다시 주우면 nil (지연 없음 — 내려놓고 다시 줍기로 무적을 반복하지 못하게)
+	stolenAt: number?,
 }
 
 export type SpecialEggOptions = {
@@ -322,6 +327,7 @@ local function placeOnNest(egg: Egg, slot: NestSlot)
 	egg.returnAt = nil
 	egg.chaseBy = nil -- 8판: 둥지로 돌아오면 추격 시간 처음부터
 	egg.chaseSeconds = 0
+	egg.stolenAt = nil
 	slot.eggUid = egg.uid
 	slot.respawnAt = nil
 	setDropClock(egg, false)
@@ -371,6 +377,7 @@ local function spawnEgg(slot: NestSlot, pet: Pets.Plant, traits: EggRoll.EggTrai
 		returnAt = nil,
 		chaseBy = nil,
 		chaseSeconds = 0,
+		stolenAt = nil,
 	}
 	eggs[egg.uid] = egg
 	placeOnNest(egg, slot)
@@ -612,6 +619,8 @@ function EggService.tryPickup(player: Player, uid: string)
 		return
 	end
 
+	-- 65번: 둥지에서 집었으면 그 시각 (경비가 1.78초 뒤 깨어남), 바닥에서 다시 주웠으면 지연 없음
+	egg.stolenAt = if egg.state == "Nest" then now else nil
 	egg.prompt.Enabled = false
 	egg.carrier = player
 	egg.pickedAt = now

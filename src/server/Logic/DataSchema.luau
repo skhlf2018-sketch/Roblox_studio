@@ -2,7 +2,7 @@
 --[[
 	DataSchema — 저장 데이터 기본값 / 검증·보정(reconcile) / 마이그레이션 (순수 로직, Lune 테스트 대상)
 
-	스키마 버전 8 (9판 — 7판 모양 + 로벅스 상품 칸 3개). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
+	스키마 버전 9 (9판 — 7판 모양 + 로벅스 상품 칸 3개 + 산 씨앗 표시). 불러온 데이터는 믿지 않고 reconcile 로 한 칸씩 검사합니다.
 	(모르는 식물 id, 잘못된 숫자, 중복 uid, 정원 칸 수 초과 등은 고치거나 버림)
 	6판 용어: pets = 정원의 성체 식물, incubators = 정원에 심어 자라는 씨앗, eggs = 씨앗 가방, fruits = 열매 가방, money = 코인
 
@@ -19,6 +19,9 @@
 	  8 (9판 로벅스 상품): + treadmillBoost(러닝머신 부스트 배수, 기본 1 — 산 것 중 가장 큰 것) · moneyPass(코인 2배, 기본 false)
 	     · receipts(지급한 영수증 PurchaseId, 최근 RECEIPT_HISTORY_MAX 500개 — 중복 지급 방지). 7 → 8: 칸만 추가 (옛 데이터는 기본값).
 	     열매 먹이기는 9판에서 없앴지만 옛 식물에 붙은 원소 돌연변이(얼음·불·번개)는 그대로 둠 (cleanMutations 는 알려진 것만 남김).
+	  9 (64번 로벅스 슈퍼 씨앗): 가방 씨앗(eggs)에 bought = true 칸 (로벅스로 산 씨앗). 산 씨앗은 가방 상한 EGG_INVENTORY_MAX 로
+	     자르지 않고 상한 셈에도 안 넣음 (가방이 가득 차도 지급하므로 — 저장·재접속 뒤에도 남게). 8 → 9: 고칠 것 없음
+	     (옛 씨앗은 bought 없음 = 보통). 버전만 올려서 8 서버가 9 데이터를 잘라 저장하지 않게 함.
 	  보정: 정원(자라는 씨앗 + 성체)이 정원 칸 수를 넘으면 자라는 씨앗은 가방으로, 그래도 넘치는 성체는 코인으로 바꿈
 	        (팔기 값 = GardenRules.sellPrice). 자리가 깨진 씨앗·성체는 빈 격자 자리로.
 	  저장된 버전이 지금 서버보다 크면(롤백·순차 배포 중) DataService 가 이번 접속 저장을 끔 → 새 필드 보호
@@ -193,7 +196,7 @@ local function cleanEgg(entry: unknown, seenUid: { [string]: boolean }): BagEgg?
 	end
 	seenUid[uid :: string] = true
 	local required = Economy.growSeconds(plant.id)
-	return {
+	local egg: BagEgg = {
 		uid = uid :: string,
 		petId = plant.id,
 		size = cleanSize(e.size),
@@ -203,6 +206,10 @@ local function cleanEgg(entry: unknown, seenUid: { [string]: boolean }): BagEgg?
 		progress = math.min(required, finiteNonNegative(e.progress, 0)),
 		required = required,
 	}
+	if e.bought == true then
+		egg.bought = true -- 9 (64번): 로벅스로 산 씨앗 — 가방 상한으로 안 자름 (reconcile)
+	end
+	return egg
 end
 
 local function finiteOrNil(value: unknown): number?
@@ -392,22 +399,26 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 		end
 	end
 
-	-- 씨앗 가방: 저장된 가방 → (자리가 없어 넘친 씨앗) 순서, EGG_INVENTORY_MAX 까지
+	-- 씨앗 가방: 저장된 가방 → (자리가 없어 넘친 씨앗) 순서, 보통 씨앗은 EGG_INVENTORY_MAX 까지.
+	-- 9 (64번): 로벅스로 산 씨앗(bought = true)은 상한과 상관없이 전부 남기고 상한 셈에도 안 넣음 — 돈을 받고 준 씨앗이
+	--   저장·재접속에서 잘려 사라지지 않게 (게임 안에서 보통 씨앗은 가방 전체가 상한 밑일 때만 들어오므로 보통 씨앗 수 ≤ 상한)
+	local normalEggs = 0
 	if typeof(src.eggs) == "table" then
 		for _, entry in src.eggs :: { unknown } do
-			if #data.eggs >= Config.EGG_INVENTORY_MAX then
-				break
-			end
 			local egg = cleanEgg(entry, seenUid)
-			if egg then
+			if egg and (egg.bought or normalEggs < Config.EGG_INVENTORY_MAX) then
 				maxUid = math.max(maxUid, uidNumber(egg.uid))
 				table.insert(data.eggs, egg)
+				if not egg.bought then
+					normalEggs += 1
+				end
 			end
 		end
 	end
 	for _, egg in toBag do
-		if #data.eggs < Config.EGG_INVENTORY_MAX then
+		if normalEggs < Config.EGG_INVENTORY_MAX then
 			table.insert(data.eggs, egg)
+			normalEggs += 1
 		end
 	end
 
@@ -559,6 +570,12 @@ function DataSchema.migrate(raw: unknown): unknown
 	if version < 8 then
 		-- 7 → 8 (9판 로벅스 상품): 칸만 추가 (treadmillBoost 1 · moneyPass false · receipts {}) — reconcile 이 기본값으로 채움
 		version = 8
+	end
+	if version < 9 then
+		-- 8 → 9 (64번 슈퍼 씨앗): 가방 씨앗에 bought 칸 (옛 데이터는 없음 = 보통 씨앗) — 고칠 것 없음.
+		-- 버전을 올리는 까닭: 8 서버(롤백·순차 배포 중)가 산 씨앗이 상한을 넘은 가방을 불러와 잘라 저장하지 않게
+		-- (isNewerVersion → 그 접속 저장 꺼짐)
+		version = 9
 	end
 	-- 더 새 버전 서버가 저장한 데이터(version > SCHEMA_VERSION)는 그대로 둠
 	-- (DataService 가 isNewerVersion 으로 확인해서 이번 접속 저장을 끔)

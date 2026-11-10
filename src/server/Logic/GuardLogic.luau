@@ -10,6 +10,7 @@
 	   - leadPoint: 목표를 "플레이어 위치 + 이동 속도 × 몇 초" 앞으로 → MoveTo 가 0.1초 전 자리에 먼저 도착해 멈추지 않음
 	   - closestApproach: 틱 사이 (플레이어 - 경비) 상대 위치가 가장 가까웠던 거리 (8판: 잡힘 판정은 시간이라 참고용)
 	5) 8판 잡힘 시간: crossedForward(다음 구역 경계를 넘었나) · rushWalkSpeed(마지막 0.3초 따라붙는 속도)
+	6) 65번 깨어나는 시간: isWaking(둥지에서 집은 시각, 지금, 1.78초) — 그동안 그 사람은 안 쫓고 닿아도 안 잡음
 ]]
 
 export type Point = { x: number, z: number }
@@ -96,6 +97,16 @@ function GuardLogic.rushWalkSpeed(distance: number, remaining: number, base: num
 	end
 	local needed = distance / math.max(remaining, 0.05)
 	return math.clamp(needed, base, math.max(base, maxSpeed))
+end
+
+-- 65번 (사장님 2026-11-10 "훔치고 1.78초 후에 쫓아오게"): 둥지에서 stolenAt 에 집은 씨앗을 든 사람에 대해 경비가 아직
+-- 자는 중인가 (now - stolenAt < wakeSeconds). stolenAt = nil(바닥에서 주움)이거나 이상한 값(NaN)이면 false = 바로 평소 규칙
+function GuardLogic.isWaking(stolenAt: number?, now: number, wakeSeconds: number): boolean
+	if stolenAt == nil or stolenAt ~= stolenAt or now ~= now or wakeSeconds ~= wakeSeconds then
+		return false
+	end
+	-- 1e-6 = os.clock 소수 오차 (정확히 1.78초가 지난 틱은 깬 것으로)
+	return now - stolenAt < wakeSeconds - 1e-6
 end
 
 -- 상대 위치가 (ax, az) → (bx, bz) 로 곧게 움직였을 때 원점(경비)에 가장 가까웠던 거리

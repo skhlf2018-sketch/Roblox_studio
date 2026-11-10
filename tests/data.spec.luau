@@ -480,7 +480,7 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"Config 7판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…5000, 성장 3배, 스키마 8 (9판)",
+		"Config 7판: 성장 단계 4개(0·25·60·100%), 열매 최대 5, 건너뛰기 10코인/분 × 등급 배수 1…5000, 성장 3배, 스키마 9 (9판 64번)",
 		function()
 			local stages = Config.GROWTH_STAGES
 			T.eq(#stages, 4)
@@ -523,7 +523,7 @@ return function(T, Loader)
 			end
 			T.eq(Config.NIGHT_GROWTH_MULTIPLIER, 30)
 			T.eq(Config.PLANT_SELL_FRUIT_MULTIPLIER, 20)
-			T.eq(Config.SCHEMA_VERSION, 8, "9판: 로벅스 상품 칸 3개 추가")
+			T.eq(Config.SCHEMA_VERSION, 9, "9판: 로벅스 상품 칸 3개 추가 (8) + 64번 산 씨앗 표시 (9)")
 		end
 	)
 

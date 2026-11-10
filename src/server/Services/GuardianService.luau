@@ -10,8 +10,15 @@
 	  빠르게 · 도망칠 수 있으면 못 잡음" 은 이제 아님. 이 구역 씨앗을 든 채 경비에 닿은 사람은 (쫓기는 사람이 아니어도,
 	  빠른 사람도) 모두 잡힘 (주임 H-1).
 
+	★ 65번 (사장님 2026-11-10 "잠든 몬스터는 계란 오른쪽에 자고 있고 사람이 계란을 훔치고 1.78초 후에 쫓아오게"):
+	  - 자는 자리 = 둥지 무리의 오른쪽 = 벽 쪽 (MapLayout.NEST_CLUSTER.guardDx −18 → x −100, 벽에서 10)
+	  - **둥지에서** 그 구역 씨앗을 집은 사람에 대해 경비는 Config.GUARD_WAKE_SECONDS(1.78초) 동안 계속 잠
+	    (egg.stolenAt, GuardLogic.isWaking): 쫓을 대상으로 안 고르고 **닿아도 안 잡음**. 다른 사람을 쫓는 중이어도 같음.
+	    대상이 없으면 State 는 "Sleeping" 그대로 → 1.78초가 지나면 "Chase". 지난 뒤에도 **닿아야만** 잡힘 (시간으로는 아무 일 없음).
+	  - 바닥 씨앗을 다시 주우면 지연 없음 (stolenAt = nil). 도망칠 수 없는 채로 다음 구역 경계를 넘으면 즉시 잡힘은 1.78초와 상관없음
+
 	8판 (사장님 2026-11-08) — 추격 시간 (추격 WalkSpeed 공식은 그대로):
-	  - 집 = 둥지 무리 바로 옆 (MapLayout.guardHome — 구역 끝 오른쪽 귀퉁이)
+	  - 집 = 둥지 무리 바로 옆 (MapLayout.guardHome — 구역 끝 오른쪽 귀퉁이, 65번: 무리의 벽 쪽)
 	  - 내 실효 속도로 도망칠 수 없으면(SpeedMath.catchSeconds ≠ nil) 그 씨앗·그 사람의 추격 시간(egg.chaseSeconds,
 	    이 경비가 쫓는 동안만 쌓임)이 2.5초(조금 모자람, 추격 기준의 70% 이상) / 1초(많이 모자람)가 되는 순간 잡힘.
 	    마지막 GUARD_CATCH_RUSH_SECONDS(0.3초)는 남은 거리 ÷ 남은 시간으로 빠르게 다가감 (≤ RUSH_MAX_WALKSPEED).
@@ -408,6 +415,11 @@ local function updateGuard(guard: Guard, carriers: { [Player]: EggService.Egg },
 							setTarget(guard, nil, "caught")
 							guard.chase = nil
 						end
+					elseif GuardLogic.isWaking(egg.stolenAt, now, Config.GUARD_WAKE_SECONDS) then
+						-- 65번 (사장님 2026-11-10 "훔치고 1.78초 후에 쫓아오게"): 둥지에서 집은 지 1.78초가 안 됨 →
+						--   이 사람에 대해서는 아직 자는 중: 쫓을 대상으로 안 고르고 **닿아도 안 잡음**
+						--   (다른 사람을 쫓고 있어도 마찬가지. 바닥에서 다시 주운 씨앗은 stolenAt = nil 이라 바로 평소 규칙)
+						continue
 					else
 						local rel = root.Position - guard.root.Position
 						local d = rel.Magnitude

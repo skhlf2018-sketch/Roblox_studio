@@ -26,6 +26,7 @@
 	건너뛰기 — Remote SkipGrowth(eggUid, "all" | "half"): 코인으로 남은 성장 시간 전부/절반 (GardenRules.skipCost:
 	    남은 1분당 10코인 × 등급 배수). 코인이 모자라면 Notify error. 거리 검사 없음 (화면 버튼)
 	선물 씨앗(grantEgg: 사쿠라 나무 뽑기·개발 명령)도 가방으로. 가방이 차면 못 받음
+    (64번: 로벅스로 산 슈퍼 씨앗은 가방이 가득 차도 받음 — BagEgg.bought, 상한을 넘어도 저장에서 안 잘림)
 	0.2초마다 구역 표시: 플레이어 Attr CurrentZone(구역 id | "hub" | ""), InSafeZone(허브 안),
 	    새 구역에 들어가면 ZoneEntered { biomeId, name, nameEn } 1회 (허브는 안 보냄)
 	밤이 되면: 허브 밖(z ≥ 0)에 있던 사람 → 자기 베이스로 순간이동 (밤 벽에 안 갇히게). 베이스가 없으면 허브 기본 스폰.
@@ -559,19 +560,28 @@ function BaseService.canReceiveEgg(player: Player): boolean
 	return data ~= nil and #data.eggs < Config.EGG_INVENTORY_MAX
 end
 
--- 선물 씨앗 (사쿠라 나무 뽑기 "sakura" · 개발 명령 "dev"): 가방으로. 가방이 가득 찼거나 모르는 식물이면 nil
+-- 선물 씨앗 (사쿠라 나무 뽑기 "sakura" · 개발 명령 "dev" · 로벅스 "purchase"): 가방으로. 가방이 가득 찼거나 모르는 식물이면 nil
+-- 64번: bought = true (로벅스로 산 슈퍼 씨앗 — ProductService) 면 **가방이 가득 차 있어도** 넣음 (돈을 받았으니 반드시 지급).
+--   그 씨앗은 BagEgg.bought = true → DataSchema.reconcile 이 가방 상한으로 자르지 않음 (저장·재접속 뒤에도 남음)
 function BaseService.grantEgg(
 	player: Player,
 	petId: string,
 	size: string,
 	mutations: { string },
-	source: string
+	source: string,
+	bought: boolean?
 ): GrantResult?
 	local _, data = Sessions.getLoaded(player)
-	if not data or not Plants.get(petId) or #data.eggs >= Config.EGG_INVENTORY_MAX then
+	if not data or not Plants.get(petId) then
+		return nil
+	end
+	if bought ~= true and #data.eggs >= Config.EGG_INVENTORY_MAX then
 		return nil
 	end
 	local egg = newBagEgg(data, petId, size, mutations, false)
+	if bought == true then
+		egg.bought = true
+	end
 	table.insert(data.eggs, egg)
 	-- queued 는 2단계 클라 호환용 (대기 줄은 없어져서 항상 false)
 	Net.fire(player, Remotes.ToClient.EggGranted, { egg = egg, queued = false, source = source })

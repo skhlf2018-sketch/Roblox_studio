@@ -3,7 +3,7 @@
 	ProductService — 로벅스 상품 (9판, 사장님 2026-11-10) — 서버 권위. 상품 표는 shared/Data/Products
 
 	사장님 2026-11-10 (62번) "영구적인 것은 게임패스, 소모품은 개발자 상품":
-	  - 개발자 상품 24개 (tskip_*, coins_*, speed_*) = 아래 ProcessReceipt (영수증 기록·저장 확인 그대로)
+	  - 개발자 상품 25개 (tskip_*, coins_*, speed_*, seed_super) = 아래 ProcessReceipt (영수증 기록·저장 확인 그대로)
 	  - 게임패스 12개 (boost_* 11 + money_pass) = ProcessReceipt 가 **안 옴**. 소유 확인 UserOwnsGamePassAsync 로만 반영:
 	      · ProductService.syncPasses(player) — 접속 준비(onPlayerReady → task.spawn) 때 id 붙은 패스를 전부 (동시에, 실패하면
 	        PASS_CHECK_RETRIES 번 더, 사이 PASS_RETRY_SECONDS) 확인 → data.moneyPass = 원래 값 or 가짐,
@@ -34,6 +34,10 @@
 	                     최대 레벨이면 전부 속도. 돈을 받았으니 언제나 뭔가 줌 (0 지급 없음)
 	    coins / speed  : Wallet.addMoney / addSpeed (MONEY_MAX · SPEED_MAX 에서 자름)
 	    moneyPass      : data.moneyPass = true (영원히 열매 판매·성체 팔기 × MONEY_PASS_MULTIPLIER — PetService.coinMultiplier). Attr MoneyPass
+	    seed (64번)    : seed_super = 슈퍼 등급 식물(seedCandidates — 유령 성 2 + 해커 연구소 3, 공지·사쿠라 전용 뺌) 중 서버 난수로
+	                     고르게 하나 → 씨앗 1개를 가방에 (개발 명령 /seed 와 같은 BaseService.grantEgg → EggGranted source
+	                     "purchase" + DataUpdate("eggs")). **가방이 가득 차도 줌** (bought = true — 상한을 넘어도 저장에서 안 잘림)
+	                     영수증마다 1개 (같은 영수증 재전송은 위 기록으로 1번만)
 	  → ProductGranted { key, kind } + Notify + (러닝머신·코인 2배면) DataUpdate("upgrades")
 ]]
 
@@ -44,6 +48,7 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Products = require(Shared.Data.Products)
+local Plants = require(Shared.Data.Plants)
 local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
@@ -55,11 +60,14 @@ local Sessions = require(Server.Sessions)
 local Snapshot = require(Server.Snapshot)
 local Wallet = require(script.Parent.Wallet)
 local DataService = require(script.Parent.DataService)
+local BaseService = require(script.Parent.BaseService)
 
 local Attr = Tags.PlayerAttributes
 local Kinds = Products.Kinds
 
 local ProductService = {}
+
+local rng = Random.new()
 
 ProductService.LOAD_WAIT_SECONDS = 15 -- ProcessReceipt 가 데이터 불러오는 중에 오면 이만큼 기다림
 ProductService.SAVE_WAIT_SECONDS = 10 -- 자동저장이 진행 중이면 끝날 때까지 이만큼 기다렸다 저장
@@ -86,6 +94,31 @@ local function setTreadmillLevel(player: Player, data: Types.PlayerData, level: 
 			Format.number(Economy.treadmillGainPerSecond(level))
 		)
 	)
+end
+
+-- 64번 슈퍼 씨앗: 그 등급(Rarities id)의 씨앗 후보 = Plants 에서 rarity 가 같은 식물 (표 순서).
+-- 공지 전용(source "special")·사쿠라 뽑기 전용("sakura")은 뺌 — 둥지에서 나오는 식물만. "super" → 유령 성 2 + 해커 연구소 3
+function ProductService.seedCandidates(rarity: string): { string }
+	local ids: { string } = {}
+	for _, plant in Plants.list do
+		if plant.rarity == rarity and plant.source == "nest" then
+			table.insert(ids, plant.id)
+		end
+	end
+	return ids
+end
+
+-- 후보 중 하나를 고르게 (roll = 0 이상 1 미만 난수, 안 주면 서버 난수). 후보가 없으면 nil
+function ProductService.rollSeed(rarity: string, roll: number?): string?
+	local ids = ProductService.seedCandidates(rarity)
+	if #ids == 0 then
+		return nil
+	end
+	local r = roll or rng:NextNumber()
+	if r ~= r then
+		r = 0
+	end
+	return ids[math.clamp(math.floor(r * #ids) + 1, 1, #ids)]
 end
 
 -- 지급 (영수증 확인 없음 — processReceipt·개발 명령 /buy·테스트). source = "purchase" | "dev" | … (기록용). 줬으면 true
@@ -174,6 +207,22 @@ function ProductService.grant(player: Player, key: string, source: string?): boo
 		end
 		syncAttributes(player, data)
 		Snapshot.section(player, "upgrades")
+	elseif kind == Kinds.seed then
+		-- 64번: 그 등급 식물 중 하나 (서버 난수) 씨앗을 가방에. 개발 명령 /seed 와 같은 길 (BaseService.grantEgg → EggGranted
+		--   + DataUpdate("eggs")) — 돈을 받았으니 가방이 가득 차 있어도 넣음 (bought = true, 저장에서 안 잘림)
+		local petId = ProductService.rollSeed(product.rarity or "")
+		if not petId then
+			warn("[ProductService] 씨앗 후보 없음: " .. product.key .. " 등급 " .. tostring(product.rarity))
+			return false
+		end
+		if not BaseService.grantEgg(player, petId, "normal", {}, "purchase", true) then
+			return false
+		end
+		Net.notify(
+			player,
+			"success",
+			string.format("%s! %s을 가방에 받았어요", product.name, Plants.seedName(petId))
+		)
 	else
 		return false
 	end

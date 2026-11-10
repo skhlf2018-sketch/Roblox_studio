@@ -10,6 +10,7 @@
 	  9판 (사장님 2026-11-10): "추천" 탭 없앰. 로벅스 상품은 Data/Products.shop 그대로 —
 	      "속도": speed_10m(10M 스피드 · R$ 199) · speed_100m(100M 스피드 · R$ 259)
 	      "코인": money_pass(코인 2배 영원히 · R$ 199, 샀으면 "보유 중") · coins_1m(1M 코인 · R$ 99) · coins_1b(1B 코인 · R$ 199)
+	      "씨앗": seed_super(슈퍼 씨앗 · R$ 5,999, 개발자 상품 — 여러 번, 큰 카드 + 무지개 띠). Products 에 없으면 카드 없이 "곧 나와요!"
 	      누르면 Purchase.prompt(key) (상품 id 0 이면 "준비 중이에요…" 토스트, 아니면 로블록스 구매창)
 
 	베이스 업그레이드 표지판 (9판: 회색 E 프롬프트 없앰 → 표지판을 마우스로 누르거나 폰으로 터치):
@@ -83,10 +84,34 @@ local TREADMILL_NAMES = {
 ShopController.TREADMILL_NAMES = TREADMILL_NAMES
 
 -- 9판 로벅스 탭: 상품 key · 카드 제목 · 아래 줄 · 그림 · 색
-type RobuxCard = { key: string, title: string, sub: string, icon: string, color: Color3 }
+--   lines = 카드에 보일 여러 줄 (없으면 sub 한 줄) · wide = 큰 카드 (330 × 400) · rarity = 위에 그 등급 띠(무지개)
+type RobuxCard = {
+	key: string,
+	title: string,
+	sub: string,
+	icon: string,
+	color: Color3,
+	lines: { string }?,
+	wide: boolean?,
+	rarity: string?,
+}
 local SPEED_BLUE = Color3.fromRGB(40, 150, 255)
 local COIN_GOLD = Color3.fromRGB(230, 170, 30)
+local SUPER_PURPLE = Color3.fromRGB(150, 60, 200) -- 슈퍼 씨앗 아이콘(tools/make-product-icons) 보라
 local ROBUX_TABS: { [string]: { RobuxCard } } = {
+	-- 9판 (사장님 2026-11-10): "씨앗" 탭 — 슈퍼 씨앗 (R$ 5,999, 개발자 상품이라 여러 번). Products 에 없으면 카드 없음
+	seed = {
+		{
+			key = "seed_super",
+			title = "슈퍼 씨앗",
+			sub = "슈퍼(Super) 등급 씨앗 1개를 가방에 받아요 · 여러 번 살 수 있어요",
+			lines = { "슈퍼(Super) 등급 씨앗 1개를", "가방에 받아요", "여러 번 살 수 있어요" },
+			icon = "seed",
+			color = SUPER_PURPLE,
+			wide = true,
+			rarity = "super",
+		},
+	},
 	speed = {
 		{ key = "speed_10m", title = "10M 스피드", sub = "속도 +10,000,000", icon = "shoe", color = SPEED_BLUE },
 		{
@@ -374,7 +399,7 @@ function ShopController.start()
 	local tabBar: Frame = Ui.new("Frame", {
 		Name = "Tabs",
 		Position = UDim2.new(1, 10, 0, 70),
-		Size = UDim2.fromOffset(96, 420),
+		Size = UDim2.fromOffset(96, 460), -- 탭 5개 (84 × 5 + 간격 8 × 4)
 		BackgroundTransparency = 1,
 		Parent = window.holder,
 	})
@@ -388,6 +413,7 @@ function ShopController.start()
 			{ "trail", "트레일", "trail" },
 			{ "speed", "속도", "shoe" },
 			{ "money", "코인", "coin" },
+			{ "seed", "씨앗", "seed" }, -- 9판: 슈퍼 씨앗
 		}
 	do
 		local id = spec[1]
@@ -540,12 +566,33 @@ function ShopController.start()
 				return
 			end
 			local anyNotReady = false
+			local drawn = 0
 			for i, item in items do
 				local product = Products.get(item.key)
 				if product then
-					local f = card(row, i, item.color, item.icon, item.title, { item.sub })
+					drawn += 1
+					local f = card(row, i, item.color, item.icon, item.title, item.lines or { item.sub })
 					f.Name = "Product_" .. item.key
-					f.Size = UDim2.fromOffset(220, 330)
+					f.Size = if item.wide then UDim2.fromOffset(330, 400) else UDim2.fromOffset(220, 330)
+					f:SetAttribute("Description", item.sub)
+					local rarity = item.rarity
+					if rarity then
+						-- 그 등급 띠 (슈퍼 = 무지개, Theme.bandFor) — 카드 위쪽
+						local band: Frame = Ui.new("Frame", {
+							Name = "RarityBand",
+							AnchorPoint = Vector2.new(0.5, 0),
+							Position = UDim2.new(0.5, 0, 0, 10),
+							Size = UDim2.new(1, -28, 0, 12),
+							BackgroundColor3 = C.white,
+							Parent = f,
+						})
+						Ui.corner(6).Parent = band
+						local grad = Instance.new("UIGradient")
+						grad.Color = if Theme.RainbowRarities[rarity]
+							then Theme.bandFor(rarity)
+							else ColorSequence.new(Theme.rarityColor(rarity))
+						grad.Parent = band
+					end
 					local owned = item.key == "money_pass" and hasMoneyPass()
 					local key = item.key
 					local b = Ui.button(
@@ -572,6 +619,10 @@ function ShopController.start()
 						anyNotReady = true
 					end
 				end
+			end
+			if drawn == 0 then
+				-- 상품이 아직 Products 에 없음 (예: 슈퍼 씨앗 준비 전) — 에러 없이 빈 탭 + 짧은 안내
+				Ui.label("곧 나와요!", UDim2.new(1, 0, 0, 40), 30, C.white, { Name = "Empty", Parent = row })
 			end
 			if anyNotReady then
 				Ui.label(

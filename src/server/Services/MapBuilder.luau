@@ -58,6 +58,7 @@ local Economy = require(Shared.Economy)
 local Visuals = require(Shared.Data.Visuals)
 local Format = require(Shared.Format)
 local Products = require(Shared.Data.Products)
+local Rarities = require(Shared.Data.Rarities)
 local Tags = require(Shared.Tags)
 local EggRules = require(Shared.EggRules)
 local Gui = require(script.Parent.Parent.Util.Gui)
@@ -5007,6 +5008,120 @@ local function setSkipVisible(sign: SkipSign, visible: boolean)
 	sign.board:SetAttribute("Hidden", not visible)
 end
 
+-- 9판 (사장님 2026-11-10: "등급을 볼 수 있는 큰 표지판 각 기지에 한 개씩"): 앞마당 +v 쪽(가게 뒤) 큰 "씨앗 등급" 표.
+--   16등급을 낮은 것부터 (왼쪽 열 1~8, 오른쪽 열 9~16) 번호 + 영어 이름(Rarities.displayName) + 등급 색(Rarities.color /
+--   textColor). 정적 표지판 (한 번 만들고 끝, Remote 없음). 파트 3개 (판 1 + 뒤 기둥 2).
+--   자리·크기는 smoke_visuals 가 검사: 앞마당 안, 가게·가로등·다른 표지판과 안 겹침
+local RARITY_BOARD = {
+	u = 20, -- 앞 가장자리에서 깊이 (울타리 u = 24 보다 앞)
+	v = 22, -- z 오프셋 (가게 v 5.5~12.5 · 가로등 v 28.5 사이)
+	w = 14, -- 판 폭 (z 방향)
+	h = 10, -- 판 높이
+	t = 0.6, -- 판 두께
+	bottom = 2.5, -- 판 아래 끝 높이
+}
+MapBuilder.RARITY_BOARD = RARITY_BOARD
+
+local function rarityBoard(parent: Instance, pos: Vector3, facing: Vector3, plotIndex: number): BasePart
+	local rb = RARITY_BOARD
+	local navy = Color3.fromRGB(26, 30, 54)
+	local boardPos = pos + Vector3.new(0, rb.bottom + rb.h / 2, 0)
+	local cf = CFrame.lookAt(boardPos, boardPos + facing)
+	-- 뒤 기둥 2개 (판 뒤에 붙어 바닥까지, 판과 안 겹침)
+	local postH = rb.bottom + rb.h
+	for i, x in { -(rb.w / 2 - 0.9), rb.w / 2 - 0.9 } do
+		local post = B(
+			parent,
+			Vector3.new(0.8, postH, 0.8),
+			cf * CFrame.new(x, postH / 2 - boardPos.Y + FLOOR_TOP, rb.t / 2 + 0.45),
+			navy,
+			true
+		)
+		post.Name = "RarityBoardPost" .. i
+	end
+	local board = makePart({
+		name = "RarityBoard",
+		size = Vector3.new(rb.w, rb.h, rb.t),
+		cframe = cf,
+		parent = parent,
+		color = navy,
+		material = Enum.Material.Plastic,
+		studs = true,
+		attributes = { PlotIndex = plotIndex },
+	})
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "Sign"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 40
+	gui.LightInfluence = 0
+	gui.MaxDistance = 200
+	local frame = Instance.new("Frame")
+	frame.Name = "Board"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = navy
+	frame.Parent = gui
+	local edge = Instance.new("UIStroke")
+	edge.Name = "Edge"
+	edge.Color = Color3.fromRGB(10, 12, 24)
+	edge.Thickness = 10
+	edge.Parent = frame
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Position = UDim2.fromScale(0.04, 0.025)
+	title.Size = UDim2.fromScale(0.92, 0.12)
+	title.Font = Enum.Font.FredokaOne
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 230, 90)
+	title.Text = "씨앗 등급 · RARITY"
+	title.Parent = frame
+	local ts = Instance.new("UIStroke")
+	ts.Color = Color3.fromRGB(10, 10, 20)
+	ts.Thickness = 4
+	ts.Parent = title
+	-- 2열 × 8줄 (낮은 등급부터: 왼쪽 열 위→아래, 다음 오른쪽 열)
+	local rows = 8
+	local top, gap = 0.17, 0.008
+	local rowH = (0.975 - top) / rows
+	for i, rarity in Rarities.list do
+		local col, row = (i - 1) // rows, (i - 1) % rows
+		local cell = Instance.new("Frame")
+		cell.Name = "Row" .. i
+		cell.BackgroundColor3 = rgb(rarity.color)
+		cell.Position = UDim2.fromScale(0.03 + col * 0.48, top + row * rowH + gap)
+		cell.Size = UDim2.fromScale(0.46, rowH - gap * 2)
+		cell:SetAttribute("Rarity", rarity.id)
+		cell.Parent = frame
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0.25, 0)
+		corner.Parent = cell
+		local cs = Instance.new("UIStroke")
+		cs.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		cs.Color = Color3.fromRGB(8, 8, 16)
+		cs.Thickness = 3
+		cs.Parent = cell
+		local label = Instance.new("TextLabel")
+		label.Name = "Rarity" .. i
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0.05, 0.1)
+		label.Size = UDim2.fromScale(0.9, 0.8)
+		label.Font = Enum.Font.FredokaOne
+		label.TextScaled = true
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.TextColor3 = rgb(rarity.textColor)
+		label.Text = i .. ". " .. rarity.displayName
+		label.Parent = cell
+		local ls = Instance.new("UIStroke")
+		ls.Color = Color3.fromRGB(10, 10, 20)
+		ls.Thickness = 2
+		ls.Transparency = 0.3
+		ls.Parent = label
+	end
+	gui.Parent = board
+	return board
+end
+
 -- 머리 위 빌보드 두 줄 (퓨즈 머신 "퓨즈 머신 / 0/3", 판매 등)
 local function twoLine(
 	adornee: BasePart,
@@ -6003,6 +6118,15 @@ local function buildPlot(index: number, parent: Instance)
 		7
 	)
 	sell:SetAttribute("PlotIndex", index)
+
+	-- 9판: 등급 큰 표지판 (앞마당 +v 쪽, 가게 뒤 — 로컬 (u, v) = RARITY_BOARD, 복도 쪽을 봄)
+	local frontEdgeX = p.center.x + f * d / 2
+	rarityBoard(
+		plotFolder,
+		Vector3.new(frontEdgeX - f * RARITY_BOARD.u, FLOOR_TOP, cz + RARITY_BOARD.v),
+		toFront,
+		index
+	)
 
 	-- 주인 이름 간판 (앞마당 앞 가장자리, 높은 기둥 2개 사이 — 판매 가게 반대쪽으로 비켜서)
 	local ownerZ = s.owner.z - 5

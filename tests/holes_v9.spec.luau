@@ -109,7 +109,7 @@ return function(T, Loader)
 
 	------------------------------------------------------------------
 	-- 진짜 Products 파일에서 id 칸만 바꾼 모듈 (아빠가 Creator Dashboard id 를 붙여 넣은 뒤를 흉내).
-	-- 진짜 파일에 붙은 진짜 id 가 무엇이든 상관없게 **36칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움
+	-- 진짜 파일에 붙은 진짜 id 가 무엇이든 상관없게 **37칸을 전부 0 으로 만든 뒤** replacements 의 칸만 채움
 	-- (patchedProducts({}) = 전부 0 = 아직 아무것도 안 만든 상태). 글자 바꾸기는 tests/ProductsPatch.luau
 	------------------------------------------------------------------
 	local function patchedProducts(replacements)
@@ -118,7 +118,7 @@ return function(T, Loader)
 
 	------------------------------------------------------------------
 	-- 세상: 진짜 Net · Sessions · Snapshot · Wallet · DataService · ProductService · PetService
-	--   opts.ids = { key = 숫자 } 이면 진짜 Products 파일을 36칸 전부 0 + 그 칸만 가짜 id 로 바꿔 끼움 ({} = 전부 0).
+	--   opts.ids = { key = 숫자 } 이면 진짜 Products 파일을 37칸 전부 0 + 그 칸만 가짜 id 로 바꿔 끼움 ({} = 전부 0).
 	--   안 주면 진짜 파일 그대로 (진짜 id 가 붙어 있음 — 값에는 기대지 말 것), byProductId 를 가짜로 하려면 fakeConfigure
 	------------------------------------------------------------------
 	local function newWorld(opts)
@@ -862,7 +862,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"아빠용 안내(docs/ROBUX_SETUP.md 3장 표)의 36개 key·가격이 코드(Data/Products)와 똑같음 — 안내대로 Creator Dashboard 에 만들면 게임 버튼의 가격과 같음",
+		"아빠용 안내(docs/ROBUX_SETUP.md 3장 표)의 37개 key·가격이 코드(Data/Products)와 똑같음 — 안내대로 Creator Dashboard 에 만들면 게임 버튼의 가격과 같음",
 		function()
 			local P = Loader.require(S .. "Data/Products")
 			local doc = fs.readFile("docs/ROBUX_SETUP.md")
@@ -880,7 +880,7 @@ return function(T, Loader)
 					count += 1
 				end
 			end
-			T.eq(count, 36, "안내 표의 상품 수")
+			T.eq(count, 37, "안내 표의 상품 수 (64번 슈퍼 씨앗 포함)")
 			for _, p in P.list do
 				T.eq(rows[p.key], p.robux, "안내 표의 " .. p.key .. " 가격 (코드 " .. p.robux .. ")")
 			end
@@ -896,6 +896,7 @@ return function(T, Loader)
 			T.eq(rows.coins_1b, 199)
 			T.eq(rows.speed_10m, 199)
 			T.eq(rows.speed_100m, 259)
+			T.eq(rows.seed_super, 5999, "64번 슈퍼 씨앗")
 		end
 	)
 
@@ -1265,7 +1266,7 @@ return function(T, Loader)
 				}),
 				0
 			)
-			T.eq(old.version, 8)
+			T.eq(old.version, 9, "7 → 8 → 9 (64번)")
 			T.eq(old.moneyPass, false, "옛 게임패스 칸은 인정 안 함")
 			T.eq(old.treadmillBoost, 1)
 			T.eq(#old.receipts, 0)
@@ -1305,8 +1306,9 @@ return function(T, Loader)
 			T.eq(r2.treadmillBoost, 2048)
 			T.eq(r2.moneyPass, true)
 			T.eq(table.concat(r2.receipts, ","), table.concat(r1.receipts, ","), "두 번 reconcile 해도 같음")
-			T.eq(DataSchema.reconcile("엉터리", 0).version, 8)
-			T.truthy(DataSchema.isNewerVersion({ version = 9 }))
+			T.eq(DataSchema.reconcile("엉터리", 0).version, 9)
+			T.truthy(DataSchema.isNewerVersion({ version = 10 }))
+			T.falsy(DataSchema.isNewerVersion({ version = 9 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 8 }))
 			T.falsy(DataSchema.isNewerVersion({ version = 7 }))
 		end

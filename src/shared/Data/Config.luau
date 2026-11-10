@@ -23,6 +23,8 @@
 9판 (사장님 2026-11-10): 열매 먹이기 삭제 (열매는 팔기만). 로벅스 상품(Data/Products, 서버 ProductService) —
   코인 2배 게임패스 플래그(GAMEPASS_MONEY_MULTIPLIER) → 로벅스 상품 money_pass (MONEY_PASS_MULTIPLIER, 저장 data.moneyPass),
   영수증 기록 RECEIPT_HISTORY_MAX, 저장 스키마 8
+9-10 (사장님 2026-11-10): 64번 슈퍼 씨앗(로벅스, 가방이 가득 차도 지급 → 저장 스키마 9) · 65번 경비가 깨어나는 시간
+  GUARD_WAKE_SECONDS(1.78초 — 둥지에서 훔친 사람은 그동안 안 쫓고 닿아도 안 잡힘. 지나도 닿아야만 잡힘)
 ]]
 
 local Config = {
@@ -32,7 +34,7 @@ local Config = {
 	MAX_PLAYERS = 7,
 	PLOT_COUNT = 7,
 	-- 씨앗 가방 / 정원에 심기 (5판 알 가방·우리에 놓기 그대로: 허브에 들고 들어오면 씨앗은 가방으로, 정원 안 원하는 자리에 심음)
-	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 씨앗 수 (가득 차면 배달·선물 씨앗을 못 받음)
+	EGG_INVENTORY_MAX = 50, -- [추정] 가방에 넣어 둘 수 있는 씨앗 수 (가득 차면 배달·선물 씨앗을 못 받음 — 로벅스 슈퍼 씨앗만 예외, 64번)
 	-- 정원 칸 수 = 정원 업그레이드(Upgrades.Pen) 칸 수 (7 → 18). 자라는 씨앗 + 성체 식물 합이 이 수까지 (Economy.penSlots)
 	EGG_PLACE_SPACING = 4, -- 심는 씨앗 ↔ 다른 씨앗·성체 식물 최소 간격(스터드). 큰 씨앗끼리는 두 씨앗 지름 평균까지 늘어남
 	--   8판: 두 자리가 다 자랐을 때 성체 폭 평균(EggPlacement.footprint, 아래 식물 크기 배율)까지 늘어남 — 최대 PLANT_GAP_MAX
@@ -216,6 +218,11 @@ local Config = {
 	-- 0.1초 전 자리를 목표로 주면 경비가 거기 먼저 도착해 멈췄다 달렸다 함). 잡힘은 틱 사이 가장 가까웠던 거리로 판정
 	GUARD_LEAD_SECONDS = 0.25,
 	GUARD_HOME_TOLERANCE = 4, -- 집에서 이 거리 안이면 도착 → 다시 잠듦 (State "Sleeping")
+	-- 65번 (사장님 2026-11-10 "사람이 계란을 훔치고 1.78초 후에 쫓아오게"): 둥지에서 그 구역 씨앗을 집은 사람은 이 초 동안
+	--   그 경비가 계속 잠 — 안 쫓고 **닿아도 안 잡음** (GuardianService, egg.stolenAt). 지나면 평소 규칙 (닿아야만 잡힘 —
+	--   이 시간은 깨어나는 시간일 뿐, 지나도 시간으로는 아무 일도 없음). 바닥에 떨어진 씨앗을 다시 주우면 지연 없음.
+	--   도망칠 수 없는 채로 다음 구역 경계를 넘으면 즉시 잡힘은 이 시간과 상관없음
+	GUARD_WAKE_SECONDS = 1.78,
 	GUARD_SEPARATION = 30, -- [추정] 경비끼리 이 거리보다 가까우면 옆으로 비켜 감 (거대 경비 겹침 방지)
 	GUARD_COLLISION_GROUP = "Guardians", -- 경비끼리는 안 부딪힘 (서로 끼어 멈추지 않게, 겹침은 위 비켜 가기로)
 
@@ -354,7 +361,8 @@ local Config = {
 	-- 7 (7판): 칸 모양은 6 그대로. 성장 3배라 저장된 씨앗 진행도(progress)를 새 Required 에 맞춰 같은 비율로 줄임
 	--   (6 → 7 마이그레이션, Logic/DataSchema). 등급 id 는 저장하지 않으므로 옛 super_ultradivine 보정은 없음
 	-- 8 (9판 로벅스 상품): + treadmillBoost(1) · moneyPass(false) · receipts({}) — 옛 데이터는 기본값으로 채움 (7 → 8 은 칸만 추가)
-	SCHEMA_VERSION = 8,
+	-- 9 (64번 슈퍼 씨앗): 가방 씨앗에 bought(로벅스로 산 씨앗 — 가방 상한을 넘어도 안 잘림). 8 → 9 는 고칠 것 없음
+	SCHEMA_VERSION = 9,
 	-- 지급한 로벅스 영수증 PurchaseId 를 최근 이만큼 저장 (중복 지급 방지, 고리). 주임 F-2: 100 → 500 (밀려난 옛 영수증 재지급 여유)
 	RECEIPT_HISTORY_MAX = 500,
 

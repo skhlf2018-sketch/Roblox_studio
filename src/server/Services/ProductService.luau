@@ -15,8 +15,10 @@
 	- 지급 ProductService.grant(player, key, source) — 순수 지급 로직 (테스트·개발 명령 /buy 가 같이 씀, 영수증 확인 없음):
 	    treadmillBoost : data.treadmillBoost = max(지금, 배수) (곱 아님). 이하를 또 사면 그대로 (소비 처리, 안내). Attr TreadmillBoost
 	                     러닝머신 1초 이득 = 레벨 이득 × 트레일 배율 × 부스트 (TreadmillService — 러닝머신 탈 때만)
-	    treadmillSkip  : tskip_N 은 지금 레벨이 N-1 이면 N 으로 (코인 안 듦). 레벨이 안 맞으면 (창이 늦게 바뀜·두 번 누름)
-	                     **다음 레벨 1칸** 올림, 이미 최대면 속도 (최대 1초 속도 × PRODUCT_MAXED_SKIP_SECONDS) — 돈을 받았으니 반드시 뭔가 줌
+	    treadmillSkip  : tskip_N 은 지금 레벨이 N-1 이면 N 으로 (코인 안 듦). 레벨이 안 맞으면 (창이 늦게 바뀜·두 번 누름·위조)
+	                     **산 로벅스만큼만** — 다음 레벨 가격부터 차례로 빼며 살 수 있는 레벨만, 남은 로벅스는 속도
+	                     (× PRODUCT_SPEED_PER_ROBUX, 속도 상품보다 유리하지 않게, Products.treadmillSkipOutcome — 주임 F-3).
+	                     최대 레벨이면 전부 속도. 돈을 받았으니 언제나 뭔가 줌 (0 지급 없음)
 	    coins / speed  : Wallet.addMoney / addSpeed (MONEY_MAX · SPEED_MAX 에서 자름)
 	    moneyPass      : data.moneyPass = true (영원히 열매 판매·성체 팔기 × MONEY_PASS_MULTIPLIER — PetService.coinMultiplier). Attr MoneyPass
 	  → ProductGranted { key, kind } + Notify + (러닝머신·코인 2배면) DataUpdate("upgrades")
@@ -29,7 +31,6 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local Products = require(Shared.Data.Products)
-local Upgrades = require(Shared.Data.Upgrades)
 local Economy = require(Shared.Economy)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
@@ -104,22 +105,25 @@ function ProductService.grant(player: Player, key: string, source: string?): boo
 		syncAttributes(player, data)
 		Snapshot.section(player, "upgrades")
 	elseif kind == Kinds.treadmillSkip then
-		local target = math.floor(value)
-		local level = data.treadmillLevel
-		if level == target - 1 and target <= Upgrades.TREADMILL_MAX_LEVEL then
-			setTreadmillLevel(player, data, target)
-		elseif level < Upgrades.TREADMILL_MAX_LEVEL then
-			-- 레벨이 안 맞음 (창이 늦게 바뀜·두 번 누름): 돈을 받았으니 다음 레벨 1칸
-			setTreadmillLevel(player, data, level + 1)
+		local before = data.treadmillLevel
+		local level, leftover = Products.treadmillSkipOutcome(before, product)
+		if level == math.floor(value) and before == level - 1 then
+			setTreadmillLevel(player, data, level)
 		else
-			local speed = Economy.treadmillGainPerSecond(Upgrades.TREADMILL_MAX_LEVEL)
-				* Config.PRODUCT_MAXED_SKIP_SECONDS
-			Wallet.addSpeed(player, speed)
+			-- 주임 F-3: 레벨이 안 맞음 → 산 로벅스만큼만 (살 수 있는 레벨 + 남은 로벅스는 속도)
+			local speed = leftover * Config.PRODUCT_SPEED_PER_ROBUX
+			data.treadmillLevel = level
+			player:SetAttribute(Attr.TreadmillLevel, level)
+			if speed > 0 then
+				Wallet.addSpeed(player, speed)
+			end
 			Net.notify(
 				player,
 				"success",
 				string.format(
-					"러닝머신이 이미 최대 레벨이라 대신 속도 +%s 를 받았어요!",
+					"러닝머신 레벨이 이미 바뀌어서 산 값(R$ %d)만큼 받았어요: 러닝머신 +%d레벨 · 속도 +%s",
+					product.robux,
+					level - before,
 					Format.number(speed)
 				)
 			)

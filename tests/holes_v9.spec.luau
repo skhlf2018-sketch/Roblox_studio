@@ -2,7 +2,7 @@
 --[[
 	9판 주임 검수 (구멍 찾기) — 수석 0ab9c70 (로벅스 상품 36개 · 열매 먹이기 삭제 · 밤 귀가 배달 버그) + 선임 d74a3ff
 	products.spec / night_carry.spec(수석이 쓴 기본 시험)과 겹치지 않게 "돈이 걸린 길의 구멍·경계·반복·무작위" 위주.
-	  A 구매 지급 안전성 (ProcessReceipt: 중복 · 동시 · 저장 실패 · 나감 · 100개 고리 · 모르는 id · 다른 사람 · Remote 로 닿는 길)
+	  A 구매 지급 안전성 (ProcessReceipt: 중복 · 동시 · 저장 실패 · 나감 · 500개 고리(F-2) · 모르는 id · 다른 사람 · Remote 로 닿는 길)
 	  B 효과 정확성 (부스트 최댓값 · 러닝머신 이득 · 레벨 상품 20개 × 상황 · 코인 2배 · 상한 · 스키마 7 → 8 · Snapshot/Attr)
 	  C 열매 먹이기 잔재 (코드 안 남았나 · 원소 돌연변이 legacy · 열매 가방/판매)
 	  D 밤 귀가 버그 (정상 배달 보존 · 두 명 · 쓰러진 상태 · 튜토리얼)
@@ -55,6 +55,20 @@ return function(T, Loader)
 		15000,
 		20000,
 	}
+
+	-- 주임 F-3 수정 규칙의 기준 계산 (서버 코드와 따로): 레벨 상품 tskip_n 을 level 에서 샀을 때 (새 레벨, 속도로 받을 R$)
+	--   맞으면(level = n-1) n · 안 맞으면 예산 = 그 상품 R$ 로 다음 레벨 가격부터 차례로 빼며 살 수 있는 만큼, 남은 R$ 는 속도
+	local function skipExpect(level, n)
+		if level == n - 1 then
+			return n, 0
+		end
+		local budget, current = SKIP_ROBUX[n], level
+		while current < 20 and SKIP_ROBUX[current + 1] <= budget do
+			budget -= SKIP_ROBUX[current + 1]
+			current += 1
+		end
+		return current, budget
+	end
 
 	-- 소스에서 주석(--[[ ... ]] 블록과 -- 줄 주석)을 뺀 코드 글자
 	local function stripComments(text)
@@ -442,27 +456,27 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"영수증 기록 100개 고리: 최근 100개 안의 PurchaseId 는 몇 번 와도 한 번만 (경계 100번째까지)",
+		"영수증 기록 500개 고리 (주임 F-2: 100 → 500): 최근 500개 안의 PurchaseId 는 몇 번 와도 한 번만 (경계 500번째까지)",
 		function()
 			inWorld(nil, function(w)
 				fakeConfigure(w)
 				enableSaving(w)
-				for i = 1, 100 do
+				T.eq(Config.RECEIPT_HISTORY_MAX, 500)
+				for i = 1, 500 do
 					T.eq(process(w, receipt(w, "coins_1m", "ring-" .. i)), GRANTED)
 				end
-				T.eq(w.data.money, 100e6)
+				T.eq(w.data.money, 500e6)
 				-- 가장 오래된 것(1번)도 아직 기록 안에 있음 → 다시 와도 안 줌
 				T.eq(process(w, receipt(w, "coins_1m", "ring-1")), GRANTED)
-				T.eq(process(w, receipt(w, "coins_1m", "ring-100")), GRANTED)
-				T.eq(w.data.money, 100e6, "고리 안에서는 두 번 안 줌")
-				T.eq(#w.data.receipts, 100)
+				T.eq(process(w, receipt(w, "coins_1m", "ring-500")), GRANTED)
+				T.eq(w.data.money, 500e6, "고리 안에서는 두 번 안 줌")
+				T.eq(#w.data.receipts, 500)
 			end)
 		end
 	)
 
-	T.skip(
-		"[F-2] 영수증 100개를 넘겨 기록에서 밀려난 옛 PurchaseId 가 다시 오면 또 지급됨 (로블록스는 PurchaseGranted 한 영수증은 다시 안 보내므로 실제로는 거의 안 일어남)",
-		"기록 고리가 100개라 101번째부터 1번째 기록이 사라짐 — 고치려면 RECEIPT_HISTORY_MAX 를 키우거나 (예: 500) 판 시각을 같이 적기",
+	T.test(
+		"[F-2 수정] 영수증 101번째가 와도 1번째 기록이 남아 있음 (고리 500) — 옛 PurchaseId 가 다시 와도 또 지급 안 됨 · 501번째부터는 가장 오래된 것이 빠짐 (로블록스는 PurchaseGranted 한 영수증은 다시 안 보내므로 실제로는 거의 안 일어남)",
 		function()
 			inWorld(nil, function(w)
 				fakeConfigure(w)
@@ -472,7 +486,13 @@ return function(T, Loader)
 				end
 				T.eq(w.data.money, 101e6)
 				T.eq(process(w, receipt(w, "coins_1m", "evict-1")), GRANTED)
-				T.eq(w.data.money, 101e6, "밀려난 영수증을 다시 받아도 또 지급하면 안 됨")
+				T.eq(w.data.money, 101e6, "101장째에도 1번째 영수증은 기록 안 — 또 지급 안 함")
+				T.eq(#w.data.receipts, 101)
+				for i = 102, 501 do
+					process(w, receipt(w, "coins_1m", "evict-" .. i))
+				end
+				T.eq(#w.data.receipts, Config.RECEIPT_HISTORY_MAX, "501장째부터 고리 크기 그대로")
+				T.eq(w.data.receipts[1], "evict-2", "가장 오래된 1번째만 빠짐")
 			end)
 		end
 	)
@@ -974,10 +994,11 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"레벨 상품 20개 × 상황(레벨 맞음 N-1 · 낮음 · 높음 · 19 · 최대 20): 맞으면 N, 안 맞으면 다음 1칸, 최대면 속도 +600M — 코인은 절대 안 듦 · 20 을 넘지 않음 · Attr·ProductGranted 맞음",
+		"레벨 상품 20개 × 상황(레벨 맞음 N-1 · 낮음 · 높음 · 19 · 최대 20): 맞으면 N, 안 맞으면 산 R$ 만큼만 (살 수 있는 레벨 + 남은 R$ × 환산율 속도, 주임 F-3 수정) — 코인은 절대 안 듦 · 20 을 넘지 않음 · 언제나 뭔가 줌 · Attr·ProductGranted 맞음",
 		function()
 			inWorld(nil, function(w)
 				local PS = w.ProductService
+				local RATE = Config.PRODUCT_SPEED_PER_ROBUX
 				w.data.money = 4242
 				local cases = 0
 				for n = 1, 20 do
@@ -993,14 +1014,22 @@ return function(T, Loader)
 						local speed = w.data.speed
 						local count = #grantedList(w)
 						T.truthy(PS.grant(w.player, "tskip_" .. n), "tskip_" .. n .. " @" .. level)
-						local want = if level == n - 1 then n elseif level < 20 then level + 1 else 20
+						local want, leftover = skipExpect(level, n)
 						T.eq(w.data.treadmillLevel, want, "tskip_" .. n .. " 레벨 " .. level .. " → ")
 						T.eq(w.player.attrs.TreadmillLevel, want)
-						T.eq(
-							w.data.speed,
-							if level == 20 then speed + 1e6 * Config.PRODUCT_MAXED_SKIP_SECONDS else speed,
-							"tskip_" .. n .. " @" .. level .. " 속도"
+						T.eq(w.data.speed, speed + leftover * RATE, "tskip_" .. n .. " @" .. level .. " 속도")
+						T.truthy(
+							want > level or w.data.speed > speed,
+							"tskip_" .. n .. " @" .. level .. ": 0 지급 없음"
 						)
+						-- 받은 레벨 값 + 속도로 받은 R$ = 산 값 (안 맞을 때 더 주지 않음)
+						if level ~= n - 1 then
+							local spent = 0
+							for k = level + 1, want do
+								spent += SKIP_ROBUX[k]
+							end
+							T.eq(spent + leftover, SKIP_ROBUX[n], "tskip_" .. n .. " @" .. level .. ": 산 값만큼")
+						end
 						T.eq(w.data.money, 4242, "코인 안 듦")
 						T.eq(#grantedList(w), count + 1)
 						T.truthy(w.data.treadmillLevel <= 20 and w.data.treadmillLevel >= 0)
@@ -1008,21 +1037,22 @@ return function(T, Loader)
 					end
 				end
 				T.truthy(cases >= 100, "경우의 수 " .. cases)
-				T.eq(Config.PRODUCT_MAXED_SKIP_SECONDS * 1e6, 6e8, "최대 레벨 보상 = 속도 600M")
+				T.eq(Config.PRODUCT_MAXED_SKIP_SECONDS, nil, "8판식 최대 레벨 600M 고정 보상 없앰")
 			end)
 		end
 	)
 
-	T.skip(
-		"[F-3] 레벨이 안 맞는 레벨 상품은 값과 상관없이 +1칸 (또는 최대 레벨이면 속도 600M) 을 줘서, 가장 싼 tskip_1 (3 R$) 을 계속 사면 20레벨까지 ≈ 60 R$ · 최대 레벨에서는 3 R$ 로 속도 600M (속도 100M 상품은 259 R$)",
-		"안 맞을 때 받는 것이 상품 가격과 무관 — 가격에 비례해서 주도록 (예: 올릴 수 있는 레벨만큼 가격 합이 안 넘게, 남으면 속도 상품 환율) 수석이 정해야 함",
+	T.test(
+		"[F-3 수정] 가장 싼 tskip_1 (3 R$) 을 계속 사도 레벨이 안 오름 (속도만 R$ 만큼) · 최대 레벨에서도 3 R$ 는 속도 3 × 환산율 — 환산율은 속도 100M 상품(259 R$)보다 유리하지 않음",
 		function()
 			inWorld(nil, function(w)
 				local PS = w.ProductService
+				T.truthy(Config.PRODUCT_SPEED_PER_ROBUX <= 1e8 / 259, "환산율 ≤ 속도 100M 상품 R$ 당 속도")
 				w.data.treadmillLevel = 1
 				local paid = 0
+				local speed0 = w.data.speed
 				for _ = 1, 19 do
-					PS.grant(w.player, "tskip_1") -- 레벨이 1 이상이면 안 맞는 상품: 3 R$ 로 +1칸
+					PS.grant(w.player, "tskip_1") -- 레벨이 1 이상이면 안 맞는 상품
 					paid += 3
 				end
 				-- 정상 가격으로 2 ~ 20레벨을 사려면 10+30+...+20000 R$ (표 합계)
@@ -1034,11 +1064,21 @@ return function(T, Loader)
 					w.data.treadmillLevel < 20 or paid >= honest,
 					"3 R$ × 19 = " .. paid .. " R$ 로 20레벨 (정상 " .. honest .. " R$)"
 				)
+				T.eq(w.data.treadmillLevel, 1, "3 R$ 로는 2레벨(10 R$)도 못 삼")
+				T.eq(w.data.speed, speed0 + paid * Config.PRODUCT_SPEED_PER_ROBUX, "대신 낸 R$ 만큼 속도")
+				-- 싼 상품 여러 장을 모아도 비싼 레벨은 안 됨 (한 장씩 따로 계산)
+				w.data.treadmillLevel = 5
+				for _ = 1, 200 do
+					PS.grant(w.player, "tskip_2")
+				end
+				T.eq(w.data.treadmillLevel, 5, "10 R$ × 200 장으로도 6레벨(399 R$) 못 얻음")
+				w.data.treadmillLevel = 20
 				local speed = w.data.speed
 				PS.grant(w.player, "tskip_1")
 				local gain = w.data.speed - speed
+				T.truthy(gain > 0, "최대 레벨에서도 0 지급 없음")
 				T.truthy(
-					gain / 3 <= 1e8 / 259 * 1.5,
+					gain / 3 <= 1e8 / 259,
 					"3 R$ 로 속도 " .. gain .. " (속도 상품은 R$ 당 " .. 1e8 / 259 .. ")"
 				)
 			end)
@@ -1188,9 +1228,9 @@ return function(T, Loader)
 				table.insert(raw.receipts, "id-" .. i)
 			end
 			local r1 = DataSchema.reconcile(raw, 0)
-			T.eq(#r1.receipts, 100)
-			T.eq(r1.receipts[100], "id-1000")
-			T.eq(r1.receipts[1], "id-901")
+			T.eq(#r1.receipts, 500)
+			T.eq(r1.receipts[500], "id-1000")
+			T.eq(r1.receipts[1], "id-501")
 			for _, id in r1.receipts do
 				T.truthy(type(id) == "string" and #id >= 1 and #id <= 64)
 			end
@@ -1948,12 +1988,13 @@ return function(T, Loader)
 						end
 					elseif product.kind == "treadmillSkip" then
 						local level = before.level
-						local want = if level == value - 1 then value elseif level < 20 then level + 1 else 20
+						-- 주임 F-3 수정: 안 맞으면 산 R$ 만큼만 (skipExpect), 남은 R$ 는 속도
+						local want, leftover = skipExpect(level, value)
 						T.eq(after.level, want, label .. ": " .. product.key .. " @" .. level)
-						if level == 20 then
+						if leftover > 0 then
 							local wantSpeed =
-								math.min(Cfg.SPEED_MAX, before.speed + 1e6 * Cfg.PRODUCT_MAXED_SKIP_SECONDS)
-							T.truthy(after.speed >= wantSpeed, label .. ": 최대 레벨 속도 보상")
+								math.min(Cfg.SPEED_MAX, before.speed + leftover * Cfg.PRODUCT_SPEED_PER_ROBUX)
+							T.truthy(after.speed >= wantSpeed, label .. ": 남은 R$ 만큼 속도")
 						end
 					end
 					if product.kind ~= "coins" then
@@ -1967,7 +2008,7 @@ return function(T, Loader)
 					if #genuine == 0 then
 						return
 					end
-					-- 기록 고리(100개) 안쪽만: 최근 50장 중에서
+					-- 기록 고리(500개) 안쪽만: 최근 50장 중에서
 					local g = genuine[#genuine - math.floor(rand() * math.min(#genuine, 50))]
 					local before = snapA()
 					local onTreadmill = A.attrs.OnTreadmill == true

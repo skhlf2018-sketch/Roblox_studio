@@ -172,6 +172,31 @@ function Products.nextTreadmillSkip(level: number): Product?
 	return treadmillSkips[nextLevel]
 end
 
+-- 러닝머신 레벨 상품을 지금 레벨에서 샀을 때 받는 것 (순수 — 서버 ProductService.grant 가 씀):
+--   (새 레벨, 남은 로벅스). 남은 로벅스는 서버가 속도로 바꿔 줌 (× Config.PRODUCT_SPEED_PER_ROBUX).
+--   - 레벨이 N-1 이면 N (값 그대로, 남는 것 0)
+--   - 안 맞으면 (창이 늦게 바뀜·두 번 누름·위조 클라 — 주임 F-3): 예산 = 그 상품 로벅스. 지금 레벨의 다음 레벨 가격부터
+--     차례로 빼며 살 수 있는 만큼만 올림 (한 칸도 못 사면 0칸), 남은 예산은 속도로. 최대 레벨이면 전부 속도.
+--     → 싼 상품(tskip_1, 3 R$)을 여러 번 사서 비싼 레벨을 얻을 수 없음. 예산 > 0 이라 "돈 받고 0 지급"도 없음
+function Products.treadmillSkipOutcome(level: number, product: Product): (number, number)
+	local maxLevel = #treadmillSkips
+	local current = if level == level then math.clamp(math.floor(level), 0, maxLevel) else 0
+	local target = math.floor(product.value or 0)
+	if current == target - 1 and target >= 1 and target <= maxLevel then
+		return target, 0
+	end
+	local budget = math.max(0, product.robux)
+	while current < maxLevel do
+		local price = treadmillSkips[current + 1].robux
+		if price > budget then
+			break
+		end
+		budget -= price
+		current += 1
+	end
+	return current, budget
+end
+
 -- Creator Dashboard 에서 만든 id 가 붙어 있나 (false 면 클라는 "준비 중")
 function Products.isConfigured(product: Product): boolean
 	return product.productId > 0

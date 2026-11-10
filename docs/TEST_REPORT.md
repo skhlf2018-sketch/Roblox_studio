@@ -1549,3 +1549,17 @@ Lune **515 통과** (482 + 새 33) · 건너뜀 3 (기존 B-4 1 + 새 E-1, E-2 2
 Lune **571 통과** (537 + 새 34) · 건너뜀 5 (기존 3 + 새 F-2, F-3) · stylua `src tests` 틀린 파일 0 · selene `src` 에러 0 · 경고 0 · luau-analyze type 0 · require 0 · lint 0 · syntax 0.
 바꾼 파일: `src/server/Services/ProductService.luau` (F-1 · F-1b) · `tests/holes_v9.spec.luau` (새) · `tests/run.luau` (등록) · `tests/products.spec.luau` (한 줄) · 이 문서.
 아빠가 상품을 켜기 전에 꼭: ① **레벨 상품(`tskip_*`) 값 우회(F-3) 해결 전에는 id 를 안 붙이기** ② id 는 **상품 하나에 하나씩, 가격까지 표와 똑같이** (틀리면 산 사람에게 엉뚱한 상품이 가고 환불이 안 됨) — 처음엔 한두 개만 붙여 스튜디오 테스트 구매로 확인한 뒤 `lune run tests/run.luau` · 다시 Publish ③ `Config.DEV_USER_IDS` 는 **빈 채로** (번호를 넣으면 그 사람은 실서버에서도 `/buy` 로 상품을 공짜로 받음).
+
+## 26. 9판 스튜디오 확인 (본부장, 2026-11-10)
+
+| # | 확인 | 결과 |
+|---|---|---|
+| 1 | 업그레이드 표지판 | 업그레이드용 ProximityPrompt 0개, `SignClick` ClickDetector 21개(내 것만 거리 20), 러닝머신 표지판 옆 "⏩ 건너뛰기 R$ 10" ✅ |
+| 2 | 스피드 배수 | 왼쪽 메뉴 순서 상점·인덱스·스피드 배수·슬로우 모드·설정, 창 카드 11장, `/buy boost_8` 뒤 `/buy boost_2` → 배수 8 유지, HUD "×8" ✅ |
+| 3 | 러닝머신 이득 | 1레벨 8/초 × 배수 8 → 4초에 +256 (64/초) ✅ |
+| 4 | 그 밖의 지급 | `/buy tskip_1` 레벨 0→1, `money_pass` true, `speed_10m` +10M ✅ |
+| 5 | 미설정 상품 | "R$ 16" 버튼을 눌러도 로벅스 구매창 안 뜸 ✅ (안내 토스트 화면은 못 잡음) |
+| 6 | 밤 버그 | 숲에서 씨앗 e2 를 든 채 `/skip` → 베이스로 이동, 씨앗 가방 0개 ✅ |
+| - | 안 본 것 | 표지판 실제 마우스 클릭, 진짜 구매창·ProcessReceipt(게시 후에만 가능), 폰 화면 |
+
+검사: 테스트 573 통과(건너뜀 3), smoke client/visuals OK, selene/stylua/luau-analyze 0.

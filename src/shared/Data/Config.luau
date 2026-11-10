@@ -355,13 +355,16 @@ local Config = {
 	--   (6 → 7 마이그레이션, Logic/DataSchema). 등급 id 는 저장하지 않으므로 옛 super_ultradivine 보정은 없음
 	-- 8 (9판 로벅스 상품): + treadmillBoost(1) · moneyPass(false) · receipts({}) — 옛 데이터는 기본값으로 채움 (7 → 8 은 칸만 추가)
 	SCHEMA_VERSION = 8,
-	RECEIPT_HISTORY_MAX = 100, -- 지급한 로벅스 영수증 PurchaseId 를 최근 이만큼 저장 (중복 지급 방지, 고리)
+	-- 지급한 로벅스 영수증 PurchaseId 를 최근 이만큼 저장 (중복 지급 방지, 고리). 주임 F-2: 100 → 500 (밀려난 옛 영수증 재지급 여유)
+	RECEIPT_HISTORY_MAX = 500,
 
 	------------------------------------------------------------------
 	-- 9판 로벅스 상품 (Data/Products, ProductService)
 	------------------------------------------------------------------
-	-- 러닝머신 레벨 올리기(tskip)를 샀는데 이미 최대 레벨이면 대신 주는 속도 = 최대 레벨 1초 속도(1M) × 이 초 [추정] (= 600M)
-	PRODUCT_MAXED_SKIP_SECONDS = 600,
+	-- 주임 F-3: 레벨이 안 맞는 러닝머신 레벨 상품(tskip)은 **산 로벅스만큼만** — 다음 레벨 가격부터 차례로 빼며 살 수 있는
+	--   레벨만 올리고, 남은 로벅스는 속도로 (Products.treadmillSkipOutcome). 환산율 = 가장 비싼 속도 상품 speed_100m
+	--   (1e8 ÷ 259 R$ = 386,100.39…) 을 내림 — 속도 상품보다 유리하지 않게. (8판 "최대면 속도 600M 고정"은 없앰)
+	PRODUCT_SPEED_PER_ROBUX = 386100,
 	AUTOSAVE_SECONDS = 60,
 	SESSION_LOCK_STALE_SECONDS = 300, -- 이보다 오래된 세션 락은 무시
 	DATASTORE_RETRIES = 3,

@@ -279,10 +279,12 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"러닝머신 레벨 올리기: 레벨이 N-1 이면 N (코인 안 듦) · 안 맞으면 다음 1칸 · 최대면 속도 보상 — 돈을 받았으니 언제나 뭔가 줌",
+		"러닝머신 레벨 올리기: 레벨이 N-1 이면 N (코인 안 듦) · 안 맞으면 산 로벅스만큼만 (살 수 있는 레벨 + 남은 R$ → 속도) · 최대면 전부 속도 — 주임 F-3",
 		function()
 			local w = world()
 			local PS = w.ProductService
+			local RATE = Config.PRODUCT_SPEED_PER_ROBUX
+			T.truthy(RATE <= 1e8 / 259, "환산율이 속도 100M 상품(259 R$)보다 유리하지 않음")
 			w.data.money = 777
 			T.truthy(PS.grant(w.player, "tskip_1"))
 			T.eq(w.data.treadmillLevel, 1, "0 → 1 (해금)")
@@ -291,23 +293,39 @@ return function(T, Loader)
 			T.truthy(PS.grant(w.player, "tskip_2"))
 			T.eq(w.data.treadmillLevel, 2)
 			T.eq(w.data.money, 777, "코인 안 듦")
-			-- 안 맞음 (아래): 2레벨인데 10레벨 상품 → 다음 1칸 (3)
+			-- 안 맞음 (아래): 2레벨에서 10레벨 상품(1599 R$) → 3~7레벨 (30+50+100+399+599 = 1178) 까지, 남은 421 R$ 는 속도
+			local speed = w.data.speed
 			T.truthy(PS.grant(w.player, "tskip_10"))
-			T.eq(w.data.treadmillLevel, 3)
-			-- 안 맞음 (위·두 번 누름): 3레벨인데 3레벨 상품 → 4
+			T.eq(w.data.treadmillLevel, 7)
+			T.eq(w.player.attrs.TreadmillLevel, 7)
+			T.eq(w.data.speed, speed + 421 * RATE)
+			T.truthy(w.H.hasNotify(w.player, "success", "산 값(R$ 1599)만큼"))
+			-- 안 맞음 (위·두 번 누름): 7레벨에서 3레벨 상품(30 R$) → 8레벨(799)은 못 삼, 30 R$ 는 속도
+			speed = w.data.speed
 			T.truthy(PS.grant(w.player, "tskip_3"))
-			T.eq(w.data.treadmillLevel, 4)
+			T.eq(w.data.treadmillLevel, 7, "싼 상품으로 비싼 레벨을 못 얻음")
+			T.eq(w.data.speed, speed + 30 * RATE, "대신 산 값만큼 속도 (0 지급 없음)")
 			w.data.treadmillLevel = 19
 			T.truthy(PS.grant(w.player, "tskip_20"))
 			T.eq(w.data.treadmillLevel, 20)
-			-- 최대에서 또: 속도 보상 (최대 1초 속도 × 600 = 600M)
-			local speed = w.data.speed
+			-- 최대에서 또: 전부 속도 (20000 R$ × 환산율)
+			speed = w.data.speed
 			T.truthy(PS.grant(w.player, "tskip_20"))
 			T.eq(w.data.treadmillLevel, 20, "최대 그대로")
-			T.eq(w.data.speed, speed + 1000000 * Config.PRODUCT_MAXED_SKIP_SECONDS)
-			T.eq(Config.PRODUCT_MAXED_SKIP_SECONDS, 600)
-			T.truthy(w.H.hasNotify(w.player, "success", "최대 레벨이라 대신 속도"))
+			T.eq(w.data.speed, speed + 20000 * RATE)
+			T.eq(Config.PRODUCT_MAXED_SKIP_SECONDS, nil, "8판식 600M 고정 보상 없앰")
 			T.eq(#granted(w), 6, "6번 다 ProductGranted")
+			-- 순수 규칙 (Products.treadmillSkipOutcome)
+			local P = w.Products
+			local function outcome(level, key)
+				return { P.treadmillSkipOutcome(level, P.get(key)) }
+			end
+			T.eq(table.concat(outcome(0, "tskip_1"), ","), "1,0")
+			T.eq(table.concat(outcome(4, "tskip_5"), ","), "5,0")
+			T.eq(table.concat(outcome(1, "tskip_1"), ","), "1,3", "3 R$ 로 2레벨(10) 못 삼")
+			T.eq(table.concat(outcome(0, "tskip_2"), ","), "1,7", "0레벨에서 2레벨 상품: 1레벨(3) + 7 R$")
+			T.eq(table.concat(outcome(20, "tskip_1"), ","), "20,3")
+			T.eq(table.concat(outcome(0, "tskip_20"), ","), "14,1814", "20000 R$ 로 1~14레벨 (18186) + 1814 남음")
 			w.H.uninstall()
 		end
 	)
@@ -498,20 +516,20 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"영수증 기록은 최근 100개 고리 (오래된 것부터 빠짐) · 지급 실패한 영수증은 안 남음",
+		"영수증 기록은 최근 500개 고리 (주임 F-2: 100 → 500, 오래된 것부터 빠짐) · 지급 실패한 영수증은 안 남음",
 		function()
 			local w = world()
 			fakeConfigure(w)
 			w.DataService.start()
 			w.session.saveEnabled = true
-			for i = 1, 105 do
+			for i = 1, 505 do
 				T.eq(process(w, receipt(w, "coins_1m", "r" .. i)), GRANTED)
 			end
 			T.eq(#w.data.receipts, Config.RECEIPT_HISTORY_MAX)
-			T.eq(Config.RECEIPT_HISTORY_MAX, 100)
+			T.eq(Config.RECEIPT_HISTORY_MAX, 500)
 			T.eq(w.data.receipts[1], "r6")
-			T.eq(w.data.receipts[100], "r105")
-			T.eq(w.data.money, 105e6)
+			T.eq(w.data.receipts[500], "r505")
+			T.eq(w.data.money, 505e6)
 			-- 지급 실패(상품 표에서 사라짐)는 기록하지 않음
 			local real = w.Products.get
 			w.Products.get = function()
@@ -552,12 +570,12 @@ return function(T, Loader)
 			T.eq(DataSchema.reconcile({ version = 8, moneyPass = "yes" }, 0).moneyPass, false, "true 만 인정")
 			T.eq(DataSchema.reconcile({ version = 8, moneyPass = true }, 0).moneyPass, true)
 			local receipts = { "a", "a", 5, "", string.rep("x", 65), "b" }
-			for i = 1, 120 do
+			for i = 1, 520 do
 				table.insert(receipts, "n" .. i)
 			end
 			local cleaned = DataSchema.cleanReceipts(receipts)
-			T.eq(#cleaned, 100, "최근 100개")
-			T.eq(cleaned[100], "n120")
+			T.eq(#cleaned, 500, "최근 500개")
+			T.eq(cleaned[500], "n520")
 			T.falsy(table.find(cleaned, "a"), "오래된 것은 빠짐")
 			T.eq(
 				#DataSchema.cleanReceipts({ "a", "a", 5, "", string.rep("x", 65), "b" }),

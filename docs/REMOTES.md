@@ -3,7 +3,7 @@
 > - **없앤 Remote**: 클라→서버 `FeedFruit` · 서버→클라 `FeedResult` (열매 먹이기 완전 삭제 — 열매는 **팔기만**). `FruitRules.feedOptions/feedChance/rollFeed/canGain/applyMutation/takeOne`, `Mutations.feed`·`feedChance`·`feedBiomes`·`FEED_*` 도 없음. 옛 먹이기로 붙은 원소 돌연변이(얼음·불·번개)는 저장된 식물에 그대로 남고 열매 값에도 그대로 곱함 (새로 안 생김).
 > - **새 Remote** 서버 → 클라 **`ProductGranted`** `Types.ProductGrant = { key: string, kind: string }` — 로벅스 상품(`shared/Data/Products`)이 지급됨 (나에게만). 바뀐 값은 같이 오는 `DataUpdate("upgrades")`·Attr 로. **서버로 "사 줘" Remote 는 없음** (위조 방지): 클라가 `MarketplaceService:PromptProductPurchase(LocalPlayer, product.productId)` 로 로블록스 구매창을 열면, 돈은 로블록스가 받고 서버 `MarketplaceService.ProcessReceipt`(`ProductService`)만 지급함.
 > - **상품 표** `Data/Products`: `treadmillBoosts`(11: `boost_2` … `boost_2048`, 값 = 배수 = R$) · `treadmillSkips`(20: `tskip_1` … `tskip_20`, 값 = 그 레벨) · `shop`(5: `money_pass` 199 · `coins_1m` 99 · `coins_1b` 199 · `speed_10m` 199 · `speed_100m` 259). `Products.get(key)` · `byProductId(id)` · `nextTreadmillSkip(level)` · `isConfigured(product)` (= `productId > 0`, 지금은 **전부 0** → 화면은 "준비 중").
-> - **효과**: 러닝머신 부스트 = 산 것 중 **가장 큰 배수 하나** (곱 아님), 러닝머신 1초 이득 = 레벨 이득 × 트레일 × 부스트 (`Economy.treadmillGainPerSecond(level, trail?, boost?)`, 걷는 속도에는 안 곱함) · 러닝머신 레벨 = 지금 레벨 + 1 상품만 (안 맞으면 다음 1칸, 최대면 속도 600M) · 코인/속도 더하기 · 코인 2배 = 열매 판매·성체 팔기 × 2 (영원히).
+> - **효과**: 러닝머신 부스트 = 산 것 중 **가장 큰 배수 하나** (곱 아님), 러닝머신 1초 이득 = 레벨 이득 × 트레일 × 부스트 (`Economy.treadmillGainPerSecond(level, trail?, boost?)`, 걷는 속도에는 안 곱함) · 러닝머신 레벨 = 지금 레벨 + 1 상품만 (안 맞으면 산 R$ 만큼만 — 살 수 있는 레벨 + 남은 R$ × 386,100 속도, 주임 F-3) · 코인/속도 더하기 · 코인 2배 = 열매 판매·성체 팔기 × 2 (영원히).
 > - **Attr** `TreadmillBoost`(number, 1 = 없음) · `MoneyPass`(bool). **Snapshot** + `DataUpdate("upgrades")` 에 `treadmillBoost` · `moneyPass`. 개발 명령 `/buy <key>` (스튜디오 무료 지급).
 > - **버그 수정**: 씨앗을 든 채 밤이 되면(서버가 베이스로 순간이동) 씨앗이 가방에 들어가던 것 → 이제 **둥지로 돌아감** + `Notify` info "밤이 되어 씨앗이 둥지로 돌아갔어요." (`EggDelivered` 없음). 다른 서버 순간이동(늦게 받은 베이스 → 집, `/zone`)도 같음. 스스로 걸어서 허브에 들어온 배달은 그대로.
 
@@ -307,7 +307,7 @@ moneyPass,                         -- 9판: 로벅스 코인 2배 (영원히)
 - **건너뛰기** (`GardenRules.skipCost`): 올림(남은 분) × 10 코인 × 등급 배수 (전부 / 절반).
 - **성체 팔기** (`GardenRules.sellPrice`): 열매 1개 값 × 20.
 - **열매 먹이기는 9판에서 없앰** (사장님 2026-11-10): 열매는 팔기만. 돌연변이는 둥지 씨앗의 자연 돌연변이(실버·황금·무지개)만 새로 생김, 옛 원소(얼음·불·번개)는 저장된 식물에만 남음.
-- **로벅스 상품** (`ProductService`, `Data/Products`, 9판): `ProcessReceipt` → 영수증 `PurchaseId` 중복 확인(`data.receipts` 최근 100개) → 지급 → 저장 → `PurchaseGranted` (플레이어 없음·불러오는 중·저장 실패·모르는 id = `NotProcessedYet`).
+- **로벅스 상품** (`ProductService`, `Data/Products`, 9판): `ProcessReceipt` → 영수증 `PurchaseId` 중복 확인(`data.receipts` 최근 500개, 주임 F-2) → 지급 → 저장 → `PurchaseGranted` (플레이어 없음·불러오는 중·저장 실패·모르는 id = `NotProcessedYet`).
 - **사쿠라 나무** (`SakuraService`, `shared/SakuraRules`): 성체 바치기 → 크리스탈 (일반은 못 바침), 100개 → 특별 씨앗 뽑기 (97.5% / 2.5%, 8판 추가 2).
 - **러닝머신** (`TreadmillService`): 1초마다 속도 += 걸음당 속도 × 4 (`Config.TREADMILL_MULTIPLIER`) × 트레일 × 9판 로벅스 부스트 + `TreadmillStep`. 20레벨 = 1초 1,000,000 (트레일·부스트 전).
 - **튜토리얼** (`TutorialService`, `shared/TutorialRules`, `Data/Tutorial`): 줍기 1→2, 놓침 2→1, 배달 →3, 심기 3→4, 다시 줍기로 정원이 비면 4→3, 성체 →5, 열매 팔기 5→끝(+1,000 코인, 8판). 튜토리얼 씨앗 = 숲 강아지풀(1초).
@@ -316,12 +316,13 @@ moneyPass,                         -- 9판: 로벅스 코인 2배 (영원히)
 ## 8. 선임 할 일
 
 ### 8-9. 9판 선임 체크리스트 (수석 2026-11-10 — 로벅스 상품 · 열매 먹이기 삭제)
-- [ ] **열매 먹이기 화면 전부 지우기**: 열매 가방 "먹이기" 버튼·성체 카드 "먹이기"·먹이기 확률 미리보기·`FeedResult` 연출·먹이기 소리 (`Remotes.ToServer.FeedFruit`·`ToClient.FeedResult` 는 이제 **없는 이름** — 남아 있으면 `crossrefs.spec` "코드에서 쓰는 Remotes.X 는 전부 실제 이름" 이 실패). 튜토리얼·도움말 글에 "먹이기" 가 있으면 지우기.
-- [ ] **구매창**: `MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)` (클라만 — 서버로 보내는 "사 줘" Remote 는 없음). **`Products.isConfigured(product)` 가 false(지금은 전부 — id 0)면 창을 열지 말고 "준비 중" 안내**. 연타 방지는 클라에서.
-- [ ] **지급 연출**: `ProductGranted { key, kind }` (나에게만) → 축하 글·소리. 실제 값은 `DataUpdate("upgrades")` (`treadmillLevel`·`treadmillBoost`·`moneyPass`) · Attr `TreadmillBoost`·`MoneyPass`·`TreadmillLevel`·`Money`·`BaseSpeed` 로 옴 (`ProductGranted` 만 보고 숫자를 바꾸지 말 것).
-- [ ] **러닝머신 창**: 코인 버튼(`PurchaseUpgrade("Treadmill")`) 옆에 로벅스 버튼 = `Products.nextTreadmillSkip(TreadmillLevel)` (지금 레벨 + 1 상품만, 최대면 숨김). 가격 `product.robux`. 1초 이득 표시 = `Economy.treadmillGainPerSecond(level, trailMultiplier, TreadmillBoost)` (`TreadmillTouched.gainPerSecond` 는 트레일·부스트 전 숫자).
-- [ ] **스피드 배수 창**: `Products.treadmillBoosts` 11장 — 지금 `TreadmillBoost` 이하 카드는 "가짐" (또 사도 그대로 — 환불 없음 안내), 큰 것만 사게.
-- [ ] **상점 창**: `Products.shop` 5개 (코인 2배 · 코인 1M · 1B · 속도 10M · 100M). `MoneyPass` 면 코인 2배 카드 "가짐".
+> **선임 완료 (2026-11-10, 커밋 d74a3ff · 1605254)** · 주임 검수 25장 통과 (`tests/holes_v9.spec.luau`). 아래 전부 됨. 수석 후속 (주임 F-2·F-3): 레벨이 안 맞는 러닝머신 레벨 상품은 산 R$ 만큼만 (남으면 속도), 영수증 기록 500개 — 화면은 바꿀 것 없음 (안내는 서버 `Notify`).
+- [x] **열매 먹이기 화면 전부 지우기**: 열매 가방 "먹이기" 버튼·성체 카드 "먹이기"·먹이기 확률 미리보기·`FeedResult` 연출·먹이기 소리 (`Remotes.ToServer.FeedFruit`·`ToClient.FeedResult` 는 이제 **없는 이름** — 남아 있으면 `crossrefs.spec` "코드에서 쓰는 Remotes.X 는 전부 실제 이름" 이 실패). 튜토리얼·도움말 글에 "먹이기" 가 있으면 지우기.
+- [x] **구매창**: `MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.productId)` (클라만 — 서버로 보내는 "사 줘" Remote 는 없음). **`Products.isConfigured(product)` 가 false(지금은 전부 — id 0)면 창을 열지 말고 "준비 중" 안내**. 연타 방지는 클라에서.
+- [x] **지급 연출**: `ProductGranted { key, kind }` (나에게만) → 축하 글·소리. 실제 값은 `DataUpdate("upgrades")` (`treadmillLevel`·`treadmillBoost`·`moneyPass`) · Attr `TreadmillBoost`·`MoneyPass`·`TreadmillLevel`·`Money`·`BaseSpeed` 로 옴 (`ProductGranted` 만 보고 숫자를 바꾸지 말 것).
+- [x] **러닝머신 창**: 코인 버튼(`PurchaseUpgrade("Treadmill")`) 옆에 로벅스 버튼 = `Products.nextTreadmillSkip(TreadmillLevel)` (지금 레벨 + 1 상품만, 최대면 숨김). 가격 `product.robux`. 1초 이득 표시 = `Economy.treadmillGainPerSecond(level, trailMultiplier, TreadmillBoost)` (`TreadmillTouched.gainPerSecond` 는 트레일·부스트 전 숫자).
+- [x] **스피드 배수 창**: `Products.treadmillBoosts` 11장 — 지금 `TreadmillBoost` 이하 카드는 "가짐" (또 사도 그대로 — 환불 없음 안내), 큰 것만 사게.
+- [x] **상점 창**: `Products.shop` 5개 (코인 2배 · 코인 1M · 1B · 속도 10M · 100M). `MoneyPass` 면 코인 2배 카드 "가짐".
 - 개발 명령 `/buy <key>` 로 스튜디오에서 무료로 받아 볼 수 있음. 스튜디오 테스트 구매(로블록스 구매창)도 무료지만 상품 id 가 있어야 함 (`docs/ROBUX_SETUP.md`).
 
 ### 8-8. 8판 선임 체크리스트 (수석 2026-11-08 — 지금은 `[8판 수석 임시]` 로 안 깨질 만큼만)

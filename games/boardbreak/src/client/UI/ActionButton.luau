@@ -3,7 +3,7 @@
 	ActionButton — 화면의 큰 둥근 버튼 "들기"(slot 0) · "치기"(slot 1) (선임)
 	  local b = ActionButton.new("TrainButton", "들기", color, 0, "dumbbell", function() Net.send("Train") end)
 	  b.setVisible(true) · b.setText("치기!", "솜") · b.isHolding()
-	누르는 순간 한 번 + 누르고 있으면 Config.AUTO_REPEAT_SECONDS(0.25초)마다 다시 (초당 4번, 서버 한도 5번).
+	누르는 순간 한 번 + 누르고 있으면 Config.AUTO_REPEAT_SECONDS(0.22초)마다 다시 (초당 4.5번, 서버 한도 5번).
 	자리는 UI/Layout.actionRect — PC 아래 가운데 / 터치 오른쪽 점프 버튼 위 (조이스틱·점프와 안 겹침, 46px 이상).
 ]]
 

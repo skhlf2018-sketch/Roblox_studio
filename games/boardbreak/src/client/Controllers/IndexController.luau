@@ -104,7 +104,7 @@ function IndexController.start()
 				TextScaled = true,
 				Parent = card,
 			})
-			Ui.label("💪 " .. Format.number(t.minPower), UDim2.new(1, -8, 0, 18), 16, C.power, {
+			Ui.label("💪 " .. Format.number(t.recommendPower), UDim2.new(1, -8, 0, 18), 16, C.power, {
 				Name = "Need",
 				Position = UDim2.fromOffset(4, 104),
 				TextScaled = true,

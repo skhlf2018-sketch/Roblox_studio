@@ -1,11 +1,10 @@
 --!strict
 --[[
 	Targets — 깰 물건 41개 (설계서 3장 표 + 9장 숫자 표). 순수 데이터.
-	  { id, index, name, world, reward, hp, recommendPower, minPower }
+	  { id, index, name, world, reward, hp, recommendPower }
 	  reward         = 한 번 깼을 때 받는 돈 (띠 배율 · 돈 2배 패스 전). 솜 3 에서 시작해 이웃끼리 5~10배 (사장님 결정 10번)
 	  hp             = 물건 체력 (한 번 칠 때 내 힘(× 힘 배수)만큼 깎임, 플레이어마다 따로 · 세션 동안 남음)
 	  recommendPower = 추천 힘 (화면 표시용만 — 힘 문턱은 없음, 사장님 결정 11번). 이 힘이면 15번에 깸
-	  minPower       = recommendPower 의 옛 이름 (선임 화면이 recommendPower 로 바꾸면 지움). 판정에는 안 씀
 	숫자 규칙 (설계서 6장): hp = 추천 힘 × 14.2 (추천 힘이면 15번) · 이웃 물건의 추천 힘·hp 는 5~10배,
 	그리고 이웃 hp 배율 ≥ 이웃 reward 배율 (약한 힘으로 뒤 물건을 오래 치는 것이 지름길이 안 되게).
 ]]
@@ -18,7 +17,6 @@ export type Target = {
 	reward: number,
 	hp: number,
 	recommendPower: number,
-	minPower: number,
 }
 
 -- { id, 이름, 월드, 값, 추천 힘, hp } — 추천 힘·hp 는 tests/tune_numbers.luau 로 만들고 sim_progress 로 검사 (설계서 9장)
@@ -78,7 +76,6 @@ for index, row in ROWS do
 		world = row[3],
 		reward = row[4],
 		recommendPower = row[5],
-		minPower = row[5],
 		hp = row[6],
 	}
 	table.insert(list, target)

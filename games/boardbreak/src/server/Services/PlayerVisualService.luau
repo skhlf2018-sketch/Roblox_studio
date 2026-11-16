@@ -111,16 +111,31 @@ function PlayerVisualService.apply(character: Model?, power: number?): number
 	return tier
 end
 
+local connections: { [Player]: { RBXScriptConnection } } = {} -- 나갈 때 끊음 (B-5)
+
+local function unwatch(player: Player)
+	local list = connections[player]
+	connections[player] = nil
+	if list then
+		for _, c in list do
+			c:Disconnect()
+		end
+	end
+end
+
 local function watch(player: Player)
+	unwatch(player) -- 두 번 불려도 연결은 하나씩만
 	local function refresh()
 		PlayerVisualService.apply(player.Character, player:GetAttribute(POWER) :: number?)
 	end
-	player.CharacterAdded:Connect(function(character: Model)
-		character:WaitForChild("HumanoidRootPart", 10)
-		character:SetAttribute("AuraTier", nil)
-		refresh()
-	end)
-	player:GetAttributeChangedSignal(POWER):Connect(refresh)
+	connections[player] = {
+		player.CharacterAdded:Connect(function(character: Model)
+			character:WaitForChild("HumanoidRootPart", 10)
+			character:SetAttribute("AuraTier", nil)
+			refresh()
+		end),
+		player:GetAttributeChangedSignal(POWER):Connect(refresh),
+	}
 	if player.Character then
 		refresh()
 	end
@@ -128,6 +143,7 @@ end
 
 function PlayerVisualService.start()
 	Players.PlayerAdded:Connect(watch)
+	Players.PlayerRemoving:Connect(unwatch)
 	for _, p in Players:GetPlayers() do
 		watch(p)
 	end

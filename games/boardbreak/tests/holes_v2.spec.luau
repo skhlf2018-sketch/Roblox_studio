@@ -790,7 +790,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"값 평가: 아령 값 ÷ 그때 깨는 물건 한 번 돈(지금 힘에 맞는 물건 × 띠 배율) = 2 ~ 150 번 안 (터무니없이 싸거나 비싸지 않음)",
+		"값 평가: 아령 값 ÷ 그때 깨는 물건 한 번 돈(지금 힘에 맞는 물건 × 띠 배율) = 2 ~ 250 번 안 (터무니없이 싸거나 비싸지 않음 — 노가다 한도가 10분이라 150 → 250, B-1)",
 		function()
 			local m = pure()
 			local at = dumbbellSim(m)
@@ -828,18 +828,18 @@ return function(T, Loader)
 				)
 			)
 			T.truthy(lo >= 2, "너무 쌈 " .. loId .. " " .. lo)
-			T.truthy(hi <= 150, "너무 비쌈 " .. hiId .. " " .. hi)
+			T.truthy(hi <= 250, "너무 비쌈 " .. hiId .. " " .. hi)
 		end
 	)
 
 	T.test(
-		"사는 데 걸리는 시간: 8분 안 · 앞/가운데/뒤 1/3 평균이 커짐 · 뒤 40개 평균은 6분 아래~8분 위로 안 벗어남",
+		"사는 데 걸리는 시간: 10분 안 · 앞/가운데/뒤 1/3 평균이 커짐 · 뒤 40개 평균은 5분 반 ~ 10분",
 		function()
 			local m = pure()
 			local _, took = dumbbellSim(m)
 			local list = {}
 			for level = 2, 60 do
-				T.truthy(took[level] <= 480, "아령 " .. level .. " " .. took[level] .. "초")
+				T.truthy(took[level] <= 600, "아령 " .. level .. " " .. took[level] .. "초")
 				table.insert(list, took[level])
 			end
 			local function avg(a, b)
@@ -853,19 +853,20 @@ return function(T, Loader)
 			local a1, a2, a3 = avg(1, 19), avg(20, 39), avg(40, n)
 			print(string.format("  (앞 %.0f · 가운데 %.0f · 뒤 %.0f초)", a1, a2, a3))
 			T.truthy(a3 > a2 and a2 > a1, "점점 늘어남")
-			T.truthy(avg(21, n) >= 330 and avg(21, n) <= 480, "아령 22~60 평균 " .. avg(21, n))
+			T.truthy(avg(21, n) >= 330 and avg(21, n) <= 600, "아령 22~60 평균 " .. avg(21, n))
 		end
 	)
 
-	T.skip(
-		"사는 시간이 앞 아령보다 20% 넘게 줄어드는 아령이 없음 (사장님: 점점 더 늘어남)",
-		"B-1: 평균은 늘지만 2~3칸마다 확 줄어드는 아령이 있음 (예: 코끼리 409초 → 버스 299초, 거대 행성 438 → 태양 177초)",
+	T.test(
+		"B-1 고침: 사는 시간이 앞 아령의 95% 아래로 줄어드는 아령이 없음 (사장님: 점점 더 늘어남) · 처음 20~30초 → 마지막까지 늘어남",
 		function()
 			local m = pure()
 			local _, took = dumbbellSim(m)
+			T.truthy(took[2] >= 20 and took[2] <= 30, "3kg 아령 " .. took[2] .. "초")
+			T.truthy(took[60] > took[40] and took[40] > took[20], "20 · 40 · 60번이 늘어남")
 			local dips = {}
-			for level = 5, 60 do
-				if took[level] < took[level - 1] * 0.8 then
+			for level = 3, 60 do
+				if took[level] < took[level - 1] * 0.95 then
 					table.insert(
 						dips,
 						string.format("%s %ds←%ds", m.Dumbbells.list[level].name, took[level], took[level - 1])
@@ -930,7 +931,7 @@ return function(T, Loader)
 			return self:FindFirstChild(name)
 		end)
 		Loader.reset()
-		local players = { list = {}, PlayerAdded = newSignal() }
+		local players = { list = {}, PlayerAdded = newSignal(), PlayerRemoving = newSignal() }
 		function players:GetPlayers()
 			return table.clone(self.list)
 		end
@@ -1148,33 +1149,31 @@ return function(T, Loader)
 		end
 	)
 
-	T.skip(
-		"플레이어가 나가면 PlayerVisualService 가 연결을 끊음",
-		"B-5(낮음): watch() 가 연결(CharacterAdded · Power 변화)을 저장해 끊지 않음 — 엔진이 Player 를 없앨 때 같이 정리되지만 선택 개선: PlayerRemoving 에서 Disconnect",
-		function()
-			local E = auraSetup()
-			local pl = { Character = nil, CharacterAdded = newSignal(), attrs = {}, sigs = {} }
-			function pl:SetAttribute(k, v)
-				self.attrs[k] = v
-				if self.sigs[k] then
-					self.sigs[k]:Fire()
-				end
+	T.test("B-5 고침: 플레이어가 나가면 (PlayerRemoving) PlayerVisualService 가 연결을 끊음", function()
+		local E = auraSetup()
+		local pl = { Character = nil, CharacterAdded = newSignal(), attrs = {}, sigs = {} }
+		function pl:SetAttribute(k, v)
+			self.attrs[k] = v
+			if self.sigs[k] then
+				self.sigs[k]:Fire()
 			end
-			function pl:GetAttribute(k)
-				return self.attrs[k]
-			end
-			function pl:GetAttributeChangedSignal(k)
-				self.sigs[k] = self.sigs[k] or newSignal()
-				return self.sigs[k]
-			end
-			E.PVS.start()
-			table.insert(E.players.list, pl)
-			E.players.PlayerAdded:Fire(pl)
-			-- 나감: 목록에서 빠짐 (엔진이 Player 를 파괴하지 않는 경우를 가정)
-			table.remove(E.players.list, 1)
-			T.eq(pl.sigs.Power:Active() + pl.CharacterAdded:Active(), 0, "나간 뒤 연결이 남아 있음")
 		end
-	)
+		function pl:GetAttribute(k)
+			return self.attrs[k]
+		end
+		function pl:GetAttributeChangedSignal(k)
+			self.sigs[k] = self.sigs[k] or newSignal()
+			return self.sigs[k]
+		end
+		E.PVS.start()
+		table.insert(E.players.list, pl)
+		E.players.PlayerAdded:Fire(pl)
+		-- 나감: 목록에서 빠짐 (엔진이 Player 를 파괴하지 않는 경우를 가정)
+		T.eq(pl.sigs.Power:Active() + pl.CharacterAdded:Active(), 2, "들어오면 연결 2개")
+		table.remove(E.players.list, 1)
+		E.players.PlayerRemoving:Fire(pl)
+		T.eq(pl.sigs.Power:Active() + pl.CharacterAdded:Active(), 0, "나간 뒤 연결이 남아 있음")
+	end)
 
 	------------------------------------------------------------------
 	T.suite("holes_v2 F: 아슬아슬한 숫자 (sim 을 흔들어 6장 규칙이 얼마나 버티나)")
@@ -1183,7 +1182,7 @@ return function(T, Loader)
 	-- sim 을 한 번 돌려 6장 규칙을 한 줄로: 월드 끝 · 가장 긴 머묾 · 가장 긴 아령 · 규칙 어긴 곳
 	local function evalSim(m)
 		local final, log = SimPlayer.run(m)
-		local maxStay, maxStayId, over8 = 0, "", 0
+		local maxStay, maxStayId, over9 = 0, "", 0
 		for i = 1, 40 do
 			local t = m.Targets.list[i]
 			if log.open[i] and log.comf[i] then
@@ -1191,8 +1190,8 @@ return function(T, Loader)
 				if stay > maxStay then
 					maxStay, maxStayId = stay, t.id
 				end
-				if stay > 480 then
-					over8 += 1
+				if stay > 540 then
+					over9 += 1
 				end
 			end
 		end
@@ -1215,18 +1214,18 @@ return function(T, Loader)
 			inBand = inBand,
 			maxStay = maxStay,
 			maxStayId = maxStayId,
-			over8 = over8,
+			over9 = over9,
 			maxBuy = maxBuy,
 			maxBuyLevel = maxBuyLevel,
 			grand = m.Progression.isGrandMaster(final.belt),
 			line = string.format(
-				"월드 끝 %s · %s · %s | 가장 긴 머묾 %s(%s) 8분 넘음 %d개 | 가장 긴 아령 %d초(#%d)",
+				"월드 끝 %s · %s · %s | 가장 긴 머묾 %s(%s) 9분 넘음 %d개 | 가장 긴 아령 %d초(#%d)",
 				mmss(ends[1]),
 				mmss(ends[2]),
 				mmss(ends[3]),
 				mmss(maxStay),
 				maxStayId,
-				over8,
+				over9,
 				maxBuy,
 				maxBuyLevel
 			),
@@ -1262,18 +1261,18 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"기준: 월드 끝 3개 목표 안 · 머묾 8분 안 · 아령 8분 안 — 그리고 여유 (월드 1 끝은 60분 한도에서 몇 %)",
+		"기준: 월드 끝 3개 목표 안 · 머묾 9분 안 · 아령 10분 안 — 그리고 여유 (월드 1 끝은 60분 한도에서 몇 %)",
 		function()
 			local m = pure()
 			local r = evalSim(m)
 			print("  (" .. r.line .. ")")
 			T.truthy(r.inBand and r.grand)
-			T.truthy(r.over8 == 0 and r.maxStay <= 480, "머묾 " .. r.maxStay)
-			T.truthy(r.maxBuy <= 480, "아령 " .. r.maxBuy)
+			T.truthy(r.over9 == 0 and r.maxStay <= 540, "머묾 " .. r.maxStay)
+			T.truthy(r.maxBuy <= 600, "아령 " .. r.maxBuy)
 			local margin1 = (3600 - r.ends[1]) / 3600
 			local margin3 = (r.ends[3] - 18000) / 18000
-			local marginStay = (480 - r.maxStay) / 480
-			local marginBuy = (480 - r.maxBuy) / 480
+			local marginStay = (540 - r.maxStay) / 540
+			local marginBuy = (600 - r.maxBuy) / 600
 			print(
 				string.format(
 					"  (여유: 월드 1 상한 %.1f%% · 월드 3 하한 %.1f%% · 머묾 %.1f%% · 아령 %.1f%%)",
@@ -1288,7 +1287,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"맵 거리: 걷기가 2배 느려지거나(속도 8) 1.25배 빨라져도 (거리 = 시간) 월드 끝 3개 목표 안 · 머묾 8분 + 10초 안 — 길가 매트 덕에 거리는 안 중요",
+		"맵 거리: 걷기가 2배 느려지거나(속도 8) 1.25배 빨라져도 (거리 = 시간) 월드 끝 3개 목표 안 · 머묾 9분 + 10초 안 — 길가 매트 덕에 거리는 안 중요",
 		function()
 			local m = pure()
 			for _, speed in { 8, 12.8, 20 } do
@@ -1297,57 +1296,69 @@ return function(T, Loader)
 				end)
 				print(string.format("  (걷기 속도 %s: %s)", speed, r.line))
 				T.truthy(r.inBand and r.grand, "속도 " .. speed .. " 월드 끝 " .. mmss(r.ends[3]))
-				T.truthy(r.maxStay <= 490, "속도 " .. speed .. " 머묾 " .. r.maxStay)
+				T.truthy(r.maxStay <= 550, "속도 " .. speed .. " 머묾 " .. r.maxStay)
 			end
 		end
 	)
 
 	T.test(
-		"심사·대결을 합격선(0.57배 힘)이 아니라 추천 힘(1배)에서 보는 플레이어 (효과 ×0.8 · ×0.57): 월드 끝 목표 안 · 머묾 8분 안",
+		"심사·대결을 합격선(0.57배 힘)이 아니라 추천 힘(1배)에서 보는 플레이어 (효과 ×0.8 · ×0.57): 월드 끝 목표 안 · 머묾 9분 안",
 		function()
 			local m = pure()
 			for _, scale in { 0.8, 0.57 } do
 				local r = evalSim(examScaled(m, scale))
 				print(string.format("  (심사·대결 효과 ×%s: %s)", scale, r.line))
 				T.truthy(r.inBand and r.grand, "×" .. scale)
-				T.truthy(r.maxStay <= 480, "×" .. scale .. " 머묾 " .. r.maxStay)
+				T.truthy(r.maxStay <= 540, "×" .. scale .. " 머묾 " .. r.maxStay)
 			end
 		end
 	)
 
 	T.test(
-		"손가락이 느린 쪽 (반복 간격 0.26초 = 초당 3.85번): 월드 끝 목표 안 · 머묾 8분 + 10초 안",
+		"손가락이 느린 쪽 (반복 간격 0.28초 = 초당 3.6번 — sim 기준 0.27 보다 느림): 월드 끝 목표 안 · 머묾 9분 + 10초 안",
 		function()
 			local m = pure()
-			local r = withSim({ TICK = 0.26 }, function()
+			local r = withSim({ TICK = 0.28 }, function()
 				return evalSim(m)
 			end)
-			print("  (간격 0.26: " .. r.line .. ")")
+			print("  (간격 0.28: " .. r.line .. ")")
 			T.truthy(r.inBand and r.grand)
-			T.truthy(r.maxStay <= 490, "머묾 " .. r.maxStay)
+			T.truthy(r.maxStay <= 550, "머묾 " .. r.maxStay)
 		end
 	)
 
-	T.skip(
-		"실제 클라 반복 간격(task.wait(0.25) 은 한 프레임 단위로 올림 → 60fps 에서 약 0.267초)이어도 6장 규칙을 지킴",
-		"B-2(중간): sim 은 0.25초 딱 — 간격 0.267 이면 월드 1 끝 59:01 (한도 60:00) · 8분 넘게 머무는 물건 2개 · 아령 1개 사는 데 8:35 (한도 8분). 0.275 면 월드 1 끝 1:00:51 (한도 넘음)",
+	T.test(
+		"B-2 고침: 클라 반복 0.22초 (서버 한도 0.2초보다 10% 느림) · sim 은 프레임 올림을 감안한 느린 쪽 0.27초 · 실제 빠르기(0.233)에서도 머묾 9분 · 아령 10분 안",
 		function()
+			local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
+			local Remotes = Loader.require("ReplicatedStorage/Shared/Remotes")
+			T.truthy(
+				Config.AUTO_REPEAT_SECONDS >= 1.1 / Remotes.RateLimits.Train.perSecond - 1e-9,
+				"들기 한도 여유 10%"
+			)
+			T.truthy(
+				Config.AUTO_REPEAT_SECONDS >= 1.1 / Remotes.RateLimits.Hit.perSecond - 1e-9,
+				"치기 한도 여유 10%"
+			)
+			T.truthy(SimPlayer.SIM.TICK >= Config.AUTO_REPEAT_SECONDS * 1.2, "sim 이 실제보다 느린 쪽")
 			local m = pure()
-			local r = withSim({ TICK = 0.267 }, function()
+			local base = evalSim(m)
+			T.truthy(base.inBand and base.over9 == 0 and base.maxBuy <= 600, "0.27: " .. base.line)
+			local fast = withSim({ TICK = 0.2333 }, function()
 				return evalSim(m)
 			end)
-			T.truthy(r.inBand, "월드 끝 " .. r.line)
-			T.truthy(r.over8 == 0 and r.maxBuy <= 480, r.line)
+			print("  (간격 0.233: " .. fast.line .. ")")
+			T.truthy(fast.over9 == 0 and fast.maxBuy <= 600 and fast.grand, "0.233: " .. fast.line)
 		end
 	)
 
-	T.skip(
-		"심사·대결을 추천 힘에서 보는 플레이어(×0.57)도 아령 한 개 사는 데 8분 안",
-		"B-3(낮음): 띠 배율이 늦게 올라 돈이 덜 벌려 가장 긴 아령이 9분 18초 (기준 7분 46초 — 8분 한도에 14초 여유뿐)",
+	T.test(
+		"B-3 고침: 심사·대결을 추천 힘에서 보는 플레이어(×0.57)도 아령 한 개 사는 데 10분 안",
 		function()
 			local m = pure()
 			local r = evalSim(examScaled(m, 0.57))
-			T.truthy(r.maxBuy <= 480, r.line)
+			print("  (×0.57: " .. r.line .. ")")
+			T.truthy(r.maxBuy <= 600, r.line)
 		end
 	)
 

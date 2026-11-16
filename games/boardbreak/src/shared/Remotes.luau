@@ -10,11 +10,11 @@
 
 	클라 → 서버 (인자):
 	  ClientReady()            화면이 준비됨 → 서버가 Snapshot 을 (다시) 보냄
-	  Train()                  아령 1번 들기 (수련 매트 위에서만). 누르고 있으면 클라가 0.25초마다 반복 (초당 4번, 서버 한도 5번)
+	  Train()                  아령 1번 들기 (수련 매트 위에서만). 누르고 있으면 클라가 0.22초마다 반복 (초당 4.5번, 서버 한도 5번)
 	  Hit(targetId)            물건 1번 치기. targetId = Targets 의 id
 	                           심사 중이면 "exam", 대결 중이면 "duel" (심사·대결 송판 치기 — 같은 Remote, 같은 속도 제한)
 	  BuyDumbbell()            다음 아령 사기 (순서대로만)
-	  StartExam()              승급 심사 시작 (심사대 ExamPad 근처, 힘 ≥ 다음 띠 needPower, 다음 띠가 심사 띠일 때)
+	  StartExam()              승급 심사 시작 (심사대 ExamPad 근처, 다음 띠가 심사 띠일 때 — 힘 조건 없음, 약하면 떨어질 뿐)
 	  StartDuel()              시험관 대결 시작 (대결장 DuelArena 근처, 다음 띠가 그 월드 4번째 띠일 때)
 	  Travel(worldIndex)       열린 월드로 이동 (서버가 순간이동: MapLayout.spawn(world))
 	  SetSetting(key, value)   설정 (Config.SETTINGS 의 키, boolean)
@@ -25,7 +25,7 @@
 	                                 · "passes" { powerBoost, moneyPass, ownedPasses } · "settings" { settings }
 	  Notify { kind, text }          알림 한 줄 (kind: "info" | "success" | "error") — 표 하나로 보냄 (첫 게임과 같음)
 	  TrainResult { gain, power }
-	  HitResult { targetId, damage, hp, hpMax, broken, reward?, reason? }   reason = "weak"(힘이 부족해요)
+	  HitResult { targetId, damage, hp, hpMax, broken, reward?, reason? }   reason 은 지금 안 씀 (힘 문턱 없음 — 약해도 피해가 들어감)
 	  ExamState { phase, broken, total, secondsLeft, belt, boardHp? }      phase = "start"|"progress"|"pass"|"fail"
 	  DuelState { phase, mine, theirs, total, world, secondsLeft?, boardHp? } phase = "start"|"progress"|"win"|"lose"
 	  ProductGranted { key, kind }

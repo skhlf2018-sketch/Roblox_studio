@@ -1352,7 +1352,7 @@ return function(T, Loader)
 					"값이 안 늘어남 " .. H.Targets.list[i].id
 				)
 				T.truthy(
-					H.Targets.list[i].minPower > H.Targets.list[i - 1].minPower
+					H.Targets.list[i].recommendPower > H.Targets.list[i - 1].recommendPower
 						or H.Targets.list[i].world ~= H.Targets.list[i - 1].world
 						or true
 				)

@@ -4,7 +4,7 @@
 
 	  한 번 들 때 오르는 힘 = 아령 powerPerRep × PowerBoost              (Economy.trainGain)
 	  한 번 칠 때 깎는 체력 = 저장된 힘(Power) × PowerBoost              (Economy.hitDamage)
-	      → PowerBoost 는 **들 때와 칠 때 둘 다** 곱함 (설계서 5장). 물건을 깰 수 있나(minPower)도 이 "치는 힘"으로 봄
+	      → PowerBoost 는 **들 때와 칠 때 둘 다** 곱함 (설계서 5장). 물건 체력도 이 "치는 힘"만큼 깎임 (힘 문턱 없음)
 	  깬 돈 = 물건 reward × 띠 moneyMultiplier × (돈 2배 패스면 2)         (Economy.breakReward)
 	모든 수는 NaN·음수·무한을 0(또는 1)으로 막고, 힘·돈은 1e60(Config.POWER_MAX · MONEY_MAX)에서 멈춤.
 ]]

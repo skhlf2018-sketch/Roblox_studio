@@ -6,11 +6,11 @@
 	끝나면 Data/Targets · Dumbbells · Belts 에 붙여 넣을 줄을 출력함. 붙여 넣은 뒤 sim_progress 로 검사.
 
 	정하는 법 (사장님 2026-11-16 결정 9·10번):
-	  물건: 값(reward)은 설계서 3장 그대로. minPower = 앞 물건 × RHO[월드] (이웃 5~10배), hp = minPower × HP_FACTOR (막 열리면 15번).
+	  물건: 값(reward)은 설계서 3장 그대로. recommendPower = 앞 물건 × RHO[월드] (이웃 5~10배), hp = recommendPower × HP_FACTOR (막 열리면 15번).
 	  아령: powerPerRep 는 CATALOG (1 · 3 · 10 · 25 · 100 → ×2.5·×4 번갈아 → 뒤는 ×4·×5 번갈아).
 	        가격: 3kg = 42 (사장님). 그 뒤는 "지금 아령으로 힘이 오르는 빠르기(1번 힘 × 초당 4번 × 들기 비율 / 지금 힘)" 가
 	        KAPPA(t) 아래로 떨어지면 그때 가진 돈 (3자리 올림) — 뒤로 갈수록 KAPPA 가 작아져 노가다가 길어짐.
-	  띠: 심사 띠 needPower = EXAM_AT 물건의 minPower (그 물건이 열릴 때 심사). 대결 띠 = 그 월드 마지막 물건이
+	  띠: 심사 띠 needPower = EXAM_AT 물건의 recommendPower (그 물건이 열릴 때 심사). 대결 띠 = 그 월드 마지막 물건이
 	      편해지고 DUEL_DELAY[월드] 초 뒤 힘 (월드 3 은 우주가 열리고 그만큼 뒤).
 ]]
 
@@ -30,7 +30,7 @@ local MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
 local HUGE = math.huge
 
 -- 조절 손잡이 ------------------------------------------------------------
-local HP_FACTOR = 14.2 -- hp = minPower × 14.2 → 막 열리면 15번, 4.73배 힘이면 3번
+local HP_FACTOR = 14.2 -- hp = recommendPower × 14.2 → 막 열리면 15번, 4.73배 힘이면 3번
 local RHO_MAX = 9.7 -- 이웃 추천 힘 배율 위 끝 (10 아래 — 3자리 올림 여유)
 local GAP = { 150, 195, 185 } -- 월드별: 앞 물건이 편해지고 다음 물건이 열리기까지 바라는 초
 local LAMBDA_START, LAMBDA_END, LAMBDA_TAU = 0.05, 0.00355, 300 -- 바라는 힘 오르는 빠르기 (ln/초): 처음 빠르게 → 뒤 0.0037 (머묾 ≈ 7분)
@@ -176,7 +176,6 @@ end
 local function defineTarget(i: number, power: number)
 	local t = Targets.list[i]
 	t.recommendPower = round3Up(power)
-	t.minPower = t.recommendPower
 	t.hp = round3Up(t.recommendPower * HP_FACTOR)
 	-- 다음 물건에서 심사: 심사 띠 추천 힘 = 이 물건이 편해지는 힘 × EXAM_EASE (똑똑한 플레이어는 그 0.57배에서 합격)
 	for belt, at in EXAM_AT do
@@ -187,7 +186,6 @@ local function defineTarget(i: number, power: number)
 end
 for i, t in Targets.list do
 	t.recommendPower = HUGE
-	t.minPower = HUGE
 	t.hp = 1e59 -- 아직 안 정함 (HUGE 는 Economy 가 0 으로 바꿔 버림)
 	if i == 1 then
 		defineTarget(1, 5)
@@ -304,7 +302,7 @@ for i, t in Targets.list do
 	end
 	print(
 		string.format(
-			"%2d %-12s open %s stay %5.0f gap %5.0f  minPower %s hp %s",
+			"%2d %-12s open %s stay %5.0f gap %5.0f  recommend %s hp %s",
 			i,
 			t.id,
 			mmss(log.open[i]),
@@ -347,7 +345,7 @@ print(
 	)
 )
 
-print("\n-- Targets ROWS (minPower, hp)")
+print("\n-- Targets ROWS (recommendPower, hp)")
 for _, t in Targets.list do
 	print(
 		string.format(

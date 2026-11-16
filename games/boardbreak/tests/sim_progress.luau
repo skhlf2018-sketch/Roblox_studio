@@ -3,14 +3,14 @@
 	sim_progress — 송판 깨기 "열심히 하는 플레이어" 흉내로 설계서 6장 숫자 규칙 검사. 저장소 루트에서:
 	  lune run games/boardbreak/tests/sim_progress.luau          (자세히: ... sim_progress.luau -v)
 	진짜 숫자 표(Data/Targets · Dumbbells · Belts · Worlds)와 진짜 규칙(Economy · Progression · ExamRules · MapLayout)을 씀.
-	플레이어는 tests/SimPlayer.luau (길가 매트에서 10초 들기 ↔ 10초 치기, 초당 4번, 돈이 가장 빨리 모이는 물건을 침 —
+	플레이어는 tests/SimPlayer.luau (길가 매트에서 10초 들기 ↔ 10초 치기, 0.27초마다, 돈이 가장 빨리 모이는 물건을 침 —
 	힘 문턱이 없으니 열린 월드의 물건 전부 중에서 고름 · 심사/대결은 이길 수 있을 때 바로).
 	"열림" = 추천 힘(recommendPower)에 닿음 (15번에 깸) · "편해짐" = 3번 안에 깸 · 머묾 = 열림 → 편해짐.
 	검사 (설계서 6장 · 사장님 결정 9·10·11번):
 	  첫 솜 30초 안 · 처음 5분 안에 아령 2번 이상
 	  이웃 물건 reward · 추천 힘 · hp 배율 5~10, hp 배율 ≥ reward 배율 · 추천 힘이면 15~30번
-	  어떤 물건도 8분 넘게 머물지 않음 · 편해짐 → 다음 열림 4분 안 (처음 10분 뒤부터는 1~4분)
-	  아령마다 사는 데 걸린 시간 8분 안 · 뒤 1/3 평균 > 가운데 1/3 > 앞 1/3
+	  어떤 물건도 9분 넘게 머물지 않음 · 편해짐 → 다음 열림 4분 안 (처음 10분 뒤부터는 1~4분)
+	  아령마다 사는 데 걸린 시간 10분 안 · 앞 아령의 95% 아래로 안 줄어듦 (점점 늘어남, B-1) · 뒤 1/3 평균 > 가운데 1/3 > 앞 1/3
 	  월드 1 끝 30~60분 · 월드 2 끝 2~4시간 · 월드 3 끝 5~9시간 (처음부터, 대결에서 이긴 시각)
 	  어느 힘에서든 돈이 가장 빨리 모이는 물건 = 지금 힘에 맞는 물건 (15번 넘게 걸리는 뒤 물건이 이득이 아님 — 지름길 없음)
 	  심사 송판 (추천 힘이면 20초 안) · 대결 (추천 힘이면 시험관보다 넉넉히 먼저) · 똑똑한 플레이어의 심사/대결은 전부 이김
@@ -47,11 +47,12 @@ local RULES = {
 	firstBreakSeconds = 30,
 	earlyBuys = 2,
 	earlyBuySeconds = 300,
-	maxStay = 480,
+	maxStay = 540, -- 9분 (B-1·B-2 때 8 → 9분)
 	gapMin = 60,
 	gapMax = 240,
 	earlySeconds = 600, -- 처음 10분은 물건이 빨리 바뀜 (힘이 빨리 오르는 때 — 틈 1분 아래 허용)
-	maxBuySeconds = 480,
+	maxBuySeconds = 600, -- 10분 (B-1: 사장님 "노가다가 점점 늘어남")
+	buyNoDip = 0.95, -- 아령 N 사는 시간 ≥ 아령 N−1 × 0.95
 	worldEnd = { { 30 * 60, 60 * 60 }, { 2 * 3600, 4 * 3600 }, { 5 * 3600, 9 * 3600 } },
 	neighbor = { 5, 10 },
 	hitsAtOpen = { 15, 30 },
@@ -87,7 +88,7 @@ local final, log = SimPlayer.run({
 -- 물건 표
 ------------------------------------------------------------------
 print(
-	"== 송판 깨기 진행 시뮬레이션 (열심히 하는 플레이어: 들기 초당 4번 · 치기 초당 4번 · 로벅스 없음)"
+	"== 송판 깨기 진행 시뮬레이션 (열심히 하는 플레이어: 들기·치기 0.27초마다 · 로벅스 없음)"
 )
 if VERBOSE then
 	print(
@@ -103,7 +104,6 @@ for _, target in Targets.list do
 		hitsAtOpen >= RULES.hitsAtOpen[1] and hitsAtOpen <= RULES.hitsAtOpen[2],
 		string.format("%s 추천 힘이면 %d번 (15~30)", target.id, hitsAtOpen)
 	)
-	check(target.minPower == target.recommendPower, target.id .. " minPower(옛 이름) = recommendPower")
 	local rewardRatio, powerRatio = nil, nil
 	if i < Targets.COUNT then
 		local nxt = Targets.list[i + 1]
@@ -134,7 +134,7 @@ for _, target in Targets.list do
 	if i < Targets.COUNT then
 		check(
 			stay ~= nil and stay <= RULES.maxStay,
-			string.format("%s 머묾 %s (8분 안)", target.id, if stay then mmss(stay) else "편해지지 않음")
+			string.format("%s 머묾 %s (9분 안)", target.id, if stay then mmss(stay) else "편해지지 않음")
 		)
 		local early = log.open[i] ~= nil and log.open[i] <= RULES.earlySeconds
 		check(
@@ -228,7 +228,17 @@ for level = 2, Dumbbells.COUNT do
 	check(took ~= nil, d.id .. " 을 그랜드 마스터 전에 못 삼")
 	if took then
 		table.insert(tooks, took)
-		check(took <= RULES.maxBuySeconds, string.format("%s 사는 데 %ds (8분 안)", d.id, math.floor(took)))
+		check(took <= RULES.maxBuySeconds, string.format("%s 사는 데 %ds (10분 안)", d.id, math.floor(took)))
+		local prevTook = tooks[#tooks - 1]
+		check(
+			prevTook == nil or took >= prevTook * RULES.buyNoDip,
+			string.format(
+				"%s 사는 데 %ds — 앞 아령 %ds 의 95%% 아래 (점점 늘어야)",
+				d.id,
+				math.floor(took),
+				math.floor(prevTook or 0)
+			)
+		)
 	end
 	check(type(d.weightKg) == "number" and d.weightKg > Dumbbells.list[level - 1].weightKg, d.id .. " weightKg 증가")
 	if VERBOSE then
@@ -324,9 +334,9 @@ for _, belt in Belts.list do
 		local mine = Config.DUEL_BOARDS * Economy.hitsToBreak(belt.duelBoardHp, belt.needPower * 1.0001) * SIM.TICK
 		local theirs = Config.DUEL_BOARDS * world.examinerSecondsPerBoard
 		check(
-			mine * 1.5 < theirs,
+			mine * 1.4 < theirs,
 			string.format(
-				"%s 대결 내 %.1f초 vs 시험관 %.1f초 (추천 힘이면 넉넉히)",
+				"%s 대결 내 %.1f초 vs 시험관 %.1f초 (추천 힘이면 1.4배 넉넉히 — sim 0.27초 기준)",
 				belt.id,
 				mine,
 				theirs

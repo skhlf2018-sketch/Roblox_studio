@@ -45,21 +45,18 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test(
-		"추천 힘·hp: 이웃 5~10배 · hp 배율 ≥ reward 배율 (뒤 물건 지름길 없음) · minPower = recommendPower (옛 이름)",
-		function()
-			for i = 2, Targets.COUNT do
-				local a, b = Targets.list[i - 1], Targets.list[i]
-				local rp, rh, rr = b.recommendPower / a.recommendPower, b.hp / a.hp, b.reward / a.reward
-				T.truthy(rp >= 5 and rp <= 10, b.id .. " 추천 힘 배율 " .. rp)
-				T.truthy(rh >= 5 and rh <= 10, b.id .. " hp 배율 " .. rh)
-				T.truthy(rh >= rr, b.id .. " hp 배율 ≥ reward 배율")
-			end
-			for _, t in Targets.list do
-				T.eq(t.minPower, t.recommendPower, t.id .. " minPower 별칭")
-			end
+	T.test("추천 힘·hp: 이웃 5~10배 · hp 배율 ≥ reward 배율 (뒤 물건 지름길 없음)", function()
+		for i = 2, Targets.COUNT do
+			local a, b = Targets.list[i - 1], Targets.list[i]
+			local rp, rh, rr = b.recommendPower / a.recommendPower, b.hp / a.hp, b.reward / a.reward
+			T.truthy(rp >= 5 and rp <= 10, b.id .. " 추천 힘 배율 " .. rp)
+			T.truthy(rh >= 5 and rh <= 10, b.id .. " hp 배율 " .. rh)
+			T.truthy(rh >= rr, b.id .. " hp 배율 ≥ reward 배율")
 		end
-	)
+		for _, t in Targets.list do
+			T.eq(t.minPower, nil, t.id .. " 옛 이름 minPower 없음")
+		end
+	end)
 
 	T.test("값·추천 힘·hp 모두 단조 증가, 유한한 양수", function()
 		for i, t in Targets.list do

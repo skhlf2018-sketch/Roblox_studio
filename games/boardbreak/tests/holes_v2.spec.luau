@@ -215,7 +215,7 @@ return function(T, Loader)
 			local m = pure()
 			local _, log = SimPlayer.run(m)
 			local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[12] }
-			local bands = { { 1800, 3600 }, { 7200, 14400 }, { 18000, 32400 } }
+			local bands = { { 1800, 3360 }, { 5160, 9600 }, { 9360, 17400 } } -- sim_progress RULES.worldEnd (결정 12번 뒤)
 			for w = 1, 3 do
 				T.truthy(ends[w] ~= nil, "월드 " .. w .. " 끝 있음")
 				T.truthy(ends[w] >= bands[w][1] and ends[w] <= bands[w][2], "월드 " .. w .. " 끝 " .. mmss(ends[w]))
@@ -332,8 +332,8 @@ return function(T, Loader)
 			local r4 = H.S.Break.hit(p, "cotton")
 			T.truthy(r4.broken, "남은 11 만 필요 → 네 번째에 깨짐")
 			T.eq(r4.damage, 11, "넘친 피해는 버림 — 11 만 깎음")
-			T.eq(r4.reward, 3)
-			T.eq(data.money, 3)
+			T.eq(r4.reward, H.Targets.get("cotton").reward)
+			T.eq(data.money, H.Targets.get("cotton").reward)
 			T.eq(session.targetHp.cotton, nil, "깨지면 다시 가득")
 			T.eq(#H.warnings, 0)
 			H.uninstall()
@@ -354,7 +354,7 @@ return function(T, Loader)
 			for _ = 1, 4 do
 				H.S.Break.hit(p2, "cotton")
 			end
-			T.eq(d2.money, 3, "p2 만 돈을 받음")
+			T.eq(d2.money, H.Targets.get("cotton").reward, "p2 만 돈을 받음")
 			T.eq(d1.money, 0, "p1 은 그대로")
 			T.eq(s1.targetHp.cotton, 31, "p2 가 깨도 p1 체력 그대로")
 			T.eq(d1.broken.cotton, nil)
@@ -383,11 +383,11 @@ return function(T, Loader)
 			T.eq(#results, 3)
 			T.falsy(results[1][1].broken)
 			T.truthy(results[2][1].broken)
-			T.eq(results[2][1].reward, 3)
+			T.eq(results[2][1].reward, cotton.reward)
 			T.falsy(results[3][1].broken, "세 번째는 새 물건")
 			T.eq(results[3][1].reward, nil, "보상 중복 없음")
 			T.near(results[3][1].hp, cotton.hp * 0.4, 1e-9, "새 물건이 0.6 깎임")
-			T.eq(data.money, 3)
+			T.eq(data.money, H.Targets.get("cotton").reward)
 			T.eq(data.broken.cotton, 1)
 			T.eq(data.stats.breaks, 1)
 			T.eq(data.stats.hits, 3)
@@ -397,7 +397,7 @@ return function(T, Loader)
 			for _ = 1, 4 do
 				H.S.Break.hit(p, "cotton")
 			end
-			T.eq(data.money, 3 + 4 * 3)
+			T.eq(data.money, cotton.reward + 4 * cotton.reward)
 			T.eq(data.broken.cotton, 5)
 			T.eq(session.targetHp.cotton, nil)
 			T.eq(#H.warnings, 0)
@@ -833,7 +833,7 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"사는 데 걸리는 시간: 10분 안 · 앞/가운데/뒤 1/3 평균이 커짐 · 뒤 40개 평균은 5분 반 ~ 10분",
+		"사는 데 걸리는 시간: 10분 안 · 앞/가운데/뒤 1/3 평균이 커짐 · 뒤 40개 평균은 3분 10초 ~ 10분 (결정 12번 뒤)",
 		function()
 			local m = pure()
 			local _, took = dumbbellSim(m)
@@ -853,7 +853,7 @@ return function(T, Loader)
 			local a1, a2, a3 = avg(1, 19), avg(20, 39), avg(40, n)
 			print(string.format("  (앞 %.0f · 가운데 %.0f · 뒤 %.0f초)", a1, a2, a3))
 			T.truthy(a3 > a2 and a2 > a1, "점점 늘어남")
-			T.truthy(avg(21, n) >= 330 and avg(21, n) <= 600, "아령 22~60 평균 " .. avg(21, n))
+			T.truthy(avg(21, n) >= 190 and avg(21, n) <= 600, "아령 22~60 평균 " .. avg(21, n))
 		end
 	)
 
@@ -1202,7 +1202,7 @@ return function(T, Loader)
 			end
 		end
 		local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[12] }
-		local bands = { { 1800, 3600 }, { 7200, 14400 }, { 18000, 32400 } }
+		local bands = { { 1800, 3360 }, { 5160, 9600 }, { 9360, 17400 } } -- sim_progress RULES.worldEnd (결정 12번 뒤)
 		local inBand = true
 		for w = 1, 3 do
 			if not (ends[w] and ends[w] >= bands[w][1] and ends[w] <= bands[w][2]) then
@@ -1261,7 +1261,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"기준: 월드 끝 3개 목표 안 · 머묾 9분 안 · 아령 10분 안 — 그리고 여유 (월드 1 끝은 60분 한도에서 몇 %)",
+		"기준: 월드 끝 3개 목표 안 · 머묾 9분 안 · 아령 10분 안 — 그리고 여유 (월드 1 끝은 56분 한도에서 몇 %)",
 		function()
 			local m = pure()
 			local r = evalSim(m)
@@ -1269,8 +1269,8 @@ return function(T, Loader)
 			T.truthy(r.inBand and r.grand)
 			T.truthy(r.over9 == 0 and r.maxStay <= 540, "머묾 " .. r.maxStay)
 			T.truthy(r.maxBuy <= 600, "아령 " .. r.maxBuy)
-			local margin1 = (3600 - r.ends[1]) / 3600
-			local margin3 = (r.ends[3] - 18000) / 18000
+			local margin1 = (3360 - r.ends[1]) / 3360
+			local margin3 = (r.ends[3] - 9360) / 9360
 			local marginStay = (540 - r.maxStay) / 540
 			local marginBuy = (600 - r.maxBuy) / 600
 			print(

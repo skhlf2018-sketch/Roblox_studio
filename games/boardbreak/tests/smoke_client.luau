@@ -158,6 +158,78 @@ for _, cls in { "Part", "SpawnLocation" } do
 		part:SetAttribute("__ltm", v)
 	end)
 end
+-- 단순 레이캐스트 (금이 물건 겉면에 붙는지 검사용): params.FilterDescendantsInstances 의 파트만,
+-- 공(Shape Ball)은 구, 나머지는 돌아간 상자(OBB). 시작점이 안에 있는 파트는 무시(로블록스와 같음)
+local function rayPart(part, origin, dir)
+	local cf = part.CFrame
+	local o = cf:PointToObjectSpace(origin)
+	local d = cf:VectorToObjectSpace(dir)
+	local h = part.Size / 2
+	if part.Shape == roblox.Enum.PartType.Ball then
+		local r = math.min(h.X, h.Y, h.Z)
+		local a = d:Dot(d)
+		local b = 2 * o:Dot(d)
+		local c = o:Dot(o) - r * r
+		local disc = b * b - 4 * a * c
+		if c <= 0 or disc < 0 or a == 0 then
+			return nil
+		end
+		local t = (-b - math.sqrt(disc)) / (2 * a)
+		if t < 0 or t > 1 then
+			return nil
+		end
+		local p = o + d * t
+		return t, cf:PointToWorldSpace(p), cf:VectorToWorldSpace(p.Unit)
+	end
+	local tmin, tmax, axis, sign = 0, 1, nil, 0
+	for _, k in { "X", "Y", "Z" } do
+		local ok, dk, hk = o[k], d[k], h[k]
+		if math.abs(dk) < 1e-9 then
+			if ok < -hk or ok > hk then
+				return nil
+			end
+		else
+			local t1, t2 = (-hk - ok) / dk, (hk - ok) / dk
+			local s = -1
+			if t1 > t2 then
+				t1, t2 = t2, t1
+				s = 1
+			end
+			if t1 > tmin then
+				tmin, axis, sign = t1, k, s
+			end
+			tmax = math.min(tmax, t2)
+			if tmin > tmax then
+				return nil
+			end
+		end
+	end
+	if not axis then
+		return nil -- 시작점이 안
+	end
+	local n =
+		Vector3.new(if axis == "X" then sign else 0, if axis == "Y" then sign else 0, if axis == "Z" then sign else 0)
+	return tmin, cf:PointToWorldSpace(o + d * tmin), cf:VectorToWorldSpace(n)
+end
+local function fakeRaycast(_, origin, dir, params)
+	local best
+	for _, part in (params and params.FilterDescendantsInstances) or {} do
+		if part:IsA("BasePart") then
+			local t, pos, normal = rayPart(part, origin, dir)
+			if t and (not best or t < best.t) then
+				best = { t = t, Position = pos, Normal = normal, Instance = part, Distance = dir.Magnitude * t }
+			end
+		end
+	end
+	return best
+end
+roblox.implementMethod("Workspace", "Raycast", fakeRaycast)
+local RaycastParamsStub = {
+	new = function()
+		return { FilterDescendantsInstances = {} }
+	end,
+}
+
 pcall(roblox.implementMethod, "Sound", "Play", function(inst)
 	inst.Playing = true
 end)
@@ -491,6 +563,7 @@ local function makeEnv(node)
 			end,
 		},
 		task = taskStub,
+		RaycastParams = RaycastParamsStub,
 		warn = function(...)
 			print("WARN:", ...)
 		end,
@@ -944,7 +1017,7 @@ local function body()
 	check(steelNeed.TextColor3 == Break.NEED_HARD, "내 힘이 추천 힘보다 작으면 주황색")
 	print("[금 가는 연출]")
 	local Cracks = client("Cracks")
-	local woodBox = Break.models().wood.PrimaryPart
+	local woodBox = Break.models().wood
 	local stages = {}
 	for _, ratio in { 0.8, 0.7, 0.45, 0.2 } do
 		Break.onHitResult({ targetId = "wood", damage = 1000, hp = 40000 * ratio, hpMax = 40000, broken = false })
@@ -967,9 +1040,111 @@ local function body()
 	)
 	Break.onHitResult({ targetId = "wood", damage = 8000, hp = 0, hpMax = 40000, broken = true, reward = 9 })
 	check(
-		Cracks.stageOf(woodBox) == 0 and woodBox:FindFirstChild("Crack_Front") == nil,
+		Cracks.stageOf(woodBox) == 0
+			and woodBox:FindFirstChild(Cracks.FOLDER) == nil
+			and woodBox.PrimaryPart:FindFirstChild("Crack_Front") == nil,
 		"깨지면(다시 생기면) 금 지움"
 	)
+	do
+		-- 가짜 물건 3종 (보이지 않는 맞히는 상자가 물건보다 2배 큼): 금은 보이는 겉면에만
+		local Enum = roblox.Enum
+		local function fakeTarget(name, shape, size, at)
+			local m = Instance.new("Model")
+			m.Name = name
+			local look = Instance.new("Part")
+			look.Name = "Look"
+			look.Shape = shape
+			look.Size = size
+			look.CFrame = CFrame.new(at)
+			look.CanQuery = false
+			look.Parent = m
+			local hb = Instance.new("Part")
+			hb.Name = "Hitbox"
+			hb.Size = size * 2
+			hb.Transparency = 1
+			hb.CFrame = CFrame.new(at)
+			hb.Parent = m
+			m.PrimaryPart = hb
+			m.Parent = Workspace
+			return m, look, hb
+		end
+		local function surfaceGap(pos, parts)
+			local best = math.huge
+			local ax = { Vector3.new(1, 0, 0), Vector3.new(0, 1, 0), Vector3.new(0, 0, 1) }
+			for _, dir in { ax[1], ax[2], ax[3], -ax[1], -ax[2], -ax[3] } do
+				local hit = fakeRaycast(nil, pos + dir * 2, -dir * 4, { FilterDescendantsInstances = parts })
+				if hit then
+					best = math.min(best, (hit.Position - pos).Magnitude)
+				end
+			end
+			return best
+		end
+		local function onHitboxFace(pos, hb)
+			local l = hb.CFrame:PointToObjectSpace(pos)
+			local h = hb.Size / 2
+			return math.min(math.abs(math.abs(l.X) - h.X), math.abs(math.abs(l.Y) - h.Y), math.abs(math.abs(l.Z) - h.Z))
+				< 0.1 -- 겉모습과 맞히는 상자 면 사이가 0.3 이라 0.1 로 가름
+		end
+		local kinds = {
+			{ "납작한 판", Enum.PartType.Block, Vector3.new(6, 0.6, 6), Vector3.new(500, 0.3, 500) },
+			{ "공", Enum.PartType.Ball, Vector3.new(4, 4, 4), Vector3.new(520, 2, 500) },
+			{ "높은 상자", Enum.PartType.Block, Vector3.new(2, 8, 2), Vector3.new(540, 4, 500) },
+			{ "행성(큰 공)", Enum.PartType.Ball, Vector3.new(40, 40, 40), Vector3.new(600, 20, 500) },
+			{ "솜(작은 공)", Enum.PartType.Ball, Vector3.new(1, 1, 1), Vector3.new(560, 0.5, 500) },
+		}
+		local LINES = { { 2, 3 }, { 5, 6 }, { 9, 12 } }
+		for _, k in kinds do
+			local m, look, hb = fakeTarget(k[1], k[2], k[3], k[4])
+			local counts, linesOk, allNear, noneOnHitbox, settings = {}, true, true, true, true
+			local worst = 0
+			for stage = 1, 3 do
+				Cracks.showModel(m, stage, Cracks.seedOf(k[1]))
+				local folder = m:FindFirstChild(Cracks.FOLDER)
+				local segs = folder and folder:GetChildren() or {}
+				counts[stage] = #segs
+				local lines = folder and folder:GetAttribute("CrackLines") or 0
+				if lines < LINES[stage][1] or lines > LINES[stage][2] or #segs > Cracks.MAX_SEGMENTS then
+					linesOk = false
+				end
+				for _, seg in segs do
+					local gap = surfaceGap(seg.CFrame.Position, { look })
+					worst = math.max(worst, gap)
+					if gap > 0.3 then
+						allNear = false
+					end
+					if onHitboxFace(seg.CFrame.Position, hb) then
+						noneOnHitbox = false
+					end
+					if seg.CanCollide or seg.CanQuery or seg.CanTouch or seg.CastShadow or not seg.Anchored then
+						settings = false
+					end
+				end
+			end
+			check(
+				linesOk and counts[1] > 0 and counts[3] > counts[1],
+				k[1]
+					.. ": 단계별 금 줄 2~3 · 5~6 · 9~12, 마디 ≤ 40 (마디 "
+					.. table.concat(counts, "·")
+					.. ")"
+			)
+			check(
+				allNear and noneOnHitbox,
+				string.format(
+					"%s: 모든 금 마디가 보이는 겉면 0.3 이내 (최대 %.3f) · 맞히는 상자 면에는 0개",
+					k[1],
+					worst
+				)
+			)
+			check(settings, k[1] .. ": 금 마디 Anchored · 충돌/질의/닿기/그림자 없음")
+			check(look.CanQuery == false, k[1] .. ": 레이캐스트 뒤 겉모습 파트 CanQuery 원래대로")
+			Cracks.showModel(m, 0, 1)
+			check(
+				m:FindFirstChild(Cracks.FOLDER) == nil and Cracks.stageOf(m) == 0,
+				k[1] .. ": 깨지면(단계 0) 금 0개"
+			)
+			m:Destroy()
+		end
+	end
 	Break.onHitResult({ targetId = "cotton", damage = 20, hp = 20, hpMax = 20, broken = true, reward = 3 })
 	check(hasFloat("+💰 3"), '깨짐 → "+💰 3" 금색 숫자')
 	local shards = 0

@@ -51,7 +51,6 @@ local homes: { [Model]: CFrame } = {}
 local currentNearest: string? = nil
 type Known = { hp: number, hpMax: number, damage: number }
 local known: { [string]: Known } = {}
-local CRACK_FACES = { Enum.NormalId.Front, Enum.NormalId.Left, Enum.NormalId.Right }
 local lastHitAt = 0
 
 local function popupGui(): Instance
@@ -337,7 +336,7 @@ function BreakController.onHitResult(r: any)
 	end
 	if r.broken then
 		shards(model)
-		Cracks.clear(hitbox)
+		Cracks.clear(model)
 		known[id] = nil
 		setHidden(model, true)
 		task.delay(0.35, function()
@@ -349,8 +348,9 @@ function BreakController.onHitResult(r: any)
 		end
 		setHp(id, model, hpMax, hpMax)
 	else
-		local before = Cracks.stageOf(hitbox)
-		local stage = Cracks.show(hitbox, Cracks.stage(hp, hpMax), Cracks.seedOf(id), CRACK_FACES)
+		-- 금은 맞히는 상자(Hitbox)가 아니라 물건의 보이는 겉면에 붙음 (단계가 바뀔 때만 레이캐스트)
+		local before = Cracks.stageOf(model)
+		local stage = Cracks.showModel(model, Cracks.stage(hp, hpMax), Cracks.seedOf(id))
 		local radius = math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20)
 		shake(model, radius * (if stage > before then 0.12 else 0.05))
 		setHp(id, model, hp, hpMax)
@@ -374,9 +374,8 @@ local function hook(inst: Instance)
 	homes[inst] = inst:GetPivot()
 	-- 다시 연결된 물건(스트리밍으로 다시 생김): 마지막으로 안 체력의 금 단계로
 	local k = known[id]
-	local hb = hitboxOf(inst)
-	if k and hb then
-		Cracks.show(hb, Cracks.stage(k.hp, k.hpMax), Cracks.seedOf(id), CRACK_FACES, false)
+	if k then
+		Cracks.showModel(inst, Cracks.stage(k.hp, k.hpMax), Cracks.seedOf(id), false)
 	end
 	local click = inst:FindFirstChild("Click")
 	if click and click:IsA("ClickDetector") then

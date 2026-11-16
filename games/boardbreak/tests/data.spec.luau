@@ -27,23 +27,34 @@ return function(T, Loader)
 		T.eq(Targets.get(nil :: any), nil, "nil id")
 	end)
 
-	T.test("물건값 = 사장님 새 표 (2026-11-16 다시 정함: 솜 3 에서 이웃 5~10배)", function()
-		-- 3 → 20 → 150 → 1,000 → 8,000 → 50,000 → 400,000 → 다시 3M … (설계서 3장)
-		local pattern = { 3, 20, 150, 1000, 8000, 50000, 400000 }
-		for i, t in Targets.list do
-			local k = (i - 1) % 7
-			local expected = pattern[k + 1] * 1e6 ^ ((i - 1) // 7)
-			T.truthy(math.abs(t.reward - expected) <= expected * 1e-9, t.id .. " 값 " .. t.reward)
+	T.test(
+		'물건값 = 사장님 결정 12번 (2026-11-16 "주는 돈 전부 2~4배 추가") · 옛 값의 2~4배 · 이웃 5~10배',
+		function()
+			-- 설계서 3장: 10 → 50 → 400 → 3,000 → 20,000 → 150,000 → 1M → 8M … (그 뒤 같은 무늬 × 100만씩,
+			-- 컴퓨터·고층 빌딩·산·수성·목성은 10배 대신 8배, 아파트 2.5B — hp 배율 ≥ reward 배율 지키려고)
+			local pattern = { 10, 50, 400, 3000, 20000, 150000, 1e6 }
+			local old = { 3, 20, 150, 1000, 8000, 50000, 400000 } -- 결정 10번 표 (2~4배 검사용)
+			for i, t in Targets.list do
+				local k = (i - 1) % 7
+				local scale = 1e6 ^ ((i - 1) // 7)
+				local expected = if k == 0 and i > 1 then 8 * scale else pattern[k + 1] * scale
+				if t.id == "apartment" then
+					expected = 2.5e9
+				end
+				T.truthy(math.abs(t.reward - expected) <= expected * 1e-9, t.id .. " 값 " .. t.reward)
+				local up = t.reward / (old[k + 1] * scale)
+				T.truthy(up >= 2 and up <= 4, t.id .. " 옛 값의 " .. up .. "배 (2~4)")
+			end
+			T.eq(Targets.get("cotton").reward, 10, "솜 10")
+			T.eq(Targets.get("glass").reward, 50, "유리 50")
+			T.eq(Targets.get("apartment").reward, 2.5e9, "아파트 2.5B")
+			T.eq(Targets.get("universe").reward, 1.5e35, "우주 = 150Dc")
+			for i = 2, Targets.COUNT do
+				local r = Targets.list[i].reward / Targets.list[i - 1].reward
+				T.truthy(r >= 5 and r <= 10, Targets.list[i].id .. " 이웃 reward 배율 " .. r)
+			end
 		end
-		T.eq(Targets.get("cotton").reward, 3, "솜 3")
-		T.eq(Targets.get("glass").reward, 20, "유리 20")
-		T.eq(Targets.get("apartment").reward, 1e9, "아파트 1B")
-		T.eq(Targets.get("universe").reward, 5e34, "우주 = 50Dc")
-		for i = 2, Targets.COUNT do
-			local r = Targets.list[i].reward / Targets.list[i - 1].reward
-			T.truthy(r >= 5 and r <= 10, Targets.list[i].id .. " 이웃 reward 배율 " .. r)
-		end
-	end)
+	)
 
 	T.test("추천 힘·hp: 이웃 5~10배 · hp 배율 ≥ reward 배율 (뒤 물건 지름길 없음)", function()
 		for i = 2, Targets.COUNT do

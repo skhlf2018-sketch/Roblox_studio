@@ -962,7 +962,7 @@ return function(T, Loader)
 		H.S.Product.grant(p, "money_2")
 		H.teleport(p, H.targetSpot("cotton"))
 		H.client(p, "Hit", "cotton")
-		T.eq(data.money, 3 * 2 * 2, "3 × 띠 3(초록 ×2) × 돈 2배")
+		T.eq(data.money, H.Targets.get("cotton").reward * 2 * 2, "솜 값 × 띠 3(초록 ×2) × 돈 2배")
 		H.uninstall()
 	end)
 
@@ -1313,27 +1313,27 @@ return function(T, Loader)
 	------------------------------------------------------------------
 
 	T.test(
-		"물건: 사장님 새 값 (2026-11-16, 결정 10번) 앞 11개 (3 · 20 · 150 · 1,000 · 8,000 · 50,000 · 400,000 · 3M · 20M · 150M · 1B) 그대로 · 이웃 5~10배 · 41개 월드 13/14/14 · 값 순증가",
+		"물건: 사장님 새 값 (2026-11-16, 결정 12번) 앞 11개 (10 · 50 · 400 · 3,000 · 20,000 · 150,000 · 1M · 8M · 50M · 400M · 2.5B) 그대로 · 이웃 5~10배 · 41개 월드 13/14/14 · 값 순증가",
 		function()
 			local H = setup()
 			local boss = {
-				{ "cotton", "솜", 3 },
-				{ "glass", "유리", 20 },
-				{ "plastic", "플라스틱", 150 },
-				{ "wood", "나무 송판", 1000 },
-				{ "iron", "철", 8000 },
-				{ "steel", "강철", 50000 },
-				{ "rubber", "고무", 400000 },
-				{ "computer", "컴퓨터", 3e6 },
-				{ "phone", "핸드폰", 2e7 },
-				{ "overpass", "육교", 1.5e8 },
-				{ "apartment", "아파트", 1e9 },
+				{ "cotton", "솜", 10 },
+				{ "glass", "유리", 50 },
+				{ "plastic", "플라스틱", 400 },
+				{ "wood", "나무 송판", 3000 },
+				{ "iron", "철", 20000 },
+				{ "steel", "강철", 150000 },
+				{ "rubber", "고무", 1e6 },
+				{ "computer", "컴퓨터", 8e6 },
+				{ "phone", "핸드폰", 5e7 },
+				{ "overpass", "육교", 4e8 },
+				{ "apartment", "아파트", 2.5e9 },
 			}
 			for i = 2, 41 do
 				local r = H.Targets.list[i].reward / H.Targets.list[i - 1].reward
 				T.truthy(r >= 5 and r <= 10, "이웃 값 5~10배 " .. H.Targets.list[i].id .. " " .. r)
 			end
-			T.eq(H.Targets.get("universe").reward, 5e34, "우주 50Dc")
+			T.eq(H.Targets.get("universe").reward, 1.5e35, "우주 150Dc")
 			T.eq(#H.Targets.list, 41)
 			for i, row in boss do
 				local t = H.Targets.list[i]

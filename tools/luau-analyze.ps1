@@ -5,6 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File tools\luau-analyze.ps1 -InstallOnly    # 도구만 받기
 #   powershell -ExecutionPolicy Bypass -File tools\luau-analyze.ps1 -Ref HEAD       # 커밋된 코드만 검사 (작업 중인 파일 무시)
 #   powershell -ExecutionPolicy Bypass -File tools\luau-analyze.ps1 -Path src\server -Report build\typecheck.md
+#   powershell -ExecutionPolicy Bypass -File tools\luau-analyze.ps1 -GameDir games\boardbreak   # 다른 게임 폴더 (그 폴더의 project · .luaurc · src)
 #
 # 왜 luau-lsp 인가:
 #   luau-analyze.exe(luau-lang/luau 릴리스)는 --defs 옵션이 없어서 로블록스 전역(game, Instance.new ...)과
@@ -30,6 +31,7 @@ param(
 	[string]$Ref = "",
 	[string]$Report = "",
 	[string]$Raw = "",
+	[string]$GameDir = "",
 	[switch]$InstallOnly,
 	[switch]$NoFail
 )
@@ -108,6 +110,14 @@ if ($InstallOnly) { return }
 # 검사할 코드의 위치 (작업 폴더 또는 커밋 스냅샷)
 $root = $repoRoot
 $label = "작업 폴더"
+$linkSuffix = ""
+if ($GameDir -ne "") {
+	# 다른 게임 폴더 (예: games\boardbreak) 를 검사: 그 폴더의 default.project.json · .luaurc · src 로. 첫 게임(인자 없음)은 그대로
+	if ($Ref -ne "") { throw "-GameDir 와 -Ref 는 같이 쓸 수 없어요" }
+	$root = (Resolve-Path (Join-Path $repoRoot $GameDir)).Path
+	$label = "작업 폴더 ($GameDir)"
+	$linkSuffix = "-" + (Split-Path -Leaf $root)
+}
 if ($Ref -ne "") {
 	$git = Find-Git
 	$snap = Join-Path $Dest "snapshot"
@@ -125,7 +135,7 @@ if ($Ref -ne "") {
 # 한글 등 ASCII 아닌 글자가 경로에 있으면 바로가기(junction)로 우회
 $runRoot = $root
 if ($root -match '[^\x00-\x7F]') {
-	$link = Join-Path $Dest "repo-link"
+	$link = Join-Path $Dest ("repo-link" + $linkSuffix)
 	if (Test-Path $link) { [System.IO.Directory]::Delete($link) }
 	New-Item -ItemType Junction -Path $link -Target $root | Out-Null
 	$runRoot = $link

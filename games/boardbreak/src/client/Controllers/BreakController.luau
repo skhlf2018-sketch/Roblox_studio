@@ -1,0 +1,424 @@
+--!strict
+--[[
+	BreakController — 물건 치기 (선임)
+	  - 물건(태그 BreakTarget) 을 마우스로 누르거나 폰으로 탭 (모델의 ClickDetector "Click") → Hit(targetId)
+	      멀리 있으면 그 물건 앞 길(MapLayout.roadPoint)로 걸어가서 침.
+	  - 물건 가까이(MapLayout.targetReach 안)에 서면 큰 "치기" 버튼 (아래 가운데 / 터치 오른쪽). 누르고 있으면 초당 4번.
+	  - 심사·대결 중(Attr Activity "exam"/"duel")에는 "치기" 버튼이 늘 보이고 Hit("exam"/"duel") 을 보냄.
+	  - HitResult { targetId, damage, hp, hpMax, broken, reward?, reason? } 받으면 (내 화면에서만):
+	      체력 막대 (물건 위, 4초 뒤 사라짐) · "-N" 숫자 · 흔들림 · 깨지면 조각 + "+💰N" 금색 숫자 + 잠깐 사라졌다 다시 톡
+	      reason "weak" → 물건 위 빨간 글 "힘이 부족해요!"
+	  물건 체력은 플레이어마다 따로라 서버는 모델을 안 바꿈 — 막대·깨짐은 전부 이 컨트롤러가 그림.
+	공개: nearest() · hitTarget(id) · onHitResult(r) · button · models()
+]]
+
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local Shared = ReplicatedStorage.Shared
+local MapLayout = require(Shared.Data.MapLayout)
+local Targets = require(Shared.Data.Targets)
+local Format = require(Shared.Format)
+local Remotes = require(Shared.Remotes)
+local Tags = require(Shared.Tags)
+local Client = script.Parent.Parent
+local Net = require(Client.Net)
+local State = require(Client.State)
+local Walk = require(Client.Walk)
+local Theme = require(Client.UI.Theme)
+local Ui = require(Client.UI.Ui)
+local ActionButton = require(Client.UI.ActionButton)
+local NotifyController = require(script.Parent.NotifyController)
+
+local BreakController = {}
+BreakController.button = nil :: ActionButton.Handle?
+BreakController.HP_BAR_SECONDS = 4
+
+local C = Theme.Colors
+local PA = Tags.PartAttributes
+local models: { [string]: Model } = {}
+local hooked: { [Instance]: boolean } = {}
+type HpBar = { gui: BillboardGui, fill: Frame, text: TextLabel, shownAt: number }
+local hpBars: { [string]: HpBar } = {}
+local homes: { [Model]: CFrame } = {}
+local currentNearest: string? = nil
+local lastHitAt = 0
+
+local function popupGui(): Instance
+	return Players.LocalPlayer:FindFirstChild("PlayerGui") or Workspace
+end
+
+local function hitboxOf(model: Model): BasePart?
+	local p = model.PrimaryPart
+	if p then
+		return p
+	end
+	local h = model:FindFirstChild("Hitbox")
+	return if h and h:IsA("BasePart") then h else nil
+end
+
+local function heightOf(model: Model): number
+	local h = model:GetAttribute("Height")
+	return if type(h) == "number" then h else 6
+end
+
+local function targetVector(id: string): Vector3?
+	local p = MapLayout.targetPosition(id)
+	return if p then Vector3.new(p.x, p.y, p.z) else nil
+end
+
+function BreakController.models(): { [string]: Model }
+	return models
+end
+
+-- 지금 칠 수 있는 가장 가까운 물건 (지금 월드, reach 안). 없으면 nil
+function BreakController.nearest(): string?
+	local root = Walk.root()
+	if not root then
+		return nil
+	end
+	local world = State.currentWorld()
+	local best: string? = nil
+	local bestScore = math.huge
+	for _, t in Targets.byWorld(world) do
+		local pos = targetVector(t.id)
+		if pos then
+			local d = Walk.flatDistance(pos)
+			local reach = MapLayout.targetReach(t.id)
+			if d <= reach then
+				local score = d / math.max(reach, 1)
+				if score < bestScore then
+					best, bestScore = t.id, score
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function activity(): string
+	return State.activity()
+end
+
+-- 치기 한 번 (버튼·클릭 공통). 심사·대결 중이면 그 송판
+function BreakController.fire()
+	local act = activity()
+	lastHitAt = os.clock()
+	if act == "exam" then
+		Net.send(Remotes.ToServer.Hit, Remotes.EXAM_TARGET)
+		return
+	elseif act == "duel" then
+		Net.send(Remotes.ToServer.Hit, Remotes.DUEL_TARGET)
+		return
+	end
+	local id = currentNearest or BreakController.nearest()
+	if id then
+		Net.send(Remotes.ToServer.Hit, id)
+	end
+end
+
+-- 물건을 눌렀을 때: 가까우면 바로, 멀면 걸어가서
+function BreakController.hitTarget(id: string)
+	if activity() ~= "" then
+		BreakController.fire()
+		return
+	end
+	local target = Targets.get(id)
+	local pos = targetVector(id)
+	if not target or not pos then
+		return
+	end
+	if target.world ~= State.currentWorld() then
+		return
+	end
+	local reach = MapLayout.targetReach(id)
+	if Walk.flatDistance(pos) <= reach then
+		lastHitAt = os.clock()
+		Net.send(Remotes.ToServer.Hit, id)
+		return
+	end
+	local road = MapLayout.roadPoint(id)
+	if not road then
+		return
+	end
+	NotifyController.toast(target.name .. " 앞으로 가요!", "info")
+	Walk.to(Vector3.new(road.x, road.y, road.z), reach - 1, function()
+		lastHitAt = os.clock()
+		Net.send(Remotes.ToServer.Hit, id)
+	end)
+end
+
+------------------------------------------------------------------
+-- 연출 (내 화면에서만)
+------------------------------------------------------------------
+
+local function floatText(adornee: BasePart, offsetY: number, text: string, color: Color3, size: number, seconds: number)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "FloatText"
+	gui.Size = UDim2.fromOffset(260, size + 14)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, offsetY, 0)
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	gui.Adornee = adornee
+	local label = Ui.label(text, UDim2.fromScale(1, 1), size, color, { Name = "Text", TextScaled = true, Parent = gui })
+	gui.Parent = popupGui()
+	Ui.tween(
+		gui,
+		TweenInfo.new(seconds, Enum.EasingStyle.Quad),
+		{ StudsOffsetWorldSpace = Vector3.new(0, offsetY + 3, 0) }
+	)
+	Ui.tween(label, TweenInfo.new(seconds), { TextTransparency = 1 })
+	task.delay(seconds + 0.05, function()
+		gui:Destroy()
+	end)
+end
+
+local function hpBar(id: string, model: Model): HpBar?
+	local entry = hpBars[id]
+	if entry and entry.gui.Parent then
+		return entry
+	end
+	local hitbox = hitboxOf(model)
+	if not hitbox then
+		return nil
+	end
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "HpBar_" .. id
+	gui.Size = UDim2.fromOffset(210, 30)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, (heightOf(model) + 1) / 2 + 1, 0)
+	gui.AlwaysOnTop = true
+	gui.LightInfluence = 0
+	gui.Adornee = hitbox
+	local back: Frame = Ui.new("Frame", {
+		Name = "Back",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = C.winDark,
+		Parent = gui,
+	})
+	Ui.corner(8).Parent = back
+	Ui.stroke(C.winEdge, 3).Parent = back
+	local fill: Frame = Ui.new("Frame", {
+		Name = "Fill",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = C.green,
+		Parent = back,
+	})
+	Ui.corner(8).Parent = fill
+	local text =
+		Ui.label("", UDim2.fromScale(1, 1), 18, C.white, { Name = "Hp", TextScaled = true, ZIndex = 2, Parent = back })
+	gui.Parent = popupGui()
+	local made: HpBar = { gui = gui, fill = fill, text = text, shownAt = os.clock() }
+	hpBars[id] = made
+	return made
+end
+
+local function setHp(id: string, model: Model, hp: number, hpMax: number)
+	local bar = hpBar(id, model)
+	if not bar then
+		return
+	end
+	local ratio = if hpMax > 0 then math.clamp(hp / hpMax, 0, 1) else 0
+	bar.fill.Size = UDim2.fromScale(ratio, 1)
+	bar.fill.BackgroundColor3 = if ratio > 0.5 then C.green elseif ratio > 0.2 then C.yellow else C.red
+	bar.text.Text = Format.number(hp) .. " / " .. Format.number(hpMax)
+	bar.gui.Enabled = true
+	bar.shownAt = os.clock()
+	local shown = bar.shownAt
+	task.delay(BreakController.HP_BAR_SECONDS, function()
+		local b = hpBars[id]
+		if b and b.shownAt == shown then
+			b.gui.Enabled = false
+		end
+	end)
+end
+
+local function shake(model: Model, strength: number)
+	local home = homes[model]
+	if not home then
+		home = model:GetPivot()
+		homes[model] = home
+	end
+	local h = home
+	model:PivotTo(h * CFrame.new(strength, 0, 0))
+	task.delay(0.05, function()
+		model:PivotTo(h * CFrame.new(-strength * 0.6, 0, 0))
+	end)
+	task.delay(0.1, function()
+		model:PivotTo(h)
+	end)
+end
+
+local function lookColor(model: Model): Color3
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Look" then
+			return d.Color
+		end
+	end
+	return C.white
+end
+
+local function setHidden(model: Model, hidden: boolean)
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") and d.Name ~= "Hitbox" and d.Name ~= "Pedestal" and d.Name ~= "PedestalGlow" then
+			d.LocalTransparencyModifier = if hidden then 1 else 0
+		end
+	end
+end
+
+local function shards(model: Model)
+	local hitbox = hitboxOf(model)
+	if not hitbox then
+		return
+	end
+	local low = State.setting("lowGraphics", false)
+	local count = if low then 3 else 8
+	local color = lookColor(model)
+	local r = model:GetAttribute("Radius")
+	local radius = if type(r) == "number" then r else 3
+	local center = hitbox.CFrame.Position
+	for i = 1, count do
+		local p = Instance.new("Part")
+		p.Name = "Shard"
+		p.Size = Vector3.one * math.clamp(radius * 0.3, 0.4, 6)
+		p.Color = color
+		p.Material = Enum.Material.SmoothPlastic
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Anchored = false
+		local a = (i / count) * math.pi * 2
+		p.CFrame = CFrame.new(center + Vector3.new(math.cos(a) * radius * 0.4, 0, math.sin(a) * radius * 0.4))
+		p.Parent = Workspace
+		pcall(function()
+			p.AssemblyLinearVelocity = Vector3.new(math.cos(a) * 18, 28 + (i % 3) * 6, math.sin(a) * 18)
+		end)
+		task.delay(1.1, function()
+			p:Destroy()
+		end)
+	end
+end
+
+function BreakController.onHitResult(r: any)
+	if type(r) ~= "table" or type(r.targetId) ~= "string" then
+		return
+	end
+	local id = r.targetId
+	local model = models[id]
+	if not model then
+		return -- "exam"/"duel" 송판은 ExamController 가 그림
+	end
+	local hitbox = hitboxOf(model)
+	if not hitbox then
+		return
+	end
+	local top = (heightOf(model) + 1) / 2
+	if r.reason == "weak" then
+		local target = Targets.get(id)
+		local need = if target then " (💪 " .. Format.number(target.minPower) .. " 필요)" else ""
+		floatText(hitbox, top + 2.5, "힘이 부족해요!" .. need, C.weak, 30, 1.2)
+		shake(model, 0.15)
+		return
+	end
+	local damage = tonumber(r.damage) or 0
+	local hp = tonumber(r.hp) or 0
+	local hpMax = tonumber(r.hpMax) or 1
+	if damage > 0 then
+		floatText(hitbox, top + 1, "-" .. Format.number(damage), C.white, 26, 0.6)
+	end
+	if r.broken then
+		shards(model)
+		setHidden(model, true)
+		task.delay(0.35, function()
+			setHidden(model, false)
+		end)
+		local reward = tonumber(r.reward) or 0
+		if reward > 0 then
+			floatText(hitbox, top + 3, "+💰 " .. Format.number(reward), C.money, 40, 1.2)
+		end
+		setHp(id, model, hpMax, hpMax)
+	else
+		shake(model, math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20) * 0.05)
+		setHp(id, model, hp, hpMax)
+	end
+end
+
+------------------------------------------------------------------
+-- 물건 연결
+------------------------------------------------------------------
+
+local function hook(inst: Instance)
+	if hooked[inst] or not inst:IsA("Model") then
+		return
+	end
+	local id = inst:GetAttribute(PA.TargetId)
+	if type(id) ~= "string" then
+		return
+	end
+	hooked[inst] = true
+	models[id] = inst
+	homes[inst] = inst:GetPivot()
+	local click = inst:FindFirstChild("Click")
+	if click and click:IsA("ClickDetector") then
+		click.MouseClick:Connect(function()
+			BreakController.hitTarget(id)
+		end)
+	end
+end
+
+function BreakController.refresh()
+	local act = activity()
+	local b = BreakController.button
+	if not b then
+		return
+	end
+	if act == "exam" or act == "duel" then
+		currentNearest = nil
+		b.setText("송판 치기!", if act == "exam" then "승급 심사" else "시험관 대결")
+		b.setVisible(true)
+		return
+	end
+	local id = BreakController.nearest()
+	currentNearest = id
+	if id then
+		local t = Targets.get(id)
+		b.setText("치기", if t then t.name else "")
+		b.setVisible(true)
+	else
+		b.setVisible(false)
+	end
+end
+
+function BreakController.start()
+	BreakController.button = ActionButton.new("HitButton", "치기", C.hitOrange, 1, "fist", BreakController.fire)
+	-- 서버 "힘이 부족해요! …" 알림은 물건 위 빨간 글이 대신 보여 줌 (토스트 두 번 안 뜨게)
+	NotifyController.mute("힘이 부족해요")
+	for _, inst in CollectionService:GetTagged(Tags.BreakTarget) do
+		hook(inst)
+	end
+	CollectionService:GetInstanceAddedSignal(Tags.BreakTarget):Connect(hook)
+	Net.on(Remotes.ToClient.HitResult, BreakController.onHitResult)
+	State.onChanged(function(section: string)
+		if section == "attr:" .. Tags.PlayerAttributes.Activity or section == "snapshot" then
+			BreakController.refresh()
+		end
+	end)
+	local acc = 0
+	RunService.Heartbeat:Connect(function(dt: number)
+		acc += dt
+		if acc >= 0.2 then
+			acc = 0
+			BreakController.refresh()
+		end
+	end)
+	BreakController.refresh()
+end
+
+-- 마지막으로 친 시각 (튜토리얼 등)
+function BreakController.lastHit(): number
+	return lastHitAt
+end
+
+return BreakController

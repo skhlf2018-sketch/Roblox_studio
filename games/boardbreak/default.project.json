@@ -1,0 +1,37 @@
+{
+  "name": "BoardBreak",
+  "emitLegacyScripts": false,
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Client": {
+        "$path": "src/client"
+      }
+    },
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+    "Players": {
+      "$properties": {
+        "CharacterAutoLoads": true,
+        "MaxPlayers": 12
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "ClockTime": 14
+      }
+    },
+    "TextChatService": {
+      "$properties": {
+        "ChatVersion": "TextChatService",
+        "CreateDefaultTextChannels": true
+      }
+    }
+  }
+}

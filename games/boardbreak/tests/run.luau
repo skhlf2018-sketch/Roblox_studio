@@ -24,6 +24,7 @@ local specs = {
 	{ "services_exam.spec", require("./services_exam.spec") },
 	{ "save_data.spec", require("./save_data.spec") },
 	{ "design_doc.spec", require("./design_doc.spec") },
+	{ "holes_v1.spec", require("./holes_v1.spec") },
 }
 
 local filters: { string } = {}

@@ -29,6 +29,9 @@ local Build = require(script.Parent.Build)
 local Dojo = {}
 
 Dojo.SHOP_MAX = 60 -- 가게 진열 아령 상한 (표가 더 길면 앞 60개만)
+-- 사범님 이름표가 보이는 거리 (배율 1 — 큰 월드는 × 배율). 90 이면 월드 3 에서 990 이라 길 위 물건 글(달 등)과 겹쳐 보였음
+--   (본부장 2026-11-16 스튜디오: 화성 매트에서 "별빛 그랜드 마스터" 가 "달" 글 위에) → 큰 월드는 도장 안·정문 앞에서만
+Dojo.NAME_TAG_DISTANCE = { 90, 50, 50 } -- 월드 1 은 그대로 90 · 큰 월드 50 × 배율 (월드 2 = 275 · 3 = 550)
 local SHELF_Y0 = 1.4
 local SHELF_GAP = 1.6
 local SHOP_SCALE = 0.7
@@ -837,7 +840,7 @@ end
 ------------------------------------------------------------------
 
 -- 시험관 NPC (도복 + 띠, 파트로만). base = 발 가운데, 앞(-Z) = 플레이어 쪽
-local function blockExaminer(parent: Instance, base: CFrame, beltColor: Color3, name: string): Model
+local function blockExaminer(parent: Instance, base: CFrame, beltColor: Color3, name: string, world: number): Model
 	local npc = Build.model("Examiner", parent)
 	local dobok = c(22, 22, 26) -- 사장님 2026-11-16: 검은 도복
 	local skin = c(255, 214, 170)
@@ -922,7 +925,13 @@ local function blockExaminer(parent: Instance, base: CFrame, beltColor: Color3, 
 		{ query = true, name = "BeltTail" }
 	)
 	npc.PrimaryPart = torso
-	local gui = Build.billboard(torso, "NameTag", UDim2.fromOffset(240, 50), 4.4, 90)
+	local gui = Build.billboard(
+		torso,
+		"NameTag",
+		UDim2.fromOffset(240, 50),
+		4.4,
+		Dojo.NAME_TAG_DISTANCE[math.clamp(world, 1, 3)]
+	)
 	local label =
 		Build.text(gui, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), "🥋 " .. name, c(255, 230, 120))
 	label.TextScaled = true
@@ -1119,7 +1128,13 @@ function Dojo.dressExaminer(rig: Model, world: number, name: string)
 			face.Texture = "rbxasset://textures/face.png"
 			face.Parent = head
 		end
-		local gui = Build.billboard(head, "NameTag", UDim2.fromOffset(240, 50), 2.2, 90)
+		local gui = Build.billboard(
+			head,
+			"NameTag",
+			UDim2.fromOffset(240, 50),
+			2.2,
+			Dojo.NAME_TAG_DISTANCE[math.clamp(world, 1, 3)]
+		)
 		local label =
 			Build.text(gui, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), "🥋 " .. name, c(255, 230, 120))
 		label.TextScaled = true
@@ -1158,7 +1173,7 @@ local function examiner(world: number, parent: Instance, base: CFrame, name: str
 	if rig then
 		rig:Destroy()
 	end
-	return blockExaminer(parent, base, style.belt, name)
+	return blockExaminer(parent, base, style.belt, name, world)
 end
 
 local function duelArena(world: number, parent: Instance, _theme: Theme)

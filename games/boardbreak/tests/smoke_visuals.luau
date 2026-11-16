@@ -1827,19 +1827,118 @@ local function body()
 	PVS.rememberBase(chA, chA.HumanoidRootPart)
 	chA:SetAttribute("VisualScale", 10)
 	PVS.apply(chA, 2e7)
-	local ringA = chA:FindFirstChild("AuraRing")
+	local ringA = PVS.ringPart(chA)
 	local lightA = chA.HumanoidRootPart:FindFirstChild("AuraLight")
 	local same3 = chA.HumanoidRootPart:FindFirstChild("AuraAttach")
 	check(
 		same3:GetAttribute("Mark") == 1
 			and math.abs(same3.Position.Y - -15) < 1e-6
-			and ringA.Size.Y > 40
+			and ringA
+			and (ringA.Size - PVS.ringSize(10, 0, 3)).Magnitude < 1e-3
 			and (not lightA or lightA.Range <= 60),
 		string.format(
-			"몸 배율 10 → 아우라 그대로 두고 크기만 (고리 지름 %.0f · 높이 %.0f · 빛 ≤ 60)",
-			ringA.Size.Y,
+			"몸 배율 10 → 아우라 그대로 두고 크기만 (고리 지름 %.1f · 높이 %.0f · 빛 ≤ 60)",
+			ringA and ringA.Size.Y or -1,
 			same3.Position.Y
 		)
+	)
+
+	-- 발밑 고리 (본부장 2026-11-16 스튜디오: 배율 10.98 에서 675 × 972 타원 — 엔진이 캐릭터 바로 아래 파트를 한 번 더 키움)
+	print("[아우라 고리 — 몸 너비만큼 둥글게 · 한 번만]")
+	local holderA = chA:FindFirstChild("AuraRing")
+	check(
+		holderA and holderA:IsA("Model") and not holderA:IsA("BasePart") and ringA and ringA.Parent == holderA,
+		"고리 파트는 캐릭터 바로 아래가 아님 (Model AuraRing 안 Ring) — 엔진 R15 자동 크기 조절은 바로 아래 파트만 키움"
+	)
+	local origA = same3:FindFirstChild("OriginalPosition")
+	check(
+		origA and origA:IsA("Vector3Value") and origA.Value == Vector3.new(0, -1.5, 0),
+		"AuraAttach OriginalPosition = 배율 1 자리 (엔진이 옮겨도 0, -1.5 × 키 배율 — 한 번만)"
+	)
+	local ringRule, roundOk, onceOk = true, true, true
+	local worst = ""
+	local tierN = #Visuals.AURA
+	for _, case in { { 1, 0 }, { 2.5, 0.2 }, { 5.6, 0.5 }, { 10.98, 0.8 }, { Sizes.MAX_SCALE, 1 } } do
+		local sc, mu = case[1], case[2]
+		local chR = fakeChar()
+		chR:SetAttribute("VisualScale", sc)
+		chR:SetAttribute("VisualMuscle", mu)
+		PVS.apply(chR, Visuals.AURA[tierN].power)
+		PVS.apply(chR, Visuals.AURA[tierN].power) -- 두 번
+		local r = PVS.ringPart(chR)
+		local want = PVS.ringSize(sc, mu, tierN)
+		local bodyW = 2 * PVS.bodyShape(sc, mu).width -- 보통 몸 너비 ≈ 2 × 너비 배율
+		if not r or (r.Size - want).Magnitude > 1e-3 then
+			onceOk = false
+			worst = string.format("배율 %.2f: %s (기대 %s)", sc, tostring(r and r.Size), tostring(want))
+		elseif math.abs(r.Size.Y - r.Size.Z) > 1e-6 then
+			roundOk = false
+		elseif r.Size.Y < bodyW or r.Size.Y > bodyW * 2 or r.Size.Y > Sizes.AVATAR_HEIGHT * sc then
+			ringRule = false
+			worst = string.format("배율 %.2f: 지름 %.1f · 몸 너비 %.1f", sc, r.Size.Y, bodyW)
+		end
+		-- 누가(엔진) 고리를 키워 버려도 다음 갱신에서 정한 크기로 되돌림
+		if r then
+			r.Size = Vector3.new(r.Size.X * 14.93, r.Size.Y * 10.98, r.Size.Z * 15.81)
+			PVS.apply(chR, Visuals.AURA[tierN].power)
+			if (r.Size - want).Magnitude > 1e-3 then
+				onceOk = false
+				worst = "남이 키운 고리를 안 되돌림 " .. tostring(r.Size)
+			end
+		end
+		-- 리스폰: 새 몸
+		local chN = fakeChar()
+		chN:SetAttribute("VisualScale", sc)
+		chN:SetAttribute("VisualMuscle", mu)
+		PVS.apply(chN, Visuals.AURA[tierN].power)
+		local rn = PVS.ringPart(chN)
+		if not rn or (rn.Size - want).Magnitude > 1e-3 then
+			onceOk = false
+			worst = "리스폰 새 몸 고리 " .. tostring(rn and rn.Size)
+		end
+	end
+	check(
+		onceOk,
+		"고리 크기 = ringSize(배율, 근육, 단계) 한 번만 (두 번 맞춰도 · 엔진이 키워도 되돌림 · 리스폰) "
+			.. worst
+	)
+	check(roundOk, "고리는 늘 동그라미 (지름 두 축이 같음 — 근육이 붙어도 타원 아님)")
+	check(ringRule, "고리 지름 = 몸 너비의 1 ~ 2배 (몸 키보다 작음) " .. worst)
+	local rr = PVS.ringPart(fakeChar())
+	check(
+		PVS.RING_TRANSPARENCY >= 0.75,
+		"고리 투명 "
+			.. PVS.RING_TRANSPARENCY
+			.. " (네온이 바닥을 하얗게 덮지 않게 — 월드 3 밝기 보정 +0.4)"
+	)
+	check(rr == nil, "아우라 없는 몸(힘 0)에는 고리 없음")
+	-- 몸 배율이 바뀌면 다시 만들지 않고 맞춤 (근육만 바뀌어도)
+	local chM = fakeChar()
+	PVS.apply(chM, 2e7)
+	PVS.ringPart(chM):SetAttribute("Mark", 1)
+	chM:SetAttribute("VisualScale", 6)
+	chM:SetAttribute("VisualMuscle", 0.4)
+	PVS.apply(chM, 2e7)
+	chM:SetAttribute("VisualMuscle", 0.9)
+	PVS.apply(chM, 2e7)
+	local rm = PVS.ringPart(chM)
+	check(
+		rm:GetAttribute("Mark") == 1 and (rm.Size - PVS.ringSize(6, 0.9, 3)).Magnitude < 1e-3,
+		"근육만 바뀌어도 같은 고리를 새 크기로 (다시 안 만듦)"
+	)
+	-- 사범님 이름표: 큰 월드에서 길 위 물건 글과 안 겹치게 (도장 안·정문 앞에서만)
+	local tagOk = true
+	for _, arena in CollectionService:GetTagged(Tags.DuelArena) do
+		local w = arena:GetAttribute(A.World)
+		local tag = arena:FindFirstChild("NameTag", true)
+		local want = Dojo.NAME_TAG_DISTANCE[w] * MapLayout.worldScale(w)
+		if not tag or math.abs(tag.MaxDistance - want) > 1e-3 then
+			tagOk = false
+		end
+	end
+	check(
+		tagOk,
+		"사범님 이름표 거리 = 월드 1 그대로 90 · 큰 월드 50 × 배율 (월드 3 = 550 — 화성 매트 ≈ 800 에서는 안 보임)"
 	)
 end
 

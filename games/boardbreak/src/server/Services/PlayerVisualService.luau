@@ -181,7 +181,54 @@ local function baseBody(character: Model, root: BasePart): (number, number)
 end
 PlayerVisualService.rememberBase = baseBody
 
--- 이미 붙은 아우라를 몸 배율에 맞춤 (다시 만들지 않음 — 파티클이 끊기지 않음)
+--[[ 발밑 고리 크기 (본부장 2026-11-16 스튜디오: 배율 10.98 에서 고리가 675 × 972 스터드 타원 — 엔진 R15 자동 크기 조절이
+	캐릭터 바로 아래 파트를 (너비, 키, 깊이) 배로 한 번 더 키웠음). 이제:
+	  · 고리 파트는 캐릭터 바로 아래가 아니라 Model "AuraRing" 안의 Part "Ring" — 엔진은 캐릭터의 바로 아래 BasePart·액세서리만
+	    키우므로 손대지 않음 (스튜디오 측정과 맞음: 바로 아래 파트만 (W, H, D) 배). 크기는 이 서비스만 정함.
+	  · 크기 = 몸 너비만큼 둥글게: 지름 = (RING_DIAMETER + 0.1 × 단계) × 몸 배율 × (1 + 0.45 × 근육) (근육이 붙은 몸 너비 배율),
+	    두께 = RING_THICK × 몸 배율. 지름 두 축이 늘 같음 (원).
+	  · 투명 0.78 (네온이 바닥을 하얗게 덮지 않게 — 월드 3 은 밝기 보정 +0.4) ]]
+PlayerVisualService.RING_DIAMETER = 2.6 -- 배율 1 · 근육 0 · 단계 0 일 때 지름 (보통 몸 너비 ≈ 2)
+PlayerVisualService.RING_THICK = 0.06
+PlayerVisualService.RING_TRANSPARENCY = 0.78
+
+function PlayerVisualService.ringSize(scale: number, muscle: number, tier: number): Vector3
+	local shape = PlayerVisualService.bodyShape(scale, muscle)
+	local d = (PlayerVisualService.RING_DIAMETER + 0.1 * tier) * shape.width
+	return Vector3.new(PlayerVisualService.RING_THICK * shape.height, d, d)
+end
+
+local function ringPart(character: Model): BasePart?
+	local holder = character:FindFirstChild("AuraRing")
+	local p = holder and holder:FindFirstChild("Ring")
+	return if p and p:IsA("BasePart") then p else nil
+end
+PlayerVisualService.ringPart = ringPart
+
+local function visualMuscle(character: Model): number
+	local m = character:GetAttribute("VisualMuscle")
+	return if type(m) == "number" then m else 0
+end
+
+-- 아우라가 지금 몸에 맞나 (배율·근육 기억 + 고리 크기가 정한 값 그대로 — 남이 키웠으면 다시 맞춤)
+local function auraFits(character: Model, tier: number): boolean
+	if character:GetAttribute("AuraScale") ~= visualScale(character) then
+		return false
+	end
+	if character:GetAttribute("AuraMuscle") ~= visualMuscle(character) then
+		return false
+	end
+	local ring = ringPart(character)
+	if ring then
+		local want = PlayerVisualService.ringSize(visualScale(character), visualMuscle(character), tier)
+		if (ring.Size - want).Magnitude > 1e-3 then
+			return false
+		end
+	end
+	return true
+end
+
+-- 이미 붙은 아우라를 몸 배율에 맞춤 (다시 만들지 않음 — 파티클이 끊기지 않음). 몇 번 불러도 같은 결과
 local function fitAura(character: Model, root: BasePart, tier: number)
 	local a = Visuals.aura(tier)
 	if not a then
@@ -191,6 +238,12 @@ local function fitAura(character: Model, root: BasePart, tier: number)
 	local hip, ry = baseBody(character, root)
 	local attach = root:FindFirstChild("AuraAttach")
 	if attach and attach:IsA("Attachment") then
+		-- 뿌리 파트 안 Attachment 는 엔진도 OriginalPosition × 키 배율로 옮김 → 배율 1 자리를 OriginalPosition 에 적어 두어서
+		--   엔진이 옮겨도 · 이 서비스가 옮겨도 같은 자리 (0, -1.5 × 배율, 0)
+		local orig = attach:FindFirstChild("OriginalPosition")
+		if orig and orig:IsA("Vector3Value") then
+			orig.Value = Vector3.new(0, -1.5, 0)
+		end
 		attach.Position = Vector3.new(0, -1.5 * s, 0)
 		local sparks = attach:FindFirstChild("AuraSparks")
 		if sparks and sparks:IsA("ParticleEmitter") then
@@ -206,10 +259,9 @@ local function fitAura(character: Model, root: BasePart, tier: number)
 	if light and light:IsA("PointLight") then
 		light.Range = math.min(Groups.LIGHT_RANGE_MAX, (8 + tier) * s)
 	end
-	local ring = character:FindFirstChild("AuraRing")
-	if ring and ring:IsA("BasePart") then
-		local d = (4 + tier * 0.2) * s
-		ring.Size = Vector3.new(0.1 * math.max(1, s * 0.5), d, d)
+	local ring = ringPart(character)
+	if ring then
+		ring.Size = PlayerVisualService.ringSize(s, visualMuscle(character), tier)
 		local offset = CFrame.new(0, -(hip + ry / 2) * s + 0.08 * s, 0) * CFrame.Angles(0, 0, math.pi / 2)
 		local weld = ring:FindFirstChildOfClass("Weld")
 		if weld then
@@ -217,6 +269,7 @@ local function fitAura(character: Model, root: BasePart, tier: number)
 		end
 	end
 	character:SetAttribute("AuraScale", s)
+	character:SetAttribute("AuraMuscle", visualMuscle(character))
 end
 
 function PlayerVisualService.apply(character: Model?, power: number?): number
@@ -231,7 +284,7 @@ function PlayerVisualService.apply(character: Model?, power: number?): number
 	local had = character:GetAttribute("AuraTier")
 	if had == tier and (tier == 0 or root:FindFirstChild("AuraAttach")) then
 		-- 단계가 그대로면 다시 만들지 않음 (몸 배율만 바뀌었으면 크기만 맞춤)
-		if tier > 0 and character:GetAttribute("AuraScale") ~= visualScale(character) then
+		if tier > 0 and not auraFits(character, tier) then
 			fitAura(character, root, tier)
 		end
 		return tier
@@ -245,6 +298,10 @@ function PlayerVisualService.apply(character: Model?, power: number?): number
 	local attach = Instance.new("Attachment")
 	attach.Name = "AuraAttach"
 	attach.Position = Vector3.new(0, -1.5, 0)
+	local origPos = Instance.new("Vector3Value") -- 엔진 자동 크기 조절이 읽는 배율 1 자리 (fitAura 참고)
+	origPos.Name = "OriginalPosition"
+	origPos.Value = Vector3.new(0, -1.5, 0)
+	origPos.Parent = attach
 	local sparks = Instance.new("ParticleEmitter")
 	sparks.Name = "AuraSparks"
 	sparks.Rate = math.min(a.rate, Visuals.AURA_RATE_CAP)
@@ -274,16 +331,18 @@ function PlayerVisualService.apply(character: Model?, power: number?): number
 		light.Shadows = false
 		light.Parent = root
 	end
-	-- 발밑 고리
+	-- 발밑 고리 (Model "AuraRing" 안 Part "Ring" — 엔진 자동 크기 조절이 손대지 않게, ringSize 참고)
 	local hum = character:FindFirstChildOfClass("Humanoid")
 	local hip = if hum and hum.HipHeight > 0 then hum.HipHeight else 2
+	local holder = Instance.new("Model")
+	holder.Name = "AuraRing"
 	local ring = Instance.new("Part")
-	ring.Name = "AuraRing"
+	ring.Name = "Ring"
 	ring.Shape = Enum.PartType.Cylinder
-	ring.Size = Vector3.new(0.1, 4 + tier * 0.2, 4 + tier * 0.2)
+	ring.Size = PlayerVisualService.ringSize(1, 0, tier)
 	ring.Color = a.color
 	ring.Material = Enum.Material.Neon
-	ring.Transparency = 0.6
+	ring.Transparency = PlayerVisualService.RING_TRANSPARENCY
 	ring.Anchored = false
 	ring.CanCollide = false
 	ring.CanQuery = false
@@ -297,9 +356,12 @@ function PlayerVisualService.apply(character: Model?, power: number?): number
 	weld.Part1 = ring
 	weld.C0 = offset
 	weld.Parent = ring
-	ring.Parent = character
+	ring.Parent = holder
+	holder.PrimaryPart = ring
+	holder.Parent = character
 	character:SetAttribute("AuraScale", 1)
-	if visualScale(character) ~= 1 then
+	character:SetAttribute("AuraMuscle", 0)
+	if not auraFits(character, tier) then
 		fitAura(character, root, tier)
 	end
 	return tier

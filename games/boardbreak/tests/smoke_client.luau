@@ -941,7 +941,15 @@ local function body()
 	local same1 = Train.attach(character, last)
 	local same2 = Train.attach(character, last)
 	check(same1 == same2 and same1.Parent == character, "크기가 그대로면 다시 안 만듦 (깜빡임 없음)")
-	big2 = same2
+	-- 누가(엔진 자동 크기 조절 등) 봉을 키워 버리면 다음 맞춤에서 정한 크기로 다시 만듦 (몸 배율 × 아령 배율 한 번만)
+	local wantBar2 = barOf(same2)
+	same2.PrimaryPart.Size = same2.PrimaryPart.Size * 10.98
+	local fixed = Train.attach(character, last)
+	check(
+		fixed ~= same2 and math.abs(barOf(fixed) - wantBar2) < 1e-3 and heldOk(fixed, hand),
+		string.format("남이 키운 손 아령 → 정한 크기로 다시 (봉 %.2f)", barOf(fixed))
+	)
+	big2 = fixed
 	hand.Size = hand.Size * 1.5
 	Train.check()
 	local big3 = character:FindFirstChild("HeldDumbbell")

@@ -59,7 +59,9 @@ local function setOthers(visible: boolean)
 			if sparks and sparks:IsA("ParticleEmitter") then
 				sparks.Enabled = visible
 			end
-			local ring = character and character:FindFirstChild("AuraRing")
+			-- 고리 = Model "AuraRing" 안 Part "Ring" (서버가 엔진 자동 크기 조절을 피하려고 감쌈). 옛 모양(바로 파트)도 읽음
+			local holder = character and character:FindFirstChild("AuraRing")
+			local ring = if holder and holder:IsA("Model") then holder:FindFirstChild("Ring") else holder
 			if ring and ring:IsA("BasePart") then
 				ring.LocalTransparencyModifier = if visible then 0 else 1
 			end

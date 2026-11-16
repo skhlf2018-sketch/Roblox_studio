@@ -55,6 +55,7 @@ type Hold = {
 	level: number,
 	scale: number,
 	handY: number,
+	barX: number, -- 만들 때 봉 길이 — 누가(엔진 자동 크기 조절 등) 키우면 달라짐 → 다시 만듦
 	fade: number?,
 	right: Model?,
 	left: Model?,
@@ -146,6 +147,14 @@ local function attached(model: Model?, hand: BasePart?, character: Model, right:
 end
 
 -- 캐릭터 손에 level 아령 (이미 맞게 붙어 있으면 그대로). 손 파트가 없으면 아무것도 안 함 (오류 없음)
+-- 봉 길이가 만들 때 그대로인가 (손 아령은 캐릭터 바로 아래 Model 이라 엔진 R15 자동 크기 조절이 안 키우지만 — 스튜디오에서
+--   마지막 아령 75.45 정확 — 혹시 누가 키웠으면 다시 만들어 늘 "몸 배율 × 아령 배율" 한 번만)
+local function barIntact(h: Hold): boolean
+	local m = h.right
+	local bar = m and m.PrimaryPart
+	return bar ~= nil and math.abs(bar.Size.X - h.barX) < 1e-3
+end
+
 function TrainController.attach(character: Model?, level: number): Model?
 	if not character then
 		return nil
@@ -161,6 +170,7 @@ function TrainController.attach(character: Model?, level: number): Model?
 		and h.level == spec.level
 		and math.abs(h.scale - scale) < 1e-3
 		and math.abs(h.handY - handY) < 1e-3
+		and barIntact(h)
 		and attached(h.right, h.rightHand, character, true)
 		and (not spec.twoHands or left == nil or attached(h.left, h.leftHand, character, false))
 	then
@@ -170,8 +180,12 @@ function TrainController.attach(character: Model?, level: number): Model?
 	if not right then
 		return nil
 	end
-	local made: Hold = { level = spec.level, scale = scale, handY = handY, rightHand = right, leftHand = left }
-	made.right = makeOne(character, right, spec.level, "HeldDumbbell", scale)
+	local made: Hold =
+		{ level = spec.level, scale = scale, handY = handY, barX = 0, rightHand = right, leftHand = left }
+	local rightModel = makeOne(character, right, spec.level, "HeldDumbbell", scale)
+	made.right = rightModel
+	local bar = rightModel.PrimaryPart
+	made.barX = if bar then bar.Size.X else 0
 	if left then
 		made.left = makeOne(character, left, spec.level, "HeldDumbbellL", scale)
 	end

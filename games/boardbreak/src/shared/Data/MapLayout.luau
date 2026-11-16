@@ -13,8 +13,11 @@
 	  MapLayout.targetPosition(id) → {x, y, z}?   물건 바닥 가운데 (월드 3 은 떠 있는 받침대 윗면)
 	  MapLayout.targetReach(id)    → number       이 수평 거리 안이면 칠 수 있음 (반지름 × FOOTPRINT 1.35 + 여유 8)
 	  MapLayout.isOnTrainMat(pos, world) → boolean  pos 는 Vector3 또는 {x,y,z} (캐릭터 HumanoidRootPart 위치면 됨)
+                                                 도장 매트 6칸 + 길가 매트(물건마다 1칸) 모두 인정
+  MapLayout.matPoint(id) → {x, y, z}?          그 물건 옆 길가 매트 가운데
+  MapLayout.matWalkDistance(id) → number       매트 가운데 → 칠 수 있는 가장 가까운 자리 (수평, 바로 치면 0)
 	  MapLayout.spawn(world) / examPad(world) / duelArena(world) → Spot (x, y, z + 크기·방향)
-	그 밖: worldOrigin · worldAt · targetIds · targetRadius · targetWorld · trainMats · dumbbellShop · beltBoard · doors
+	그 밖: worldOrigin · worldAt · targetIds · targetRadius · targetWorld · trainMats · roadMats · dumbbellShop · beltBoard · doors
 	      · lobbyRect · targetArea · roadPoint
 ]]
 
@@ -242,7 +245,69 @@ local function readXYZ(pos: any): (number, number, number)
 	return pos.X, pos.Y, pos.Z
 end
 
--- 수련 매트 위인가 (가장자리 1 스터드 여유, 높이는 바닥 -3 ~ +10: 캐릭터 몸 가운데까지)
+------------------------------------------------------------------
+-- 길가 수련 매트 (물건 41개마다 1칸): 그 물건 쪽 길 절반 위, 물건과 같은 z (= 치는 자리 바로 그곳)
+--   x: 길 가운데에서 ROAD_MAT_CENTER (가운데 4 스터드는 비워 둠, 길 가장자리 줄과도 안 겹침)
+--   매트 가운데에 서면 그 물건이 targetReach 안 → 걷지 않고 들기·치기 둘 다 (matWalkDistance 0)
+--   얇은 판(안 부딪힘)이라 길을 막지 않음
+------------------------------------------------------------------
+
+MapLayout.ROAD_MAT_X = 4.5 -- 길 가로 방향 크기
+MapLayout.ROAD_MAT_Z = 6 -- 길 따라 크기
+MapLayout.ROAD_MAT_CENTER = 4.2 -- 길 가운데 ~ 매트 가운데
+
+export type RoadMat = Spot & { targetId: string }
+
+local roadMatList: { [number]: { RoadMat } } = {}
+local roadMatById: { [string]: RoadMat } = {}
+for w = 1, MapLayout.WORLD_COUNT do
+	local list: { RoadMat } = {}
+	for _, s in order[w] do
+		local m: RoadMat = {
+			x = ox(w) + s.side * MapLayout.ROAD_MAT_CENTER,
+			y = MapLayout.FLOOR_Y,
+			z = s.pos.z,
+			sizeX = MapLayout.ROAD_MAT_X,
+			sizeZ = MapLayout.ROAD_MAT_Z,
+			yaw = if s.side < 0 then FACE_LEFT else FACE_RIGHT,
+			targetId = s.id,
+		}
+		roadMatById[s.id] = m
+		table.insert(list, m)
+	end
+	roadMatList[w] = list
+end
+
+-- 월드의 길가 매트 (물건 순서대로)
+function MapLayout.roadMats(world: number): { RoadMat }
+	return table.clone(roadMatList[clampWorld(world)])
+end
+
+-- 그 물건 옆 매트 가운데 (모르는 id 는 nil)
+function MapLayout.matPoint(targetId: string): XYZ?
+	local m = roadMatById[targetId]
+	if not m then
+		return nil
+	end
+	return { x = m.x, y = m.y, z = m.z }
+end
+
+-- 매트 가운데 → 그 물건을 칠 수 있는 가장 가까운 자리까지 수평 거리 (매트에서 바로 치면 0, 모르는 id 는 math.huge)
+function MapLayout.matWalkDistance(targetId: string): number
+	local m = roadMatById[targetId]
+	local s = spots[targetId]
+	if not m or not s then
+		return math.huge
+	end
+	local d = math.sqrt((m.x - s.pos.x) ^ 2 + (m.z - s.pos.z) ^ 2)
+	return math.max(0, d - MapLayout.targetReach(targetId))
+end
+
+local function onSpot(x: number, z: number, m: Spot): boolean
+	return math.abs(x - m.x) <= m.sizeX / 2 + 1 and math.abs(z - m.z) <= m.sizeZ / 2 + 1
+end
+
+-- 수련 매트 위인가 — 도장 매트 + 길가 매트 (가장자리 1 스터드 여유, 높이는 바닥 -3 ~ +10: 캐릭터 몸 가운데까지)
 function MapLayout.isOnTrainMat(pos: any, world: number): boolean
 	if pos == nil then
 		return false
@@ -255,7 +320,12 @@ function MapLayout.isOnTrainMat(pos: any, world: number): boolean
 		return false
 	end
 	for _, m in MapLayout.trainMats(world) do
-		if math.abs(x - m.x) <= m.sizeX / 2 + 1 and math.abs(z - m.z) <= m.sizeZ / 2 + 1 then
+		if onSpot(x, z, m) then
+			return true
+		end
+	end
+	for _, m in roadMatList[clampWorld(world)] do
+		if onSpot(x, z, m) then
 			return true
 		end
 	end

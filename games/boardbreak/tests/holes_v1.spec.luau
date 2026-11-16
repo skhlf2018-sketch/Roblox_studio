@@ -413,35 +413,60 @@ return function(T, Loader)
 		H.uninstall()
 	end)
 
-	T.skip(
-		"죽은 캐릭터(Health 0)도 치기 · 들기가 됨 [A-1 낮음]",
-		"BreakService.hit · TrainService.train · ExamService 가 Character.getRoot 만 보고 isAlive(Health>0) 를 안 봄",
+	T.test(
+		"죽은 캐릭터(Health 0)는 치기 · 들기 · 심사 · 대결 안 됨 [A-1 고침 — Character.isAlive]",
 		function()
 			local H = setup()
-			local p, _, data = join(H, 1, { power = ONE_SHOT })
+			local p, session, data = join(H, 1, { power = ONE_SHOT })
 			H.teleport(p, H.targetSpot("cotton"))
 			p.Character.humanoid.Health = 0
 			H.client(p, "Hit", "cotton")
 			T.eq(data.money, 0, "죽었는데 돈이 생김")
+			T.eq(#H.sent(p, "HitResult"), 0, "죽으면 HitResult 도 없음")
+			local mat = H.MapLayout.trainMats(1)[1]
+			H.teleport(p, mat.x, 3, mat.z)
+			H.advance(1)
+			H.client(p, "Train")
+			T.eq(data.power, ONE_SHOT, "죽었는데 힘이 오름")
+			H.teleport(p, H.examSpot(1))
+			H.advance(3)
+			H.client(p, "StartExam")
+			T.eq(session.exam, nil, "죽었는데 심사 시작")
+			data.belt = 3
+			H.teleport(p, H.duelSpot(1))
+			H.advance(3)
+			H.client(p, "StartDuel")
+			T.eq(session.duel, nil, "죽었는데 대결 시작")
+			-- 살아나면 다시 됨
+			p.Character.humanoid.Health = 100
+			H.advance(3)
+			H.client(p, "StartDuel")
+			T.truthy(session.duel ~= nil, "살아 있으면 대결 시작")
+			H.uninstall()
 		end
 	)
 
 	T.test(
-		"minPower 경계: 치는 힘 = minPower 이면 깎임, 아주 조금 모자라면 weak (힘 × 배수 로 봄)",
+		"힘 문턱 없음 (사장님 결정 11번): 치는 힘 = 추천 힘이면 그만큼, 아주 조금 모자라도 그만큼 깎임 · weak 없음 (힘 × 배수 로 봄)",
 		function()
 			local H = setup()
 			local glass = H.Targets.get("glass")
-			local p, session, data = join(H, 1, { power = glass.minPower / 4, powerBoost = 4 })
+			local p, session, data = join(H, 1, { power = glass.recommendPower / 4, powerBoost = 4 })
 			H.teleport(p, H.targetSpot("glass"))
 			H.client(p, "Hit", "glass")
-			T.eq(H.sent(p, "HitResult")[1][1].damage, glass.minPower, "힘 × 4 = minPower")
+			T.eq(H.sent(p, "HitResult")[1][1].damage, glass.recommendPower, "힘 × 4 = 추천 힘")
 			T.truthy(session.targetHp.glass ~= nil)
-			data.power = glass.minPower / 4 * (1 - 1e-9)
+			data.power = glass.recommendPower / 4 * (1 - 1e-9)
 			H.advance(1)
 			H.client(p, "Hit", "glass")
 			local list = H.sent(p, "HitResult")
-			T.eq(list[#list][1].reason, "weak")
-			T.eq(list[#list][1].damage, 0)
+			T.eq(list[#list][1].reason, nil, "weak 없음")
+			T.near(
+				list[#list][1].damage,
+				glass.recommendPower * (1 - 1e-9),
+				glass.recommendPower * 1e-12,
+				"조금 모자라도 그만큼"
+			)
 			H.uninstall()
 		end
 	)
@@ -475,15 +500,16 @@ return function(T, Loader)
 		function()
 			local H = setup()
 			local cotton = H.Targets.get("cotton")
-			local a, sa, da = join(H, 1, { power = cotton.minPower })
-			local b, _, db = join(H, 2, { power = cotton.minPower })
+			local a, sa, da = join(H, 1, { power = cotton.recommendPower })
+			local b, _, db = join(H, 2, { power = cotton.recommendPower })
 			H.teleport(a, H.targetSpot("cotton"))
 			H.teleport(b, H.targetSpot("cotton"))
 			for _ = 1, 14 do
 				H.client(a, "Hit", "cotton")
 				H.advance(0.25)
 			end
-			T.eq(sa.targetHp.cotton, cotton.minPower, "A 남은 체력 = 한 번 분")
+			T.eq(sa.targetHp.cotton, cotton.hp - 14 * cotton.recommendPower, "A 남은 체력 = 한 번 분 이하")
+			T.truthy(sa.targetHp.cotton <= cotton.recommendPower, "A 는 한 번 더 치면 깸")
 			H.client(b, "Hit", "cotton")
 			T.eq(db.money, 0, "B 는 마무리 못 함")
 			T.eq(da.money, 0)
@@ -563,13 +589,20 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"시작 조건: 힘 1 모자람 · 심사대 밖 · 이미 진행 중 · 12번 띠 뒤 = 시작 안 됨 (12번 뒤 다시 시작해도 안전)",
+		"시작 조건: 힘 0 은 시작되지만 합격 못 함 · 심사대 밖 · 이미 진행 중 · 12번 띠 뒤 = 시작 안 됨 (12번 뒤 다시 시작해도 안전)",
 		function()
 			local H = setup()
 			local need = H.Belts.get(2).needPower
-			local p, session, data = join(H, 1, { power = need * (1 - 1e-12) }, at(H.examSpot(1)))
+			local p, session, data = join(H, 1, { power = 0 }, at(H.examSpot(1)))
 			H.client(p, "StartExam")
-			T.eq(session.exam, nil, "힘 모자람")
+			T.truthy(session.exam ~= nil, "힘 0 으로도 도전 (사장님 결정 11번)")
+			for _ = 1, 30 do
+				H.client(p, "Hit", "exam")
+				H.advance(0.25)
+			end
+			H.advance(15)
+			T.eq(session.exam, nil, "20초 지나 끝남")
+			T.eq(data.belt, 1, "힘 0 → 떨어짐 (띠 그대로)")
 			data.power = need
 			H.teleport(p, H.spawnSpot(1))
 			H.advance(3)
@@ -822,24 +855,28 @@ return function(T, Loader)
 				)
 				spent += cost
 			end
-			T.truthy(data.dumbbellLevel <= 20)
+			T.truthy(data.dumbbellLevel <= H.Dumbbells.COUNT)
 			T.eq(#H.warnings, 0)
 			H.uninstall()
 		end
 	)
 
-	T.test("마지막 아령 (20): 돈이 얼마나 많아도 그대로 · 돈 안 줄어듦 · 알림만", function()
-		local H = setup()
-		local p, _, data = join(H, 1, { money = 1e60, dumbbellLevel = 20 })
-		for _ = 1, 5 do
-			H.client(p, "BuyDumbbell")
-			H.advance(1)
+	T.test(
+		"마지막 아령 (Dumbbells.COUNT): 돈이 얼마나 많아도 그대로 · 돈 안 줄어듦 · 알림만",
+		function()
+			local H = setup()
+			local last = H.Dumbbells.COUNT
+			local p, _, data = join(H, 1, { money = 1e60, dumbbellLevel = last })
+			for _ = 1, 5 do
+				H.client(p, "BuyDumbbell")
+				H.advance(1)
+			end
+			T.eq(data.dumbbellLevel, last)
+			T.eq(data.money, 1e60)
+			T.truthy(H.hasNotify(p, "info", "가장 좋은 아령"))
+			H.uninstall()
 		end
-		T.eq(data.dumbbellLevel, 20)
-		T.eq(data.money, 1e60)
-		T.truthy(H.hasNotify(p, "info", "가장 좋은 아령"))
-		H.uninstall()
-	end)
+	)
 
 	------------------------------------------------------------------
 	T.suite("holes_v1 5: 로벅스 패스")
@@ -1205,7 +1242,10 @@ return function(T, Loader)
 				local d = D.reconcile(D.migrate(raw), 0)
 				T.truthy(d.power == d.power and d.power >= 0 and d.power <= 1e60)
 				T.truthy(d.money == d.money and d.money >= 0 and d.money <= 1e60)
-				T.truthy(d.dumbbellLevel >= 1 and d.dumbbellLevel <= 20 and d.dumbbellLevel % 1 == 0, "아령")
+				T.truthy(
+					d.dumbbellLevel >= 1 and d.dumbbellLevel <= H.Dumbbells.COUNT and d.dumbbellLevel % 1 == 0,
+					"아령"
+				)
 				T.truthy(d.belt >= 1 and d.belt <= 12 and d.belt % 1 == 0, "띠")
 				T.truthy(d.world >= 1 and d.world <= H.Progression.worldsFromBelt(d.belt), "월드 > 띠")
 				T.truthy(H.Products.isValidBoost(d.powerBoost), "배수")
@@ -1273,22 +1313,27 @@ return function(T, Loader)
 	------------------------------------------------------------------
 
 	T.test(
-		"물건: 사장님 숫자 앞 11개 (3 · 10 · 20 · 50 · 128 · 256 · 1024 · 8192 · 32768 · 524288 · 1000000) 그대로 · 41개 월드 13/14/14 · 값 순증가",
+		"물건: 사장님 새 값 (2026-11-16, 결정 10번) 앞 11개 (3 · 20 · 150 · 1,000 · 8,000 · 50,000 · 400,000 · 3M · 20M · 150M · 1B) 그대로 · 이웃 5~10배 · 41개 월드 13/14/14 · 값 순증가",
 		function()
 			local H = setup()
 			local boss = {
 				{ "cotton", "솜", 3 },
-				{ "glass", "유리", 10 },
-				{ "plastic", "플라스틱", 20 },
-				{ "wood", "나무 송판", 50 },
-				{ "iron", "철", 128 },
-				{ "steel", "강철", 256 },
-				{ "rubber", "고무", 1024 },
-				{ "computer", "컴퓨터", 8192 },
-				{ "phone", "핸드폰", 32768 },
-				{ "overpass", "육교", 524288 },
-				{ "apartment", "아파트", 1000000 },
+				{ "glass", "유리", 20 },
+				{ "plastic", "플라스틱", 150 },
+				{ "wood", "나무 송판", 1000 },
+				{ "iron", "철", 8000 },
+				{ "steel", "강철", 50000 },
+				{ "rubber", "고무", 400000 },
+				{ "computer", "컴퓨터", 3e6 },
+				{ "phone", "핸드폰", 2e7 },
+				{ "overpass", "육교", 1.5e8 },
+				{ "apartment", "아파트", 1e9 },
 			}
+			for i = 2, 41 do
+				local r = H.Targets.list[i].reward / H.Targets.list[i - 1].reward
+				T.truthy(r >= 5 and r <= 10, "이웃 값 5~10배 " .. H.Targets.list[i].id .. " " .. r)
+			end
+			T.eq(H.Targets.get("universe").reward, 5e34, "우주 50Dc")
 			T.eq(#H.Targets.list, 41)
 			for i, row in boss do
 				local t = H.Targets.list[i]
@@ -1334,7 +1379,11 @@ return function(T, Loader)
 			T.eq(H.Worlds.get(3).examinerSecondsPerBoard, 1.2)
 			T.eq(H.Remotes.RateLimits.Train.perSecond, 5)
 			T.eq(H.Remotes.RateLimits.Hit.perSecond, 5)
-			T.eq(H.Dumbbells.COUNT, 20)
+			T.eq(H.Dumbbells.COUNT, #H.Dumbbells.list)
+			T.truthy(
+				H.Dumbbells.COUNT >= 40,
+				"아령 개수는 표 길이 (사장님 결정 9번 — 지금 " .. H.Dumbbells.COUNT .. ")"
+			)
 			T.eq(H.Belts.COUNT, 12)
 			T.eq(H.Products.MAX_BOOST, 2048)
 			T.eq(H.Products.get("money_2").robux, 199)
@@ -1411,15 +1460,69 @@ return function(T, Loader)
 		end
 	)
 
-	T.skip(
-		"대결 시작·치기 거리(40)가 수련 매트까지 덮음 [A-2 낮음]",
-		"Config.DUEL_RADIUS = 40 인데 대결장(34×22) 가운데에서 수련 매트 가장 먼 칸까지 약 26 스터드 — 매트에서 들기를 하면서 대결 시작 가능",
+	T.test(
+		"심사·대결은 판 위와 그 앞에서만 시작 — 도장 매트 · 길가 매트 어디서도 안 됨 (EXAM_RADIUS 20 · DUEL_RADIUS 24) [A-2 고침]",
 		function()
 			local H = setup()
-			local mat = H.MapLayout.trainMats(1)[6]
-			local p, session = join(H, 1, { power = H.Belts.get(4).needPower, belt = 3 }, at(mat.x, 3, mat.z))
-			H.client(p, "StartDuel")
-			T.eq(session.duel, nil, "수련 매트에서 대결이 시작됨")
+			local ML = H.MapLayout
+			T.eq(H.Config.EXAM_RADIUS, 20)
+			T.eq(H.Config.DUEL_RADIUS, 24)
+			for world = 1, 3 do
+				local examBelt, duelBelt = world * 4 - 3, world * 4 - 1
+				local pe, se = join(H, world * 10 + 1, { belt = examBelt, world = world, power = ONE_SHOT })
+				local pd, sd = join(H, world * 10 + 2, { belt = duelBelt, world = world, power = ONE_SHOT })
+				se.currentWorld, sd.currentWorld = world, world
+				-- 매트 가운데 + 네 모서리 (도장 매트 6칸 + 그 월드 길가 매트)
+				local mats = ML.trainMats(world)
+				for _, m in ML.roadMats(world) do
+					table.insert(mats, m)
+				end
+				T.truthy(#mats > 6, "길가 매트도 있음 " .. world)
+				for _, m in mats do
+					for _, off in { { 0, 0 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } } do
+						local x, z = m.x + off[1] * m.sizeX / 2, m.z + off[2] * m.sizeZ / 2
+						H.teleport(pe, x, 3, z)
+						H.teleport(pd, x, 3, z)
+						H.advance(2.1)
+						H.client(pe, "StartExam")
+						H.client(pd, "StartDuel")
+						T.eq(
+							se.exam,
+							nil,
+							string.format("월드 %d 매트 (%.0f, %.0f) 에서 심사 시작", world, x, z)
+						)
+						T.eq(
+							sd.duel,
+							nil,
+							string.format("월드 %d 매트 (%.0f, %.0f) 에서 대결 시작", world, x, z)
+						)
+					end
+				end
+				-- 판 위와 그 앞 (판 가장자리에서 2 스터드 밖)에서는 시작됨
+				local pad, arena = ML.examPad(world), ML.duelArena(world)
+				local spots = {
+					{ "심사대 가운데", pad, pad.x, pad.z, "exam" },
+					{ "심사대 앞", pad, pad.x - pad.sizeX / 2 - 2, pad.z, "exam" },
+					{ "대결장 가운데", arena, arena.x, arena.z, "duel" },
+					{ "대결장 앞", arena, arena.x + arena.sizeX / 2 + 2, arena.z, "duel" },
+				}
+				for k, spot in spots do
+					local p, session = join(
+						H,
+						world * 10 + 2 + k,
+						{ belt = if spot[5] == "exam" then examBelt else duelBelt, world = world, power = ONE_SHOT }
+					)
+					session.currentWorld = world
+					H.teleport(p, spot[3], 3, spot[4])
+					H.client(p, if spot[5] == "exam" then "StartExam" else "StartDuel")
+					T.truthy(
+						(if spot[5] == "exam" then session.exam else session.duel) ~= nil,
+						string.format("월드 %d %s 에서 시작 안 됨", world, spot[1])
+					)
+				end
+			end
+			T.eq(#H.warnings, 0, table.concat(H.warnings, " | "))
+			H.uninstall()
 		end
 	)
 

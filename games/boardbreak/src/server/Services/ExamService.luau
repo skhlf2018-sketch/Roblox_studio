@@ -3,8 +3,8 @@
 	ExamService — 승급 심사 (StartExam) · 시험관 대결 (StartDuel) — 서버 판정 (설계서 4장, 상태 기계는 shared/ExamRules)
 
 	시작:
-	  StartExam()  다음 띠가 심사 띠 · 힘 ≥ needPower · 심사대 MapLayout.examPad(지금 월드) 에서 EXAM_RADIUS 안 · 심사·대결 중 아님
-	  StartDuel()  다음 띠가 대결 띠(4·8·12) · 힘 ≥ needPower · 대결장 MapLayout.duelArena(지금 월드) 에서 DUEL_RADIUS 안
+	  StartExam()  다음 띠가 심사 띠 · (힘 조건 없음 — 약하면 떨어질 뿐) · 심사대 MapLayout.examPad(지금 월드) 에서 EXAM_RADIUS 안 · 심사·대결 중 아님
+	  StartDuel()  다음 띠가 대결 띠(4·8·12) · (힘 조건 없음 — 약하면 질 뿐) · 대결장 MapLayout.duelArena(지금 월드) 에서 DUEL_RADIUS 안
 	치기: 클라는 일반 치기와 같은 Remote 로 Hit("exam") / Hit("duel") (BreakService 가 여기로 넘김 — 같은 속도 제한 초당 5번).
 	  피해 = 힘 × PowerBoost (Economy.hitDamage). 심사대·대결장 근처에서만.
 	진행 틱 (EXAM_TICK_SECONDS): 남은 시간·시험관 진행을 ExamState / DuelState "progress" 로, 끝나면 "pass"|"fail" / "win"|"lose".
@@ -24,7 +24,6 @@ local MapLayout = require(Shared.Data.MapLayout)
 local Economy = require(Shared.Economy)
 local ExamRules = require(Shared.ExamRules)
 local Progression = require(Shared.Progression)
-local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
@@ -36,14 +35,20 @@ local Character = require(Server.Util.Character)
 
 local ExamService = {}
 
-local function near(player: Player, spot: { x: number, y: number, z: number }?, radius: number): boolean
+-- 살아 있는 캐릭터가 spot 에서 radius 안, 그리고 수련 매트(도장·길가) 위가 아님
+--   (죽은 캐릭터는 시작·치기 안 됨 — A-1 · 대결장 옆 도장 매트 가장자리가 대결장 가운데에서 20 스터드라
+--    반경만으로는 못 막음 → 매트 위면 따로 막음 — A-2)
+local function near(player: Player, spot: { x: number, y: number, z: number }?, radius: number, world: number): boolean
 	local root = Character.getRoot(player)
-	if not root or not spot then
+	if not root or not spot or not Character.isAlive(player) then
 		return false
 	end
 	local p = root.Position
 	local dx, dz = p.X - spot.x, p.Z - spot.z
-	return dx * dx + dz * dz <= radius * radius and math.abs(p.Y - spot.y) <= radius
+	if dx * dx + dz * dz > radius * radius or math.abs(p.Y - spot.y) > radius then
+		return false
+	end
+	return not MapLayout.isOnTrainMat(p, world)
 end
 
 local function examSpot(session: Sessions.Session): { x: number, y: number, z: number }
@@ -80,20 +85,14 @@ local function duelState(state: ExamRules.Duel, now: number): Types.DuelState
 	}
 end
 
-local function reasonText(reason: string?, belt: Belts.Belt?, power: number): string
+-- 시작할 수 없는 이유 (힘은 이유가 아님 — 사장님 결정 11번: 힘이 약해도 도전은 됨)
+local function reasonText(reason: string?): string
 	if reason == "max" then
 		return "이미 마지막 띠예요! 그랜드 마스터!"
 	elseif reason == "duel" then
 		return "다음 띠는 시험관과 대결해서 받아요. 대결장으로 가요!"
 	elseif reason == "exam" then
 		return "다음 띠는 승급 심사로 받아요. 심사대로 가요!"
-	elseif reason == "weak" and belt then
-		return string.format(
-			"%s 을 받으려면 힘 %s 이 필요해요 (지금 %s)",
-			belt.name,
-			Format.number(belt.needPower),
-			Format.number(power)
-		)
 	end
 	return "지금은 할 수 없어요"
 end
@@ -182,10 +181,10 @@ function ExamService.startExam(player: Player, now: number?): boolean
 	end
 	local ok, reason, nextBelt = Progression.canExam(data.power, data.belt)
 	if not ok or not nextBelt then
-		Net.notify(player, "error", reasonText(reason, nextBelt, data.power))
+		Net.notify(player, "error", reasonText(reason))
 		return false
 	end
-	if not near(player, examSpot(session), Config.EXAM_RADIUS) then
+	if not near(player, examSpot(session), Config.EXAM_RADIUS, session.currentWorld) then
 		Net.notify(player, "error", "심사대 위에서 시작해요!")
 		return false
 	end
@@ -207,10 +206,10 @@ function ExamService.startDuel(player: Player, now: number?): boolean
 	end
 	local ok, reason, nextBelt = Progression.canDuel(data.power, data.belt)
 	if not ok or not nextBelt then
-		Net.notify(player, "error", reasonText(reason, nextBelt, data.power))
+		Net.notify(player, "error", reasonText(reason))
 		return false
 	end
-	if not near(player, duelSpot(session), Config.DUEL_RADIUS) then
+	if not near(player, duelSpot(session), Config.DUEL_RADIUS, session.currentWorld) then
 		Net.notify(player, "error", "대결장 안에서 시작해요!")
 		return false
 	end
@@ -238,7 +237,11 @@ function ExamService.hit(player: Player, kind: string, now: number?): boolean
 	local damage = Economy.hitDamage(data.power, data.powerBoost)
 	if kind == Remotes.EXAM_TARGET then
 		local state = session.exam
-		if not state or state.finished or not near(player, examSpot(session), Config.EXAM_RADIUS) then
+		if
+			not state
+			or state.finished
+			or not near(player, examSpot(session), Config.EXAM_RADIUS, session.currentWorld)
+		then
 			return false
 		end
 		data.stats.hits += 1
@@ -251,7 +254,11 @@ function ExamService.hit(player: Player, kind: string, now: number?): boolean
 		return changed
 	elseif kind == Remotes.DUEL_TARGET then
 		local state = session.duel
-		if not state or state.finished or not near(player, duelSpot(session), Config.DUEL_RADIUS) then
+		if
+			not state
+			or state.finished
+			or not near(player, duelSpot(session), Config.DUEL_RADIUS, session.currentWorld)
+		then
 			return false
 		end
 		data.stats.hits += 1

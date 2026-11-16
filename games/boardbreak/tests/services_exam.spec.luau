@@ -41,14 +41,17 @@ return function(T, Loader)
 	T.suite("services_exam: 승급 심사")
 
 	T.test(
-		"시작 조건: 힘 부족 · 심사대 밖 · 다음 띠가 대결 띠 → 시작 안 됨 (알림)",
+		"시작 조건: 힘 0 이어도 시작은 됨 (사장님 결정 11번) 하지만 합격은 못 함 · 심사대 밖 · 다음 띠가 대결 띠 → 시작 안 됨 (알림)",
 		function()
 			local H = setup()
 			local need = H.Belts.get(2).needPower
-			local p, session, data = join(H, { power = need - 1 })
+			local p, session, data = join(H, { power = 0 })
 			H.client(p, "StartExam")
-			T.eq(session.exam, nil, "힘 부족")
-			T.truthy(H.hasNotify(p, "error", "필요해요"))
+			T.truthy(session.exam, "힘 0 으로도 도전")
+			T.falsy(H.hasNotify(p, "error", "필요해요"), "힘 부족 알림 없음")
+			hitFor(H, p, "exam", 21)
+			T.eq(last(H, p, "ExamState").phase, "fail", "힘 0 → 송판이 안 깨져 떨어짐")
+			T.eq(data.belt, 1, "띠 그대로")
 			data.power = need
 			H.teleport(p, H.spawnSpot(1))
 			H.advance(3)
@@ -205,6 +208,22 @@ return function(T, Loader)
 		T.eq(data.stats.duelsLost, 1)
 		H.uninstall()
 	end)
+
+	T.test(
+		"힘 0 으로도 대결은 시작됨 (사장님 결정 11번) — 하지만 송판이 안 깨져 짐 · 띠·월드 그대로",
+		function()
+			local H = setup()
+			local p, session, data = duelJoin(H, 3, 1, 0)
+			H.client(p, "StartDuel")
+			T.truthy(session.duel, "힘 0 으로도 도전")
+			H.advance(3)
+			hitFor(H, p, "duel", 30)
+			T.eq(last(H, p, "DuelState").phase, "lose")
+			T.eq(data.belt, 3)
+			T.eq(data.world, 1, "월드 2 는 여전히 잠김")
+			H.uninstall()
+		end
+	)
 
 	T.test("카운트다운 중 친 것은 무시 (미리 연타해도 이득 없음)", function()
 		local H = setup()

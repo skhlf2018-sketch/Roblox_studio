@@ -7,7 +7,10 @@
 	  - 심사·대결 중(Attr Activity "exam"/"duel")에는 "치기" 버튼이 늘 보이고 Hit("exam"/"duel") 을 보냄.
 	  - HitResult { targetId, damage, hp, hpMax, broken, reward?, reason? } 받으면 (내 화면에서만):
 	      체력 막대 (물건 위, 4초 뒤 사라짐) · "-N" 숫자 · 흔들림 · 깨지면 조각 + "+💰N" 금색 숫자 + 잠깐 사라졌다 다시 톡
-	      reason "weak" → 물건 위 빨간 글 "힘이 부족해요!"
+	      금 가는 연출 (Client/Cracks): 체력 75·50·25% 에서 금 1·2·3단계 (+ 작은 조각 · 흔들림), 깨지면/다시 생기면 지움.
+	        마지막으로 안 체력을 기억해 두었다가 물건이 다시 연결되면(스트리밍) 같은 단계로 다시 그림.
+	      힘 문턱 없음 — "힘이 부족해요" 글 없음. 물건 위 "💪 추천 힘 N" 은 내 치는 힘이 모자라면 주황색.
+	      체력 막대에 남은 타격 수 어림 "약 N번".
 	  물건 체력은 플레이어마다 따로라 서버는 모델을 안 바꿈 — 막대·깨짐은 전부 이 컨트롤러가 그림.
 	공개: nearest() · hitTarget(id) · onHitResult(r) · button · models()
 ]]
@@ -32,6 +35,7 @@ local Theme = require(Client.UI.Theme)
 local Ui = require(Client.UI.Ui)
 local ActionButton = require(Client.UI.ActionButton)
 local NotifyController = require(script.Parent.NotifyController)
+local Cracks = require(Client.Cracks)
 
 local BreakController = {}
 BreakController.button = nil :: ActionButton.Handle?
@@ -45,6 +49,9 @@ type HpBar = { gui: BillboardGui, fill: Frame, text: TextLabel, shownAt: number 
 local hpBars: { [string]: HpBar } = {}
 local homes: { [Model]: CFrame } = {}
 local currentNearest: string? = nil
+type Known = { hp: number, hpMax: number, damage: number }
+local known: { [string]: Known } = {}
+local CRACK_FACES = { Enum.NormalId.Front, Enum.NormalId.Left, Enum.NormalId.Right }
 local lastHitAt = 0
 
 local function popupGui(): Instance
@@ -223,7 +230,12 @@ local function setHp(id: string, model: Model, hp: number, hpMax: number)
 	local ratio = if hpMax > 0 then math.clamp(hp / hpMax, 0, 1) else 0
 	bar.fill.Size = UDim2.fromScale(ratio, 1)
 	bar.fill.BackgroundColor3 = if ratio > 0.5 then C.green elseif ratio > 0.2 then C.yellow else C.red
-	bar.text.Text = Format.number(hp) .. " / " .. Format.number(hpMax)
+	local k = known[id]
+	local left = if k and k.damage > 0 and hp > 0 then math.ceil(hp / k.damage) else 0
+	bar.text.Text = Format.number(hp)
+		.. " / "
+		.. Format.number(hpMax)
+		.. (if left > 1 then "  · 약 " .. Format.number(left) .. "번" else "")
 	bar.gui.Enabled = true
 	bar.shownAt = os.clock()
 	local shown = bar.shownAt
@@ -315,21 +327,18 @@ function BreakController.onHitResult(r: any)
 		return
 	end
 	local top = (heightOf(model) + 1) / 2
-	if r.reason == "weak" then
-		local target = Targets.get(id)
-		local need = if target then " (💪 " .. Format.number(target.minPower) .. " 필요)" else ""
-		floatText(hitbox, top + 2.5, "힘이 부족해요!" .. need, C.weak, 30, 1.2)
-		shake(model, 0.15)
-		return
-	end
+	-- (옛 서버의 reason "weak" 도 그냥 보통 타격으로 그림 — "힘이 부족해요" 글은 더 없음)
 	local damage = tonumber(r.damage) or 0
 	local hp = tonumber(r.hp) or 0
 	local hpMax = tonumber(r.hpMax) or 1
+	known[id] = { hp = if r.broken then hpMax else hp, hpMax = hpMax, damage = damage }
 	if damage > 0 then
 		floatText(hitbox, top + 1, "-" .. Format.number(damage), C.white, 26, 0.6)
 	end
 	if r.broken then
 		shards(model)
+		Cracks.clear(hitbox)
+		known[id] = nil
 		setHidden(model, true)
 		task.delay(0.35, function()
 			setHidden(model, false)
@@ -340,7 +349,10 @@ function BreakController.onHitResult(r: any)
 		end
 		setHp(id, model, hpMax, hpMax)
 	else
-		shake(model, math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20) * 0.05)
+		local before = Cracks.stageOf(hitbox)
+		local stage = Cracks.show(hitbox, Cracks.stage(hp, hpMax), Cracks.seedOf(id), CRACK_FACES)
+		local radius = math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20)
+		shake(model, radius * (if stage > before then 0.12 else 0.05))
 		setHp(id, model, hp, hpMax)
 	end
 end
@@ -360,11 +372,39 @@ local function hook(inst: Instance)
 	hooked[inst] = true
 	models[id] = inst
 	homes[inst] = inst:GetPivot()
+	-- 다시 연결된 물건(스트리밍으로 다시 생김): 마지막으로 안 체력의 금 단계로
+	local k = known[id]
+	local hb = hitboxOf(inst)
+	if k and hb then
+		Cracks.show(hb, Cracks.stage(k.hp, k.hpMax), Cracks.seedOf(id), CRACK_FACES, false)
+	end
 	local click = inst:FindFirstChild("Click")
 	if click and click:IsA("ClickDetector") then
 		click.MouseClick:Connect(function()
 			BreakController.hitTarget(id)
 		end)
+	end
+end
+
+-- 물건 위 "💪 추천 힘 N": 내 치는 힘(힘 × 배수)이 모자라면 주황색, 아니면 노란색
+BreakController.NEED_OK = Color3.fromRGB(255, 235, 150)
+BreakController.NEED_HARD = Color3.fromRGB(255, 150, 40)
+function BreakController.recommendPower(id: string): number
+	local t: any = Targets.get(id)
+	return if t then tonumber(t.recommendPower or t.minPower) or 0 else 0
+end
+function BreakController.paintNeed()
+	local mine = State.power() * math.max(1, State.boost())
+	for id, model in models do
+		local hb = hitboxOf(model)
+		local gui = hb and hb:FindFirstChild("TargetInfo")
+		local box = gui and gui:FindFirstChild("Box")
+		local need = box and box:FindFirstChild("Need")
+		if need and need:IsA("TextLabel") then
+			need.TextColor3 = if mine < BreakController.recommendPower(id)
+				then BreakController.NEED_HARD
+				else BreakController.NEED_OK
+		end
 	end
 end
 
@@ -393,7 +433,7 @@ end
 
 function BreakController.start()
 	BreakController.button = ActionButton.new("HitButton", "치기", C.hitOrange, 1, "fist", BreakController.fire)
-	-- 서버 "힘이 부족해요! …" 알림은 물건 위 빨간 글이 대신 보여 줌 (토스트 두 번 안 뜨게)
+	-- 옛 서버가 "힘이 부족해요" 알림을 보내도 안 보이게 (이제 힘 문턱 없음)
 	NotifyController.mute("힘이 부족해요")
 	for _, inst in CollectionService:GetTagged(Tags.BreakTarget) do
 		hook(inst)
@@ -405,15 +445,21 @@ function BreakController.start()
 			BreakController.refresh()
 		end
 	end)
-	local acc = 0
+	local acc, needAcc = 0, 0
 	RunService.Heartbeat:Connect(function(dt: number)
 		acc += dt
+		needAcc += dt
 		if acc >= 0.2 then
 			acc = 0
 			BreakController.refresh()
 		end
+		if needAcc >= 1 then
+			needAcc = 0
+			BreakController.paintNeed()
+		end
 	end)
 	BreakController.refresh()
+	BreakController.paintNeed()
 end
 
 -- 마지막으로 친 시각 (튜토리얼 등)

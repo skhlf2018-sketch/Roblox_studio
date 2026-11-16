@@ -234,6 +234,37 @@ local head = Instance.new("Part")
 head.Name = "Head"
 head.CFrame = CFrame.new(0, 4.5, -36)
 head.Parent = character
+-- R15 팔 관절 (Lift 가 C0 를 돌렸다 돌려놓는지 봄)
+local function r15Arms(model)
+	local upper = Instance.new("Part")
+	upper.Name = "UpperTorso"
+	upper.Parent = model
+	for _, side in { "Right", "Left" } do
+		local ua = Instance.new("Part")
+		ua.Name = side .. "UpperArm"
+		ua.Parent = model
+		local sh = Instance.new("Motor6D")
+		sh.Name = side .. "Shoulder"
+		sh.Part0 = upper
+		sh.Part1 = ua
+		sh.C0 = CFrame.new(if side == "Right" then 1 else -1, 0.56, 0)
+		sh.Parent = ua
+		local la = Instance.new("Part")
+		la.Name = side .. "LowerArm"
+		la.Parent = model
+		local el = Instance.new("Motor6D")
+		el.Name = side .. "Elbow"
+		el.Part0 = ua
+		el.Part1 = la
+		el.C0 = CFrame.new(0, -0.33, 0)
+		el.Parent = la
+	end
+	local lh = Instance.new("Part")
+	lh.Name = "LeftHand"
+	lh.CFrame = CFrame.new(-1.5, 3, -36)
+	lh.Parent = model
+end
+r15Arms(character)
 local humanoid = Instance.new("Humanoid")
 humanoid.Parent = character
 character.Parent = Workspace
@@ -525,6 +556,7 @@ local function body()
 		"ExamController",
 		"WorldController",
 		"TutorialController",
+		"AuraController",
 	}
 	local startedAll = true
 	for _, name in order do
@@ -630,6 +662,163 @@ local function body()
 	-- 화면 빈 곳 누르기 (매트 위)
 	fakeServices.UserInputService.InputBegan:Fire({ UserInputType = roblox.Enum.UserInputType.MouseButton1 }, false)
 	check(countSent(S.Train) == before + 2, "매트 위에서 화면 누름 → Train()")
+
+	print("[진짜 아령 · 팔 동작]")
+	local DumbbellLook = shared("DumbbellLook")
+	local Lift = client("Lift")
+	local function heldOk(model, handPart)
+		if not model then
+			return false, "아령 없음"
+		end
+		local bar = model.PrimaryPart
+		if not (bar and bar.Name == "Bar") then
+			return false, "손잡이(PrimaryPart Bar) 없음"
+		end
+		local hw = bar:FindFirstChild("HandWeld")
+		if not (hw and hw:IsA("Weld") and hw.Part0 == handPart and hw.Part1 == bar) then
+			return false, "손잡이가 손에 안 붙음"
+		end
+		for _, p in model:GetDescendants() do
+			if p:IsA("BasePart") then
+				if p.Anchored or p.CanCollide or p.CanQuery or p.CanTouch or not p.Massless then
+					return false, p.Name .. " 물리 설정"
+				end
+				if p ~= bar then
+					local w = p:FindFirstChild("BarWeld")
+					if not (w and w.Part0 == bar and w.Part1 == p) then
+						return false, p.Name .. " 손잡이에 용접 안 됨"
+					end
+					-- 부품 사이 거리 고정: 용접 C0 = 지금 상대 자리
+					local rel = bar.CFrame:ToObjectSpace(p.CFrame)
+					if (rel.Position - w.C0.Position).Magnitude > 1e-3 then
+						return false, p.Name .. " 용접 자리 어긋남"
+					end
+				end
+			end
+		end
+		return true, ""
+	end
+	local held1 = character:FindFirstChild("HeldDumbbell")
+	local ok1, why1 = heldOk(held1, hand)
+	check(
+		ok1,
+		"아령 모든 부품이 손잡이에 용접 · 손잡이는 손(RightHand)에 · 안 부딪힘·Massless "
+			.. why1
+	)
+	local classicParts = 0
+	for _, p in held1:GetChildren() do
+		if p:IsA("BasePart") then
+			classicParts += 1
+		end
+	end
+	check(
+		held1:GetAttribute("Classic") == true and classicParts == 5,
+		"1번 아령 = 무료 모델 Dumbell 모양 (원기둥 5개, " .. classicParts .. ")"
+	)
+	check(DumbbellLook.count() == #Dumbbells.list, "아령 개수 = Dumbbells 표 길이 (" .. #Dumbbells.list .. ")")
+	local last = #Dumbbells.list
+	local sLast, s2 = DumbbellLook.spec(last), DumbbellLook.spec(2)
+	check(
+		sLast.plates == DumbbellLook.MAX_PLATES
+			and sLast.diameter <= DumbbellLook.MAX_DIAMETER
+			and sLast.glow
+			and s2.plates < sLast.plates
+			and DumbbellLook.spec(last + 10).level == last,
+		"무거울수록 원판 많고 큼 · 상한 지름 " .. DumbbellLook.MAX_DIAMETER .. " · 끝 아령은 빛"
+	)
+	setAttr(A.DumbbellLevel, last)
+	Train.check()
+	local heavy = character:FindFirstChild("HeldDumbbell")
+	local okH = heldOk(heavy, hand)
+	check(
+		okH and heavy:GetAttribute("Level") == last and character:FindFirstChild("HeldDumbbellL") ~= nil,
+		"마지막 아령 (" .. Dumbbells.get(last).name .. ") → 두 손에 하나씩"
+	)
+	check(
+		heavy:GetAttribute("Aura") >= 4,
+		"덤벨 아우라: 끝 아령은 파티클 단계 (" .. heavy:GetAttribute("Aura") .. ")"
+	)
+	setAttr(A.DumbbellLevel, 1)
+	Train.check()
+	-- 들기 → 팔 Motor6D C0 가 움직였다가 돌아옴
+	local rs = character.RightUpperArm.RightShoulder
+	local rs0 = rs.C0
+	Train.button.press()
+	Train.button.release()
+	fakeServices.RunService.Heartbeat:Fire(0.1)
+	local moved = (rs.C0.LookVector - rs0.LookVector).Magnitude > 0.1
+	fakeServices.RunService.Heartbeat:Fire(0.2)
+	local back = (rs.C0.LookVector - rs0.LookVector).Magnitude < 1e-4
+		and (rs.C0.Position - rs0.Position).Magnitude < 1e-4
+	check(moved and back, "들기 → R15 오른 어깨 C0 가 올라갔다 원래대로 (0.25초)")
+	-- R6
+	local r6 = Instance.new("Model")
+	local torso = Instance.new("Part")
+	torso.Name = "Torso"
+	torso.Parent = r6
+	local m6 = Instance.new("Motor6D")
+	m6.Name = "Right Shoulder"
+	m6.C0 = CFrame.new(1, 0.5, 0) * CFrame.Angles(0, math.pi / 2, 0)
+	m6.Parent = torso
+	r6.Parent = Workspace
+	local r60 = m6.C0
+	Lift.play(r6, "one")
+	Lift.step(0.12)
+	local r6moved = (m6.C0.UpVector - r60.UpVector).Magnitude > 0.1
+	Lift.step(0.2)
+	check(r6moved and (m6.C0.UpVector - r60.UpVector).Magnitude < 1e-4, 'R6 "Right Shoulder" 도 같은 동작')
+	-- 손 파트가 없는 몸 → 오류 없이 건너뜀
+	local noHand = Instance.new("Model")
+	noHand.Parent = Workspace
+	local okNo, resNo = pcall(Train.attach, noHand, 3)
+	check(
+		okNo and resNo == nil and noHand:FindFirstChild("HeldDumbbell") == nil,
+		"손 파트가 없으면 에러 없이 건너뜀"
+	)
+	-- 물건(ClickDetector 모델)을 누른 것이면 들기는 안 보냄
+	local cottonModel = CollectionService:GetTagged(Tags.BreakTarget)[1]
+	local oldPick = Train.pickAt
+	Train.pickAt = function()
+		return cottonModel.PrimaryPart
+	end
+	local t1 = countSent(S.Train)
+	fakeServices.UserInputService.InputBegan:Fire({ UserInputType = roblox.Enum.UserInputType.MouseButton1 }, false)
+	check(countSent(S.Train) == t1, "매트 위에서 물건을 탭 → 들기 안 보냄 (치기만)")
+	Train.pickAt = oldPick
+	-- 리스폰: 새 몸에도 아령·팔 동작
+	local character2 = Instance.new("Model")
+	character2.Name = "Tester"
+	local root2 = Instance.new("Part")
+	root2.Name = "HumanoidRootPart"
+	root2.CFrame = root.CFrame
+	root2.Parent = character2
+	local hand2 = Instance.new("Part")
+	hand2.Name = "RightHand"
+	hand2.CFrame = root.CFrame * CFrame.new(1.5, 0, 0)
+	hand2.Parent = character2
+	r15Arms(character2)
+	local hum2 = Instance.new("Humanoid")
+	hum2.Parent = character2
+	character.Parent = nil
+	character2.Parent = Workspace
+	player.Character = character2
+	sigOf(player, "CharacterAdded"):Fire(character2)
+	Train.check()
+	local okR = heldOk(character2:FindFirstChild("HeldDumbbell"), hand2)
+	local rs2 = character2.RightUpperArm.RightShoulder
+	local rs20 = rs2.C0
+	Train.button.press()
+	Train.button.release()
+	fakeServices.RunService.Heartbeat:Fire(0.1)
+	local moved2 = (rs2.C0.LookVector - rs20.LookVector).Magnitude > 0.1
+	fakeServices.RunService.Heartbeat:Fire(0.2)
+	check(okR and moved2, "리스폰 뒤 새 몸 손에 아령 + 팔 동작")
+	-- 원래 몸으로 되돌림 (뒤 검사들이 root·hand 를 씀)
+	character2.Parent = nil
+	character.Parent = Workspace
+	player.Character = character
+	sigOf(player, "CharacterAdded"):Fire(character)
+	Train.check()
 	moveTo(0, -36)
 	Train.check()
 	check(
@@ -645,6 +834,52 @@ local function body()
 	moveTo(road.x, road.z)
 	Break.refresh()
 	check(Break.button.button.Visible and Break.button.sub.Text == "솜", '솜 앞 → "치기" 버튼 (솜)')
+	-- 길가 수련 매트: 매트 가운데에 서면 들기·치기 둘 다, 안 겹침
+	local Layout0 = client("UI/Layout")
+	local Ui0 = client("UI/Ui")
+	local bothOk, rectOk = true, true
+	for _, id in { "cotton", "glass", "school", "stadium" } do
+		local mp = MapLayout.matPoint(id)
+		moveTo(mp.x, mp.z)
+		Train.check()
+		Break.refresh()
+		if not (Train.onMat() and Train.button.button.Visible and Break.button.button.Visible) then
+			bothOk = false
+			print("    길가 매트 " .. id .. ": 버튼 하나만")
+		end
+	end
+	check(bothOk, "길가 매트 위 → 들기·치기 버튼 둘 다 보임 (솜·유리·학교·경기장)")
+	for _, size in { Vector2.new(1100, 720), Vector2.new(1920, 1080), Vector2.new(800, 600) } do
+		local a, b = Layout0.actionRect(size, Ui0.scale(), false, 0), Layout0.actionRect(size, Ui0.scale(), false, 1)
+		if Layout0.overlaps(a, b) or math.abs(a.y - b.y) > 0.5 then
+			rectOk = false
+		end
+	end
+	for _, size in { Vector2.new(844, 332), Vector2.new(667, 317), Vector2.new(1024, 710) } do
+		local a, b = Layout0.actionRect(size, Ui0.scale(), true, 0), Layout0.actionRect(size, Ui0.scale(), true, 1)
+		local jump = Layout0.jumpZone(size)
+		if
+			Layout0.overlaps(a, b)
+			or Layout0.overlaps(a, jump)
+			or Layout0.overlaps(b, jump)
+			or math.abs(a.x - b.x) > 0.5
+			or a.y >= b.y
+			or a.y < 0
+			or a.w < 46
+		then
+			rectOk = false
+			print(string.format("    터치 %dx%d: 들기 %d,%d 치기 %d,%d", size.X, size.Y, a.x, a.y, b.x, b.y))
+		end
+	end
+	check(rectOk, "들기·치기 자리 안 겹침 (PC 아래 가운데 나란히 · 폰 점프 위 세로)")
+	local tb, hb = Train.button.button, Break.button.button
+	check(
+		tb.Position ~= hb.Position and not Layout0.overlaps(Train.button.rect(), Break.button.rect()),
+		"실제 버튼 두 개 자리 안 겹침"
+	)
+	moveTo(road.x, road.z)
+	Train.check()
+	Break.refresh()
 	Break.button.press()
 	Break.button.release()
 	local hit = lastSent(S.Hit)
@@ -699,7 +934,42 @@ local function body()
 	end
 	check(hasFloat("-" .. Format.number(1000)), '깎인 체력 "-1K" 숫자')
 	Break.onHitResult({ targetId = "steel", damage = 0, hp = 1.6e6, hpMax = 1.6e6, broken = false, reason = "weak" })
-	check(hasFloat("힘이 부족해요"), 'reason weak → 물건 위 빨간 "힘이 부족해요!"')
+	check(not hasFloat("힘이 부족해요"), '"힘이 부족해요" 글은 더 안 뜸 (옛 reason weak 도)')
+	local steelNeed = find(Break.models().steel, "Need")
+	check(
+		steelNeed and string.find(steelNeed.Text, "추천 힘", 1, true) ~= nil,
+		'물건 위 "💪 추천 힘 N" (' .. (steelNeed and steelNeed.Text or "?") .. ")"
+	)
+	Break.paintNeed()
+	check(steelNeed.TextColor3 == Break.NEED_HARD, "내 힘이 추천 힘보다 작으면 주황색")
+	print("[금 가는 연출]")
+	local Cracks = client("Cracks")
+	local woodBox = Break.models().wood.PrimaryPart
+	local stages = {}
+	for _, ratio in { 0.8, 0.7, 0.45, 0.2 } do
+		Break.onHitResult({ targetId = "wood", damage = 1000, hp = 40000 * ratio, hpMax = 40000, broken = false })
+		table.insert(stages, Cracks.stageOf(woodBox))
+	end
+	check(
+		stages[1] == 0 and stages[2] == 1 and stages[3] == 2 and stages[4] == 3,
+		"체력 80·70·45·20% → 금 0·1·2·3단계 (" .. table.concat(stages, ",") .. ")"
+	)
+	check(
+		Cracks.stage(30, 40) == 1
+			and Cracks.stage(20, 40) == 2
+			and Cracks.stage(10, 40) == 3
+			and Cracks.stage(40, 40) == 0,
+		"경계값 75% → 1 · 50% → 2 · 25% → 3 · 가득 0"
+	)
+	check(
+		string.find(find(playerGui:FindFirstChild("HpBar_wood"), "Hp").Text, "약", 1, true) ~= nil,
+		"체력 막대에 남은 타격 수 어림 (" .. find(playerGui:FindFirstChild("HpBar_wood"), "Hp").Text .. ")"
+	)
+	Break.onHitResult({ targetId = "wood", damage = 8000, hp = 0, hpMax = 40000, broken = true, reward = 9 })
+	check(
+		Cracks.stageOf(woodBox) == 0 and woodBox:FindFirstChild("Crack_Front") == nil,
+		"깨지면(다시 생기면) 금 지움"
+	)
 	Break.onHitResult({ targetId = "cotton", damage = 20, hp = 20, hpMax = 20, broken = true, reward = 3 })
 	check(hasFloat("+💰 3"), '깨짐 → "+💰 3" 금색 숫자')
 	local shards = 0
@@ -743,12 +1013,18 @@ local function body()
 		find(pad, "Board_3").LocalTransparencyModifier == 1 and find(pad, "Board_4").LocalTransparencyModifier == 0,
 		"깬 송판 3장은 사라짐 (내 화면)"
 	)
+	check(
+		find(pad, "Board_4"):FindFirstChild("Crack_Front") ~= nil
+			and find(pad, "Board_5"):FindFirstChild("Crack_Front") == nil,
+		"심사 송판: 지금 치는 4번째 송판에 금 (boardHp 5 / 8e5 → 3단계)"
+	)
 	fire(R.ExamState, { phase = "pass", broken = 10, total = 10, secondsLeft = 4, belt = 2 })
 	setAttr(A.Activity, "")
 	check(
 		not panel.Visible and find(pad, "Board_3").LocalTransparencyModifier == 0,
 		"합격 → 패널 닫힘 · 송판 다시"
 	)
+	check(find(pad, "Board_4"):FindFirstChild("Crack_Front") == nil, "합격 → 송판 금 지움")
 	local big = find(screen, "ExamBig")
 	check(big ~= nil, "합격 큰 글 자리 (ExamBig)")
 
@@ -779,6 +1055,44 @@ local function body()
 	fire(R.DuelState, { phase = "lose", mine = 3, theirs = 15, total = 15, world = 2 })
 	check(not panel.Visible, "패배도 오류 없음")
 
+	print("[아우라 (내 화면)]")
+	local Aura = ctrl("AuraController")
+	character:SetAttribute("AuraTier", 2)
+	Aura.tick()
+	character:SetAttribute("AuraTier", 3)
+	holdDelays = true
+	Aura.tick()
+	holdDelays = false
+	check(
+		Aura.lastShownTier() == 3 and find(screen, "AuraFlash") ~= nil,
+		'아우라 단계 오름 → 번쩍 + "아우라 UP!"'
+	)
+	-- 저사양이면 남의 아우라 파티클을 내 화면에서 끔
+	local other = Instance.new("Player")
+	local otherChar = Instance.new("Model")
+	local otherRoot = Instance.new("Part")
+	otherRoot.Name = "HumanoidRootPart"
+	otherRoot.Parent = otherChar
+	local att = Instance.new("Attachment")
+	att.Name = "AuraAttach"
+	att.Parent = otherRoot
+	local pe = Instance.new("ParticleEmitter")
+	pe.Name = "AuraSparks"
+	pe.Parent = att
+	otherChar.Parent = Workspace
+	other.Character = otherChar
+	local oldGet = Players.GetPlayers
+	Players.GetPlayers = function()
+		return { player, other }
+	end
+	State.get().settings.lowGraphics = true
+	Aura.tick()
+	local offLow = pe.Enabled == false
+	State.get().settings.lowGraphics = false
+	Aura.tick()
+	check(offLow and pe.Enabled == true, "저사양 → 남의 아우라 파티클 꺼짐 · 끄면 다시 켜짐")
+	Players.GetPlayers = oldGet
+	otherChar.Parent = nil
 	print("[아령 가게]")
 	local Windows = client("UI/Windows")
 	local Shop = ctrl("DumbbellShopController")
@@ -825,13 +1139,27 @@ local function body()
 	check(Windows.isOpen(Belt.NAME), "띠 표지판 클릭 → 띠 창")
 	local beltWin = find(screen, Belt.NAME)
 	local action = find(beltWin, "ActionButton")
+	local hintLabel = find(beltWin, "Hint")
 	check(
-		string.find(action.Text, "더 필요해요", 1, true) ~= nil,
-		'힘 모자람 → 회색 "💪 N 더 필요해요"'
+		string.find(action.Text, "심사 보기", 1, true) ~= nil and action.Active ~= false,
+		"힘이 약해도 버튼은 늘 누를 수 있음 (" .. action.Text .. ")"
+	)
+	check(
+		hintLabel == nil or string.find(hintLabel.Text, "어려울 수 있어요", 1, true) ~= nil,
+		'약하면 "추천 힘 N — 지금은 어려울 수 있어요" ('
+			.. (hintLabel and hintLabel.Text or "힌트 이름 다름")
+			.. ")"
 	)
 	local e0 = countSent(S.StartExam)
+	moveTo(0, -36)
+	table.clear(moveTargets)
 	press(action)
-	check(countSent(S.StartExam) == e0, "힘 모자라면 StartExam 안 보냄")
+	flushMoves()
+	check(
+		countSent(S.StartExam) == e0 + 1,
+		"힘이 약해도 심사 보기 → StartExam (서버가 순서·위치만 검사)"
+	)
+	e0 = countSent(S.StartExam)
 	setAttr(A.Power, Belts.get(2).needPower * 1.5)
 	Belt.render()
 	check(

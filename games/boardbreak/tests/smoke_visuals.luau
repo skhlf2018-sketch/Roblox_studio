@@ -48,6 +48,18 @@ for _, class in { "Part", "SpawnLocation", "Model", "Folder", "BillboardGui", "S
 		return noopSignal()
 	end)
 end
+roblox.implementMethod("Model", "PivotTo", function(model, cf)
+	local primary = model.PrimaryPart
+	if not primary then
+		return
+	end
+	local delta = cf * primary.CFrame:Inverse()
+	for _, d in model:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.CFrame = delta * d.CFrame
+		end
+	end
+end)
 roblox.implementMethod("Model", "GetPivot", function(model)
 	local primary = model.PrimaryPart
 	return if primary then primary.CFrame else CFrame.new()
@@ -340,6 +352,46 @@ local function body()
 	check(#MapLayout.doors(1) == 2 and #MapLayout.doors(3) == 2, "월드마다 다른 월드 문 2개")
 
 	print("[맵 만들기]")
+	-- 사범님: 월드 1 은 가짜 R15 몸(진짜 API 대신)으로 입히기 경로를, 월드 2·3 은 API 없음 → 블록 대체 경로를 검사
+	local Dojo = requireNode(Loader.get("ServerScriptService/Server/Map/Dojo"))
+	local realCreate = Dojo.createRig
+	local rigCalls = 0
+	Dojo.createRig = function()
+		rigCalls += 1
+		if rigCalls > 1 then
+			return realCreate() -- Lune 에는 HumanoidDescription·CreateHumanoidModelFromDescription 이 없음 → nil
+		end
+		local rig = Instance.new("Model")
+		local function part(name, size, y)
+			local p = Instance.new("Part")
+			p.Name = name
+			p.Size = size
+			p.CFrame = CFrame.new(0, y, 0)
+			p.Parent = rig
+			return p
+		end
+		part("HumanoidRootPart", Vector3.new(2, 2, 1), 3)
+		local up = part("UpperTorso", Vector3.new(2, 1.6, 1), 3.4)
+		part("LowerTorso", Vector3.new(2, 0.4, 1), 2.4)
+		part("Head", Vector3.new(1.2, 1.2, 1.2), 4.8)
+		for _, side in { "Left", "Right" } do
+			local ua = part(side .. "UpperArm", Vector3.new(1, 1.2, 1), 3.4)
+			local m = Instance.new("Motor6D")
+			m.Name = side .. "Shoulder"
+			m.Part0 = up
+			m.Part1 = ua
+			m.Parent = ua
+			part(side .. "LowerArm", Vector3.new(1, 1.1, 1), 2.4)
+			part(side .. "Hand", Vector3.new(1, 0.3, 1), 1.8)
+			part(side .. "UpperLeg", Vector3.new(1, 1.2, 1), 1.6)
+			part(side .. "LowerLeg", Vector3.new(1, 1.1, 1), 0.7)
+			part(side .. "Foot", Vector3.new(1, 0.3, 1), 0.15)
+		end
+		local hum = Instance.new("Humanoid")
+		hum.HipHeight = 2
+		hum.Parent = rig
+		return rig
+	end
 	local MapBuilder = requireNode(Loader.get("ServerScriptService/Server/Services/MapBuilder"))
 	MapBuilder.start()
 	MapBuilder.start() -- 두 번 불러도 한 번만
@@ -508,7 +560,10 @@ local function body()
 	print("[로비 태그]")
 	local A = Tags.PartAttributes
 	local matParts = CollectionService:GetTagged(Tags.TrainMat)
-	check(#matParts == 3 * #mats, "TrainMat 파트 " .. #matParts .. " (월드마다 " .. #mats .. ")")
+	check(
+		#matParts == 3 * #mats + #Targets.list,
+		"TrainMat 파트 " .. #matParts .. " (도장 월드마다 " .. #mats .. " + 길가 " .. #Targets.list .. ")"
+	)
 	local matOk = true
 	for _, p in matParts do
 		local w = p:GetAttribute(A.World)
@@ -518,6 +573,107 @@ local function body()
 		end
 	end
 	check(matOk, "매트 파트 위 = isOnTrainMat (Attr World)")
+
+	print("[길가 수련 매트 41칸]")
+	local roadParts = {}
+	for _, p in matParts do
+		local tid = p:GetAttribute(A.TargetId)
+		if tid then
+			roadParts[tid] = p
+		end
+	end
+	local rmTag, rmWalk, rmOn, rmTarget, rmRoad, rmMats, rmParts, rmInfo = 0, 0, 0, 0, 0, 0, 0, 0
+	local maxWalk = 0
+	for _, t in Targets.list do
+		local mp = MapLayout.matPoint(t.id)
+		local part = roadParts[t.id]
+		local p = MapLayout.targetPosition(t.id)
+		local ox = MapLayout.worldOrigin(t.world).x
+		if not (mp and part and part:GetAttribute(A.World) == t.world) then
+			rmTag += 1
+			print("    길가 매트 없음/태그·Attr 틀림: " .. t.id)
+		else
+			local walk = MapLayout.matWalkDistance(t.id)
+			maxWalk = math.max(maxWalk, walk)
+			if walk > 6 then
+				rmWalk += 1
+				print(string.format("    매트에서 멀다: %s %.1f", t.id, walk))
+			end
+			if not MapLayout.isOnTrainMat(Vector3.new(mp.x, 3, mp.z), t.world) then
+				rmOn += 1
+			end
+			-- 물건(실제 파트 크기)과 안 겹침
+			local half = math.max(part.Size.X, part.Size.Z) / 2
+			local dist = math.sqrt((mp.x - p.x) ^ 2 + (mp.z - p.z) ^ 2)
+			if dist < (extents[t.id] or 0) + 0.5 then
+				rmTarget += 1
+				print("    물건과 겹침: " .. t.id)
+			end
+			for _, other in MapLayout.targetIds(t.world) do
+				if other ~= t.id then
+					local q = MapLayout.targetPosition(other)
+					local ea = extents[other] or 0
+					if math.sqrt((mp.x - q.x) ^ 2 + (mp.z - q.z) ^ 2) < ea + half - 0.5 then
+						-- 대략 원 판정이 겹치면 사각형으로 다시
+						local rx = math.abs(mp.x - q.x) - part.Size.X / 2
+						local rz = math.abs(mp.z - q.z) - part.Size.Z / 2
+						if math.max(rx, rz) < ea then
+							rmTarget += 1
+							print("    다른 물건과 겹침: " .. t.id .. " ↔ " .. other)
+						end
+					end
+				end
+			end
+			-- 길 위, 가운데 통로(±1.5)는 비워 둠, 안 부딪힘 (길을 막지 않음)
+			local x0, x1 = mp.x - part.Size.X / 2 - ox, mp.x + part.Size.X / 2 - ox
+			if
+				math.abs(x0) > MapLayout.ROAD_HALF
+				or math.abs(x1) > MapLayout.ROAD_HALF
+				or (x0 < 1.5 and x1 > -1.5)
+				or part.CanCollide
+			then
+				rmRoad += 1
+				print("    길을 막음/길 밖: " .. t.id)
+			end
+			-- 다른 매트와 안 겹침
+			for _, m in MapLayout.roadMats(t.world) do
+				if
+					m.targetId ~= t.id
+					and math.abs(m.x - mp.x) < (m.sizeX + part.Size.X) / 2
+					and math.abs(m.z - mp.z) < (m.sizeZ + part.Size.Z) / 2
+				then
+					rmMats += 1
+				end
+			end
+			if count(part) > 2 then
+				rmParts += 1
+			end
+		end
+		-- 머리 위 글 거리: 물건 크기에 맞게 (60 ~ 400)
+		local model = MapBuilder.getTarget(t.id)
+		local gui = model and model.PrimaryPart and model.PrimaryPart:FindFirstChild("TargetInfo")
+		local r = MapLayout.targetRadius(t.id)
+		local want = math.clamp(r * 6, 60, 400)
+		if not (gui and math.abs(gui.MaxDistance - want) < 0.01) then
+			rmInfo += 1
+			print("    글 거리 틀림: " .. t.id)
+		end
+	end
+	check(rmTag == 0, "물건 41개마다 길가 매트 (TrainMat 태그 · Attr World·TargetId · matPoint)")
+	check(rmWalk == 0, string.format("matWalkDistance ≤ 6 (가장 먼 %.1f)", maxWalk))
+	check(maxWalk == 0, "길가 매트 위에서 바로 칠 수 있음 (matWalkDistance 0)")
+	check(rmOn == 0, "길가 매트 가운데 = isOnTrainMat true")
+	check(rmTarget == 0, "길가 매트가 물건(실제 파트)과 안 겹침")
+	check(rmRoad == 0, "길가 매트는 길 위 · 가운데 통로 비움 · 안 부딪힘")
+	check(rmMats == 0, "길가 매트끼리 안 겹침")
+	check(rmParts == 0, "길가 매트 파트 1~2개")
+	check(rmInfo == 0, "TargetInfo MaxDistance = 반지름 × 6 (60~400)")
+	check(
+		MapLayout.matPoint("nope") == nil and MapLayout.matWalkDistance("nope") == math.huge,
+		"모르는 id → matPoint nil · matWalkDistance huge"
+	)
+	local spr = MapLayout.spawn(1)
+	check(not MapLayout.isOnTrainMat(Vector3.new(spr.x, 3, 58), 1), "정문 앞 길 가운데 → 매트 아님")
 	for _, name in { "DumbbellShop", "BeltBoard", "ExamPad", "DuelArena" } do
 		local list = CollectionService:GetTagged(Tags[name])
 		local ok = #list == 3
@@ -644,6 +800,230 @@ local function body()
 		npc and npc:FindFirstChild("Belt") and npc:FindFirstChild("Head") and npc.PrimaryPart,
 		"시험관 NPC (머리·도복·띠)"
 	)
+	print("[사범님 3명]")
+	local rigKinds = {}
+	local exOk = true
+	for _, arena in CollectionService:GetTagged(Tags.DuelArena) do
+		local w = arena:GetAttribute(A.World)
+		local ex = arena:FindFirstChild("Examiner")
+		local spot = MapLayout.duelArena(w)
+		local tag = ex and ex:FindFirstChild("NameTag", true)
+		local nameLabel = tag and tag:FindFirstChild("Name")
+		local nameText = nameLabel and nameLabel.Text or ""
+		local blocks = false
+		local onArena = true
+		if ex then
+			for _, d in ex:GetDescendants() do
+				if d:IsA("BasePart") then
+					if d.CanCollide then
+						blocks = true
+					end
+					local p = d.CFrame.Position
+					if
+						math.abs(p.X - spot.x) > spot.sizeX / 2 + 1
+						or math.abs(p.Z - spot.z) > spot.sizeZ / 2 + 1
+						or p.Y < 0
+					then
+						onArena = false
+					end
+				end
+			end
+		end
+		local kind = ex and ex:GetAttribute("Rig")
+		table.insert(rigKinds, tostring(kind))
+		local worldName = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Worlds")).get(w).examiner
+		if
+			not (
+				ex
+				and ex.PrimaryPart
+				and ex:FindFirstChild("Belt")
+				and ex:FindFirstChild("Head")
+				and string.find(nameText, worldName, 1, true)
+				and not blocks
+				and onArena
+			)
+		then
+			exOk = false
+			print(
+				string.format(
+					"    사범님 월드 %d: %s 이름 '%s' 막음 %s 대결장 위 %s",
+					w,
+					tostring(kind),
+					nameText,
+					tostring(blocks),
+					tostring(onArena)
+				)
+			)
+		end
+	end
+	check(
+		exOk and #rigKinds == 3,
+		"사범님 3명: 띠·머리·이름표(Worlds 이름) · 대결장 위 · 안 부딪힘 ("
+			.. table.concat(rigKinds, ",")
+			.. ")"
+	)
+	local r15Count, blockCount = 0, 0
+	for _, k in rigKinds do
+		if k == "R15" then
+			r15Count += 1
+		elseif k == "block" then
+			blockCount += 1
+		end
+	end
+	check(r15Count == 1 and blockCount == 2, "R15 몸 입히기 경로 1 · API 없을 때 블록 대체 2")
+	local r15 = nil
+	for _, arena in CollectionService:GetTagged(Tags.DuelArena) do
+		local ex = arena:FindFirstChild("Examiner")
+		if ex and ex:GetAttribute("Rig") == "R15" then
+			r15 = ex
+		end
+	end
+	check(
+		r15
+			and r15.HumanoidRootPart.Anchored
+			and r15.UpperTorso.Color == roblox.Color3.fromRGB(250, 250, 252)
+			and r15:FindFirstChild("Collar")
+			and r15:FindFirstChild("Hair")
+			and r15:FindFirstChild("BeltKnot")
+			and r15.Head:FindFirstChildOfClass("Decal"),
+		"R15 사범님: 뿌리 고정 · 흰 도복 · 깃 · 머리카락 · 띠 매듭 · 얼굴"
+	)
+	local foot = r15 and r15.LeftFoot.CFrame.Position.Y - 0.15
+	check(foot and math.abs(foot - 0.6) < 0.05, "사범님 발이 대결장 바닥 위 (" .. tostring(foot) .. ")")
+
+	print("[도장 천장]")
+	local roofOk = true
+	for w = 1, 3 do
+		local lobby = map["World" .. w]:FindFirstChild("Lobby")
+		local roof = lobby and lobby:FindFirstChild("Roof")
+		local ceil = roof and roof:FindFirstChild("Ceiling")
+		local rect = MapLayout.lobbyRect(w)
+		if not ceil then
+			roofOk = false
+			print("    천장 없음: 월드 " .. w)
+		else
+			local r = xzRect(ceil)
+			local bottom = ceil.CFrame.Position.Y - ceil.Size.Y / 2
+			if r.x0 > rect.x0 or r.x1 < rect.x1 or r.z0 > rect.z0 or r.z1 < rect.z1 or bottom < 18 then
+				roofOk = false
+				print(string.format("    천장이 덜 덮음/낮음: 월드 %d 아랫면 %.1f", w, bottom))
+			end
+			local lamps = 0
+			for _, d in roof:GetChildren() do
+				if d.Name == "CeilingLamp" and d:FindFirstChildOfClass("PointLight") then
+					lamps += 1
+				end
+			end
+			if lamps < 4 then
+				roofOk = false
+				print("    천장 등 부족: 월드 " .. w)
+			end
+			-- 정문(가운데 x ±9, 높이 0~14)과 월드 문 앞(x ±3.5, 높이 0~9.5)은 비어 있어야 함
+			local cx = (rect.x0 + rect.x1) / 2
+			local holes = { { x0 = cx - 9, x1 = cx + 9, z0 = rect.z1 - 2, z1 = rect.z1 + 3, y1 = 14 } }
+			for _, d in MapLayout.doors(w) do
+				table.insert(holes, { x0 = d.x - 3.5, x1 = d.x + 3.5, z0 = d.z - 1, z1 = d.z + 4, y1 = 9.5 })
+			end
+			for _, d in roof:GetDescendants() do
+				if d:IsA("BasePart") then
+					local pr = xzRect(d)
+					local low = math.huge
+					for _, pt in partCorners(d) do
+						low = math.min(low, pt.Y)
+					end
+					for _, h in holes do
+						if rectsOverlap(pr, h) and low < h.y1 then
+							roofOk = false
+							print("    문을 막음: 월드 " .. w .. " " .. d.Name)
+						end
+					end
+				end
+			end
+		end
+	end
+	check(
+		roofOk,
+		"세 월드 도장 천장: 로비를 다 덮음 · 높이 ≥ 18 · 천장 등 · 정문·월드 문 뚫림"
+	)
+
+	print("[가게 진열 아령]")
+	local Dumbbells = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Dumbbells"))
+	local shopM = CollectionService:GetTagged(Tags.DumbbellShop)[1]
+	local display = shopM:FindFirstChild("Display")
+	local want = math.min(#Dumbbells.list, Dojo.SHOP_MAX)
+	local shown = display and #display:GetChildren() or 0
+	check(
+		shown == want,
+		string.format("진열 아령 = 표 길이 %d (상한 %d) → %d", #Dumbbells.list, Dojo.SHOP_MAX, shown)
+	)
+	local first = display and display:FindFirstChild("Dumbbell_1")
+	check(
+		first and first:GetAttribute("Classic") == true and count(first) == 5,
+		"진열 1번 아령 = 무료 모델 Dumbell 모양 (원기둥 5개)"
+	)
+
+	print("[플레이어 아우라 (서버)]")
+	local Visuals = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Visuals"))
+	local PVS = requireNode(Loader.get("ServerScriptService/Server/Services/PlayerVisualService"))
+	local edgeOk = Visuals.auraTier(99) == 0 and Visuals.auraTier(100) == 1 and Visuals.auraTier(9999) == 1
+	for i, a in Visuals.AURA do
+		if Visuals.auraTier(a.power) ~= i or (i > 1 and Visuals.auraTier(a.power * 0.999) ~= i - 1) then
+			edgeOk = false
+		end
+	end
+	check(
+		edgeOk and Visuals.auraTier(0 / 0) == 0,
+		"아우라 단계 경계값 (99→0 · 100→1 · 문턱마다 한 단계)"
+	)
+	local function fakeChar()
+		local ch = Instance.new("Model")
+		local rp = Instance.new("Part")
+		rp.Name = "HumanoidRootPart"
+		rp.Size = Vector3.new(2, 2, 1)
+		rp.Parent = ch
+		local hm = Instance.new("Humanoid")
+		hm.Parent = ch
+		ch.Parent = Workspace
+		return ch
+	end
+	local ch = fakeChar()
+	local t3 = PVS.apply(ch, 2e7)
+	local attach = ch.HumanoidRootPart:FindFirstChild("AuraAttach")
+	attach:SetAttribute("Mark", 1)
+	PVS.apply(ch, 5e7)
+	local same = ch.HumanoidRootPart:FindFirstChild("AuraAttach")
+	check(
+		t3 == 3 and same and same:GetAttribute("Mark") == 1,
+		"단계가 그대로면 다시 만들지 않음 (2e7·5e7 → 3단계)"
+	)
+	local t4 = PVS.apply(ch, 2e10)
+	local fresh = ch.HumanoidRootPart:FindFirstChild("AuraAttach")
+	check(
+		t4 == 4 and fresh:GetAttribute("Mark") == nil and ch:FindFirstChild("AuraRing"),
+		"단계가 바뀌면 갈아 끼움 (+ 발밑 고리)"
+	)
+	local rateOk = true
+	for i, a in Visuals.AURA do
+		local c2 = fakeChar()
+		PVS.apply(c2, a.power)
+		local sum = 0
+		for _, d in c2:GetDescendants() do
+			if d:IsA("ParticleEmitter") then
+				sum += d.Rate
+			end
+		end
+		if sum > Visuals.AURA_RATE_CAP or sum < 8 then
+			rateOk = false
+		end
+	end
+	check(rateOk, "단계마다 파티클 Rate 합 8 ~ " .. Visuals.AURA_RATE_CAP)
+	local respawned = fakeChar()
+	check(
+		PVS.apply(respawned, 1e40) == #Visuals.AURA and respawned.HumanoidRootPart:FindFirstChild("AuraAttach"),
+		"새 몸(리스폰)에도 붙음 · 끝 단계 1e40"
+	)
+	check(PVS.apply(fakeChar(), 5) == 0, "힘 100 미만 → 아우라 없음")
+
 	local board = CollectionService:GetTagged(Tags.BeltBoard)[1]
 	local sg = board.PrimaryPart and board.PrimaryPart:FindFirstChild("Sign")
 	local grid = sg and sg.Board:FindFirstChild("Belts")

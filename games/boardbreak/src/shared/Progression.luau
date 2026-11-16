@@ -2,11 +2,11 @@
 --[[
 	Progression — 띠 승급 · 월드 열림 · 아령 구매 조건 (순수 로직, Lune 테스트 대상). 설계서 2장·4장·6장.
 
-	  띠: 1칸씩만 오름 (앞 띠가 있어야). 다음 띠의 needPower ≤ 저장된 힘(Power). 각 월드의 네 번째 띠(4·8·12)는 대결로만.
+	  띠: 1칸씩만 오름 (앞 띠가 있어야). 힘 조건 없음 — 언제든 도전 (사장님 결정 11번, needPower 는 추천 힘). 각 월드의 네 번째 띠(4·8·12)는 대결로만.
 	  월드: 띠 4 → 월드 2, 띠 8 → 월드 3 이 열림 (Progression.worldsFromBelt). 띠 12 = 그랜드 마스터.
 	  아령: 순서대로만 (다음 아령 = 지금 + 1), 돈 ≥ price.
 	  2048배 패스를 사도 순서는 못 건너뜀 (힘이 빨리 오를 뿐 — 띠는 1칸씩, 월드는 대결로만)
-	이유 코드(reason): "max" 끝까지 다 함 · "weak" 힘 부족 · "duel" 대결로만 받는 띠 · "exam" 심사로 받는 띠 · "money" 돈 부족
+	이유 코드(reason): "max" 끝까지 다 함 · "duel" 대결로만 받는 띠 · "exam" 심사로 받는 띠 · "money" 돈 부족
 ]]
 
 local Belts = require(script.Parent.Data.Belts)
@@ -33,8 +33,8 @@ function Progression.nextBelt(belt: number): Belts.Belt?
 	return Belts.get(int(belt, 1, Belts.COUNT) + 1)
 end
 
--- 승급 심사를 볼 수 있나: (ok, reason, 다음 띠)
-function Progression.canExam(power: number, belt: number): (boolean, string?, Belts.Belt?)
+-- 승급 심사를 볼 수 있나 (힘은 안 봄 — 첫 인자는 옛 호출 모양 그대로 두려고): (ok, reason, 다음 띠)
+function Progression.canExam(_power: number, belt: number): (boolean, string?, Belts.Belt?)
 	local nextBelt = Progression.nextBelt(belt)
 	if not nextBelt then
 		return false, "max", nil
@@ -42,23 +42,17 @@ function Progression.canExam(power: number, belt: number): (boolean, string?, Be
 	if nextBelt.duel then
 		return false, "duel", nextBelt
 	end
-	if not (type(power) == "number" and power == power and power >= nextBelt.needPower) then
-		return false, "weak", nextBelt
-	end
 	return true, nil, nextBelt
 end
 
--- 시험관 대결을 할 수 있나: (ok, reason, 다음 띠)
-function Progression.canDuel(power: number, belt: number): (boolean, string?, Belts.Belt?)
+-- 시험관 대결을 할 수 있나 (힘은 안 봄): (ok, reason, 다음 띠)
+function Progression.canDuel(_power: number, belt: number): (boolean, string?, Belts.Belt?)
 	local nextBelt = Progression.nextBelt(belt)
 	if not nextBelt then
 		return false, "max", nil
 	end
 	if not nextBelt.duel then
 		return false, "exam", nextBelt
-	end
-	if not (type(power) == "number" and power == power and power >= nextBelt.needPower) then
-		return false, "weak", nextBelt
 	end
 	return true, nil, nextBelt
 end

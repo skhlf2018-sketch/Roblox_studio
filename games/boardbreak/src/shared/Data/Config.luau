@@ -28,8 +28,11 @@ local Config = {
 	DUEL_BOARDS = 15, -- 나와 시험관이 나란히 송판 15장
 	DUEL_MAX_SECONDS = 90, -- 대결이 이 시간을 넘으면 시험관 승 (시험관은 보통 그 전에 다 깸)
 	DUEL_COUNTDOWN_SECONDS = 3, -- "start" 뒤 이만큼 지나야 칠 수 있음 (시험관도 그때 시작)
-	EXAM_RADIUS = 30, -- 심사대(MapLayout.examPad) 에서 이 거리 안에서만 시작·치기
-	DUEL_RADIUS = 40, -- 대결장(MapLayout.duelArena) 에서 이 거리 안에서만 시작·치기
+	-- 심사대(MapLayout.examPad, 16×14) 에서 이 거리 안에서만 시작·치기 — 판 위와 그 앞. 수련 매트(도장·길가)에서는 안 됨 (A-2)
+	EXAM_RADIUS = 20,
+	-- 대결장(MapLayout.duelArena, 34×22) 에서 이 거리 안에서만 시작·치기 — 판 위와 그 앞 (A-2).
+	-- 옆 도장 매트 가장자리가 대결장 가운데에서 20 이라 반경만으로는 못 막음 → ExamService 가 수련 매트 위면 따로 막음
+	DUEL_RADIUS = 24,
 	EXAM_TICK_SECONDS = 0.5, -- 심사·대결 진행 틱 (남은 시간·시험관 진행)
 
 	------------------------------------------------------------------

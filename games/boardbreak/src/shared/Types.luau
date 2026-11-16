@@ -65,12 +65,12 @@ export type TrainResult = {
 
 export type HitResult = {
 	targetId: string, -- Targets id 또는 "exam" / "duel"
-	damage: number, -- 깎인 체력 (힘이 부족하면 0)
+	damage: number, -- 깎인 체력 (= 치는 힘, 힘 문턱 없음 — 사장님 결정 11번)
 	hp: number, -- 남은 체력 (깨졌으면 다시 가득 = hpMax)
 	hpMax: number,
 	broken: boolean,
 	reward: number?, -- 깨져서 받은 돈 (띠 배율·돈 2배 적용 후)
-	reason: string?, -- "weak" = 힘이 부족해요
+	reason: string?, -- 지금은 안 씀 (예전 "weak" 없앰 — 힘이 약해도 피해가 들어감)
 }
 
 export type ExamPhase = "start" | "progress" | "pass" | "fail"

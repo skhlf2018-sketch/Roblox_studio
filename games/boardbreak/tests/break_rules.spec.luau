@@ -32,31 +32,41 @@ return function(T, Loader)
 		T.falsy(BreakRules.inReach(here, here, 0, 0), "닿는 거리 0")
 	end)
 
-	T.test("힘 부족 (치는 힘 < minPower): 피해 0 + weak, 체력 그대로", function()
-		local hp = {}
-		local out = BreakRules.hit(hp, cotton, cotton.minPower - 1)
-		T.eq(out.damage, 0)
-		T.eq(out.reason, "weak")
-		T.eq(out.hp, cotton.hp)
-		T.eq(out.broken, false)
-		T.eq(hp.cotton, nil, "체력 표 안 바뀜")
-		local nan = BreakRules.hit(hp, cotton, 0 / 0)
-		T.eq(nan.reason, "weak", "NaN 피해")
-	end)
+	T.test(
+		"힘 문턱 없음 (사장님 결정 11번): 힘 1 로도 피해 1 · 우주에도 · 힘 0·NaN 이면 피해 0",
+		function()
+			local hp = {}
+			local out = BreakRules.hit(hp, cotton, 1)
+			T.eq(out.damage, 1)
+			T.eq(out.reason, nil, "weak 없음")
+			T.eq(out.hp, cotton.hp - 1)
+			T.eq(hp.cotton, cotton.hp - 1, "깎인 만큼 남음")
+			local universe = Targets.get("universe")
+			local far = BreakRules.hit(hp, universe, 1)
+			T.eq(far.damage, 1, "추천 힘 " .. universe.recommendPower .. " 보다 훨씬 약해도 깎임")
+			T.eq(hp.universe, universe.hp - 1)
+			for _, bad in { 0, -5, 0 / 0, math.huge } do
+				local none = BreakRules.hit(hp, cotton, bad)
+				T.eq(none.damage, 0, "피해 0: " .. tostring(bad))
+				T.eq(none.broken, false)
+			end
+			T.eq(hp.cotton, cotton.hp - 1, "0·NaN 은 체력을 안 바꿈")
+		end
+	)
 
 	T.test("한 번씩 깎이고 0 이하면 깨짐 → 다시 가득 (넘친 피해는 버림)", function()
 		local hp = {}
 		local hits = 0
 		local broken = false
 		while not broken do
-			local out = BreakRules.hit(hp, cotton, cotton.minPower)
+			local out = BreakRules.hit(hp, cotton, cotton.recommendPower)
 			hits += 1
 			broken = out.broken
 			if broken then
 				T.eq(out.hp, cotton.hp, "깨지면 가득")
 			end
 		end
-		T.eq(hits, 15, "막 열렸을 때 15번")
+		T.eq(hits, 15, "추천 힘이면 15번")
 		T.eq(hp.cotton, nil, "깨진 뒤 표에서 지움")
 		local big = BreakRules.hit(hp, cotton, 1e50)
 		T.truthy(big.broken, "한 방")
@@ -65,8 +75,8 @@ return function(T, Loader)
 
 	T.test("플레이어마다 따로 (표가 다르면 서로 영향 없음)", function()
 		local a, b = {}, {}
-		BreakRules.hit(a, cotton, cotton.minPower)
-		T.eq(a.cotton, cotton.hp - cotton.minPower, "A 깎임")
+		BreakRules.hit(a, cotton, cotton.recommendPower)
+		T.eq(a.cotton, cotton.hp - cotton.recommendPower, "A 깎임")
 		T.eq(BreakRules.currentHp(b, cotton), cotton.hp, "B 그대로")
 	end)
 

@@ -48,7 +48,19 @@ return function(T, Loader)
 	end
 
 	-- "1,024" · "4M" · "16Qa" · "1Sp" → 숫자
-	local UNIT = { K = 1e3, M = 1e6, B = 1e9, T = 1e12, Qa = 1e15, Qi = 1e18, Sx = 1e21, Sp = 1e24 }
+	local UNIT = {
+		K = 1e3,
+		M = 1e6,
+		B = 1e9,
+		T = 1e12,
+		Qa = 1e15,
+		Qi = 1e18,
+		Sx = 1e21,
+		Sp = 1e24,
+		Oc = 1e27,
+		No = 1e30,
+		Dc = 1e33,
+	}
 	local function parseValue(text: string): number?
 		local plain = string.gsub(text, ",", "")
 		local n = tonumber(plain)
@@ -84,26 +96,29 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("9-1 물건 minPower · hp = Targets", function()
+	T.test("9-1 물건 추천 힘 · hp = Targets", function()
 		local list = rows(section(9), "### 9-1")
 		T.eq(#list, 41)
 		for i, cells in list do
 			local t = Targets.list[i]
 			T.eq(cells[2], t.id)
-			T.truthy(near(tonumber(cells[3]), t.minPower), t.id .. " minPower " .. cells[3])
+			T.truthy(near(tonumber(cells[3]), t.recommendPower), t.id .. " 추천 힘 " .. cells[3])
 			T.truthy(near(tonumber(cells[4]), t.hp), t.id .. " hp " .. cells[4])
 		end
 	end)
 
-	T.test("9-2 아령 powerPerRep · price = Dumbbells", function()
+	T.test("9-2 아령 weightKg · powerPerRep · price = Dumbbells (개수도)", function()
 		local list = rows(section(9), "### 9-2")
-		T.eq(#list, 20)
+		T.eq(#list, Dumbbells.COUNT)
+		T.truthy(string.find(section(9), "### 9-2. 아령 " .. Dumbbells.COUNT .. "개", 1, true), "제목의 개수")
+		T.truthy(string.find(section(7), "/dumbbell <1-N>", 1, true), "7장 개발 명령 /dumbbell <1-N>")
 		for i, cells in list do
 			local d = Dumbbells.list[i]
 			T.eq(cells[2], d.id)
 			T.eq(cells[3], d.name)
-			T.truthy(near(tonumber(cells[4]), d.powerPerRep), d.id .. " powerPerRep")
-			T.truthy(near(tonumber(cells[5]), d.price), d.id .. " price")
+			T.truthy(near3(tonumber(cells[4]), d.weightKg), d.id .. " weightKg")
+			T.truthy(near(tonumber(cells[5]), d.powerPerRep), d.id .. " powerPerRep")
+			T.truthy(near(tonumber(cells[6]), d.price), d.id .. " price")
 		end
 	end)
 

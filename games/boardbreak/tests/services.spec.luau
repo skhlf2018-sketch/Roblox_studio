@@ -126,20 +126,59 @@ return function(T, Loader)
 		H.uninstall()
 	end)
 
-	T.test("힘이 부족하면 피해 0 + reason weak + 알림", function()
-		local H = setup()
-		local glass = H.Targets.get("glass")
-		local p, session, data = join(H, 1, { power = glass.minPower - 1 })
-		H.teleport(p, H.targetSpot("glass"))
-		H.client(p, "Hit", "glass")
-		local r = H.sent(p, "HitResult")[1][1]
-		T.eq(r.damage, 0)
-		T.eq(r.reason, "weak")
-		T.eq(session.targetHp.glass, nil)
-		T.eq(data.money, 0)
-		T.truthy(H.hasNotify(p, "error", "힘이 부족해요"))
-		H.uninstall()
-	end)
+	T.test(
+		"힘 문턱 없음: 추천 힘보다 약해도 피해 = 치는 힘 · weak·알림 없음 · 깎인 체력은 떠났다 와도 남음",
+		function()
+			local H = setup()
+			local glass = H.Targets.get("glass")
+			local p, session, data = join(H, 1, { power = 1 })
+			H.teleport(p, H.targetSpot("glass"))
+			H.client(p, "Hit", "glass")
+			local r = H.sent(p, "HitResult")[1][1]
+			T.eq(r.damage, 1, "힘 1 → 피해 1")
+			T.eq(r.reason, nil, "weak 없음")
+			T.eq(r.hp, glass.hp - 1)
+			T.eq(r.hpMax, glass.hp)
+			T.eq(session.targetHp.glass, glass.hp - 1)
+			T.eq(data.money, 0)
+			T.falsy(H.hasNotify(p, "error", "힘이 부족해요"), "힘 부족 알림 없음")
+			-- 다른 물건을 치러 갔다가 돌아와도 그대로
+			H.teleport(p, H.targetSpot("cotton"))
+			H.advance(1)
+			H.client(p, "Hit", "cotton")
+			H.teleport(p, H.targetSpot("glass"))
+			H.advance(1)
+			H.client(p, "Hit", "glass")
+			local list = H.sent(p, "HitResult")
+			T.eq(list[#list][1].hp, glass.hp - 2, "떠났다 와도 깎인 만큼 남음")
+			H.uninstall()
+		end
+	)
+
+	T.test(
+		"힘 1 로도 솜부터 우주까지 (열린 월드 안) 41개 전부 피해 1 · 닫힌 월드는 여전히 무시",
+		function()
+			local H = setup()
+			local p, session = join(H, 1, { power = 1, belt = 12, world = 3 })
+			for _, t in H.Targets.list do
+				session.currentWorld = t.world
+				H.teleport(p, H.targetSpot(t.id))
+				H.advance(0.3)
+				H.client(p, "Hit", t.id)
+				local list = H.sent(p, "HitResult")
+				local r = list[#list][1]
+				T.eq(r.targetId, t.id, t.id)
+				T.eq(r.damage, 1, t.id .. " 피해 1")
+				T.eq(r.hp, t.hp - 1, t.id .. " 체력 1 깎임")
+			end
+			T.eq(#H.sent(p, "HitResult"), H.Targets.COUNT)
+			local q = join(H, 2, { power = 1, belt = 3, world = 1 })
+			H.teleport(q, H.targetSpot("mall"))
+			H.client(q, "Hit", "mall")
+			T.eq(#H.sent(q, "HitResult"), 0, "띠 3 이면 월드 2 물건은 못 침")
+			H.uninstall()
+		end
+	)
 
 	T.test("없는 id · 이상한 인자 · 먼 거리 · 닫힌 월드 = 무시 (아무것도 안 보냄)", function()
 		local H = setup()
@@ -198,7 +237,7 @@ return function(T, Loader)
 		H.advance(1)
 		H.client(p, "Hit", "cotton")
 		local list = H.sent(p, "HitResult")
-		T.eq(list[#list][1].reason, "weak", "NaN 힘")
+		T.eq(list[#list][1].damage, 0, "NaN 힘 → 피해 0")
 		T.eq(data.money, 1e60)
 		H.uninstall()
 	end)
@@ -217,10 +256,10 @@ return function(T, Loader)
 		T.eq(data.dumbbellLevel, 2, "다음 하나만")
 		T.eq(data.money, 1e60 - H.Dumbbells.get(2).price)
 		T.eq(p:GetAttribute("DumbbellLevel"), 2)
-		data.dumbbellLevel = 20
+		data.dumbbellLevel = H.Dumbbells.COUNT
 		H.advance(1)
 		H.client(p, "BuyDumbbell")
-		T.eq(data.dumbbellLevel, 20, "끝")
+		T.eq(data.dumbbellLevel, H.Dumbbells.COUNT, "끝")
 		H.uninstall()
 	end)
 

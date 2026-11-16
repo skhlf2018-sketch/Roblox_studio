@@ -11,9 +11,12 @@
 	월드 테마: 1 태권도장 마을 (나무 바닥 도장 · 마을 길 · 나무·집) / 2 지구 한 바퀴 (도시 빌딩 · 바다 · 산)
 	          / 3 우주 (검은 바닥 + 별 · 물건은 떠 있는 받침대 위)
 	물건 41개: Model "Target_<id>" (태그 BreakTarget, Attr TargetId·World), 모양은 Map/TargetLooks,
-	  보이지 않는 맞히는 상자 "Hitbox"(PrimaryPart) + 위 글 "TargetInfo"(이름 · 💰 값 · 💪 필요한 힘)
+	  보이지 않는 맞히는 상자 "Hitbox"(PrimaryPart) + 위 글 "TargetInfo"(이름 · 💰 값 · 💪 추천 힘 — 클라가 내 힘이 모자라면 주황색으로)
 	  + ClickDetector "Click" (모델 아무 곳이나 눌러도 됨 → 클라 BreakController 가 Hit(targetId)).
 	  체력 막대·깨짐은 플레이어마다 다르므로 클라가 자기 화면에서만 그림.
+	  TargetInfo 는 MapBuilder.labelDistance(반지름) 안에서만 보임 (멀리 있는 글끼리 안 겹치게).
+	길가 수련 매트 41칸: World<n>/RoadMats/RoadMat_<id> (태그 TrainMat, Attr World·TargetId, 안 부딪히는 얇은 판)
+	  자리는 MapLayout.roadMats — 그 물건 쪽 길 절반, 물건과 같은 z (매트 위에서 바로 침).
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -210,6 +213,43 @@ local function ground(world: number, parent: Instance, theme: WorldTheme)
 		if world < 3 then "다음 월드는 도장 문으로!" else "🌌 우주 끝!",
 		WHITE
 	)
+end
+
+-- 길가 수련 매트 (물건마다 1칸, 파트 1개 + 윗면 글). 얇고 안 부딪힘 → 길을 막지 않음
+local ROAD_MAT_H = 0.2
+local ROAD_TOP = 0.1 -- 길 판 윗면 (Road: y -0.4, 두께 1)
+
+local function roadMats(world: number, parent: Instance, theme: WorldTheme)
+	local folder = Build.folder("RoadMats", parent)
+	for i, m in MapLayout.roadMats(world) do
+		local color = theme.dojo.mat[(i - 1) % #theme.dojo.mat + 1]
+		local attrs: { [string]: any } = { [PA.World] = world, [PA.TargetId] = m.targetId }
+		local mat = Build.part(
+			folder,
+			"Block",
+			Vector3.new(m.sizeX, ROAD_MAT_H, m.sizeZ),
+			CFrame.new(m.x, ROAD_TOP + ROAD_MAT_H / 2, m.z),
+			color,
+			M.Fabric,
+			{
+				name = "RoadMat_" .. m.targetId,
+				collide = false,
+				query = false,
+				attributes = attrs,
+			}
+		)
+		CollectionService:AddTag(mat, Tags.TrainMat)
+		local gui = Instance.new("SurfaceGui")
+		gui.Name = "MatLabel"
+		gui.Face = Enum.NormalId.Top
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 20
+		gui.LightInfluence = 0
+		gui.MaxDistance = 80
+		Build.text(gui, "Title", UDim2.fromScale(0.05, 0.3), UDim2.fromScale(0.9, 0.4), "💪 수련", WHITE)
+		gui.Parent = mat
+	end
+	return folder
 end
 
 ------------------------------------------------------------------
@@ -427,8 +467,19 @@ end
 -- 물건 41개
 ------------------------------------------------------------------
 
+-- 머리 위 글이 보이는 거리: 작은 물건 60 · 큰 물건 반지름 × 6 (최대 400)
+function MapBuilder.labelDistance(r: number): number
+	return math.clamp(r * 6, 60, 400)
+end
+
+-- 추천 힘 (문턱 아님 — 약하면 오래 걸릴 뿐). 표 칸 이름이 minPower → recommendPower 로 바뀌는 중이라 둘 다 읽음
+function MapBuilder.recommendPower(target: any): number
+	return tonumber(target.recommendPower or target.minPower) or 0
+end
+
 local function infoText(target: Targets.Target): (string, string)
-	return "💰 " .. Format.number(target.reward), "💪 필요한 힘 " .. Format.number(target.minPower)
+	return "💰 " .. Format.number(target.reward),
+		"💪 추천 힘 " .. Format.number(MapBuilder.recommendPower(target))
 end
 
 local function buildTarget(target: Targets.Target, parent: Instance): Model?
@@ -488,8 +539,15 @@ local function buildTarget(target: Targets.Target, parent: Instance): Model?
 	model:SetAttribute(PA.World, target.world)
 	model:SetAttribute("Height", height)
 	model:SetAttribute("Radius", r)
-	-- 머리 위 글: 이름 / 값 / 필요한 힘 (멀리서도 보이게 크기는 화면 픽셀 고정)
-	local gui = Build.billboard(hitbox, "TargetInfo", UDim2.fromOffset(230, 96), (height + 1) / 2 + 3.5, 90 + r * 4)
+	-- 머리 위 글: 이름 / 값 / 필요한 힘 (크기는 화면 픽셀 고정). 멀리 있는 물건 글끼리 겹치지 않게
+	-- 물건 크기에 맞춘 거리 안에서만 보임 (MapBuilder.labelDistance)
+	local gui = Build.billboard(
+		hitbox,
+		"TargetInfo",
+		UDim2.fromOffset(230, 96),
+		(height + 1) / 2 + 3.5,
+		MapBuilder.labelDistance(r)
+	)
 	local frame = Instance.new("Frame")
 	frame.Name = "Box"
 	frame.Size = UDim2.fromScale(1, 1)
@@ -498,7 +556,7 @@ local function buildTarget(target: Targets.Target, parent: Instance): Model?
 	local reward, need = infoText(target)
 	Build.text(frame, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.4), target.name, WHITE)
 	Build.text(frame, "Reward", UDim2.fromScale(0, 0.4), UDim2.fromScale(1, 0.3), reward, c(255, 215, 60))
-	Build.text(frame, "Need", UDim2.fromScale(0, 0.7), UDim2.fromScale(1, 0.3), need, c(255, 140, 140))
+	Build.text(frame, "Need", UDim2.fromScale(0, 0.7), UDim2.fromScale(1, 0.3), need, c(255, 235, 150))
 	Build.click(model, "Click", MapLayout.targetReach(target.id) + 60)
 	CollectionService:AddTag(model, Tags.BreakTarget)
 	targetModels[target.id] = model
@@ -515,6 +573,7 @@ local function buildWorld(world: number, parent: Instance): Folder
 	folder:SetAttribute(PA.World, world)
 	Dojo.build(world, folder, theme.dojo)
 	ground(world, folder, theme)
+	roadMats(world, folder, theme)
 	local targets = Build.folder("Targets", folder)
 	for _, target in Targets.byWorld(world) do
 		buildTarget(target, targets)

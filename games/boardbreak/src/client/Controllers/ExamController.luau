@@ -30,6 +30,8 @@ local Layout = require(Client.UI.Layout)
 local Ui = require(Client.UI.Ui)
 local Windows = require(Client.UI.Windows)
 local NotifyController = require(script.Parent.NotifyController)
+local Cracks = require(Client.Cracks)
+local Lift = require(Client.Lift)
 
 local ExamController = {}
 ExamController.panel = nil :: Frame?
@@ -101,18 +103,44 @@ function ExamController.big(text: string, color: Color3, seconds: number?)
 end
 
 -- 도장 송판을 깬 만큼 숨김 (내 화면에서만). prefix "Board"(심사대) · "Mine" · "Theirs"(대결장)
-local function paintBoards(tag: string, prefix: string, broken: number, total: number)
+-- 지금 치는 송판(broken + 1)에는 hp/hpMax 로 금 (75·50·25%), 나머지 송판 금은 지움
+local function paintBoards(tag: string, prefix: string, broken: number, total: number, hp: number?, hpMax: number?)
 	local world = State.currentWorld()
+	local stage = Cracks.stage(hp, hpMax)
 	for _, model in CollectionService:GetTagged(tag) do
 		if model:GetAttribute(Tags.PartAttributes.World) == world then
 			for i = 1, total do
 				local board = model:FindFirstChild(prefix .. "_" .. tostring(i), true)
 				if board and board:IsA("BasePart") then
 					board.LocalTransparencyModifier = if i <= broken then 1 else 0
+					if i == broken + 1 and stage > 0 then
+						Cracks.show(
+							board,
+							stage,
+							Cracks.seedOf(prefix .. i),
+							{ Enum.NormalId.Front, Enum.NormalId.Back }
+						)
+					else
+						Cracks.clear(board)
+					end
 				end
 			end
 		end
 	end
+end
+
+-- 사범님이 송판을 깰 때마다 오른팔 내리치기 (R15 몸일 때. 블록 대체 모델이면 그냥 넘어감)
+local lastTheirs = 0
+function ExamController.examinerChop(world: number): boolean
+	for _, arena in CollectionService:GetTagged(Tags.DuelArena) do
+		if arena:GetAttribute(Tags.PartAttributes.World) == world then
+			local npc = arena:FindFirstChild("Examiner")
+			if npc and npc:IsA("Model") then
+				return Lift.play(npc, "chop")
+			end
+		end
+	end
+	return false
 end
 ExamController.paintBoards = paintBoards
 
@@ -163,7 +191,7 @@ function ExamController.onExam(s: any)
 				then "지금 송판 " .. Format.number(hp) .. " / " .. Format.number(hpMax)
 				else ""
 		end
-		paintBoards(Tags.ExamPad, "Board", broken, total)
+		paintBoards(Tags.ExamPad, "Board", broken, total, tonumber(s.boardHp), tonumber(s.boardHpMax))
 	elseif phase == "pass" then
 		mode = nil
 		show(false)
@@ -220,8 +248,15 @@ function ExamController.onDuel(s: any)
 			local left = tonumber(s.secondsLeft)
 			label.Text = if left then string.format("남은 시간 %d초", math.ceil(left)) else ""
 		end
-		paintBoards(Tags.DuelArena, "Mine", mine, total)
+		paintBoards(Tags.DuelArena, "Mine", mine, total, tonumber(s.boardHp), tonumber(s.boardHpMax))
 		paintBoards(Tags.DuelArena, "Theirs", theirs, total)
+		if phase == "start" then
+			lastTheirs = 0
+		end
+		if theirs > lastTheirs then
+			ExamController.examinerChop(worldIndex)
+		end
+		lastTheirs = theirs
 	elseif phase == "win" or phase == "lose" then
 		mode = nil
 		show(false)

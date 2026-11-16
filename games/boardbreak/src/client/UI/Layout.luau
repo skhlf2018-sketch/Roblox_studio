@@ -7,7 +7,8 @@
 	  Layout.joystickZone / jumpZone  → 로블록스 터치 조이스틱·점프 버튼 자리 (PlayerModule 규칙)
 	  Layout.statsRect(area, s, touch) → 힘·돈·띠 묶음 (PC 왼쪽 아래 / 터치 위 왼쪽 한 줄)
 	  Layout.actionRect(area, s, touch, slot) → 큰 "들기"(slot 0) · "치기"(slot 1) 버튼
-	      PC: 아래 가운데 (나란히) / 터치: 오른쪽, 점프 버튼 위 (조이스틱·점프와 안 겹침), 화면에서 46px 이상
+	      PC: 아래 가운데 (나란히) / 터치: 오른쪽, 점프 버튼 위에 세로로 (아래 치기 · 위 들기), 46px 이상
+	      길가 매트 위에서는 들기·치기가 둘 다 보이므로 두 칸은 절대 안 겹침
 	  Layout.topPanel(area, s, touch, w, h) → 위 가운데 패널 (튜토리얼·심사 진행). 터치는 위 한 줄 아래
 ]]
 
@@ -136,14 +137,18 @@ end
 -- 큰 "들기"(0) · "치기"(1) 버튼 자리 (화면 픽셀, 정사각형)
 function Layout.actionRect(area: Vector2, hudScale: number, touch: boolean, slot: number): Rect
 	if touch then
-		local size = math.max(Layout.MIN_TOUCH, Layout.ACTION_TOUCH)
 		local jump = Layout.jumpZone(area)
 		local gap = 12
-		-- 점프 버튼 바로 위 (화면 오른쪽), slot 1 은 그 왼쪽
-		local x = area.X - 14 - size - slot * (size + gap)
-		local y = jump.y - gap - size
-		if y < 60 then
-			y = 60
+		local top = 60 -- 위 한 줄(힘·돈) 아래
+		-- 점프 버튼 위에 세로로 2칸: 아래칸 = "치기"(slot 1, 제일 많이 누름) · 위칸 = "들기"(slot 0)
+		-- 화면이 낮으면 두 칸이 들어가게 줄임 (46px 이상)
+		local fit = math.floor((jump.y - gap - top - gap) / 2)
+		local size = math.max(Layout.MIN_TOUCH, math.min(Layout.ACTION_TOUCH, fit))
+		local x = area.X - 14 - size
+		local row = if slot == 1 then 0 else 1
+		local y = jump.y - gap - size - row * (size + gap)
+		if y < 4 then
+			y = 4
 		end
 		return { x = x, y = y, w = size, h = size }
 	end

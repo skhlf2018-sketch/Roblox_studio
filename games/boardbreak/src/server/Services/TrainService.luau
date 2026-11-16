@@ -32,7 +32,10 @@ function TrainService.train(player: Player): number
 		return 0
 	end
 	local root = Character.getRoot(player)
-	if not root or not MapLayout.isOnTrainMat(root.Position, session.currentWorld) then
+	if not root or not Character.isAlive(player) then
+		return 0 -- 죽은 캐릭터(Health 0)는 못 듦 (A-1)
+	end
+	if not MapLayout.isOnTrainMat(root.Position, session.currentWorld) then
 		if Sessions.useCooldown(session, "offMat", 3, os.clock()) then
 			Net.notify(player, "info", TrainService.OFF_MAT_TEXT)
 		end

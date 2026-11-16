@@ -18,11 +18,17 @@ local MapLayout = require(Shared.Data.MapLayout)
 local Belts = require(Shared.Data.Belts)
 local Worlds = require(Shared.Data.Worlds)
 local Dumbbells = require(Shared.Data.Dumbbells)
+local DumbbellLook = require(Shared.DumbbellLook)
 local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local Build = require(script.Parent.Build)
 
 local Dojo = {}
+
+Dojo.SHOP_MAX = 60 -- 가게 진열 아령 상한 (표가 더 길면 앞 60개만)
+local SHELF_Y0 = 1.4
+local SHELF_GAP = 1.6
+local SHOP_SCALE = 0.7
 
 export type Theme = {
 	floor: Color3,
@@ -217,6 +223,206 @@ local function shell(world: number, parent: Instance, theme: Theme)
 end
 
 ------------------------------------------------------------------
+-- 지붕·천장 (Lobby/Roof). 벽 위(WALL_H)부터 천장(ROOF_Y)까지 윗벽으로 메우고, 천장 판 + 월드 테마 지붕 + 천장 등.
+--   정문(가운데 x ±10)은 높이 17 까지 비워 둠, 월드 문은 로비 안쪽에 있어 그대로.
+------------------------------------------------------------------
+
+Dojo.ROOF_Y = 20 -- 천장 아랫면 높이 (카메라가 천장에 끼지 않게 18 이상)
+Dojo.GATE_CLEAR = 17 -- 정문 위 윗벽 아랫면
+
+local function roof(world: number, parent: Instance, theme: Theme)
+	local folder = Build.folder("Roof", parent)
+	local rect = MapLayout.lobbyRect(world)
+	local cx = (rect.x0 + rect.x1) / 2
+	local cz = (rect.z0 + rect.z1) / 2
+	local w = rect.x1 - rect.x0
+	local d = rect.z1 - rect.z0
+	local top = Dojo.ROOF_Y
+	local uh = top - WALL_H
+	local uy = WALL_H + uh / 2
+	-- 윗벽 (왼·오른·뒤 + 앞 양옆 + 정문 위 상인방)
+	Build.solid(
+		folder,
+		"UpperWall",
+		Vector3.new(2, uh, d + 4),
+		CFrame.new(rect.x0 - 1, uy, cz),
+		theme.wall,
+		theme.wallMaterial
+	)
+	Build.solid(
+		folder,
+		"UpperWall",
+		Vector3.new(2, uh, d + 4),
+		CFrame.new(rect.x1 + 1, uy, cz),
+		theme.wall,
+		theme.wallMaterial
+	)
+	Build.solid(
+		folder,
+		"UpperWall",
+		Vector3.new(w + 4, uh, 2),
+		CFrame.new(cx, uy, rect.z0 - 1),
+		theme.wall,
+		theme.wallMaterial
+	)
+	local gate = 10
+	local side = (w - gate * 2) / 2
+	Build.solid(
+		folder,
+		"UpperWall",
+		Vector3.new(side + 2, uh, 2),
+		CFrame.new(rect.x0 + side / 2 - 1, uy, rect.z1 + 1),
+		theme.wall,
+		theme.wallMaterial
+	)
+	Build.solid(
+		folder,
+		"UpperWall",
+		Vector3.new(side + 2, uh, 2),
+		CFrame.new(rect.x1 - side / 2 + 1, uy, rect.z1 + 1),
+		theme.wall,
+		theme.wallMaterial
+	)
+	local lh = top - Dojo.GATE_CLEAR
+	Build.solid(
+		folder,
+		"GateLintel",
+		Vector3.new(gate * 2 + 2, lh, 2),
+		CFrame.new(cx, Dojo.GATE_CLEAR + lh / 2, rect.z1 + 1),
+		theme.trim,
+		M.Wood
+	)
+	-- 천장 판 (벽 바깥까지 덮음)
+	local ceilColor = if world == 1 then c(225, 205, 165) elseif world == 2 then c(190, 225, 245) else c(40, 42, 66)
+	local ceilMat = if world == 1 then M.WoodPlanks elseif world == 2 then M.Glass else M.Metal
+	local ceiling = Build.solid(
+		folder,
+		"Ceiling",
+		Vector3.new(w + 4, 1, d + 4),
+		CFrame.new(cx, top + 0.5, cz),
+		ceilColor,
+		ceilMat,
+		{ transparency = if world == 2 then 0.35 else 0 }
+	)
+	ceiling:SetAttribute("RoofBottom", top)
+	-- 천장 들보 (안에서 보이는 줄)
+	for i = -2, 2 do
+		Build.part(
+			folder,
+			"Beam",
+			Vector3.new(w + 2, 0.8, 1.2),
+			CFrame.new(cx, top - 0.4, cz + i * (d / 5)),
+			if world == 2 then c(200, 205, 215) else theme.trim,
+			if world == 2 then M.Metal else M.Wood
+		)
+	end
+	-- 천장 등 3 × 2 (안이 어둡지 않게)
+	for _, lx in { -30, 0, 30 } do
+		for _, lz in { -22, 18 } do
+			local lamp = Build.part(
+				folder,
+				"CeilingLamp",
+				Vector3.new(6, 0.4, 2.5),
+				CFrame.new(cx + lx, top - 1, cz + lz),
+				if world == 3 then theme.accent else c(255, 245, 220),
+				M.Neon
+			)
+			Build.light(lamp, if world == 3 then c(210, 190, 255) else c(255, 240, 215), 45, 1.4)
+		end
+	end
+	-- 월드 테마 지붕 (천장 위)
+	if world == 1 then
+		-- 기와지붕: 박공 쐐기 2개 + 처마 + 용마루
+		local rh = 12
+		local tile = c(64, 70, 86)
+		Build.part(
+			folder,
+			"Wedge",
+			Vector3.new(w + 10, rh, d / 2 + 5),
+			CFrame.new(cx, top + 1 + rh / 2, cz - (d / 2 + 5) / 2),
+			tile,
+			M.Slate,
+			{ name = "RoofTile" }
+		)
+		Build.part(
+			folder,
+			"Wedge",
+			Vector3.new(w + 10, rh, d / 2 + 5),
+			CFrame.new(cx, top + 1 + rh / 2, cz + (d / 2 + 5) / 2) * CFrame.Angles(0, math.pi, 0),
+			tile,
+			M.Slate,
+			{ name = "RoofTile" }
+		)
+		Build.part(
+			folder,
+			"Block",
+			Vector3.new(w + 12, 1.2, 2.2),
+			CFrame.new(cx, top + 1 + rh + 0.4, cz),
+			c(40, 44, 56),
+			M.Slate,
+			{ name = "RoofRidge" }
+		)
+		for _, sz in { -1, 1 } do
+			Build.part(
+				folder,
+				"Block",
+				Vector3.new(w + 12, 0.6, 3),
+				CFrame.new(cx, top + 1.1, cz + sz * (d / 2 + 5)),
+				theme.trim,
+				M.Wood,
+				{ name = "Eave" }
+			)
+		end
+	else
+		-- 2 유리 돔 체육관 / 3 우주선 돔: 층층이 줄어드는 원판 4장 + 꼭대기
+		local glass = if world == 2 then c(150, 210, 245) else c(70, 50, 130)
+		local ring = if world == 2 then c(220, 225, 235) else theme.accent
+		local sizes = { 92, 74, 52, 28 }
+		for i, dia in sizes do
+			local y = top + 1 + (i - 0.5) * 3
+			Build.part(
+				folder,
+				"VCyl",
+				Vector3.new(dia, 3, 0),
+				CFrame.new(cx, y, cz),
+				glass,
+				M.Glass,
+				{ name = "Dome", transparency = 0.3 }
+			)
+			Build.part(
+				folder,
+				"VCyl",
+				Vector3.new(dia + 1, 0.4, 0),
+				CFrame.new(cx, y - 1.5, cz),
+				ring,
+				if world == 3 then M.Neon else M.Metal,
+				{ name = "DomeRing" }
+			)
+		end
+		if world == 3 then
+			Build.part(
+				folder,
+				"VCyl",
+				Vector3.new(0.6, 10, 0),
+				CFrame.new(cx, top + 18, cz),
+				c(200, 200, 220),
+				M.Metal,
+				{
+					name = "Antenna",
+				}
+			)
+			local tip =
+				Build.part(folder, "Ball", Vector3.one * 1.6, CFrame.new(cx, top + 23.5, cz), c(255, 80, 80), M.Neon, {
+					name = "AntennaTip",
+				})
+			Build.light(tip, c(255, 90, 90), 20, 2)
+		end
+	end
+	return folder
+end
+Dojo.roof = roof
+
+------------------------------------------------------------------
 -- 스폰 · 수련 매트
 ------------------------------------------------------------------
 
@@ -242,29 +448,6 @@ local function spawnPad(world: number, parent: Instance, theme: Theme)
 	end
 	pad:SetAttribute(PA.World, world)
 	CollectionService:AddTag(pad, Tags.WorldSpawn)
-end
-
--- 작은 아령 (봉 + 원판 2개)
-local function dumbbell(parent: Instance, cf: CFrame, len: number, d: number, color: Color3)
-	Build.part(parent, "HCyl", Vector3.new(len, d * 0.25, d * 0.25), cf, c(190, 190, 200), M.Metal, { query = true })
-	Build.part(
-		parent,
-		"HCyl",
-		Vector3.new(len * 0.22, d, d),
-		cf * CFrame.new(-len * 0.4, 0, 0),
-		color,
-		M.Metal,
-		{ query = true }
-	)
-	Build.part(
-		parent,
-		"HCyl",
-		Vector3.new(len * 0.22, d, d),
-		cf * CFrame.new(len * 0.4, 0, 0),
-		color,
-		M.Metal,
-		{ query = true }
-	)
 end
 
 local function trainMats(world: number, parent: Instance, theme: Theme)
@@ -301,28 +484,21 @@ local function trainMats(world: number, parent: Instance, theme: Theme)
 			INK
 		)
 		gui.Parent = mat
-		-- 매트 구석 작은 아령 (장식)
-		dumbbell(
+		-- 매트 구석 작은 아령 (장식, 가게와 같은 진짜 아령 모양)
+		local deco = DumbbellLook.build(
 			folder,
-			CFrame.new(m.x - m.sizeX / 2 + 1.2, MapLayout.MAT_HEIGHT + 0.5, m.z - m.sizeZ / 2 + 1.6),
-			2.4,
 			1,
-			c(80, 80, 90)
+			1.2,
+			true,
+			CFrame.new(m.x - m.sizeX / 2 + 1.4, MapLayout.MAT_HEIGHT + 0.4, m.z - m.sizeZ / 2 + 1.6)
 		)
+		deco.Name = "MatDumbbell"
 	end
 end
 
 ------------------------------------------------------------------
 -- 아령 가게 (카운터 + 진열장 20개 + 간판)
 ------------------------------------------------------------------
-
-local function dumbbellColor(level: number): Color3
-	local t = (level - 1) / 19
-	if level >= 20 then
-		return c(30, 20, 40)
-	end
-	return Color3.fromHSV((0.6 - t * 0.9) % 1, 0.55 + t * 0.3, 0.95 - t * 0.2)
-end
 
 local function shop(world: number, parent: Instance, theme: Theme)
 	local s = MapLayout.dumbbellShop(world)
@@ -358,12 +534,15 @@ local function shop(world: number, parent: Instance, theme: Theme)
 	)
 	-- 뒤 진열장 2단 + 아령 20개
 	local shelfZ = s.sizeX / 2 - 1.2
-	for row = 0, 1 do
+	local shown = math.min(#Dumbbells.list, Dojo.SHOP_MAX)
+	local rows = math.clamp(math.ceil(shown / 12), 1, 5)
+	local perRow = math.max(1, math.ceil(shown / rows))
+	for row = 0, rows - 1 do
 		Build.part(
 			model,
 			"Block",
-			Vector3.new(s.sizeZ - 1, 0.4, 1.8),
-			cf * CFrame.new(0, 2.4 + row * 3, shelfZ),
+			Vector3.new(s.sizeZ - 1, 0.3, 1.8),
+			cf * CFrame.new(0, SHELF_Y0 + row * SHELF_GAP, shelfZ),
 			c(120, 80, 50),
 			M.Wood,
 			{
@@ -376,8 +555,8 @@ local function shop(world: number, parent: Instance, theme: Theme)
 	Build.part(
 		model,
 		"Block",
-		Vector3.new(s.sizeZ, 7.6, 0.6),
-		cf * CFrame.new(0, 3.8, shelfZ + 1.1),
+		Vector3.new(s.sizeZ, SHELF_Y0 + rows * SHELF_GAP, 0.6),
+		cf * CFrame.new(0, (SHELF_Y0 + rows * SHELF_GAP) / 2, shelfZ + 1.1),
 		c(110, 72, 45),
 		M.WoodPlanks,
 		{
@@ -386,17 +565,26 @@ local function shop(world: number, parent: Instance, theme: Theme)
 			name = "ShelfBack",
 		}
 	)
-	for level = 1, math.min(20, #Dumbbells.list) do
-		local row = if level <= 10 then 0 else 1
-		local k = (level - 1) % 10
-		local x = -s.sizeZ / 2 + 1.4 + k * ((s.sizeZ - 2.8) / 9)
-		local size = 0.7 + level * 0.025
-		dumbbell(model, cf * CFrame.new(x, 2.6 + row * 3 + size / 2, shelfZ), 1.4, size, dumbbellColor(level))
+	-- 진열 아령: Dumbbells 표 길이만큼 (상한 SHOP_MAX). 진짜 아령 모양(DumbbellLook) 0.7배, 봉이 진열장 안쪽을 봄
+	local display = Build.folder("Display", model)
+	for level = 1, shown do
+		local row = (level - 1) // perRow
+		local k = (level - 1) % perRow
+		local x = -s.sizeZ / 2 + 1.4 + k * ((s.sizeZ - 2.8) / math.max(1, perRow - 1))
+		local y = SHELF_Y0 + row * SHELF_GAP + 0.15 + DumbbellLook.diameterOf(level) * SHOP_SCALE / 2
+		local one = DumbbellLook.build(
+			display,
+			level,
+			SHOP_SCALE,
+			true,
+			cf * CFrame.new(x, y, shelfZ) * CFrame.Angles(0, math.pi / 2, 0)
+		)
+		one.Name = "Dumbbell_" .. tostring(level)
 	end
 	-- 간판 (카운터 위, 진열장보다 높게)
 	local board = sign(
 		model,
-		cf * CFrame.new(0, 9.5, shelfZ + 0.6),
+		cf * CFrame.new(0, SHELF_Y0 + rows * SHELF_GAP + 1.8, shelfZ + 0.6),
 		s.sizeZ - 2,
 		3,
 		"🏋️ 아령 가게",
@@ -559,12 +747,12 @@ end
 ------------------------------------------------------------------
 
 -- 시험관 NPC (도복 + 띠, 파트로만). base = 발 가운데, 앞(-Z) = 플레이어 쪽
-local function examiner(parent: Instance, base: CFrame, beltColor: Color3, name: string)
+local function blockExaminer(parent: Instance, base: CFrame, beltColor: Color3, name: string): Model
 	local npc = Build.model("Examiner", parent)
 	local dobok = c(248, 248, 250)
 	local skin = c(255, 214, 170)
 	local torso = Build.part(npc, "Block", Vector3.new(2.2, 2.4, 1.2), base * CFrame.new(0, 3.6, 0), dobok, M.Fabric, {
-		collide = true,
+		collide = false,
 		query = true,
 		name = "Torso",
 	})
@@ -646,8 +834,239 @@ local function examiner(parent: Instance, base: CFrame, beltColor: Color3, name:
 	npc.PrimaryPart = torso
 	local gui = Build.billboard(torso, "NameTag", UDim2.fromOffset(240, 50), 4.4, 90)
 	local label =
-		Build.text(gui, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), "👑 " .. name, c(255, 230, 120))
+		Build.text(gui, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), "🥋 " .. name, c(255, 230, 120))
 	label.TextScaled = true
+	npc:SetAttribute("Rig", "block")
+	return npc
+end
+
+-- 사범님 (진짜 로블록스 R15 몸). 서버에서 기본 몸을 만들고 피부·흰 도복·깃·띠·머리카락·얼굴을 입힘 (외부 에셋 id 없음).
+--   Dojo.createRig() 이 실패하면(테스트 환경 등) 블록 모델로 대체. 테스트는 Dojo.createRig 를 바꿔 끼울 수 있음.
+local SKIN = c(234, 184, 146)
+local DOBOK = c(250, 250, 252)
+-- 월드마다: 띠 색 · 깃/소매 줄 색 · 머리 색 (1 검은 띠 · 2 빨강 줄 · 3 금색)
+local EXAMINER_STYLE = {
+	{ belt = c(20, 20, 24), trim = c(20, 20, 24), hair = c(30, 24, 20) },
+	{ belt = c(20, 20, 24), trim = c(210, 30, 40), hair = c(50, 36, 28) },
+	{ belt = c(240, 190, 40), trim = c(240, 190, 40), hair = c(200, 200, 205) },
+}
+
+function Dojo.createRig(): Model?
+	local Players = game:GetService("Players")
+	local ok, rig = pcall(function(): Model
+		local desc: any = Instance.new("HumanoidDescription")
+		desc.HeadColor = SKIN
+		desc.TorsoColor = DOBOK
+		desc.LeftArmColor = DOBOK
+		desc.RightArmColor = DOBOK
+		desc.LeftLegColor = DOBOK
+		desc.RightLegColor = DOBOK
+		return (Players :: any):CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+	end)
+	return if ok and typeof(rig) == "Instance" and rig:IsA("Model") then rig else nil
+end
+
+local function weldTo(
+	rig: Model,
+	to: BasePart,
+	name: string,
+	size: Vector3,
+	offset: CFrame,
+	color: Color3,
+	mat: Enum.Material?
+)
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = size
+	p.Color = color
+	p.Material = mat or M.Fabric
+	p.Anchored = false
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Massless = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.CFrame = to.CFrame * offset
+	local w = Instance.new("Weld")
+	w.Part0 = to
+	w.Part1 = p
+	w.C0 = offset
+	w.Parent = p
+	p.Parent = rig
+	return p
+end
+
+local function bodyPart(rig: Model, name: string): BasePart?
+	local p = rig:FindFirstChild(name)
+	return if p and p:IsA("BasePart") then p else nil
+end
+
+-- 입히기 (진짜 몸이든 테스트 가짜 몸이든 부위 이름만 맞으면 됨)
+function Dojo.dressExaminer(rig: Model, world: number, name: string)
+	local style = EXAMINER_STYLE[math.clamp(world, 1, #EXAMINER_STYLE)]
+	for _, d in rig:GetDescendants() do
+		if d:IsA("BodyColors") or d:IsA("Shirt") or d:IsA("Pants") or d:IsA("ShirtGraphic") then
+			d:Destroy()
+		elseif d:IsA("BasePart") then
+			d.Anchored = d.Name == "HumanoidRootPart"
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CanTouch = false
+		end
+	end
+	for _, n in
+		{
+			"UpperTorso",
+			"LowerTorso",
+			"LeftUpperArm",
+			"LeftLowerArm",
+			"RightUpperArm",
+			"RightLowerArm",
+			"LeftUpperLeg",
+			"LeftLowerLeg",
+			"RightUpperLeg",
+			"RightLowerLeg",
+		}
+	do
+		local p = bodyPart(rig, n)
+		if p then
+			p.Color = DOBOK
+			p.Material = M.Fabric
+		end
+	end
+	for _, n in { "Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot" } do
+		local p = bodyPart(rig, n)
+		if p then
+			p.Color = SKIN
+		end
+	end
+	local upper = bodyPart(rig, "UpperTorso")
+	if upper then
+		local s = upper.Size
+		-- 도복 깃 (앞에서 V 자로 겹침)
+		for _, sx in { -1, 1 } do
+			weldTo(
+				rig,
+				upper,
+				"Collar",
+				Vector3.new(0.28, s.Y * 0.95, 0.06),
+				CFrame.new(sx * 0.22, 0.02, -s.Z / 2 - 0.03) * CFrame.Angles(0, 0, sx * 0.42),
+				style.trim
+			)
+		end
+	end
+	local lower = bodyPart(rig, "LowerTorso")
+	if lower then
+		local s = lower.Size
+		local y = s.Y / 2 - 0.12
+		weldTo(rig, lower, "Belt", Vector3.new(s.X + 0.1, 0.26, s.Z + 0.1), CFrame.new(0, y, 0), style.belt)
+		weldTo(rig, lower, "BeltKnot", Vector3.new(0.36, 0.3, 0.14), CFrame.new(0, y, -s.Z / 2 - 0.1), style.belt)
+		for _, sx in { -1, 1 } do
+			weldTo(
+				rig,
+				lower,
+				"BeltTail",
+				Vector3.new(0.16, 0.8, 0.05),
+				CFrame.new(sx * 0.12, y - 0.48, -s.Z / 2 - 0.12) * CFrame.Angles(0, 0, sx * 0.18),
+				style.belt
+			)
+		end
+	end
+	-- 소매·바짓단 줄
+	for _, n in { "LeftLowerArm", "RightLowerArm", "LeftLowerLeg", "RightLowerLeg" } do
+		local p = bodyPart(rig, n)
+		if p then
+			local s = p.Size
+			weldTo(
+				rig,
+				p,
+				"Cuff",
+				Vector3.new(s.X + 0.06, 0.14, s.Z + 0.06),
+				CFrame.new(0, -s.Y / 2 + 0.12, 0),
+				style.trim
+			)
+		end
+	end
+	local head = bodyPart(rig, "Head")
+	if head then
+		local s = head.Size
+		weldTo(
+			rig,
+			head,
+			"Hair",
+			Vector3.new(s.X * 1.06, 0.32, s.Z * 1.06),
+			CFrame.new(0, s.Y / 2 - 0.02, 0.02),
+			style.hair
+		)
+		weldTo(
+			rig,
+			head,
+			"HairBack",
+			Vector3.new(s.X * 1.06, s.Y * 0.55, 0.22),
+			CFrame.new(0, s.Y * 0.18, s.Z / 2 - 0.02),
+			style.hair
+		)
+		-- 진지한 눈썹 (얼굴은 기본 얼굴 — 로블록스 안에 들어 있는 그림)
+		for _, sx in { -1, 1 } do
+			weldTo(
+				rig,
+				head,
+				"Brow",
+				Vector3.new(0.3, 0.07, 0.05),
+				CFrame.new(sx * 0.22, s.Y * 0.16, -s.Z / 2 - 0.02) * CFrame.Angles(0, 0, sx * -0.2),
+				style.hair,
+				M.SmoothPlastic
+			)
+		end
+		if not head:FindFirstChildOfClass("Decal") then
+			local face = Instance.new("Decal")
+			face.Name = "face"
+			face.Face = Enum.NormalId.Front
+			face.Texture = "rbxasset://textures/face.png"
+			face.Parent = head
+		end
+		local gui = Build.billboard(head, "NameTag", UDim2.fromOffset(240, 50), 2.2, 90)
+		local label =
+			Build.text(gui, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), "🥋 " .. name, c(255, 230, 120))
+		label.TextScaled = true
+	end
+	local hum = rig:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		pcall(function()
+			hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		end)
+	end
+end
+
+local function examiner(world: number, parent: Instance, base: CFrame, name: string): Model
+	local style = EXAMINER_STYLE[math.clamp(world, 1, #EXAMINER_STYLE)]
+	local rig = Dojo.createRig()
+	local root = rig and rig:FindFirstChild("HumanoidRootPart")
+	if rig and root and root:IsA("BasePart") then
+		rig.Name = "Examiner"
+		rig.PrimaryPart = root
+		Dojo.dressExaminer(rig, world, name)
+		local hum = rig:FindFirstChildOfClass("Humanoid")
+		local hip = if hum and hum.HipHeight > 0 then hum.HipHeight else 2
+		-- 발이 바닥(base)에 닿게: 뿌리 파트 가운데 = 바닥 + 엉덩이 높이 + 뿌리 반 높이
+		local target = base * CFrame.new(0, hip + root.Size.Y / 2, 0)
+		local ok = pcall(function()
+			rig:PivotTo(target)
+		end)
+		if not ok then
+			root.CFrame = target
+		end
+		rig:SetAttribute("Rig", "R15")
+		rig.Parent = parent
+		return rig
+	end
+	if rig then
+		rig:Destroy()
+	end
+	return blockExaminer(parent, base, style.belt, name)
 end
 
 local function duelArena(world: number, parent: Instance, _theme: Theme)
@@ -689,13 +1108,11 @@ local function duelArena(world: number, parent: Instance, _theme: Theme)
 	boardRack(theirs, theirsCf, MapLayout.DUEL_BOARDS, "Theirs", 1.6)
 	-- 시험관: 시험관 줄 끝(벽 쪽)에 서서 통로를 봄
 	local w = Worlds.get(world)
-	local belt = Belts.get(world * 4)
-	local beltColor = if belt then Color3.fromRGB(belt.color[1], belt.color[2], belt.color[3]) else c(30, 30, 30)
 	local examinerPos = v3(s.examiner)
 		- dir * (s.sizeX / 2 - 2.5)
 		+ Vector3.new(0, 0.6, 0)
 		+ (v3(s.examiner) - v3(s.player)).Unit * 2
-	examiner(model, CFrame.lookAt(examinerPos, examinerPos + dir), beltColor, if w then w.examiner else "시험관")
+	examiner(world, model, CFrame.lookAt(examinerPos, examinerPos + dir), if w then w.examiner else "사범님")
 	local board = sign(
 		model,
 		facing(v3(s, 7.5) - dir * (s.sizeX / 2 - 0.6), dir),
@@ -788,6 +1205,7 @@ end
 function Dojo.build(world: number, parent: Instance, theme: Theme): Folder
 	local lobby = Build.folder("Lobby", parent)
 	shell(world, lobby, theme)
+	roof(world, lobby, theme)
 	spawnPad(world, lobby, theme)
 	trainMats(world, lobby, theme)
 	shop(world, lobby, theme)

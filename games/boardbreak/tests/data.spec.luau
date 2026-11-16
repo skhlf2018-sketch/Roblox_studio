@@ -1,5 +1,5 @@
 --!nocheck
--- 데이터 표 무결성: 물건 41 · 아령 20 · 띠 12 · 월드 3 · 게임패스 12 (설계서 3·4·5·6장)
+-- 데이터 표 무결성: 물건 41 · 아령 (Dumbbells.COUNT) · 띠 12 · 월드 3 · 게임패스 12 (설계서 3·4·5·6장)
 return function(T, Loader)
 	local Targets = Loader.require("ReplicatedStorage/Shared/Data/Targets")
 	local Dumbbells = Loader.require("ReplicatedStorage/Shared/Data/Dumbbells")
@@ -27,59 +27,110 @@ return function(T, Loader)
 		T.eq(Targets.get(nil :: any), nil, "nil id")
 	end)
 
-	T.test("사장님 값 1~11번 그대로 (솜 3 · 유리 10 … 아파트 1,000,000)", function()
-		local boss = { 3, 10, 20, 50, 128, 256, 1024, 8192, 32768, 524288, 1000000 }
-		for i, v in boss do
-			T.eq(Targets.list[i].reward, v, Targets.list[i].id)
+	T.test("물건값 = 사장님 새 표 (2026-11-16 다시 정함: 솜 3 에서 이웃 5~10배)", function()
+		-- 3 → 20 → 150 → 1,000 → 8,000 → 50,000 → 400,000 → 다시 3M … (설계서 3장)
+		local pattern = { 3, 20, 150, 1000, 8000, 50000, 400000 }
+		for i, t in Targets.list do
+			local k = (i - 1) % 7
+			local expected = pattern[k + 1] * 1e6 ^ ((i - 1) // 7)
+			T.truthy(math.abs(t.reward - expected) <= expected * 1e-9, t.id .. " 값 " .. t.reward)
 		end
-		T.eq(Targets.get("universe").reward, 1e24, "우주 = 1Sp")
+		T.eq(Targets.get("cotton").reward, 3, "솜 3")
+		T.eq(Targets.get("glass").reward, 20, "유리 20")
+		T.eq(Targets.get("apartment").reward, 1e9, "아파트 1B")
+		T.eq(Targets.get("universe").reward, 5e34, "우주 = 50Dc")
+		for i = 2, Targets.COUNT do
+			local r = Targets.list[i].reward / Targets.list[i - 1].reward
+			T.truthy(r >= 5 and r <= 10, Targets.list[i].id .. " 이웃 reward 배율 " .. r)
+		end
 	end)
 
-	T.test("값·minPower·hp 모두 단조 증가, 유한한 양수", function()
+	T.test(
+		"추천 힘·hp: 이웃 5~10배 · hp 배율 ≥ reward 배율 (뒤 물건 지름길 없음) · minPower = recommendPower (옛 이름)",
+		function()
+			for i = 2, Targets.COUNT do
+				local a, b = Targets.list[i - 1], Targets.list[i]
+				local rp, rh, rr = b.recommendPower / a.recommendPower, b.hp / a.hp, b.reward / a.reward
+				T.truthy(rp >= 5 and rp <= 10, b.id .. " 추천 힘 배율 " .. rp)
+				T.truthy(rh >= 5 and rh <= 10, b.id .. " hp 배율 " .. rh)
+				T.truthy(rh >= rr, b.id .. " hp 배율 ≥ reward 배율")
+			end
+			for _, t in Targets.list do
+				T.eq(t.minPower, t.recommendPower, t.id .. " minPower 별칭")
+			end
+		end
+	)
+
+	T.test("값·추천 힘·hp 모두 단조 증가, 유한한 양수", function()
 		for i, t in Targets.list do
-			for _, key in { "reward", "minPower", "hp" } do
+			for _, key in { "reward", "recommendPower", "hp" } do
 				local v = t[key]
 				T.truthy(type(v) == "number" and v == v and v > 0 and v < math.huge, t.id .. " " .. key)
 			end
 			if i > 1 then
 				local prev = Targets.list[i - 1]
 				T.truthy(t.reward > prev.reward, t.id .. " reward 증가")
-				T.truthy(t.minPower > prev.minPower, t.id .. " minPower 증가")
+				T.truthy(t.recommendPower > prev.recommendPower, t.id .. " 추천 힘 증가")
 				T.truthy(t.hp > prev.hp, t.id .. " hp 증가")
 			end
 		end
 	end)
 
-	T.test("막 열렸을 때 15~30번 · 편해진 힘(3번) < 다음 물건 minPower", function()
+	T.test("추천 힘이면 15~30번 · 편해진 힘(3번) < 다음 물건 추천 힘", function()
 		for i, t in Targets.list do
-			local hits = Economy.hitsToBreak(t.hp, t.minPower)
+			local hits = Economy.hitsToBreak(t.hp, t.recommendPower)
 			T.truthy(hits >= 15 and hits <= 30, t.id .. " 처음 타격 " .. hits)
 			if i < Targets.COUNT then
-				T.truthy(t.hp / 3 < Targets.list[i + 1].minPower, t.id .. " 편해진 뒤에 다음이 열림")
+				T.truthy(t.hp / 3 < Targets.list[i + 1].recommendPower, t.id .. " 편해진 뒤에 다음이 열림")
 			end
 		end
 	end)
 
-	T.suite("data: 아령 20개")
+	T.suite("data: 아령 (사장님 결정 9번)")
 
-	T.test("20개 · 1번은 공짜 · 힘/번·값 단조 증가", function()
-		T.eq(Dumbbells.COUNT, 20, "아령 수")
-		T.eq(Dumbbells.list[1].price, 0, "1kg 아령 공짜")
-		T.eq(Dumbbells.list[1].powerPerRep, 1, "1kg 아령 1")
-		for i, d in Dumbbells.list do
-			T.eq(d.level, i, d.id .. " level")
-			T.eq(Dumbbells.get(i), d, "get")
-			T.eq(Dumbbells.byId(d.id), d, "byId")
-			if i > 1 then
-				T.truthy(d.powerPerRep > Dumbbells.list[i - 1].powerPerRep, d.id .. " 힘 증가")
-				T.truthy(d.price > Dumbbells.list[i - 1].price, d.id .. " 값 증가")
+	T.test(
+		"#list 개 · 1번은 공짜 · 사장님 숫자 (1kg 1 · 3kg 3 · 5kg 10 · 10kg 25 · 25kg 100, 3kg 42) · 힘/번·값·weightKg 단조 증가",
+		function()
+			T.eq(Dumbbells.COUNT, #Dumbbells.list, "아령 수 = 표 길이")
+			T.truthy(Dumbbells.COUNT >= 40 and Dumbbells.COUNT <= 80, "아령 수 " .. Dumbbells.COUNT)
+			T.eq(Dumbbells.list[1].price, 0, "1kg 아령 공짜")
+			T.eq(Dumbbells.list[1].powerPerRep, 1, "1kg 아령 1")
+			local boss = {
+				{ "1kg 아령", 1 },
+				{ "3kg 아령", 3 },
+				{ "5kg 아령", 10 },
+				{ "10kg 아령", 25 },
+				{ "25kg 아령", 100 },
+			}
+			for i, b in boss do
+				T.eq(Dumbbells.list[i].name, b[1], "이름 " .. i)
+				T.eq(Dumbbells.list[i].powerPerRep, b[2], b[1] .. " 힘")
 			end
+			T.eq(Dumbbells.list[2].price, 42, "3kg 아령 42")
+			for i, d in Dumbbells.list do
+				T.truthy(type(d.name) == "string" and #d.name > 0, "이름 " .. i)
+				T.truthy(type(d.weightKg) == "number" and d.weightKg > 0, d.id .. " weightKg")
+				if i > 1 then
+					T.truthy(d.weightKg > Dumbbells.list[i - 1].weightKg, d.id .. " weightKg 증가")
+					local r = d.powerPerRep / Dumbbells.list[i - 1].powerPerRep
+					T.truthy(r >= 2 and r <= 5 + 1e-9, d.id .. " 힘/번 배율 완만 " .. r)
+				end
+			end
+			for i, d in Dumbbells.list do
+				T.eq(d.level, i, d.id .. " level")
+				T.eq(Dumbbells.get(i), d, "get")
+				T.eq(Dumbbells.byId(d.id), d, "byId")
+				if i > 1 then
+					T.truthy(d.powerPerRep > Dumbbells.list[i - 1].powerPerRep, d.id .. " 힘 증가")
+					T.truthy(d.price > Dumbbells.list[i - 1].price, d.id .. " 값 증가")
+				end
+			end
+			T.eq(Dumbbells.get(0), nil, "0")
+			T.eq(Dumbbells.get(Dumbbells.COUNT + 1), nil, "끝 다음")
+			T.eq(Dumbbells.get(1.5), nil, "소수")
+			T.eq(Dumbbells.get(0 / 0), nil, "NaN")
 		end
-		T.eq(Dumbbells.get(0), nil, "0")
-		T.eq(Dumbbells.get(21), nil, "21")
-		T.eq(Dumbbells.get(1.5), nil, "소수")
-		T.eq(Dumbbells.get(0 / 0), nil, "NaN")
-	end)
+	)
 
 	T.suite("data: 띠 12개 · 월드 3개")
 
@@ -136,10 +187,13 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"대결 띠 needPower ≥ 그 월드 마지막 물건 minPower (시험관을 이길 힘 = 마지막 물건을 깨는 힘)",
+		"대결 띠 추천 힘 ≥ 그 월드 마지막 물건 추천 힘 (시험관을 넉넉히 이길 힘 = 마지막 물건을 깨는 힘)",
 		function()
 			for _, w in Worlds.list do
-				T.truthy(Belts.get(w.index * 4).needPower >= Targets.list[w.lastTarget].minPower, "월드 " .. w.index)
+				T.truthy(
+					Belts.get(w.index * 4).needPower >= Targets.list[w.lastTarget].recommendPower,
+					"월드 " .. w.index
+				)
 			end
 		end
 	)

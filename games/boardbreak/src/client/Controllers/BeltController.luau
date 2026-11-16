@@ -6,7 +6,7 @@
 	  아래: 다음 띠 조건 ("노랑 띠 — 💪 200K 필요 (지금 12K)") + 버튼
 	      심사 띠 → "🥋 심사 보기" → StartExam()   /  각 월드 네 번째 띠 → "⚔️ 시험관과 대결" → StartDuel()
 	      심사대·대결장에서 멀면 그쪽으로 걸어간 뒤 보냄 (서버가 거리·힘을 다시 검사).
-	      힘이 모자라면 회색 버튼 "💪 N 더 필요해요". 9단 띠면 "그랜드 마스터!"
+	      힘 조건 없이 늘 누를 수 있음 (추천 힘보다 약하면 "추천 힘 N — 지금은 어려울 수 있어요"). 9단 띠면 "그랜드 마스터!"
 	  도장 띠 표지판(SurfaceGui Belt_1..12)에도 지금 내 띠를 초록 테두리로 (내 화면에서만).
 	공개: NAME · render() · nextBelt() · startNext()
 ]]
@@ -56,13 +56,7 @@ function BeltController.startNext(): boolean
 	if State.activity() ~= "" then
 		return false
 	end
-	if State.power() < nxt.needPower then
-		NotifyController.toast(
-			"💪 힘이 " .. Format.number(nxt.needPower - State.power()) .. " 더 필요해요",
-			"error"
-		)
-		return false
-	end
+	-- 힘 조건 없음 (needPower = 추천 힘). 약하면 오래 걸릴 뿐 — 서버는 띠 순서·위치만 검사
 	local world = State.currentWorld()
 	local remote = if nxt.duel then Remotes.ToServer.StartDuel else Remotes.ToServer.StartExam
 	local spot = if nxt.duel then MapLayout.duelArena(world) else MapLayout.examPad(world)
@@ -233,7 +227,19 @@ function BeltController.start()
 		local power = State.power()
 		local what = if nxt.duel then "⚔️ 시험관과 대결" else "🥋 승급 심사"
 		nextLabel.Text = string.format("다음: %s — %s", nxt.name, what)
-		hint.Text = string.format("💪 %s 필요 (지금 %s)", Format.number(nxt.needPower), Format.number(power))
+		local hard = power < nxt.needPower
+		hint.Text = (
+			if hard
+				then string.format(
+					"💪 추천 힘 %s — 지금은 어려울 수 있어요",
+					Format.number(nxt.needPower)
+				)
+				else string.format(
+					"💪 추천 힘 %s (지금 %s)",
+					Format.number(nxt.needPower),
+					Format.number(power)
+				)
+		)
 			.. (
 				if nxt.duel
 					then " · 먼저 송판 15장을 깨면 승리 → 다음 월드!"
@@ -241,15 +247,13 @@ function BeltController.start()
 			)
 		if State.activity() ~= "" then
 			Ui.setButton(action, "지금 하는 중!", C.gray, false)
-		elseif power >= nxt.needPower then
+		else
 			Ui.setButton(
 				action,
 				if nxt.duel then "⚔️ 시험관과 대결" else "🥋 심사 보기",
 				if nxt.duel then C.purple else C.shopGreen,
 				true
 			)
-		else
-			Ui.setButton(action, "💪 " .. Format.number(nxt.needPower - power) .. " 더 필요해요", C.gray, false)
 		end
 	end
 	renderFn = render

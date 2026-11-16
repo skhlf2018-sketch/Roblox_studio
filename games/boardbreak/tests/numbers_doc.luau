@@ -14,6 +14,25 @@ local Belts = Loader.require("ReplicatedStorage/Shared/Data/Belts")
 local Worlds = Loader.require("ReplicatedStorage/Shared/Data/Worlds")
 local Economy = Loader.require("ReplicatedStorage/Shared/Economy")
 local Format = Loader.require("ReplicatedStorage/Shared/Format")
+local SimPlayer = require("./SimPlayer")
+
+-- 아령 "사는 데 걸린 시간" 칸 (sim_progress 와 같은 플레이어)
+local _, simLog = SimPlayer.run({
+	Targets = Targets,
+	Dumbbells = Dumbbells,
+	Belts = Belts,
+	Worlds = Worlds,
+	Economy = Economy,
+	Progression = Loader.require("ReplicatedStorage/Shared/Progression"),
+	ExamRules = Loader.require("ReplicatedStorage/Shared/ExamRules"),
+	MapLayout = Loader.require("ReplicatedStorage/Shared/Data/MapLayout"),
+})
+local function clock(seconds: number?): string
+	if not seconds then
+		return "-"
+	end
+	return string.format("%d:%02d:%02d", seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+end
 
 local function e(n: number): string
 	if n == 0 then
@@ -32,47 +51,56 @@ local function add(s)
 	table.insert(lines, s)
 end
 
-add("### 9-1. 물건 41개 (hp · minPower)")
+add("### 9-1. 물건 41개 (추천 힘 · hp)")
 add("")
-add("| # | id | minPower | hp | 막 열렸을 때 타격 | 화면 (minPower / hp) |")
-add("|---|---|---|---|---|---|")
+add("| # | id | 추천 힘 | hp | 추천 힘이면 타격 | 화면 (값 · 추천 힘 / hp) | 열림 (sim) |")
+add("|---|---|---|---|---|---|---|")
 for _, t in Targets.list do
 	add(
 		string.format(
-			"| %d | %s | %s | %s | %d | %s / %s |",
+			"| %d | %s | %s | %s | %d | %s · %s / %s | %s |",
 			t.index,
 			t.id,
-			e(t.minPower),
+			e(t.recommendPower),
 			e(t.hp),
-			Economy.hitsToBreak(t.hp, t.minPower),
-			Format.number(t.minPower),
-			Format.number(t.hp)
+			Economy.hitsToBreak(t.hp, t.recommendPower),
+			Format.number(t.reward),
+			Format.number(t.recommendPower),
+			Format.number(t.hp),
+			clock(simLog.open[t.index])
 		)
 	)
 end
 add("")
-add("### 9-2. 아령 20개")
+add(string.format("### 9-2. 아령 %d개", Dumbbells.COUNT))
 add("")
-add("| 레벨 | id | 이름 | powerPerRep | price | 화면 (힘/번 · 값) |")
-add("|---|---|---|---|---|---|")
+add(
+	"| 레벨 | id | 이름 | weightKg | powerPerRep | price | 화면 (힘/번 · 값) | 산 시각 (sim) | 걸린 시간 |"
+)
+add("|---|---|---|---|---|---|---|---|---|")
 for _, d in Dumbbells.list do
+	local at = simLog.buy[d.level]
+	local before = simLog.buy[d.level - 1]
 	add(
 		string.format(
-			"| %d | %s | %s | %s | %s | %s · %s |",
+			"| %d | %s | %s | %s | %s | %s | %s · %s | %s | %s |",
 			d.level,
 			d.id,
 			d.name,
+			e(d.weightKg),
 			e(d.powerPerRep),
 			e(d.price),
 			Format.number(d.powerPerRep),
-			Format.number(d.price)
+			Format.number(d.price),
+			clock(at),
+			if at and before then string.format("%d초", math.floor(at - before)) else "-"
 		)
 	)
 end
 add("")
 add("### 9-3. 띠 12개")
 add("")
-add("| # | id | 이름 | moneyMultiplier | needPower | 받는 법 | 송판 1장 체력 |")
+add("| # | id | 이름 | moneyMultiplier | needPower (추천 힘) | 받는 법 | 송판 1장 체력 |")
 add("|---|---|---|---|---|---|---|")
 for _, b in Belts.list do
 	local how = if b.index == 1 then "처음" elseif b.duel then "대결" else "심사"

@@ -4,7 +4,7 @@
 	  - targetId = "exam" / "duel" 이면 심사·대결 송판 → ExamService.hit (같은 Remote · 같은 속도 제한)
 	  - 없는 id · 닫힌 월드의 물건 · 너무 먼 거리 → 무시 (거리 = 선임 MapLayout.targetPosition(id) 와 캐릭터 위치,
 	    닿는 거리 MapLayout.targetReach(id) + Config.HIT_REACH_SLACK)
-	  - 치는 힘(힘 × PowerBoost) < minPower → 피해 0 + HitResult reason "weak" + 알림 "힘이 부족해요" (2초에 한 번)
+	  - 힘 문턱 없음 (사장님 결정 11번): 피해 = 치는 힘(힘 × PowerBoost) 그대로 — 약하면 여러 번 쳐야 할 뿐. recommendPower 는 화면 표시용
 	  - 체력은 플레이어마다 따로 (session.targetHp). 깨지면 돈 = reward × 띠 배율 × (돈 2배면 2) · broken[id] += 1 · 체력 다시 가득
 	  - 속도 제한: Remotes.RateLimits.Hit (초당 5번, 넘으면 버림 — Net.on)
 	  → HitResult { targetId, damage, hp, hpMax, broken, reward?, reason? } (나에게만) · Attr Money (Wallet)
@@ -18,7 +18,6 @@ local Config = require(Shared.Data.Config)
 local MapLayout = require(Shared.Data.MapLayout)
 local Economy = require(Shared.Economy)
 local BreakRules = require(Shared.BreakRules)
-local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
 local Types = require(Shared.Types)
 local Server = script.Parent.Parent
@@ -32,8 +31,6 @@ local ExamService = require(script.Parent.ExamService)
 
 local BreakService = {}
 
-BreakService.WEAK_TEXT = "힘이 부족해요! 아령을 더 들어요."
-
 -- 한 번 치기 (Remote 와 테스트가 같이 씀). 판정이 났으면 HitResult, 무시했으면 nil
 function BreakService.hit(player: Player, rawId: unknown): Types.HitResult?
 	local session, data = Sessions.getLoaded(player)
@@ -41,8 +38,8 @@ function BreakService.hit(player: Player, rawId: unknown): Types.HitResult?
 		return nil
 	end
 	local id = Validate.uid(rawId)
-	if not id then
-		return nil
+	if not id or not Character.isAlive(player) then
+		return nil -- 죽은 캐릭터(Health 0)는 못 침 (A-1)
 	end
 	if id == Remotes.EXAM_TARGET or id == Remotes.DUEL_TARGET then
 		ExamService.hit(player, id)
@@ -74,20 +71,7 @@ function BreakService.hit(player: Player, rawId: unknown): Types.HitResult?
 		reward = nil,
 		reason = outcome.reason,
 	}
-	if outcome.reason == "weak" then
-		if Sessions.useCooldown(session, "weak", 2, os.clock()) then
-			Net.notify(
-				player,
-				"error",
-				string.format(
-					"%s (%s 은 힘 %s 부터)",
-					BreakService.WEAK_TEXT,
-					target.name,
-					Format.number(target.minPower)
-				)
-			)
-		end
-	elseif outcome.broken then
+	if outcome.broken then
 		local reward = Wallet.addMoney(player, Economy.breakReward(target.reward, data.belt, data.moneyPass))
 		local first = (data.broken[target.id] or 0) == 0
 		data.broken[target.id] = math.min(1e15, (data.broken[target.id] or 0) + 1)

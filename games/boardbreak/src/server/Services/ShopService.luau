@@ -31,13 +31,13 @@ function ShopService.buyDumbbell(player: Player): boolean
 	local ok, reason, nextDumbbell = Progression.canBuyDumbbell(data.dumbbellLevel, data.money)
 	if not ok or not nextDumbbell then
 		if reason == "max" then
-			Net.notify(player, "info", "가장 좋은 아령을 이미 갖고 있어요!")
+			Net.notify(player, "info", "최고 아령 보유")
 		elseif nextDumbbell then
 			Net.notify(
 				player,
 				"error",
 				string.format(
-					"%s 은 %s 돈이 필요해요 (지금 %s)",
+					"돈 부족 · %s 가격 %s (보유 %s)",
 					nextDumbbell.name,
 					Format.number(nextDumbbell.price),
 					Format.number(data.money)

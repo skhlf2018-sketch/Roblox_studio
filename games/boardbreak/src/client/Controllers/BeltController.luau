@@ -64,7 +64,7 @@ function BeltController.startNext(): boolean
 	local pos = Vector3.new(spot.x, spot.y, spot.z)
 	Windows.close(NAME)
 	if Walk.flatDistance(pos) > radius - 4 then
-		NotifyController.toast(if nxt.duel then "대결장으로 가요!" else "심사대로 가요!", "info")
+		NotifyController.toast(if nxt.duel then "대결장으로 이동" else "심사대로 이동", "info")
 	end
 	Walk.to(pos, radius - 6, function()
 		Net.send(remote)
@@ -203,7 +203,7 @@ function BeltController.start()
 				row.state.TextColor3 = C.green
 				row.card.BackgroundColor3 = Color3.fromRGB(40, 70, 45)
 			elseif index < mine then
-				row.state.Text = "받았어요"
+				row.state.Text = "획득"
 				row.state.TextColor3 = C.gray
 				row.card.BackgroundColor3 = Color3.fromRGB(50, 52, 62)
 			elseif index == mine + 1 then
@@ -219,9 +219,9 @@ function BeltController.start()
 		action.Size = UDim2.new(1, -24, 0, Ui.touch(60, SIZE))
 		local nxt = BeltController.nextBelt()
 		if grandMaster() or not nxt then
-			nextLabel.Text = "👑 그랜드 마스터! 모든 띠를 받았어요"
-			hint.Text = "계속 물건을 깨서 도감을 채워 봐요"
-			Ui.setButton(action, "최고 띠예요!", C.gray, false)
+			nextLabel.Text = "👑 그랜드 마스터! 모든 띠 획득"
+			hint.Text = "물건 격파로 도감 채우기"
+			Ui.setButton(action, "최고 띠", C.gray, false)
 			return
 		end
 		local power = State.power()
@@ -230,10 +230,7 @@ function BeltController.start()
 		local hard = power < nxt.needPower
 		hint.Text = (
 			if hard
-				then string.format(
-					"💪 추천 힘 %s — 지금은 어려울 수 있어요",
-					Format.number(nxt.needPower)
-				)
+				then string.format("💪 추천 힘 %s · 아직 어려움", Format.number(nxt.needPower))
 				else string.format(
 					"💪 추천 힘 %s (지금 %s)",
 					Format.number(nxt.needPower),
@@ -242,11 +239,11 @@ function BeltController.start()
 		)
 			.. (
 				if nxt.duel
-					then " · 먼저 송판 15장을 깨면 승리 → 다음 월드!"
+					then " · 송판 15장 먼저 격파 시 승리 → 다음 월드"
 					else " · 20초 안에 송판 10장!"
 			)
 		if State.activity() ~= "" then
-			Ui.setButton(action, "지금 하는 중!", C.gray, false)
+			Ui.setButton(action, "진행 중", C.gray, false)
 		else
 			Ui.setButton(
 				action,

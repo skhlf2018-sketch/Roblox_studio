@@ -94,12 +94,12 @@ function WorldController.travel(world: number): boolean
 		return false
 	end
 	if State.activity() ~= "" then
-		NotifyController.toast("심사·대결이 끝나면 갈 수 있어요", "info")
+		NotifyController.toast("심사·대결 종료 후 이동 가능", "info")
 		return false
 	end
 	if not WorldController.isUnlocked(world) then
 		NotifyController.toast(
-			string.format("🔒 월드 %d %s 는 시험관을 이기면 열려요", world, w.name),
+			string.format("🔒 월드 %d %s · 시험관 승리 시 열림", world, w.name),
 			"error"
 		)
 		SoundController.play("Error")

@@ -230,11 +230,7 @@ local function onLockStolen(session: Session)
 	)
 	if player.Parent ~= nil then
 		player:SetAttribute(Tags.PlayerAttributes.SaveEnabled, false)
-		Net.notify(
-			player,
-			"error",
-			"다른 곳에서 같은 계정으로 접속해서 이 서버는 저장을 멈췄어요. 다시 접속해 주세요."
-		)
+		Net.notify(player, "error", "같은 계정 다른 곳 접속 · 이 서버 저장 중지. 재접속 필요")
 	end
 end
 

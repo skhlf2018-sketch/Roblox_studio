@@ -151,7 +151,7 @@ function BreakController.hitTarget(id: string)
 	if not road then
 		return
 	end
-	NotifyController.toast(target.name .. " 앞으로 가요!", "info")
+	NotifyController.toast(target.name .. " 앞으로 이동", "info")
 	Walk.to(Vector3.new(road.x, road.y, road.z), reach - 1, function()
 		lastHitAt = os.clock()
 		Net.send(Remotes.ToServer.Hit, id)

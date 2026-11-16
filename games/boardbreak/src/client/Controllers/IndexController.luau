@@ -134,7 +134,7 @@ function IndexController.start()
 				e.name.Text = "???"
 				e.mark.Text = "?"
 				e.mark.TextColor3 = C.gray
-				e.count.Text = "아직 못 깼어요"
+				e.count.Text = "아직 안 깸"
 				e.card.BackgroundColor3 = C.winDark
 			end
 		end

@@ -54,15 +54,12 @@ function WorldService.travel(player: Player, rawWorld: unknown): boolean
 		Net.notify(
 			player,
 			"error",
-			string.format(
-				"%s 은 아직 열리지 않았어요. 시험관을 이기면 열려요!",
-				if info then info.name else "그 월드"
-			)
+			string.format("%s 잠김 · 시험관 승리 시 열림", if info then info.name else "그 월드")
 		)
 		return false
 	end
 	if Sessions.activity(session) ~= "" then
-		Net.notify(player, "error", "심사·대결 중에는 이동할 수 없어요!")
+		Net.notify(player, "error", "심사·대결 중 이동 불가")
 		return false
 	end
 	session.currentWorld = world

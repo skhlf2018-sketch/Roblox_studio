@@ -83,13 +83,13 @@ function PlayerLifecycle.onPlayerAdded(player: Player)
 		Net.notify(
 			player,
 			"error",
-			"게임이 업데이트되는 중이에요. 이번 접속은 저장되지 않으니 잠시 뒤 다시 접속해 주세요."
+			"게임 업데이트 중 · 이번 접속 저장 안 됨. 잠시 후 재접속 필요"
 		)
 	elseif not saveEnabled and not DataService.isMemoryMode() then
 		Net.notify(
 			player,
 			"error",
-			"저장 데이터를 불러오지 못했어요. 이번 접속은 저장되지 않아요. 다시 접속해 주세요."
+			"저장 데이터 불러오기 실패 · 이번 접속 저장 안 됨. 재접속 필요"
 		)
 	end
 	safely("Snapshot", Snapshot.send, player)

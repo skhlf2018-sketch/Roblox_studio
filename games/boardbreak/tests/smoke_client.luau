@@ -1104,18 +1104,15 @@ local function body()
 	check(find(find(shopWin, "Next"), "Name").Text == Dumbbells.get(2).name, "다음 아령 = 3kg 아령")
 	local buy = find(shopWin, "BuyButton")
 	check(
-		string.find(buy.Text, "사기", 1, true) ~= nil,
-		'돈이 넉넉 → 초록 "사기 · 💰 30" (' .. buy.Text .. ")"
+		string.find(buy.Text, "구매", 1, true) ~= nil,
+		'돈이 넉넉 → 초록 "구매 · 💰 42" (' .. buy.Text .. ")"
 	)
 	local b0 = countSent(S.BuyDumbbell)
 	press(buy)
 	check(countSent(S.BuyDumbbell) == b0 + 1, "사기 → BuyDumbbell()")
 	setAttr(A.Money, 10)
 	Shop.render()
-	check(
-		string.find(buy.Text, "더 필요해요", 1, true) ~= nil,
-		'돈이 모자라면 "💰 20 더 필요해요" (' .. buy.Text .. ")"
-	)
+	check(string.find(buy.Text, " 부족", 1, true) ~= nil, '돈이 모자라면 "💰 20 부족" (' .. buy.Text .. ")")
 	press(buy)
 	check(countSent(S.BuyDumbbell) == b0 + 1, "돈 모자라면 안 보냄")
 	check(find(shopWin, "Dumbbell_20") ~= nil, "아령 20개 목록")
@@ -1145,8 +1142,8 @@ local function body()
 		"힘이 약해도 버튼은 늘 누를 수 있음 (" .. action.Text .. ")"
 	)
 	check(
-		hintLabel == nil or string.find(hintLabel.Text, "어려울 수 있어요", 1, true) ~= nil,
-		'약하면 "추천 힘 N — 지금은 어려울 수 있어요" ('
+		hintLabel == nil or string.find(hintLabel.Text, "아직 어려움", 1, true) ~= nil,
+		'약하면 "추천 힘 N · 아직 어려움" ('
 			.. (hintLabel and hintLabel.Text or "힌트 이름 다름")
 			.. ")"
 	)
@@ -1220,8 +1217,8 @@ local function body()
 	local boostWin = find(screen, Boost.NAME)
 	check(Boost.cardState(2) == "buy" and Boost.cardState(4) == "locked", "×1: 2배만 살 수 있고 4배는 잠김")
 	check(
-		find(find(boostWin, "Boost_power_4"), "State").Text == "2배를 먼저 사요",
-		'4배 카드 "2배를 먼저 사요"'
+		find(find(boostWin, "Boost_power_4"), "State").Text == "2배 먼저 필요",
+		'4배 카드 "2배 먼저 필요"'
 	)
 	check(find(find(boostWin, "Boost_power_2"), "State").Text == "준비 중", 'id 0 → "준비 중"')
 	press(find(find(boostWin, "Boost_power_2"), "BuyBoost"))
@@ -1264,12 +1261,12 @@ local function body()
 
 	print("[Notify]")
 	holdDelays = true
-	fire(R.Notify, { kind = "success", text = "3kg 아령을 샀어요!" })
+	fire(R.Notify, { kind = "success", text = "3kg 아령 구매!" })
 	holdDelays = false
 	local toast = find(screen, "ToastStack")
 	local found = false
 	for _, t in toast:GetChildren() do
-		if t:IsA("TextLabel") and t.Text == "3kg 아령을 샀어요!" then
+		if t:IsA("TextLabel") and t.Text == "3kg 아령 구매!" then
 			found = true
 		end
 	end

@@ -32,7 +32,7 @@ local SoundController = require(script.Parent.Controllers.SoundController)
 
 local Purchase = {}
 
-Purchase.NOT_READY = "준비 중이에요 — 어른과 함께 상품을 만들어야 살 수 있어요"
+Purchase.NOT_READY = "준비 중"
 Purchase.BUSY_SECONDS = 2
 Purchase.TOAST_COOLDOWN = 1 -- "준비 중" 토스트는 1초에 한 번만
 
@@ -92,7 +92,7 @@ function Purchase.prompt(key: string): string
 	if not ok then
 		busyUntil = -math.huge
 		warn("[Purchase] 구매창을 못 띄움: " .. tostring(err))
-		NotifyController.toast("구매창을 열 수 없어요. 잠시 뒤에 다시 해 봐요", "error")
+		NotifyController.toast("구매창 열기 실패 · 잠시 후 재시도", "error")
 		return "error"
 	end
 	return "prompted"
@@ -130,7 +130,7 @@ local function celebrate(text: string)
 		stroke.Color = C.winEdge
 		stroke.Thickness = 5
 	end
-	Ui.label("고마워요!", UDim2.new(1, 0, 0, 36), 28, C.white, {
+	Ui.label("구매 완료!", UDim2.new(1, 0, 0, 36), 28, C.white, {
 		Name = "Sub",
 		Position = UDim2.fromOffset(0, 70),
 		Parent = holder,
@@ -153,7 +153,7 @@ function Purchase.granted(payload: any): boolean
 	}
 	busyUntil = -math.huge
 	SoundController.play("ProductGranted")
-	celebrate((if product then product.name else grant.key) .. " 받았어요!")
+	celebrate((if product then product.name else grant.key) .. " 획득!")
 	for _, fn in table.clone(listeners) do
 		task.spawn(fn, grant)
 	end

@@ -23,7 +23,7 @@ local Wallet = require(script.Parent.Wallet)
 
 local TrainService = {}
 
-TrainService.OFF_MAT_TEXT = "수련 매트 위에서 아령을 들어요!"
+TrainService.OFF_MAT_TEXT = "수련 매트 위에서만 아령 들기 가능"
 
 -- 한 번 들기 (Remote 와 테스트가 같이 씀). 올랐으면 오른 힘, 아니면 0
 function TrainService.train(player: Player): number

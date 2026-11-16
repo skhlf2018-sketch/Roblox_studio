@@ -64,17 +64,11 @@ function BoostController.start()
 		Windows.close(NAME)
 	end)
 	local content = window.content
-	Ui.label(
-		"아령으로 오르는 힘과 칠 때 깎는 힘이 둘 다 N배! (영원히)",
-		UDim2.new(1, 0, 0, 28),
-		20,
-		C.yellow,
-		{
-			Name = "Hint",
-			TextScaled = true,
-			Parent = content,
-		}
-	)
+	Ui.label("아령 힘·타격 힘 모두 N배 (영구)", UDim2.new(1, 0, 0, 28), 20, C.yellow, {
+		Name = "Hint",
+		TextScaled = true,
+		Parent = content,
+	})
 	local nowLabel = Ui.label("", UDim2.new(1, 0, 0, 30), 24, C.white, {
 		Name = "Current",
 		Position = UDim2.fromOffset(0, 30),
@@ -142,9 +136,7 @@ function BoostController.start()
 
 	local function render()
 		local now = BoostController.current()
-		nowLabel.Text = if now > 1
-			then string.format("지금 ×%s 적용 중!", tostring(now))
-			else "아직 힘 배수가 없어요 (×1)"
+		nowLabel.Text = if now > 1 then string.format("×%s 적용 중", tostring(now)) else "힘 배수 없음 (×1)"
 		local buttonH = Ui.touch(56, SIZE)
 		for _, product in Products.powerBoosts do
 			local entry = cards[product.key]
@@ -159,13 +151,11 @@ function BoostController.start()
 				elseif s == "locked" then
 					local need = Products.nextPowerBoost(now)
 					Ui.setButton(entry.button, "🔒 " .. Purchase.robux(product.robux), C.gray, false)
-					entry.state.Text = if need
-						then string.format("%d배를 먼저 사요", need.value or 2)
-						else "잠겨 있어요"
+					entry.state.Text = if need then string.format("%d배 먼저 필요", need.value or 2) else "잠김"
 					entry.card.BackgroundColor3 = Color3.fromRGB(48, 48, 54)
 				else
 					Ui.setButton(entry.button, if s == "active" then "적용 중" else "보유 중", C.gray, false)
-					entry.state.Text = if s == "active" then "지금 이 배수!" else "샀어요 ✔"
+					entry.state.Text = if s == "active" then "현재 배수" else "구매 완료 ✔"
 					entry.card.BackgroundColor3 = Color3.fromRGB(60, 62, 70)
 				end
 			end

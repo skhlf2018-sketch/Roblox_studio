@@ -88,13 +88,13 @@ end
 -- 시작할 수 없는 이유 (힘은 이유가 아님 — 사장님 결정 11번: 힘이 약해도 도전은 됨)
 local function reasonText(reason: string?): string
 	if reason == "max" then
-		return "이미 마지막 띠예요! 그랜드 마스터!"
+		return "마지막 띠 보유 · 그랜드 마스터!"
 	elseif reason == "duel" then
-		return "다음 띠는 시험관과 대결해서 받아요. 대결장으로 가요!"
+		return "다음 띠: 대결장에서 시험관 대결"
 	elseif reason == "exam" then
-		return "다음 띠는 승급 심사로 받아요. 심사대로 가요!"
+		return "다음 띠: 심사대에서 승급 심사"
 	end
-	return "지금은 할 수 없어요"
+	return "지금은 불가"
 end
 
 local function busy(session: Sessions.Session): boolean
@@ -119,12 +119,12 @@ local function finishExam(player: Player, session: Sessions.Session, data: Types
 		Net.notify(
 			player,
 			"success",
-			string.format("합격! %s 을 받았어요! (돈 ×%s)", belt.name, tostring(belt.moneyMultiplier))
+			string.format("합격! %s 획득 (돈 ×%s)", belt.name, tostring(belt.moneyMultiplier))
 		)
 		Snapshot.section(player, "progress")
 	else
 		data.stats.examsFailed += 1
-		Net.notify(player, "info", "아쉬워요! 힘을 더 길러서 다시 도전해요.")
+		Net.notify(player, "info", "불합격 · 힘 키워서 재도전")
 	end
 	Attributes.sync(player)
 end
@@ -143,18 +143,14 @@ local function finishDuel(player: Player, session: Sessions.Session, data: Types
 		data.stats.duelsWon += 1
 		if Progression.isGrandMaster(data.belt) then
 			data.grandMaster = true
-			Net.notify(
-				player,
-				"success",
-				"그랜드 마스터! 모든 시험관을 이겼어요! (계속 깰 수 있어요)"
-			)
+			Net.notify(player, "success", "그랜드 마스터! 모든 시험관 격파 (격파 계속 가능)")
 		else
 			local nextWorld = Worlds.get(data.world)
 			Net.notify(
 				player,
 				"success",
 				string.format(
-					"%s 을 이겼어요! %s · %s 이 열렸어요!",
+					"%s 격파! %s · %s 열림",
 					state.examiner,
 					belt.name,
 					if nextWorld then nextWorld.name else "다음 월드"
@@ -164,7 +160,7 @@ local function finishDuel(player: Player, session: Sessions.Session, data: Types
 		Snapshot.section(player, "progress")
 	else
 		data.stats.duelsLost += 1
-		Net.notify(player, "info", "시험관이 먼저 다 깼어요. 힘을 더 길러서 다시 도전해요!")
+		Net.notify(player, "info", "패배 · 시험관 먼저 완료. 힘 키워서 재도전")
 	end
 	Attributes.sync(player)
 end
@@ -185,7 +181,7 @@ function ExamService.startExam(player: Player, now: number?): boolean
 		return false
 	end
 	if not near(player, examSpot(session), Config.EXAM_RADIUS, session.currentWorld) then
-		Net.notify(player, "error", "심사대 위에서 시작해요!")
+		Net.notify(player, "error", "심사대 위에서만 시작 가능")
 		return false
 	end
 	local t = now or os.clock()
@@ -210,7 +206,7 @@ function ExamService.startDuel(player: Player, now: number?): boolean
 		return false
 	end
 	if not near(player, duelSpot(session), Config.DUEL_RADIUS, session.currentWorld) then
-		Net.notify(player, "error", "대결장 안에서 시작해요!")
+		Net.notify(player, "error", "대결장 안에서만 시작 가능")
 		return false
 	end
 	local t = now or os.clock()

@@ -69,13 +69,13 @@ end
 
 local function text(step: number): (string, string)
 	if step == 1 then
-		return '1/3 💪 수련 매트에 올라가 "들기"를 눌러요',
+		return "1/3 💪 수련 매트에서 [들기]",
 			string.format("힘 %s / %d", Format.number(State.power()), TutorialController.TUTORIAL_POWER)
 	elseif step == 2 then
-		return "2/3 🥊 도장 밖 솜을 눌러서 깨요!", '가까이 가면 "치기" 버튼도 생겨요'
+		return "2/3 🥊 도장 밖 솜 깨기", "가까이 가면 [치기] 표시"
 	elseif step == 3 then
 		local nxt = Dumbbells.get(2)
-		return "3/3 🏋️ 아령 가게에서 다음 아령을 사요",
+		return "3/3 🏋️ 아령 가게에서 다음 아령 구매",
 			if nxt then string.format("%s · 💰 %s", nxt.name, Format.number(nxt.price)) else ""
 	end
 	return "", ""
@@ -98,7 +98,7 @@ function TutorialController.refresh()
 	if step == 0 then
 		if shownStep > 0 and not doneShown then
 			doneShown = true
-			NotifyController.toast("🎉 안내 끝! 이제 더 큰 물건을 깨 봐요", "success")
+			NotifyController.toast("🎉 안내 완료 · 더 큰 물건에 도전", "success")
 			SoundController.play("TutorialDone")
 		end
 		shownStep = 0

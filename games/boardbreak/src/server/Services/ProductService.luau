@@ -47,17 +47,13 @@ ProductService.RECEIPT_ID_MAX = 64
 ProductService.PASS_CHECK_RETRIES = 2
 ProductService.PASS_RETRY_SECONDS = 1
 ProductService.PASS_CHECK_TIMEOUT = 30
-ProductService.PASS_CHECKING_TEXT = "구매를 확인하는 중이에요. 잠시 뒤 다시 접속하면 적용돼요"
+ProductService.PASS_CHECKING_TEXT = "구매 확인 중 · 잠시 후 재접속 시 적용"
 
 local function boostText(boost: number): string
-	return string.format(
-		"힘 %s배! 아령으로 오르는 힘도, 칠 때 힘도 %s배예요.",
-		Format.number(boost),
-		Format.number(boost)
-	)
+	return string.format("힘 %s배! 아령 힘·타격 힘 모두 %s배", Format.number(boost), Format.number(boost))
 end
 
-local MONEY_PASS_TEXT = "돈 2배! 이제 물건을 깨면 돈을 2배로 받아요 (영원히)."
+local MONEY_PASS_TEXT = "돈 2배! 격파 보상 2배 (영구)"
 
 -- 지급 (영수증 확인 없음 — 개발 명령 /buy · 테스트). 줬으면 true
 function ProductService.grant(player: Player, key: string, _source: string?): boolean
@@ -75,10 +71,7 @@ function ProductService.grant(player: Player, key: string, _source: string?): bo
 			Net.notify(
 				player,
 				"info",
-				string.format(
-					"힘 배수는 순서대로 열려요. 지금 %s배예요.",
-					Format.number(data.powerBoost)
-				)
+				string.format("힘 배수는 순서대로 구매 · 현재 %s배", Format.number(data.powerBoost))
 			)
 		end
 		for _, boost in Products.powerBoosts do
@@ -88,7 +81,7 @@ function ProductService.grant(player: Player, key: string, _source: string?): bo
 		end
 	elseif product.kind == Kinds.moneyPass then
 		if data.moneyPass then
-			Net.notify(player, "info", "이미 돈 2배를 갖고 있어요! (영원히 적용 중)")
+			Net.notify(player, "info", "돈 2배 보유 중 (영구 적용)")
 		else
 			data.moneyPass = true
 			Net.notify(player, "success", MONEY_PASS_TEXT)
@@ -182,7 +175,7 @@ function ProductService.processReceipt(receipt: { [string]: any }): Enum.Product
 	if not product then
 		warn(
 			string.format(
-				"[ProductService] 모르는 상품 id %s (%s) — Products.IDS 를 확인하세요. 지급 안 함",
+				"[ProductService] 모르는 상품 id %s (%s) — Products.IDS 확인 필요. 지급 안 함",
 				tostring(productId),
 				player.Name
 			)
@@ -391,7 +384,7 @@ function ProductService.onGamePassPurchaseFinished(player: Player, gamePassId: n
 				player,
 				"success",
 				string.format(
-					"힘 배수는 순서대로 열려요. 지금 %s배예요 — 앞의 배수 패스를 사면 올라가요.",
+					"힘 배수는 순서대로 구매 · 현재 %s배 (앞 배수 구매 시 상승)",
 					Format.number(data.powerBoost)
 				)
 			)

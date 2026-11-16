@@ -205,7 +205,7 @@ local function shell(world: number, parent: Instance, theme: Theme)
 		gate * 2 + 5,
 		4,
 		theme.name,
-		"물건 깨러 가요 →",
+		"물건 깨러 가기 →",
 		theme.accent
 	)
 	gateSign.Name = "GateSign"
@@ -588,7 +588,7 @@ local function shop(world: number, parent: Instance, theme: Theme)
 		s.sizeZ - 2,
 		3,
 		"🏋️ 아령 가게",
-		"눌러서 다음 아령 사기",
+		"눌러서 다음 아령 구매",
 		c(70, 150, 60)
 	)
 	board.Name = "ShopSign"
@@ -1121,7 +1121,7 @@ local function duelArena(world: number, parent: Instance, _theme: Theme)
 		14,
 		3.2,
 		"⚔️ 시험관과 대결",
-		"먼저 송판 15장을 다 깨면 승리!",
+		"송판 15장 먼저 격파 시 승리",
 		c(150, 50, 160)
 	)
 	board.Name = "DuelSign"

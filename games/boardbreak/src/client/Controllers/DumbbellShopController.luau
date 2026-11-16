@@ -115,7 +115,7 @@ function DumbbellShopController.start()
 		Position = UDim2.new(0.5, 0, 0, 40),
 		Parent = top,
 	})
-	local buy = Ui.button("사기", C.shopGreen, UDim2.new(1, -24, 0, 58), function()
+	local buy = Ui.button("구매", C.shopGreen, UDim2.new(1, -24, 0, 58), function()
 		local nxt = DumbbellShopController.nextDumbbell()
 		if not nxt then
 			return
@@ -180,19 +180,19 @@ function DumbbellShopController.start()
 			nextGain.Text = perRep(nxt)
 			local money = State.money()
 			if money >= nxt.price then
-				Ui.setButton(buy, "사기 · 💰 " .. Format.number(nxt.price), C.shopGreen, true)
+				Ui.setButton(buy, "구매 · 💰 " .. Format.number(nxt.price), C.shopGreen, true)
 			else
-				Ui.setButton(buy, "💰 " .. Format.number(nxt.price - money) .. " 더 필요해요", C.gray, false)
+				Ui.setButton(buy, "💰 " .. Format.number(nxt.price - money) .. " 부족", C.gray, false)
 			end
 		else
 			nextName.Text = "없음"
 			nextGain.Text = ""
-			Ui.setButton(buy, "가장 좋은 아령이에요!", C.gray, false)
+			Ui.setButton(buy, "최고 아령 보유", C.gray, false)
 		end
 		for lv, entry in cards do
 			local d = Dumbbells.get(lv)
 			if lv <= level then
-				entry.state.Text = if lv == level then "들고 있어요 ✔" else "가졌어요 ✔"
+				entry.state.Text = if lv == level then "사용 중 ✔" else "보유 ✔"
 				entry.card.BackgroundColor3 = Color3.fromRGB(40, 70, 45)
 			elseif lv == level + 1 then
 				entry.state.Text = if d then "💰 " .. Format.number(d.price) else ""

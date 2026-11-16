@@ -151,8 +151,7 @@ function DevCommands.handle(player: Player, message: string): boolean
 		data.moneyPass = false
 		table.clear(session.ownedPasses)
 		Snapshot.section(player, "passes")
-		text =
-			"힘 배수·돈 2배를 처음으로 되돌렸어요 (다시 접속하면 가진 게임패스가 다시 적용돼요)"
+		text = "힘 배수·돈 2배 초기화 (재접속 시 보유 게임패스 재적용)"
 	elseif command == "reset" then
 		ExamService.cancel(player)
 		local fresh = DataSchema.default(os.time())

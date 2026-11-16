@@ -202,7 +202,7 @@ function ExamController.onExam(s: any)
 		mode = nil
 		show(false)
 		paintBoards(Tags.ExamPad, "Board", 0, total)
-		ExamController.big("아쉬워요… 다시 도전!", C.red, 2)
+		ExamController.big("불합격… 다시 도전!", C.red, 2)
 	end
 end
 
@@ -267,14 +267,14 @@ function ExamController.onDuel(s: any)
 			local nextWorld = Worlds.get(worldIndex + 1)
 			if nextWorld then
 				NotifyController.banner(
-					"🚪 월드 " .. nextWorld.index .. " " .. nextWorld.name .. " 문이 열렸어요!",
+					"🚪 월드 " .. nextWorld.index .. " " .. nextWorld.name .. " 문 열림!",
 					Theme.worldColor(nextWorld.index)
 				)
 			else
-				NotifyController.banner("👑 그랜드 마스터가 되었어요!", C.yellow)
+				NotifyController.banner("👑 그랜드 마스터 달성!", C.yellow)
 			end
 		else
-			ExamController.big("졌어요… 힘을 더 길러서 다시!", C.red, 2.2)
+			ExamController.big("패배… 힘 키워서 재도전!", C.red, 2.2)
 		end
 	end
 end

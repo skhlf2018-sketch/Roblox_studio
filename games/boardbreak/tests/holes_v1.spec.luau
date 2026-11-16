@@ -873,7 +873,7 @@ return function(T, Loader)
 			end
 			T.eq(data.dumbbellLevel, last)
 			T.eq(data.money, 1e60)
-			T.truthy(H.hasNotify(p, "info", "가장 좋은 아령"))
+			T.truthy(H.hasNotify(p, "info", "최고 아령"))
 			H.uninstall()
 		end
 	)

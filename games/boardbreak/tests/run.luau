@@ -26,6 +26,8 @@ local specs = {
 	{ "design_doc.spec", require("./design_doc.spec") },
 	{ "holes_v1.spec", require("./holes_v1.spec") },
 	{ "holes_v2.spec", require("./holes_v2.spec") },
+	{ "sizes.spec", require("./sizes.spec") },
+	{ "size_service.spec", require("./size_service.spec") },
 }
 
 local filters: { string } = {}

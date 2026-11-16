@@ -4,7 +4,7 @@
 	  Dojo.build(world, parent, theme) → Folder "Lobby"
 	만드는 것 (태그는 shared/Tags, 전부 Model 에 태그 + Attr World + ClickDetector "Click"):
 	  WorldSpawn (월드 1 은 진짜 SpawnLocation) · TrainMat 6칸 (각 매트 파트에 태그 — 위에 서면 들기)
-	  · DumbbellShop (카운터 + 아령 20개 진열 + 간판) · BeltBoard (12개 띠 색·이름 판 — 클라가 내 띠를 반짝이게)
+	  · DumbbellShop (카운터 + 아령 진열 + 간판) · BeltBoard (Belts.list 전부 — 월드별 세로 칸, 여러 색 띠는 그러데이션 · 클라가 내 띠를 반짝이게)
 	  · ExamPad (단상 + 송판 10장 거치대 Board_1..10) · DuelArena (내 쪽 Mine_1..15 · 시험관 쪽 Theirs_1..15 + 시험관 NPC)
 	  · WorldDoor (다른 월드 문 2개, Attr TargetWorld. 자물쇠 "Lock" 은 클라가 내 열린 월드에 맞춰 보이기/숨기기)
 	표지판은 스폰·매트 위를 가리지 않게 벽 쪽에 (smoke_visuals 가 검사).
@@ -15,10 +15,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local MapLayout = require(Shared.Data.MapLayout)
+-- 짓기는 배율 1 자리로 (MapBuilder 가 월드를 다 지은 뒤 통째로 worldScale 배 키움)
+local Layout = MapLayout.base
 local Belts = require(Shared.Data.Belts)
 local Worlds = require(Shared.Data.Worlds)
 local Dumbbells = require(Shared.Data.Dumbbells)
 local DumbbellLook = require(Shared.DumbbellLook)
+local BeltLook = require(Shared.BeltLook)
 local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local Build = require(script.Parent.Build)
@@ -39,6 +42,7 @@ export type Theme = {
 	mat: { Color3 },
 	accent: Color3,
 	name: string,
+	glow: boolean?, -- 벽 아래 네온 띠 (어두운 우주 도장 — 스스로 빛나서 방 모양이 보임)
 }
 
 local M = Enum.Material
@@ -108,7 +112,7 @@ end
 ------------------------------------------------------------------
 
 local function shell(world: number, parent: Instance, theme: Theme)
-	local rect = MapLayout.lobbyRect(world)
+	local rect = Layout.lobbyRect(world)
 	local cx = (rect.x0 + rect.x1) / 2
 	local w = rect.x1 - rect.x0
 	local d = rect.z1 - rect.z0
@@ -167,6 +171,31 @@ local function shell(world: number, parent: Instance, theme: Theme)
 	-- 벽 위 띠 장식 (4면)
 	for _, s in { { rect.x0 - 1, 0, 2.4, d }, { rect.x1 + 1, 0, 2.4, d }, { cx, rect.z0 - 1, w + 4, 2.4 } } do
 		Build.part(parent, "Block", Vector3.new(s[3], 0.8, s[4]), CFrame.new(s[1], WALL_H + 0.4, s[2]), theme.trim)
+	end
+	-- 어두운 우주 도장: 안쪽 벽 아래·위에 네온 띠 (스스로 빛나서 방 모양이 보임 — 빛 범위 상한 60 과 상관없음)
+	if theme.glow then
+		local gate0 = 10
+		local t = 0.4
+		local runs = {
+			{ rect.x0 + t / 2, 0, t, d }, -- 왼쪽
+			{ rect.x1 - t / 2, 0, t, d }, -- 오른쪽
+			{ cx, rect.z0 + t / 2, w, t }, -- 뒤
+			{ (rect.x0 + cx - gate0) / 2, rect.z1 - t / 2, (cx - gate0) - rect.x0, t }, -- 앞 왼쪽 (정문 빼고)
+			{ (rect.x1 + cx + gate0) / 2, rect.z1 - t / 2, rect.x1 - (cx + gate0), t }, -- 앞 오른쪽
+		}
+		for _, y in { 0.5, WALL_H - 0.6 } do
+			for _, s in runs do
+				Build.part(
+					parent,
+					"Block",
+					Vector3.new(s[3], 0.6, s[4]),
+					CFrame.new(s[1], y, s[2]),
+					theme.accent,
+					M.Neon,
+					{ name = "GlowTrim", shadow = false }
+				)
+			end
+		end
 	end
 	-- 모서리 기둥 4개 + 등불
 	for _, p in { { rect.x0, rect.z0 }, { rect.x1, rect.z0 }, { rect.x0, rect.z1 }, { rect.x1, rect.z1 } } do
@@ -232,7 +261,7 @@ Dojo.GATE_CLEAR = 17 -- 정문 위 윗벽 아랫면
 
 local function roof(world: number, parent: Instance, theme: Theme)
 	local folder = Build.folder("Roof", parent)
-	local rect = MapLayout.lobbyRect(world)
+	local rect = Layout.lobbyRect(world)
 	local cx = (rect.x0 + rect.x1) / 2
 	local cz = (rect.z0 + rect.z1) / 2
 	local w = rect.x1 - rect.x0
@@ -293,8 +322,8 @@ local function roof(world: number, parent: Instance, theme: Theme)
 		M.Wood
 	)
 	-- 천장 판 (벽 바깥까지 덮음)
-	local ceilColor = if world == 1 then c(225, 205, 165) elseif world == 2 then c(190, 225, 245) else c(40, 42, 66)
-	local ceilMat = if world == 1 then M.WoodPlanks elseif world == 2 then M.Glass else M.Metal
+	local ceilColor = if world == 1 then c(225, 205, 165) elseif world == 2 then c(190, 225, 245) else c(95, 98, 140)
+	local ceilMat = if world == 1 then M.WoodPlanks elseif world == 2 then M.Glass else M.SmoothPlastic
 	local ceiling = Build.solid(
 		folder,
 		"Ceiling",
@@ -418,6 +447,13 @@ local function roof(world: number, parent: Instance, theme: Theme)
 			Build.light(tip, c(255, 90, 90), 20, 2)
 		end
 	end
+	-- 사장님 결정 13번: 몸이 천장보다 큰 거인이 작은 월드에 와도 안 끼게 — 지붕 전체는 플레이어 몸과 안 부딪힘
+	--   (충돌 그룹 Build.PASS_GROUP. 카메라·다른 것과는 그대로 부딪혀서 보통 몸은 천장 아래에서 카메라가 멈춤)
+	for _, piece in folder:GetDescendants() do
+		if piece:IsA("BasePart") then
+			Build.giantPass(piece)
+		end
+	end
 	return folder
 end
 Dojo.roof = roof
@@ -427,7 +463,7 @@ Dojo.roof = roof
 ------------------------------------------------------------------
 
 local function spawnPad(world: number, parent: Instance, theme: Theme)
-	local s = MapLayout.spawn(world)
+	local s = Layout.spawn(world)
 	local pos = v3(s, 0.25)
 	local pad: BasePart
 	if world == 1 then
@@ -452,7 +488,7 @@ end
 
 local function trainMats(world: number, parent: Instance, theme: Theme)
 	local folder = Build.folder("TrainMats", parent)
-	for i, m in MapLayout.trainMats(world) do
+	for i, m in Layout.trainMats(world) do
 		local color = theme.mat[(i - 1) % #theme.mat + 1]
 		local mat = Build.solid(
 			folder,
@@ -501,7 +537,7 @@ end
 ------------------------------------------------------------------
 
 local function shop(world: number, parent: Instance, theme: Theme)
-	local s = MapLayout.dumbbellShop(world)
+	local s = Layout.dumbbellShop(world)
 	local model = Build.model("DumbbellShop", parent)
 	local dir = dirOf(s.yaw) -- 앞 (-x, 통로 쪽)
 	local center = v3(s)
@@ -597,14 +633,47 @@ local function shop(world: number, parent: Instance, theme: Theme)
 end
 
 ------------------------------------------------------------------
--- 띠 표지판 (12개 띠)
+-- 띠 표지판 (Belts.list 전부 — 사장님 결정 16번: 22개). 월드마다 한 줄(세로 칸): 월드 1 · 2 · 3 을 왼쪽 → 오른쪽,
+--   그 월드 띠를 위 → 아래 (개수는 belt.world 로 셈 — "4개씩" 가정 없음). 칸 = 띠 천(여러 색이면 그러데이션) + 이름 + 추천 힘/대결
 ------------------------------------------------------------------
 
+Dojo.BELT_BOARD_H = 15 -- 표지판 높이 (위 끝 16 < 천장 20)
+Dojo.BELT_HEADER = 0.17 -- 위 제목 + 월드 이름 줄 (비율)
+
+-- 띠 칸 자리 (grid 안 비율): 월드 열 · 그 월드 안 순서 행. 반환 { [index] = { col, row, rows } }, 열 수
+function Dojo.beltCells(): ({ [number]: { col: number, row: number, rows: number } }, number)
+	local worlds: { number } = {}
+	local count: { [number]: number } = {}
+	for _, belt in Belts.list do
+		if not count[belt.world] then
+			count[belt.world] = 0
+			table.insert(worlds, belt.world)
+		end
+		count[belt.world] += 1
+	end
+	table.sort(worlds)
+	local rows = 1
+	for _, n in count do
+		rows = math.max(rows, n)
+	end
+	local colOf: { [number]: number } = {}
+	for i, w in worlds do
+		colOf[w] = i
+	end
+	local seen: { [number]: number } = {}
+	local out: { [number]: { col: number, row: number, rows: number } } = {}
+	for _, belt in Belts.list do
+		seen[belt.world] = (seen[belt.world] or 0) + 1
+		out[belt.index] = { col = colOf[belt.world], row = seen[belt.world], rows = rows }
+	end
+	return out, #worlds
+end
+
 local function beltBoard(world: number, parent: Instance)
-	local s = MapLayout.beltBoard(world)
+	local s = Layout.beltBoard(world)
 	local model = Build.model("BeltBoard", parent)
 	local dir = dirOf(s.yaw)
-	local h = 11
+	local h = Dojo.BELT_BOARD_H
 	local board = Build.part(
 		model,
 		"Block",
@@ -618,51 +687,72 @@ local function beltBoard(world: number, parent: Instance)
 			name = "Board",
 		}
 	)
-	local frame = Build.surfaceSign(board, c(36, 40, 64), 24)
+	local frame = Build.surfaceSign(board, c(36, 40, 64), 30)
 	Build.text(
 		frame,
 		"Title",
-		UDim2.fromScale(0.05, 0.02),
-		UDim2.fromScale(0.9, 0.12),
+		UDim2.fromScale(0.05, 0.01),
+		UDim2.fromScale(0.9, 0.08),
 		"🥋 띠 (눌러서 보기)",
 		WHITE
 	)
 	local grid = Instance.new("Frame")
 	grid.Name = "Belts"
 	grid.BackgroundTransparency = 1
-	grid.Position = UDim2.fromScale(0.03, 0.16)
-	grid.Size = UDim2.fromScale(0.94, 0.82)
+	grid.Position = UDim2.fromScale(0.02, 0.1)
+	grid.Size = UDim2.fromScale(0.96, 0.89)
 	grid.Parent = frame
-	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromScale(0.32, 0.23)
-	layout.CellPadding = UDim2.fromScale(0.015, 0.02)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = grid
+	local cells, cols = Dojo.beltCells()
+	local colW = 1 / math.max(1, cols)
+	local head = 0.07 -- 월드 이름 줄 (grid 안 비율)
+	for col = 1, cols do
+		local w = 0
+		for _, belt in Belts.list do
+			if cells[belt.index].col == col then
+				w = belt.world
+				break
+			end
+		end
+		local wd = Worlds.get(w)
+		local tint = if wd then Color3.fromRGB(wd.color[1], wd.color[2], wd.color[3]) else WHITE
+		Build.text(
+			grid,
+			"World_" .. tostring(w),
+			UDim2.fromScale((col - 1) * colW + 0.01, 0),
+			UDim2.fromScale(colW - 0.02, head - 0.01),
+			string.format("월드 %d", w),
+			tint
+		)
+	end
 	for _, belt in Belts.list do
+		local at = cells[belt.index]
+		local rowH = (1 - head) / at.rows
 		local cell = Instance.new("Frame")
 		cell.Name = "Belt_" .. tostring(belt.index)
 		cell.LayoutOrder = belt.index
 		cell.BackgroundColor3 = c(24, 26, 44)
 		cell.BorderSizePixel = 0
+		cell.Position = UDim2.fromScale((at.col - 1) * colW + 0.008, head + (at.row - 1) * rowH + rowH * 0.06)
+		cell.Size = UDim2.fromScale(colW - 0.016, rowH * 0.88)
 		cell.Parent = grid
 		local edge = Instance.new("UIStroke")
 		edge.Name = "Edge"
 		edge.Color = if belt.world == world then c(255, 220, 80) else c(70, 74, 100)
-		edge.Thickness = if belt.world == world then 4 else 2
+		edge.Thickness = if belt.world == world then 3 else 2
 		edge.Parent = cell
 		local stripe = Instance.new("Frame")
 		stripe.Name = "Stripe"
-		stripe.BackgroundColor3 = Color3.fromRGB(belt.color[1], belt.color[2], belt.color[3])
 		stripe.BorderSizePixel = 0
-		stripe.Position = UDim2.fromScale(0.05, 0.12)
-		stripe.Size = UDim2.fromScale(0.9, 0.22)
+		stripe.Position = UDim2.fromScale(0.03, 0.2)
+		stripe.Size = UDim2.fromScale(0.26, 0.6)
 		stripe.Parent = cell
-		Build.text(cell, "Name", UDim2.fromScale(0.04, 0.38), UDim2.fromScale(0.92, 0.32), belt.name, WHITE)
+		BeltLook.paint(stripe, belt)
+		Build.text(cell, "Name", UDim2.fromScale(0.33, 0.02), UDim2.fromScale(0.65, 0.56), belt.name, WHITE)
 		local need = if belt.duel
 			then "⚔️ 시험관 대결"
 			elseif belt.needPower <= 0 then "처음 띠"
 			else "💪 " .. Format.number(belt.needPower)
-		Build.text(cell, "Need", UDim2.fromScale(0.04, 0.7), UDim2.fromScale(0.92, 0.26), need, c(255, 225, 120))
+		Build.text(cell, "Need", UDim2.fromScale(0.33, 0.58), UDim2.fromScale(0.65, 0.4), need, c(255, 225, 120))
 	end
 	Build.click(model, "Click", 40)
 	tagModel(model, Tags.BeltBoard, world, board)
@@ -696,7 +786,7 @@ local function boardRack(parent: Instance, cf: CFrame, count: number, prefix: st
 end
 
 local function examPad(world: number, parent: Instance, theme: Theme)
-	local s = MapLayout.examPad(world)
+	local s = Layout.examPad(world)
 	local model = Build.model("ExamPad", parent)
 	local dir = dirOf(s.yaw)
 	local cf = facing(v3(s), dir)
@@ -1072,7 +1162,7 @@ local function examiner(world: number, parent: Instance, base: CFrame, name: str
 end
 
 local function duelArena(world: number, parent: Instance, _theme: Theme)
-	local s = MapLayout.duelArena(world)
+	local s = Layout.duelArena(world)
 	local model = Build.model("DuelArena", parent)
 	local dir = dirOf(s.yaw) -- +x (통로 쪽)
 	local cf = facing(v3(s), dir)
@@ -1134,7 +1224,7 @@ end
 ------------------------------------------------------------------
 
 local function worldDoors(world: number, parent: Instance, theme: Theme)
-	for _, d in MapLayout.doors(world) do
+	for _, d in Layout.doors(world) do
 		local model = Build.model("WorldDoor_" .. tostring(d.world), parent)
 		local target = Worlds.get(d.world)
 		local tint = if target then Color3.fromRGB(target.color[1], target.color[2], target.color[3]) else theme.accent
@@ -1159,15 +1249,17 @@ local function worldDoors(world: number, parent: Instance, theme: Theme)
 			M.Wood,
 			{ collide = true, query = true }
 		)
-		Build.part(
+		local lintel = Build.part(
 			model,
 			"Block",
 			Vector3.new(10, 1.4, 1.6),
 			cf * CFrame.new(0, 10.4, 0),
 			theme.trim,
 			M.Wood,
-			{ collide = true, query = true }
+			{ collide = true, query = true, name = "Lintel" }
 		)
+		-- 문보다 큰 거인도 문 위 들보에 안 끼임 (사장님 결정 13·15번 — 문 칸에 들어가면 바로 이동)
+		Build.giantPass(lintel)
 		local portal =
 			Build.part(model, "Block", Vector3.new(7, 9.2, 0.4), cf * CFrame.new(0, 4.8, 0.2), tint, M.Neon, {
 				query = true,

@@ -630,6 +630,7 @@ local function body()
 		"WorldController",
 		"TutorialController",
 		"AuraController",
+		"CameraController",
 	}
 	local startedAll = true
 	for _, name in order do
@@ -641,7 +642,7 @@ local function body()
 			print("    시작 실패 " .. name .. ": " .. tostring(err))
 		end
 	end
-	check(startedAll, "컨트롤러 13개 start() 오류 없음")
+	check(startedAll, "컨트롤러 14개 start() 오류 없음")
 	local Purchase = client("Purchase")
 	Purchase.start()
 	-- Main.client 도 문법·require 확인 (실행은 안 함 — 진입점은 game.Loaded 를 기다림)
@@ -659,7 +660,7 @@ local function body()
 	end
 	check(
 		bootedAll and string.find(mainSrc, "ClientReady", 1, true) ~= nil,
-		"Main 이 컨트롤러 13개 boot + ClientReady 보냄"
+		"Main 이 컨트롤러 14개 boot + ClientReady 보냄"
 	)
 
 	local screen = playerGui:FindFirstChild("BoardBreakUI")
@@ -898,6 +899,195 @@ local function body()
 		not Train.button.button.Visible and character:FindFirstChild("HeldDumbbell") == nil,
 		"매트에서 내려오면 버튼·아령 사라짐"
 	)
+
+	print("[몸 크기 · 큰 아령 · 카메라 (사장님 결정 13번)]")
+	local Sizes = shared("Data/Sizes")
+	local function barOf(model)
+		return model and model.PrimaryPart and model.PrimaryPart.Size.X or 0
+	end
+	moveTo(mat.x, mat.z)
+	character:SetAttribute("VisualScale", 10)
+	setAttr(A.DumbbellLevel, last)
+	Train.check()
+	local big = character:FindFirstChild("HeldDumbbell")
+	local wantBar = DumbbellLook.barLength(last, 10 * Sizes.dumbbellScale(last))
+	local okBig, whyBig = heldOk(big, hand)
+	check(
+		okBig and math.abs(barOf(big) - wantBar) < 1e-3,
+		string.format(
+			"몸 배율 10 + 마지막 아령 → 봉 %.1f (= 2.42 × 10 × dumbbellScale) · 손에 용접 %s",
+			barOf(big),
+			whyBig
+		)
+	)
+	check(
+		math.abs(Train.heldScale(character, last) - 10 * Sizes.dumbbellScale(last)) < 1e-9,
+		"손 아령 배율 = VisualScale × Sizes.dumbbellScale(단계)"
+	)
+	local bigL = character:FindFirstChild("HeldDumbbellL")
+	character:SetAttribute("VisualScale", 10.2)
+	Train.check()
+	local big2 = character:FindFirstChild("HeldDumbbell")
+	local ok2b = heldOk(big2, hand)
+	check(
+		big2 ~= big
+			and ok2b
+			and math.abs(barOf(big2) - DumbbellLook.barLength(last, 10.2 * Sizes.dumbbellScale(last))) < 1e-3
+			and big.Parent == nil
+			and (bigL == nil or bigL.Parent == nil),
+		"몸이 2% 커지면 같은 프레임에 새 크기 아령으로 바꿔 끼움 (옛 것 지움 · 용접 그대로)"
+	)
+	-- (Lune 은 같은 인스턴스도 꺼낼 때마다 다른 userdata 라 표 열쇠가 안 맞음 → 같은 참조로 두 번 붙여서 봄)
+	local same1 = Train.attach(character, last)
+	local same2 = Train.attach(character, last)
+	check(same1 == same2 and same1.Parent == character, "크기가 그대로면 다시 안 만듦 (깜빡임 없음)")
+	big2 = same2
+	hand.Size = hand.Size * 1.5
+	Train.check()
+	local big3 = character:FindFirstChild("HeldDumbbell")
+	check(
+		big3 ~= big2 and heldOk(big3, hand),
+		"손 파트 크기가 바뀌면(서버가 몸을 키움) 쥔 자리 다시 맞춤"
+	)
+	hand.Size = hand.Size / 1.5
+	-- 카메라 → 머리 선을 큰 아령이 가리면 반투명
+	local bar3 = big3.PrimaryPart
+	local cam = Workspace.CurrentCamera
+	local through = bar3.CFrame.Position
+	check(
+		Train.blocksView(big3, through + Vector3.new(0, 0, 50), through + Vector3.new(0, 0, -50)),
+		"카메라 → 머리 선이 아령을 지나면 가림으로 봄"
+	)
+	check(
+		not Train.blocksView(big3, through + Vector3.new(0, 500, 50), through + Vector3.new(0, 500, -50)),
+		"멀리 위로 지나면 안 가림"
+	)
+	local function ltmOf()
+		local m = character:FindFirstChild("HeldDumbbell")
+		local ok, v = pcall(function()
+			return m.PrimaryPart.LocalTransparencyModifier
+		end)
+		return if ok then v else nil
+	end
+	cam.CFrame = CFrame.new(through + Vector3.new(0, 0, 60))
+	head.CFrame = CFrame.new(through + Vector3.new(0, 0, -60))
+	Train.check()
+	check(
+		math.abs((ltmOf() or 0) - Train.FADE) < 1e-4,
+		"가리면 내 화면에서 반투명 (" .. tostring(ltmOf()) .. ")"
+	)
+	cam.CFrame = CFrame.new(through + Vector3.new(0, 900, 60))
+	Train.check()
+	check(ltmOf() == nil or ltmOf() == 0, "안 가리면 다시 그대로 (" .. tostring(ltmOf()) .. ")")
+	head.CFrame = CFrame.new(0, 4.5, -36)
+	cam.CFrame = CFrame.new()
+	character:SetAttribute("VisualScale", nil)
+	setAttr(A.DumbbellLevel, 1)
+	Train.check()
+	check(barOf(character:FindFirstChild("HeldDumbbell")) < 2, "보통 몸 · 1번 아령은 원래 크기")
+	-- 큰 몸은 뿌리가 높음 → 서버 SizeService 처럼 뿌리를 3 × (배율 − 1) 내려서 매트 판정
+	setAttr("BodyScale", Sizes.MAX_SCALE)
+	root.CFrame = CFrame.new(mat.x, 3 * Sizes.MAX_SCALE, mat.z)
+	Train.check()
+	check(
+		Train.onMat(),
+		string.format(
+			"거인(배율 %.1f, 뿌리 높이 %.0f) 도 매트 위 → 들기",
+			Sizes.MAX_SCALE,
+			3 * Sizes.MAX_SCALE
+		)
+	)
+	check(
+		not Train.matAt(Vector3.new(mat.x, 3 * Sizes.MAX_SCALE, mat.z), 1, 1),
+		"보통 몸이 그 높이에 떠 있으면 매트 아님"
+	)
+	setAttr("BodyScale", 1)
+	moveTo(0, -36)
+	Train.check()
+	-- 들기 도중 몸이 커짐: R15 쉬는 C0 를 RigAttachment 에서 다시 읽음 → 끝나면 새 자리
+	local upperT = character.UpperTorso
+	local rsAtt = Instance.new("Attachment")
+	rsAtt.Name = "RightShoulderRigAttachment"
+	rsAtt.CFrame = rs.C0
+	rsAtt.Parent = upperT
+	Lift.play(character, "one")
+	Lift.step(0.1)
+	local grown = CFrame.new(rs.C0.Position * 0 + Vector3.new(10, 5.6, 0))
+	rsAtt.CFrame = grown
+	Lift.step(0.05)
+	local midOk = (rs.C0.Position - grown.Position).Magnitude < 1e-4
+	Lift.step(0.3)
+	check(
+		midOk and (rs.C0.Position - grown.Position).Magnitude < 1e-4 and not Lift.isPlaying(character),
+		"들기 도중 몸이 커져도 팔이 새 어깨 자리에서 움직이고, 끝나면 새 자리 (옛 크기로 안 돌아감)"
+	)
+	rsAtt.CFrame = rs0
+	Lift.reset(character)
+	rs.C0 = rs0
+	rsAtt:Destroy()
+	-- R6: 기억한 C0 × 배율 비율
+	Lift.restOf(m6) -- 이 참조로 배율 1 C0 를 기억 (Lune 참조 문제 — 위 참고)
+	r6:SetAttribute("VisualScale", 2)
+	check(
+		(Lift.restOf(m6).Position - r60.Position * 2).Magnitude < 1e-4,
+		"R6 쉬는 C0 도 몸 배율 비율만큼 (Model:ScaleTo 와 같게)"
+	)
+	-- 카메라
+	local Camera = ctrl("CameraController")
+	local minZ, maxZ = Camera.limits(Sizes.MAX_SCALE)
+	check(
+		maxZ >= 128 * Sizes.MAX_SCALE - 1e-6 and minZ >= 0.5 * Sizes.MAX_SCALE - 1e-6,
+		string.format("카메라 줌 한도 = 처음 값 × 몸 배율 (최대 %.0f · 최소 %.1f)", maxZ, minZ)
+	)
+	check(
+		Camera.zoomFor(Sizes.MAX_SCALE) > 75 * 1.5,
+		string.format(
+			"가장 큰 몸(키 ≈ %.0f) 기본 거리 %.0f — 몸이 화면에 들어옴",
+			Sizes.AVATAR_HEIGHT * Sizes.MAX_SCALE,
+			Camera.zoomFor(Sizes.MAX_SCALE)
+		)
+	)
+	local camSrc = fs.readFile("games/boardbreak/src/client/Controllers/CameraController.luau")
+		.. fs.readFile("games/boardbreak/src/client/Controllers/TrainController.luau")
+		.. fs.readFile("games/boardbreak/src/client/Controllers/WorldController.luau")
+	check(
+		not string.find(camSrc, "WalkSpeed%s*=") and not string.find(camSrc, "JumpHeight%s*="),
+		"클라는 WalkSpeed · JumpHeight 를 안 바꿈 (서버 SizeService)"
+	)
+	local Walk = client("Walk")
+	setAttr(A.CurrentWorld, 3)
+	check(
+		math.abs(Walk.scale() - MapLayout.worldScale(3)) < 1e-9,
+		"Walk 도착 여유 배율 = 지금 월드 배율 (월드 3)"
+	)
+	setAttr(A.CurrentWorld, 1)
+	local BreakC = ctrl("BreakController")
+	local Cracks = client("Cracks")
+	local w3model = BreakC.models()["universe"]
+	local w1model = BreakC.models()["cotton"]
+	check(
+		w3model
+			and BreakC.scaleOf(w3model) == MapLayout.worldScale(3)
+			and BreakC.scaleOf(w1model) == 1
+			and Cracks.scaleOf(w3model.PrimaryPart) == MapLayout.worldScale(3),
+		"치기 연출·금 크기 배율 = 그 물건 월드 배율 (우주 "
+			.. tostring(w3model and BreakC.scaleOf(w3model))
+			.. " · 솜 1)"
+	)
+	-- 큰 월드 물건 금: 금 마디 길이·굵기가 월드 배율만큼 (월드 1 상한 6 · 0.8 에 묶이지 않음)
+	if w3model then
+		Cracks.showModel(w3model, 2, 7, false)
+		local marks = w3model:FindFirstChild(Cracks.FOLDER)
+		local longest = 0
+		for _, p in marks and marks:GetChildren() or {} do
+			longest = math.max(longest, p.Size.Z)
+		end
+		check(
+			marks and (#marks:GetChildren() == 0 or longest > 6),
+			string.format("우주(월드 3) 금 마디 길이 %.1f (> 월드 1 상한 6)", longest)
+		)
+		Cracks.clear(w3model)
+	end
 
 	print("[물건 치기]")
 	local Break = ctrl("BreakController")
@@ -1346,19 +1536,70 @@ local function body()
 		countSent(S.StartExam) == e0 + 1 and #moveTargets == 1,
 		"심사 보기 → 심사대로 걸어가서 StartExam()"
 	)
-	setAttr(A.Belt, 3)
-	setAttr(A.Power, math.max(Belts.get(4).needPower * 1.5, 1e19)) -- Lune 은 i64 안의 큰 정수 Attribute 를 32비트로 자름 (로블록스는 괜찮음) → 1e19 이상
+	-- 월드 1 의 대결 띠 (표에서 읽음 — "4개씩" 가정 없음, 사장님 결정 16번)
+	local duelBelt
+	for _, b in Belts.list do
+		if b.world == 1 and b.duel then
+			duelBelt = b
+			break
+		end
+	end
+	setAttr(A.Belt, duelBelt.index - 1)
+	setAttr(A.Power, math.max(duelBelt.needPower * 1.5, 1e19)) -- Lune 은 i64 안의 큰 정수 Attribute 를 32비트로 자름 (로블록스는 괜찮음) → 1e19 이상
 	Belt.render()
 	check(
 		string.find(action.Text, "대결", 1, true) ~= nil,
-		'다음 띠(파랑)가 대결 띠 → "⚔️ 시험관과 대결" (' .. action.Text .. ")"
+		"다음 띠(" .. duelBelt.name .. ')가 대결 띠 → "⚔️ 시험관과 대결" (' .. action.Text .. ")"
 	)
 	local d0 = countSent(S.StartDuel)
 	press(action)
 	flushMoves()
 	check(countSent(S.StartDuel) == d0 + 1, "대결 → StartDuel()")
-	local cell = find(boardModel, "Belt_3")
-	check(cell and cell.Edge.Thickness == 6, "도장 띠 표지판에 지금 내 띠(3) 반짝 테두리")
+	local mineIdx = duelBelt.index - 1
+	local cell = find(boardModel, "Belt_" .. mineIdx)
+	check(
+		cell and cell.Edge.Thickness == 6,
+		"도장 띠 표지판에 지금 내 띠(" .. mineIdx .. ") 반짝 테두리"
+	)
+	-- 띠 전부 (Belts.COUNT) · 스크롤 · 여러 색 띠
+	local cards = 0
+	for i = 1, Belts.COUNT do
+		if find(beltWin, "Belt_" .. i) then
+			cards += 1
+		end
+	end
+	check(cards == Belts.COUNT, string.format("띠 창 칸 = Belts.COUNT (%d / %d)", cards, Belts.COUNT))
+	local yLast = Belt.scrollTo(Belts.COUNT)
+	check(
+		yLast > 0 and Belt.scroll and Belt.scroll.CanvasPosition.Y == yLast,
+		string.format("띠 창이 마지막 띠 줄까지 스크롤 (캔버스 y %d)", yLast)
+	)
+	check(Belt.scrollTo(1) == 0, "첫 띠 → 맨 위")
+	local multi
+	for _, b in Belts.list do
+		if #shared("BeltLook").colors(b) > 1 then
+			multi = b
+			break
+		end
+	end
+	if multi then
+		local mcard = find(beltWin, "Belt_" .. multi.index)
+		check(
+			mcard and find(mcard, "BeltGradient") ~= nil,
+			"여러 색 띠(" .. multi.name .. ") → 띠 창 칸에 그러데이션"
+		)
+		setAttr(A.Belt, multi.index)
+		Hud.refresh()
+		check(find(stats, "BeltGradient") ~= nil, "왼쪽 아래 띠 칩도 그러데이션 (" .. multi.name .. ")")
+		setAttr(A.Belt, mineIdx)
+		Hud.refresh()
+		check(
+			find(stats, "BeltGradient") == nil or #shared("BeltLook").colors(Belts.get(mineIdx)) > 1,
+			"한 색 띠로 돌아가면 그러데이션 없앰"
+		)
+	else
+		check(false, "여러 색 띠가 표에 없음 (Belts.colors)")
+	end
 	local examModel = CollectionService:GetTagged(Tags.ExamPad)[1]
 	Windows.close()
 	sigOf(examModel:FindFirstChild("Click"), "MouseClick"):Fire(player)
@@ -1382,8 +1623,110 @@ local function body()
 	check(find(door2, "LockBody").LocalTransparencyModifier == 1, "월드 2 열림 → 자물쇠 사라짐")
 	sigOf(door2:FindFirstChild("Click"), "MouseClick"):Fire(player)
 	check(countSent(S.Travel) == t0 + 1 and lastSent(S.Travel).args[1] == 2, "열린 문 클릭 → Travel(2)")
+
+	print("[포털에 들어가면 바로 이동 (사장님 결정 15번)]")
+	World.TRAVEL_GAP = 0 -- 검사 안에서는 1.5초 연타 막기를 끔
+	local door2Spot
+	for _, d in MapLayout.doors(1) do
+		if d.world == 2 then
+			door2Spot = d
+		end
+	end
+	moveTo(0, -36)
+	World.checkPortal()
+	check(World.isArmed(), "스폰(포털 밖) → 들어갈 준비")
+	local p0 = countSent(S.Travel)
+	moveTo(door2Spot.x, door2Spot.z + 0.3)
+	World.checkPortal()
+	check(
+		countSent(S.Travel) == p0 + 1 and lastSent(S.Travel).args[1] == 2,
+		"열린 월드 2 포털에 걸어 들어감 → 클릭 없이 Travel(2) 한 번"
+	)
+	for _ = 1, 5 do
+		World.checkPortal()
+	end
+	moveTo(door2Spot.x + 1, door2Spot.z - 0.5)
+	World.checkPortal()
+	check(
+		countSent(S.Travel) == p0 + 1,
+		"포털 안에 계속 서 있으면 다시 안 보냄 (몸이 여러 번 닿아도)"
+	)
+	moveTo(door2Spot.x, door2Spot.z + 12)
+	World.checkPortal()
+	check(
+		countSent(S.Travel) == p0 + 1 and World.isArmed(),
+		"포털 밖으로 나옴 → 안 보냄 · 다시 들어갈 준비"
+	)
+	moveTo(door2Spot.x, door2Spot.z)
+	World.checkPortal()
+	check(countSent(S.Travel) == p0 + 2, "나왔다가 다시 들어가면 또 Travel(2)")
+	-- 잠긴 월드 3 포털: Travel 안 보냄 · 알림은 들어갈 때 한 번 (서 있어도 반복 안 함)
+	local door3Spot
+	for _, d in MapLayout.doors(1) do
+		if d.world == 3 then
+			door3Spot = d
+		end
+	end
+	moveTo(0, -36)
+	World.checkPortal()
+	local Notify = ctrl("NotifyController")
+	local toasts = 0
+	local oldToast = Notify.toast
+	Notify.toast = function(text, kind)
+		toasts += 1
+		return oldToast(text, kind)
+	end
+	local p1 = countSent(S.Travel)
+	World.TOAST_GAP = 0 -- 바로 앞 "잠긴 문 클릭" 알림 때문에 막히지 않게 (여기서는 "서 있는 동안 반복 안 함" 만 봄)
+	moveTo(door3Spot.x, door3Spot.z + 0.3)
+	for _ = 1, 10 do
+		World.checkPortal()
+	end
+	World.TOAST_GAP = 3
+	check(
+		countSent(S.Travel) == p1 and toasts == 1,
+		"잠긴 월드 3 포털 → Travel 안 보냄 · 🔒 알림 한 번 (" .. toasts .. ")"
+	)
+	moveTo(0, -36)
+	World.checkPortal()
+	moveTo(door3Spot.x, door3Spot.z + 0.3)
+	World.checkPortal()
+	check(toasts == 1, "곧바로 다시 들어가도 알림은 " .. World.TOAST_GAP .. "초에 한 번")
+	Notify.toast = oldToast
+	-- 거인 (몸 배율 최대): 문보다 커도 몸이 문에 닿으면 들어감 · 스폰은 포털 밖
+	moveTo(0, -36)
+	setAttr("BodyScale", Sizes.MAX_SCALE)
+	root.CFrame = CFrame.new(0, 3 * Sizes.MAX_SCALE, -36)
+	World.checkPortal()
+	check(World.isArmed() and World.portalAt() == nil, "거인이 스폰에 서 있으면 포털 밖")
+	local p2 = countSent(S.Travel)
+	root.CFrame = CFrame.new(door2Spot.x + door2Spot.halfX + 5, 3 * Sizes.MAX_SCALE, door2Spot.z + 6)
+	World.checkPortal()
+	check(countSent(S.Travel) == p2 + 1, "거인: 뿌리가 문틀 밖이어도 몸이 문에 닿으면 Travel")
+	setAttr("BodyScale", 1)
+	moveTo(0, -36)
+	World.checkPortal()
+	World.TRAVEL_GAP = 1.5
 	setAttr(A.CurrentWorld, 3)
 	check(fakeServices.Lighting.ClockTime == 0, "우주(월드 3) → 밤하늘 조명")
+	local ambOk = true
+	for w, l in World.LIGHTS do
+		local a = l.ambient
+		if
+			(a.R + a.G + a.B) / 3 < World.MIN_AMBIENT
+			or (l.outdoor.R + l.outdoor.G + l.outdoor.B) / 3 < World.MIN_AMBIENT
+		then
+			ambOk = false
+			print("    어두운 월드 조명: " .. w)
+		end
+	end
+	local amb3 = fakeServices.Lighting.Ambient
+	check(
+		ambOk and amb3 == World.LIGHTS[3].ambient,
+		"월드마다 지붕 아래·밖 그늘 빛 ≥ "
+			.. World.MIN_AMBIENT
+			.. " (월드 3 도장 안이 까맣지 않게) · 월드 3 에 들어가면 그 조명"
+	)
 	setAttr(A.CurrentWorld, 1)
 
 	print("[힘 배수]")

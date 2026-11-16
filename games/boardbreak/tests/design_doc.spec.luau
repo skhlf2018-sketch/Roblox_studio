@@ -122,12 +122,15 @@ return function(T, Loader)
 		end
 	end)
 
-	T.test("9-3 띠 배율 · needPower · 송판 = Belts", function()
+	T.test("9-3 띠 배율 · needPower · 송판 · 월드 = Belts (개수도)", function()
 		local list = rows(section(9), "### 9-3")
-		T.eq(#list, 12)
+		T.eq(#list, Belts.COUNT)
+		T.truthy(string.find(section(9), "### 9-3. 띠 " .. Belts.COUNT .. "개", 1, true), "제목의 개수")
 		for i, cells in list do
 			local b = Belts.list[i]
 			T.eq(cells[2], b.id)
+			T.eq(cells[3], b.name, b.id .. " 이름")
+			T.eq(tonumber(cells[8]), b.world, b.id .. " 월드")
 			T.eq(tonumber(cells[4]), b.moneyMultiplier, b.id .. " 배율")
 			T.truthy(near(tonumber(cells[5]), b.needPower), b.id .. " needPower")
 			T.eq(cells[6], if i == 1 then "처음" elseif b.duel then "대결" else "심사", b.id .. " 받는 법")

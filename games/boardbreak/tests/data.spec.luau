@@ -1,5 +1,5 @@
 --!nocheck
--- 데이터 표 무결성: 물건 41 · 아령 (Dumbbells.COUNT) · 띠 12 · 월드 3 · 게임패스 12 (설계서 3·4·5·6장)
+-- 데이터 표 무결성: 물건 41 · 아령 (Dumbbells.COUNT) · 띠 22 · 월드 3 · 게임패스 12 (설계서 3·4·5·6장)
 return function(T, Loader)
 	local Targets = Loader.require("ReplicatedStorage/Shared/Data/Targets")
 	local Dumbbells = Loader.require("ReplicatedStorage/Shared/Data/Dumbbells")
@@ -140,43 +140,162 @@ return function(T, Loader)
 		end
 	)
 
-	T.suite("data: 띠 12개 · 월드 3개")
+	T.suite("data: 띠 22개 (사장님 결정 16번) · 월드 3개")
 
-	T.test("12개 · 월드마다 4개 · 4·8·12 = 대결 · 배율·needPower 증가", function()
-		T.eq(Belts.COUNT, 12, "띠 수")
-		local names = {
-			"흰",
-			"노랑",
-			"초록",
-			"파랑",
-			"보라",
-			"갈색",
-			"빨강",
-			"검정",
-			"1단",
-			"3단",
-			"6단",
-			"9단",
-		}
-		for i, b in Belts.list do
-			T.eq(b.index, i, "index")
-			T.eq(b.world, math.ceil(i / 4), b.id .. " 월드")
-			T.eq(b.duel, i % 4 == 0, b.id .. " 대결")
-			T.truthy(string.find(b.name, names[i], 1, true) ~= nil, b.id .. " 이름 " .. b.name)
-			if i > 1 then
-				T.truthy(b.moneyMultiplier > Belts.list[i - 1].moneyMultiplier, b.id .. " 배율 증가")
-				T.truthy(b.needPower > Belts.list[i - 1].needPower, b.id .. " needPower 증가")
+	-- 사장님 순서 그대로 (이름 · id · 월드). 마지막 칸 = 월드 대결 띠
+	local BELT_ORDER = {
+		{ "흰 띠", "white", 1 },
+		{ "노랑 띠", "yellow", 1 },
+		{ "초록 띠", "green", 1 },
+		{ "파랑 띠", "blue", 1 },
+		{ "보라 띠", "purple", 1 },
+		{ "갈색 띠", "brown", 1 },
+		{ "빨강 띠", "red", 1, true },
+		{ "검정 띠", "black", 2 },
+		{ "1단 띠", "dan_1", 2 },
+		{ "3단 띠", "dan_3", 2 },
+		{ "6단 띠", "dan_6", 2 },
+		{ "9단 띠", "dan_9", 2 },
+		{ "마스터 띠", "master", 2 },
+		{ "무지개 띠", "rainbow", 2, true },
+		{ "태극 띠", "taegeuk", 3 },
+		{ "무한 띠", "infinity", 3 },
+		{ "우주 띠", "cosmos", 3 },
+		{ "유튜브 띠", "youtube", 3 },
+		{ "슈퍼 띠", "super", 3 },
+		{ "미친 띠", "crazy", 3 },
+		{ "레전더리 띠", "legendary", 3 },
+		{ "천상 띠", "heavenly", 3, true },
+	}
+
+	T.test(
+		"22개 · 사장님 순서 · id · 월드 7/7/8 · 월드마다 대결 띠 하나 = 그 월드 마지막 띠",
+		function()
+			T.eq(Belts.COUNT, 22, "띠 수")
+			T.eq(#Belts.list, #BELT_ORDER)
+			for i, row in BELT_ORDER do
+				local b = Belts.list[i]
+				T.eq(b.index, i, "index")
+				T.eq(b.id, row[2], "id " .. i)
+				T.truthy(string.sub(b.name, 1, #row[1]) == row[1], b.id .. " 이름 " .. b.name)
+				T.eq(b.world, row[3], b.id .. " 월드")
+				T.eq(b.duel, row[4] == true, b.id .. " 대결")
+				T.eq(Belts.byId(b.id), b, "byId " .. b.id)
 			end
-			if b.duel then
-				T.eq(b.examBoardHp, 0, "대결 띠 심사 송판 없음")
-				T.eq(b.duelBoardHp, b.needPower * Belts.DUEL_HITS_AT_NEED, "대결 송판")
-			elseif i > 1 then
-				T.eq(b.examBoardHp, b.needPower * Belts.EXAM_HITS_AT_NEED, "심사 송판")
+			T.eq(string.find(Belts.get(12).name, "그랜드", 1, true), nil, "9단 띠는 그냥 9단 띠")
+			T.truthy(
+				string.find(Belts.get(22).name, "그랜드 마스터", 1, true) ~= nil,
+				"천상 띠 = 그랜드 마스터"
+			)
+			T.eq(Belts.WORLD_COUNT, Worlds.COUNT, "띠 표의 월드 수")
+			local sizes = { 7, 7, 8 }
+			for w = 1, Worlds.COUNT do
+				local list = Belts.ofWorld(w)
+				T.eq(#list, sizes[w], "월드 " .. w .. " 띠 수")
+				local duels = 0
+				for k, b in list do
+					T.eq(b.world, w)
+					if b.duel then
+						duels += 1
+						T.eq(k, #list, "대결 띠는 그 월드 마지막 띠")
+					end
+					if k > 1 then
+						T.eq(b.index, list[k - 1].index + 1, "월드 안 띠는 이어진 번호")
+					end
+				end
+				T.eq(duels, 1, "월드 " .. w .. " 대결 띠 하나")
+				T.eq(Belts.duelOf(w), list[#list], "duelOf = 마지막 띠")
+			end
+			T.eq(#Belts.ofWorld(4), 0, "없는 월드")
+			T.eq(Belts.duelOf(4), nil)
+			T.eq(Belts.duelOf(0 / 0), nil)
+			T.eq(Belts.list[Belts.COUNT].duel, true, "마지막 띠 = 대결 (그랜드 마스터)")
+		end
+	)
+
+	T.test(
+		"띠 천 색 colors: 1~3개 RGB (0~255 정수) · 첫 색 = color · 한 색 띠는 { color } · 새 띠는 두 색 이상",
+		function()
+			local multi = {
+				master = 2,
+				rainbow = 3,
+				taegeuk = 2,
+				infinity = 2,
+				cosmos = 2,
+				youtube = 2,
+				super = 2,
+				crazy = 2,
+				legendary = 2,
+				heavenly = 3,
+			}
+			for _, b in Belts.list do
+				T.truthy(type(b.colors) == "table" and #b.colors >= 1 and #b.colors <= 3, b.id .. " colors 1~3")
+				for _, c in b.colors do
+					T.eq(#c, 3, b.id .. " RGB")
+					for _, v in c do
+						T.truthy(type(v) == "number" and v >= 0 and v <= 255 and v % 1 == 0, b.id .. " 색 범위")
+					end
+				end
+				T.eq(#b.color, 3, b.id .. " color")
+				for k = 1, 3 do
+					T.eq(b.colors[1][k], b.color[k], b.id .. " 첫 색 = color")
+				end
+				T.eq(#b.colors, multi[b.id] or 1, b.id .. " 색 개수")
+				T.truthy(b.colors[1] ~= b.color, b.id .. " 표를 같이 쓰지 않음 (복사)")
+			end
+			T.falsy(string.find(string.lower(Belts.byId("youtube").name), "logo", 1, true), "유튜브 띠: 이름만")
+		end
+	)
+
+	T.test(
+		"needPower · 배율 순증가 · 흰 띠 0 / 1 · 마지막 배율 ≥ 200 · 송판 체력 규칙",
+		function()
+			for i, b in Belts.list do
+				if i > 1 then
+					T.truthy(b.moneyMultiplier > Belts.list[i - 1].moneyMultiplier, b.id .. " 배율 증가")
+					T.truthy(b.needPower > Belts.list[i - 1].needPower, b.id .. " needPower 증가")
+				end
+				if b.duel then
+					T.eq(b.examBoardHp, 0, "대결 띠 심사 송판 없음")
+					T.eq(b.duelBoardHp, b.needPower * Belts.DUEL_HITS_AT_NEED, "대결 송판")
+				elseif i > 1 then
+					T.eq(b.examBoardHp, b.needPower * Belts.EXAM_HITS_AT_NEED, "심사 송판")
+				end
+			end
+			T.eq(Belts.list[1].needPower, 0, "흰 띠는 처음부터")
+			T.eq(Belts.list[1].moneyMultiplier, 1, "흰 띠 배율 1")
+			T.eq(Belts.list[1].examBoardHp, 0, "흰 띠는 심사 없음")
+			T.truthy(Belts.list[Belts.COUNT].moneyMultiplier >= 200, "마지막 배율 200 이상")
+		end
+	)
+
+	T.test(
+		"추천 힘이 그 월드 물건 힘 범위 안: 심사 띠는 그 월드 물건 추천 힘 사이 · 대결 띠는 그 월드 마지막 물건 이상 · 다음 월드 첫 물건 근처",
+		function()
+			for _, w in Worlds.list do
+				local first = Targets.list[w.firstTarget].recommendPower
+				local last = Targets.list[w.lastTarget].recommendPower
+				for _, b in Belts.ofWorld(w.index) do
+					if b.duel then
+						T.truthy(b.needPower >= last, b.id .. " 대결 ≥ 마지막 물건")
+						local nextWorld = Worlds.get(w.index + 1)
+						if nextWorld then
+							local nextFirst = Targets.list[nextWorld.firstTarget].recommendPower
+							T.truthy(
+								b.needPower <= nextFirst * 10,
+								b.id .. " 대결이 다음 월드 첫 물건의 10배 안"
+							)
+						end
+					elseif b.index > 1 then
+						T.truthy(
+							b.needPower >= first and b.needPower <= last,
+							b.id .. " 심사 띠가 그 월드 물건 범위 안"
+						)
+					end
+				end
 			end
 		end
-		T.eq(Belts.list[1].needPower, 0, "흰 띠는 처음부터")
-		T.eq(Belts.list[1].moneyMultiplier, 1, "흰 띠 배율 1")
-	end)
+	)
 
 	T.test("월드 3개: 물건 범위·시험관·대결 송판", function()
 		T.eq(Worlds.COUNT, 3, "월드 수")
@@ -187,7 +306,7 @@ return function(T, Loader)
 			T.eq(w.lastTarget, ranges[i][2], "마지막 물건")
 			T.truthy(type(w.examiner) == "string" and #w.examiner > 0, "시험관 이름")
 			T.truthy(w.examinerSecondsPerBoard > 0, "시험관 속도")
-			T.eq(w.duelBoardHp, Belts.get(i * 4).duelBoardHp, "대결 송판 = 대결 띠")
+			T.eq(w.duelBoardHp, Belts.duelOf(i).duelBoardHp, "대결 송판 = 대결 띠")
 			T.eq(#w.color, 3, "테마색")
 		end
 		T.eq(Worlds.get(4), nil, "없는 월드")
@@ -199,7 +318,7 @@ return function(T, Loader)
 		function()
 			for _, w in Worlds.list do
 				T.truthy(
-					Belts.get(w.index * 4).needPower >= Targets.list[w.lastTarget].recommendPower,
+					Belts.duelOf(w.index).needPower >= Targets.list[w.lastTarget].recommendPower,
 					"월드 " .. w.index
 				)
 			end

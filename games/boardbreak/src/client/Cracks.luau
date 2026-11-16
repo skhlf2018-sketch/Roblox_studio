@@ -10,13 +10,31 @@
 	      굴곡(구면)을 따라감. 끝점이 겉면을 벗어나면 그 마디는 버림. 길이·굵기는 물건 크기에 비례.
 	      75% → 3줄 · 50% → 6줄 · 25% → 11줄(굵게), 물건 하나 최대 40 마디. 모델 안 Folder "CrackMarks"(Attr CrackStage).
 	      (레이캐스트는 단계가 바뀔 때만. 마디는 Anchored · 충돌/질의/그림자 없음, 모델 안이라 PivotTo 흔들림을 같이 따라감)
-	  Cracks.clear(partOrModel) · Cracks.stageOf(partOrModel)
+	  Cracks.clear(partOrModel) · Cracks.stageOf(partOrModel) · Cracks.scaleOf(inst) (그 월드 배율 — 금 길이·굵기·조각·띄움·글 거리 상한 × 배율)
 	송판(심사·대결)은 송판 파트 자체 면에 SurfaceGui (Cracks.show) — 송판 겉면 그대로라 그대로 둠.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local MapLayout = require(ReplicatedStorage.Shared.Data.MapLayout)
+
 local Cracks = {}
+
+-- 그 파트·모델이 있는 월드의 배율 (위로 올라가며 Attr World 를 찾음 — 사장님 결정 13번). 모르면 1
+function Cracks.scaleOf(inst: Instance): number
+	local node: Instance? = inst
+	while node do
+		local ok, w = pcall(function()
+			return (node :: Instance):GetAttribute("World")
+		end)
+		if ok and type(w) == "number" then
+			return MapLayout.worldScale(w)
+		end
+		node = node.Parent
+	end
+	return 1
+end
 
 Cracks.LINES = { 1, 2, 3 } -- 단계마다 금 줄 수 (× 3 마디)
 local THICK = { 3, 6, 9 }
@@ -113,17 +131,18 @@ local function drawLines(holder: Frame, stage: number, seed: number)
 end
 
 local function chips(part: BasePart, count: number)
+	local k = Cracks.scaleOf(part)
 	for i = 1, count do
 		local p = Instance.new("Part")
 		p.Name = "Chip"
-		p.Size = Vector3.one * math.clamp(part.Size.X * 0.06, 0.25, 1.5)
+		p.Size = Vector3.one * math.clamp(part.Size.X * 0.06, 0.25 * k, 1.5 * k)
 		p.Color = part.Color
 		p.Material = Enum.Material.SmoothPlastic
 		p.CanCollide = false
 		p.CanQuery = false
 		p.CanTouch = false
 		p.Anchored = false
-		p.CFrame = part.CFrame * CFrame.new((i - count / 2) * 0.4, part.Size.Y * 0.2, -part.Size.Z / 2 - 0.3)
+		p.CFrame = part.CFrame * CFrame.new((i - count / 2) * 0.4 * k, part.Size.Y * 0.2, -part.Size.Z / 2 - 0.3 * k)
 		p.Parent = Workspace
 		task.delay(0.9, function()
 			p:Destroy()
@@ -148,6 +167,7 @@ function Cracks.show(
 		return 0
 	end
 	local list: { Enum.NormalId } = faces or { Enum.NormalId.Front }
+	local k = Cracks.scaleOf(part)
 	for _, face in list do
 		local gui = Instance.new("SurfaceGui")
 		gui.Name = "Crack_" .. face.Name
@@ -155,8 +175,8 @@ function Cracks.show(
 		gui.LightInfluence = 0
 		gui.AlwaysOnTop = false
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 25
-		gui.MaxDistance = 400
+		gui.PixelsPerStud = 25 / k -- 큰 월드 송판: 그림 픽셀 수는 그대로
+		gui.MaxDistance = 400 * k
 		gui:SetAttribute("CrackStage", stage)
 		local holder = Instance.new("Frame")
 		holder.Name = "Cracks"
@@ -262,9 +282,10 @@ function Cracks.showModel(model: Model, stage: number, seed: number, withChips: 
 	local size = hi - lo
 	local big = math.max(size.X, size.Y, size.Z)
 	local reach = size.Magnitude + 2
-	local segLen = math.clamp(big * 0.09, 0.12, 6)
+	local k = Cracks.scaleOf(model) -- 큰 월드(배율 k): 금 길이·굵기 상한도 k 배
+	local segLen = math.clamp(big * 0.09, 0.12 * k, 6 * k)
 	local s = math.clamp(stage, 1, 3)
-	local thick = math.clamp(big * SEG_THICK[s], 0.03, 0.8)
+	local thick = math.clamp(big * SEG_THICK[s], 0.03 * k, 0.8 * k)
 	local rand = rng(seed)
 
 	-- 보이는 파트만 맞도록 (CanQuery 가 꺼진 겉모습 파트도 잠깐 켰다가 돌려놓음 — 내 화면에서만)
@@ -341,7 +362,7 @@ function Cracks.showModel(model: Model, stage: number, seed: number, withChips: 
 			return false
 		end
 		local w = thick * (1 - (seg - 1) * 0.12)
-		local at = m.pos + n * (Cracks.LIFT + 0.01)
+		local at = m.pos + n * (Cracks.LIFT + 0.01) * k
 		local p = Instance.new("Part")
 		p.Name = "Crack"
 		p.Size = Vector3.new(math.max(w, 0.02), 0.02, along.Magnitude + w * 0.6)
@@ -403,7 +424,7 @@ function Cracks.showModel(model: Model, stage: number, seed: number, withChips: 
 			local h = starts[i]
 			local c = Instance.new("Part")
 			c.Name = "Chip"
-			c.Size = Vector3.one * math.clamp(big * 0.04, 0.15, 1.5)
+			c.Size = Vector3.one * math.clamp(big * 0.04, 0.15 * k, 1.5 * k)
 			c.Color = color
 			c.Material = Enum.Material.SmoothPlastic
 			c.CanCollide = false

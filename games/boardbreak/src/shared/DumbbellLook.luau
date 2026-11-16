@@ -9,6 +9,8 @@
 	    빛(Neon + PointLight) · 단계 색으로 표현 (화면을 가리지 않게).
 	  DumbbellLook.build(parent, level, scale, anchored) → Model "Dumbbell" (PrimaryPart = Bar, 봉은 X 축)
 	    anchored=false 면 Massless·안 부딪힘·Weld 로 봉에 붙음 (손에 붙일 때).
+	    scale 배: 파트 크기 · 파티클 크기/속도 · 번개 굵기 · 빛 범위(최대 60) 까지 (손 아령 = 몸 배율 × Sizes.dumbbellScale).
+	  DumbbellLook.barLength(level, scale?) → 가장 긴 축 (마지막 아령 scale 1 = 2.42 = Sizes.LAST_DUMBBELL_LENGTH)
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -191,7 +193,7 @@ function DumbbellLook.build(parent: Instance?, level: number, scale: number?, an
 		local light = Instance.new("PointLight")
 		light.Name = "DumbbellLight"
 		light.Color = s.color
-		light.Range = 6 + 8 * s.t
+		light.Range = math.min(60, (6 + 8 * s.t) * math.max(1, k))
 		light.Brightness = 1 + 2 * s.t
 		light.Shadows = false
 		light.Parent = bar
@@ -202,13 +204,13 @@ function DumbbellLook.build(parent: Instance?, level: number, scale: number?, an
 		sparks.Name = "DumbbellSparks"
 		sparks.Rate = if s.aura >= 4 then 10 else 6
 		sparks.Lifetime = NumberRange.new(0.3, 0.6)
-		sparks.Speed = NumberRange.new(1, 2)
+		sparks.Speed = NumberRange.new(1 * k, 2 * k)
 		sparks.SpreadAngle = Vector2.new(180, 180)
 		sparks.LightEmission = 1
 		sparks.LightInfluence = 0
 		sparks.Color = ColorSequence.new(s.color)
 		sparks.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, if s.aura >= 4 then 0.25 else 0.15),
+			NumberSequenceKeypoint.new(0, math.min(20, (if s.aura >= 4 then 0.25 else 0.15) * k)),
 			NumberSequenceKeypoint.new(1, 0),
 		})
 		sparks.Parent = bar
@@ -228,10 +230,10 @@ function DumbbellLook.build(parent: Instance?, level: number, scale: number?, an
 			beam.Color = ColorSequence.new(s.color, Color3.new(1, 1, 1))
 			beam.LightEmission = 1
 			beam.LightInfluence = 0
-			beam.Width0 = 0.15
-			beam.Width1 = 0.15
-			beam.CurveSize0 = 1.2
-			beam.CurveSize1 = -1.2
+			beam.Width0 = 0.15 * k
+			beam.Width1 = 0.15 * k
+			beam.CurveSize0 = 1.2 * k
+			beam.CurveSize1 = -1.2 * k
 			beam.Segments = 6
 			beam.FaceCamera = true
 			beam.Parent = bar
@@ -259,6 +261,17 @@ end
 function DumbbellLook.diameterOf(level: number): number
 	local s = DumbbellLook.spec(level)
 	return if s.level == 1 then 1.42 * DumbbellLook.CLASSIC_SCALE else s.diameter
+end
+
+-- 봉 길이 (가장 긴 축, scale 배). 1번 아령은 무료 모델 치수 (원판이 봉보다 바깥으로 나옴)
+function DumbbellLook.barLength(level: number, scale: number?): number
+	local s = DumbbellLook.spec(level)
+	local k = scale or 1
+	if s.level == 1 then
+		local q = k * DumbbellLook.CLASSIC_SCALE
+		return math.max(1.6 * q, 2 * (0.76 * q + 0.41 * q / 2))
+	end
+	return s.handle * k + 2 * (s.plates * s.thickness * k + 0.12 * k)
 end
 
 -- 파트 수 (진열 상한 계산용)

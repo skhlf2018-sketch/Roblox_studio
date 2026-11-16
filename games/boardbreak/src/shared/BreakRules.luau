@@ -8,7 +8,8 @@
 	                         recommendPower 는 화면 표시용 "추천 힘"). 치는 힘 0 이면 피해 0.
 	                         체력이 0 이하가 되면 깨짐 → 그 물건 체력은 다시 가득 (hpTable 에서 지움). 넘친 피해는 버림.
 	                         깎인 체력은 세션 동안 남음 (떠났다 돌아와도 그대로 — 조금씩 깎아 깨는 도전).
-	거리: 수평 거리 ≤ reach + slack (reach = 선임 MapLayout.targetReach(id) — 물건 크기에 맞는 거리), 높이 차 ≤ reach + VERTICAL_SLACK.
+	거리: 수평 거리 ≤ reach + slack (reach = 선임 MapLayout.targetReach(id) — 물건 크기에 맞는 거리), 높이 차 ≤ reach + slack + vertical
+	  (vertical 기본 VERTICAL_SLACK). 서버(BreakService)는 slack · vertical 에 그 월드 Sizes.worldScale 을 곱하고 몸이 커진 만큼 더함.
 ]]
 
 local Targets = require(script.Parent.Data.Targets)
@@ -30,7 +31,13 @@ export type HitOutcome = {
 }
 
 -- 캐릭터 위치가 물건에 닿을 만큼 가까운가 (pos 는 {x,y,z} 또는 Vector3 처럼 X/Y/Z)
-function BreakRules.inReach(characterPos: any, targetPos: Point?, reach: number, slack: number): boolean
+function BreakRules.inReach(
+	characterPos: any,
+	targetPos: Point?,
+	reach: number,
+	slack: number,
+	vertical: number?
+): boolean
 	if characterPos == nil or targetPos == nil then
 		return false
 	end
@@ -49,7 +56,12 @@ function BreakRules.inReach(characterPos: any, targetPos: Point?, reach: number,
 	if dx * dx + dz * dz > r * r then
 		return false
 	end
-	return math.abs(cy - targetPos.y) <= r + BreakRules.VERTICAL_SLACK
+	local up = if type(vertical) == "number"
+			and vertical == vertical
+			and vertical >= 0
+		then vertical
+		else BreakRules.VERTICAL_SLACK
+	return math.abs(cy - targetPos.y) <= r + up
 end
 
 -- 칠 수 있나 (힘은 안 봄 — 어떤 힘이든 칠 수 있음). (target, nil) 또는 (nil, reason)
@@ -59,7 +71,8 @@ function BreakRules.check(
 	characterPos: any,
 	targetPos: Point?,
 	reach: number,
-	slack: number
+	slack: number,
+	vertical: number?
 ): (Targets.Target?, string?)
 	if typeof(targetId) ~= "string" then
 		return nil, "unknown"
@@ -71,7 +84,7 @@ function BreakRules.check(
 	if type(openedWorld) ~= "number" or target.world > openedWorld then
 		return nil, "closed"
 	end
-	if not BreakRules.inReach(characterPos, targetPos, reach, slack) then
+	if not BreakRules.inReach(characterPos, targetPos, reach, slack, vertical) then
 		return nil, "far"
 	end
 	return target, nil

@@ -3,7 +3,8 @@
 	송판 깨기 서버 진입점 (ServerScriptService.Server.Main — Script, RunContext = Server)
 	팀 표준: 진입점은 이것 하나. 나머지는 전부 ModuleScript + start(). 시작 순서 (위에서 아래로):
 	  Net → MapBuilder(선임 — 맵) → *VisualService(선임 — 겉모습, Services 폴더에서 이름이 VisualService 로 끝나는 것 전부) →
-	  DataService → TrainService · ExamService · BreakService · ShopService · WorldService → ProductService → LeaderboardService
+	  DataService → SizeService(몸 크기 — 힘이 바뀌면 Wallet.sync 가 부름) → TrainService · ExamService · BreakService · ShopService
+	  · WorldService → ProductService → LeaderboardService
 	  → DevCommands → PlayerLifecycle (맨 마지막: 접속 처리)
 	서비스 하나의 start() 가 오류를 내도 나머지는 계속 켜짐 (출력창에 warn).
 ]]
@@ -13,6 +14,7 @@ local Services = Server.Services
 
 local Net = require(Server.Net)
 local DataService = require(Services.DataService)
+local SizeService = require(Services.SizeService)
 local TrainService = require(Services.TrainService)
 local ExamService = require(Services.ExamService)
 local BreakService = require(Services.BreakService)
@@ -56,6 +58,9 @@ for _, child in Services:GetChildren() do
 end
 boot("DataService", function()
 	DataService.start()
+end)
+boot("SizeService", function()
+	SizeService.start()
 end)
 boot("TrainService", function()
 	TrainService.start()

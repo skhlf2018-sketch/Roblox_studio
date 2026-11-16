@@ -57,12 +57,12 @@ return function(T, Loader)
 			H.advance(3)
 			H.client(p, "StartExam")
 			T.eq(session.exam, nil, "심사대 밖")
-			data.belt = 3
+			data.belt = H.Belts.duelOf(1).index - 1
 			data.power = 1e60
 			H.teleport(p, H.examSpot(1))
 			H.advance(3)
 			H.client(p, "StartExam")
-			T.eq(session.exam, nil, "띠 4 는 대결로만")
+			T.eq(session.exam, nil, "월드 1 마지막 띠(빨강)는 대결로만")
 			T.truthy(H.hasNotify(p, "error", "대결"))
 			H.uninstall()
 		end
@@ -163,7 +163,7 @@ return function(T, Loader)
 		T.eq(session.duel, nil, "띠 3 은 심사")
 		T.truthy(H.hasNotify(p, "error", "심사"))
 		local _, data = H.server("Sessions").getLoaded(p)
-		data.belt = 3
+		data.belt = H.Belts.duelOf(1).index - 1
 		H.teleport(p, H.spawnSpot(1))
 		H.advance(3)
 		H.client(p, "StartDuel")
@@ -171,30 +171,35 @@ return function(T, Loader)
 		H.uninstall()
 	end)
 
-	T.test("needPower 로 초당 4번 → 이김 → 띠 4 · 월드 2 열림 · DuelState win", function()
-		local H = setup()
-		local p, session, data = duelJoin(H, 3, 1)
-		H.client(p, "StartDuel")
-		T.truthy(session.duel)
-		T.eq(p:GetAttribute("Activity"), "duel")
-		local start = H.sent(p, "DuelState")[1][1]
-		T.eq(start.phase, "start")
-		T.eq(start.total, 15)
-		T.eq(start.examiner, H.Worlds.get(1).examiner)
-		H.advance(3) -- 카운트다운
-		hitFor(H, p, "duel", 15)
-		T.eq(last(H, p, "DuelState").phase, "win")
-		T.eq(data.belt, 4)
-		T.eq(data.world, 2, "월드 2 열림")
-		T.eq(p:GetAttribute("World"), 2)
-		T.eq(session.duel, nil)
-		T.eq(data.stats.duelsWon, 1)
-		H.uninstall()
-	end)
+	T.test(
+		"needPower 로 초당 4번 → 이김 → 월드 1 대결 띠(빨강) · 월드 2 열림 · DuelState win",
+		function()
+			local H = setup()
+			local D1 = H.Belts.duelOf(1).index
+			local p, session, data = duelJoin(H, D1 - 1, 1)
+			H.client(p, "StartDuel")
+			T.truthy(session.duel)
+			T.eq(p:GetAttribute("Activity"), "duel")
+			local start = H.sent(p, "DuelState")[1][1]
+			T.eq(start.phase, "start")
+			T.eq(start.total, 15)
+			T.eq(start.examiner, H.Worlds.get(1).examiner)
+			H.advance(3) -- 카운트다운
+			hitFor(H, p, "duel", 15)
+			T.eq(last(H, p, "DuelState").phase, "win")
+			T.eq(data.belt, D1)
+			T.eq(data.world, 2, "월드 2 열림")
+			T.eq(p:GetAttribute("World"), 2)
+			T.eq(session.duel, nil)
+			T.eq(data.stats.duelsWon, 1)
+			H.uninstall()
+		end
+	)
 
 	T.test("느리게 치면 시험관이 먼저 → 짐 (띠·월드 그대로)", function()
 		local H = setup()
-		local p, session, data = duelJoin(H, 3, 1)
+		local before = H.Belts.duelOf(1).index - 1
+		local p, session, data = duelJoin(H, before, 1)
 		H.client(p, "StartDuel")
 		H.advance(3)
 		for _ = 1, 30 do
@@ -202,7 +207,7 @@ return function(T, Loader)
 			H.advance(1) -- 초당 1번
 		end
 		T.eq(last(H, p, "DuelState").phase, "lose")
-		T.eq(data.belt, 3)
+		T.eq(data.belt, before)
 		T.eq(data.world, 1)
 		T.eq(session.duel, nil)
 		T.eq(data.stats.duelsLost, 1)
@@ -213,13 +218,14 @@ return function(T, Loader)
 		"힘 0 으로도 대결은 시작됨 (사장님 결정 11번) — 하지만 송판이 안 깨져 짐 · 띠·월드 그대로",
 		function()
 			local H = setup()
-			local p, session, data = duelJoin(H, 3, 1, 0)
+			local before = H.Belts.duelOf(1).index - 1
+			local p, session, data = duelJoin(H, before, 1, 0)
 			H.client(p, "StartDuel")
 			T.truthy(session.duel, "힘 0 으로도 도전")
 			H.advance(3)
 			hitFor(H, p, "duel", 30)
 			T.eq(last(H, p, "DuelState").phase, "lose")
-			T.eq(data.belt, 3)
+			T.eq(data.belt, before)
 			T.eq(data.world, 1, "월드 2 는 여전히 잠김")
 			H.uninstall()
 		end
@@ -227,7 +233,7 @@ return function(T, Loader)
 
 	T.test("카운트다운 중 친 것은 무시 (미리 연타해도 이득 없음)", function()
 		local H = setup()
-		local p, session = duelJoin(H, 3, 1, 1e9) -- 한 번에 1장
+		local p, session = duelJoin(H, H.Belts.duelOf(1).index - 1, 1, 1e9) -- 한 번에 1장
 		H.client(p, "StartDuel")
 		for _ = 1, 5 do
 			H.client(p, "Hit", "duel")
@@ -236,13 +242,14 @@ return function(T, Loader)
 		H.uninstall()
 	end)
 
-	T.test("월드 3 마지막 시험관을 이기면 그랜드 마스터 (띠 12)", function()
+	T.test("월드 3 마지막 시험관을 이기면 그랜드 마스터 (마지막 띠 — 천상 띠)", function()
 		local H = setup()
-		local p, _, data = duelJoin(H, 11, 3)
+		local p, _, data = duelJoin(H, H.Belts.COUNT - 1, 3)
 		H.client(p, "StartDuel")
 		H.advance(3)
 		hitFor(H, p, "duel", 15)
-		T.eq(data.belt, 12)
+		T.eq(data.belt, H.Belts.COUNT)
+		T.eq(H.Belts.get(data.belt).id, "heavenly")
 		T.truthy(data.grandMaster)
 		T.eq(p:GetAttribute("GrandMaster"), true)
 		T.truthy(H.hasNotify(p, "success", "그랜드 마스터"))

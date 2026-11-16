@@ -6,6 +6,9 @@
 	    매트 위에서 화면 "빈 곳"을 눌러도 한 번 — 물건·버튼·표지판(ClickDetector 가 있는 모델)을 누른 것이면 들기는 안 보냄
 	    (물건 클릭은 BreakController 가 Hit 만 보냄).
 	  - 손에 진짜 아령 (shared/DumbbellLook: 손잡이 봉 + 원판, 무거울수록 크고 여러 장 · 상한 넘으면 빛).
+	    크기 = 몸 배율(캐릭터 Attr VisualScale — 서버 PlayerVisualService 가 몸을 키운 값) × Sizes.dumbbellScale(단계) (사장님 결정 13번).
+	    몸 배율·손 크기가 바뀌면 같은 프레임에 새로 만들어 바꿔 끼움 (2% 단위). 아령이 카메라 → 내 머리 선을 가리면 반투명 (내 화면만).
+	  - 매트 판정 = 서버 SizeService 와 같게: 그대로 또는 큰 몸이면 뿌리를 3 × (몸 배율 − 1) 내려서 (TrainController.matAt)
 	    아령 Model 의 모든 부품은 손잡이(PrimaryPart "Bar")에 Weld, 손잡이는 손 파트(R15 RightHand / R6 Right Arm)에 Weld.
 	    전부 Massless · 안 부딪힘 · 안 맞음 · Anchored 아님. 손 파트가 바뀌면(리스폰·아바타 늦게 로딩) 다시 붙임.
 	    무거운 아령(DumbbellLook.twoHands)은 왼손에도 하나 더 → 두 손으로 듦.
@@ -26,6 +29,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage.Shared
 local MapLayout = require(Shared.Data.MapLayout)
 local Dumbbells = require(Shared.Data.Dumbbells)
+local Sizes = require(Shared.Data.Sizes)
 local DumbbellLook = require(Shared.DumbbellLook)
 local Format = require(Shared.Format)
 local Remotes = require(Shared.Remotes)
@@ -46,7 +50,17 @@ local C = Theme.Colors
 local PAttr = Tags.PlayerAttributes
 local onMat = false
 
-type Hold = { level: number, right: Model?, left: Model?, rightHand: BasePart?, leftHand: BasePart? }
+-- key = 아령 크기를 정한 값 (단계 · 몸 배율 · 손 크기) — 하나라도 바뀌면 새로 만들어 붙임 (2% 단위라 드묾, 같은 프레임에 바꿔 끼워 깜빡임 없음)
+type Hold = {
+	level: number,
+	scale: number,
+	handY: number,
+	fade: number?,
+	right: Model?,
+	left: Model?,
+	rightHand: BasePart?,
+	leftHand: BasePart?,
+}
 local holds: { [Model]: Hold } = {}
 
 function TrainController.onMat(): boolean
@@ -74,9 +88,19 @@ local function grip(hand: BasePart): CFrame
 	return CFrame.new(0, if r6 then -hand.Size.Y / 2 + 0.15 else -hand.Size.Y * 0.2, 0)
 end
 
-local function makeOne(character: Model, hand: BasePart, level: number, name: string): Model
+-- 손에 든 아령 배율 = 몸 배율 × 아령 단계 배율 (사장님 결정 13번: 가장 큰 몸 + 마지막 아령 = 아파트 높이 × 2)
+function TrainController.heldScale(character: Model, level: number): number
+	local raw = character:GetAttribute("VisualScale")
+	local body = if type(raw) == "number" and raw > 0 then raw else 1
+	if character == Players.LocalPlayer.Character and raw == nil then
+		body = State.bodyScale()
+	end
+	return body * Sizes.dumbbellScale(level)
+end
+
+local function makeOne(character: Model, hand: BasePart, level: number, name: string, scale: number): Model
 	local g = grip(hand)
-	local model = DumbbellLook.build(nil, level, 1, false, hand.CFrame * g)
+	local model = DumbbellLook.build(nil, level, scale, false, hand.CFrame * g)
 	model.Name = name
 	local bar = model.PrimaryPart :: BasePart
 	local weld = Instance.new("Weld")
@@ -130,9 +154,13 @@ function TrainController.attach(character: Model?, level: number): Model?
 	local h = holds[character]
 	local right = handOf(character, true)
 	local left = if spec.twoHands then handOf(character, false) else nil
+	local scale = TrainController.heldScale(character, spec.level)
+	local handY = if right then right.Size.Y else 0
 	if
 		h
 		and h.level == spec.level
+		and math.abs(h.scale - scale) < 1e-3
+		and math.abs(h.handY - handY) < 1e-3
 		and attached(h.right, h.rightHand, character, true)
 		and (not spec.twoHands or left == nil or attached(h.left, h.leftHand, character, false))
 	then
@@ -142,10 +170,10 @@ function TrainController.attach(character: Model?, level: number): Model?
 	if not right then
 		return nil
 	end
-	local made: Hold = { level = spec.level, rightHand = right, leftHand = left }
-	made.right = makeOne(character, right, spec.level, "HeldDumbbell")
+	local made: Hold = { level = spec.level, scale = scale, handY = handY, rightHand = right, leftHand = left }
+	made.right = makeOne(character, right, spec.level, "HeldDumbbell", scale)
 	if left then
-		made.left = makeOne(character, left, spec.level, "HeldDumbbellL")
+		made.left = makeOne(character, left, spec.level, "HeldDumbbellL", scale)
 	end
 	holds[character] = made
 	return made.right
@@ -209,7 +237,8 @@ function TrainController.popGain(gain: number)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "GainPopup"
 	gui.Size = UDim2.fromOffset(160, 44)
-	gui.StudsOffset = Vector3.new(math.random(-10, 10) / 10, 2.4, 0)
+	local k = State.bodyScale() -- 큰 몸이면 머리도 큼 → 그만큼 위에
+	gui.StudsOffset = Vector3.new(math.random(-10, 10) / 10 * k, 2.4 * k, 0)
 	gui.AlwaysOnTop = true
 	gui.LightInfluence = 0
 	gui.Adornee = head
@@ -219,7 +248,11 @@ function TrainController.popGain(gain: number)
 		Parent = gui,
 	})
 	gui.Parent = Players.LocalPlayer:FindFirstChild("PlayerGui") or Workspace
-	Ui.tween(gui, TweenInfo.new(0.7, Enum.EasingStyle.Quad), { StudsOffset = gui.StudsOffset + Vector3.new(0, 2.5, 0) })
+	Ui.tween(
+		gui,
+		TweenInfo.new(0.7, Enum.EasingStyle.Quad),
+		{ StudsOffset = gui.StudsOffset + Vector3.new(0, 2.5 * k, 0) }
+	)
 	Ui.tween(label, TweenInfo.new(0.7), { TextTransparency = 1 })
 	task.delay(0.75, function()
 		gui:Destroy()
@@ -230,6 +263,15 @@ end
 -- 다른 플레이어 (내 화면에서 그 사람 손 아령 + 팔 동작)
 ------------------------------------------------------------------
 
+-- 매트 위인가 — 서버 SizeService.isOnTrainMat 과 같은 규칙: 그대로 또는 (큰 몸이면) 뿌리를 3 × (몸 배율 − 1) 내려서
+function TrainController.matAt(pos: Vector3, world: number, bodyScale: number): boolean
+	if MapLayout.isOnTrainMat(pos, world) then
+		return true
+	end
+	local extra = 3 * (math.max(1, bodyScale) - 1)
+	return extra > 0 and MapLayout.isOnTrainMat(pos - Vector3.new(0, extra, 0), world)
+end
+
 local function otherOnMat(p: Player): (Model?, boolean)
 	local character = p.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -237,7 +279,86 @@ local function otherOnMat(p: Player): (Model?, boolean)
 		return character, false
 	end
 	local world = tonumber(p:GetAttribute(PAttr.CurrentWorld)) or 1
-	return character, MapLayout.isOnTrainMat(root.CFrame.Position, world)
+	local body = tonumber(p:GetAttribute(PAttr.BodyScale)) or 1
+	return character, TrainController.matAt(root.CFrame.Position, world, body)
+end
+
+------------------------------------------------------------------
+-- 큰 아령이 내 화면을 가리면 반투명 (내 화면에서만, LocalTransparencyModifier)
+------------------------------------------------------------------
+
+TrainController.FADE = 0.7
+
+-- 점 p 에서 선분 a-b 까지 거리
+local function pointSegment(p: Vector3, a: Vector3, b: Vector3): number
+	local ab = b - a
+	local len2 = ab:Dot(ab)
+	local t = if len2 > 0 then math.clamp((p - a):Dot(ab) / len2, 0, 1) else 0
+	return (a + ab * t - p).Magnitude
+end
+
+-- 아령(봉 + 원판)이 카메라 → 머리 선을 가리나
+function TrainController.blocksView(model: Model, camPos: Vector3, focus: Vector3): boolean
+	local bar = model.PrimaryPart
+	if not bar then
+		return false
+	end
+	local radius = 0
+	for _, d in model:GetChildren() do
+		if d:IsA("BasePart") then
+			radius = math.max(radius, d.Size.Y / 2)
+		end
+	end
+	local half = bar.Size.X / 2
+	local axis = bar.CFrame.RightVector
+	local c = bar.CFrame.Position
+	for i = 0, 8 do
+		local p = c + axis * (-half + (i / 8) * 2 * half)
+		if pointSegment(p, camPos, focus) <= radius then
+			return true
+		end
+	end
+	return false
+end
+
+local function fadeHeld(character: Model)
+	local h = holds[character]
+	if not h then
+		return
+	end
+	local camera = Workspace.CurrentCamera
+	local head = character:FindFirstChild("Head")
+	if not camera or not (head and head:IsA("BasePart")) then
+		return
+	end
+	local camPos = camera.CFrame.Position
+	local focus = head.CFrame.Position
+	local blocked = false
+	for _, m in { h.right, h.left } do
+		if m and TrainController.blocksView(m, camPos, focus) then
+			blocked = true
+		end
+	end
+	local alpha = if blocked then TrainController.FADE else 0
+	if h.fade == alpha then
+		return
+	end
+	h.fade = alpha
+	for _, m in { h.right, h.left } do
+		if m then
+			for _, d in m:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.LocalTransparencyModifier = alpha
+				end
+			end
+		end
+	end
+end
+
+-- 테스트용: 지금 든 아령의 반투명 값 (없으면 nil)
+function TrainController.fadeOf(character: Model): number?
+	local h = holds[character]
+	return if h then h.fade else nil
 end
 
 local watched: { [Player]: boolean } = {}
@@ -286,7 +407,7 @@ end
 
 function TrainController.check()
 	local root = Walk.root()
-	local now = root ~= nil and MapLayout.isOnTrainMat(root.CFrame.Position, State.currentWorld())
+	local now = root ~= nil and TrainController.matAt(root.CFrame.Position, State.currentWorld(), State.bodyScale())
 	if now ~= onMat then
 		onMat = now
 		local b = TrainController.button
@@ -302,6 +423,9 @@ function TrainController.check()
 		local d = Dumbbells.get(level)
 		if b and d then
 			b.setText("들기", d.name)
+		end
+		if character then
+			fadeHeld(character)
 		end
 	elseif character and (holds[character] or character:FindFirstChild("HeldDumbbell")) then
 		dropHold(character)

@@ -7,7 +7,8 @@
 	나감: 심사·대결 정리 → 저장 + 세션 락 해제 → 세션 삭제 (저장이 끝내 실패하면 DataService 가 나중에 다시)
 	      불러오는 중에 나가면 data 는 저장하지 않고 락만 풂
 	ClientReady Remote: 클라 화면이 준비되면 → Snapshot (접속 직후 Snapshot 을 놓친 경우 대비)
-	캐릭터가 생기면 지금 월드 스폰으로 (WorldService)
+	캐릭터가 생기면 몸 배율에 맞는 걷기·점프 (SizeService) → 지금 월드 스폰으로 (WorldService — 큰 몸은 그만큼 높이 놓음)
+	불러오기가 끝나면 Attributes.sync → Wallet.sync 가 BodyScale · Muscle 을 정함 (SizeService)
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +26,7 @@ local Attributes = require(Server.Attributes)
 local Services = script.Parent
 local DataService = require(Services.DataService)
 local Wallet = require(Services.Wallet)
+local SizeService = require(Services.SizeService)
 local WorldService = require(Services.WorldService)
 local ExamService = require(Services.ExamService)
 local ProductService = require(Services.ProductService)
@@ -58,6 +60,7 @@ function PlayerLifecycle.onPlayerAdded(player: Player)
 	player:SetAttribute(Attr.Activity, "")
 
 	player.CharacterAdded:Connect(function()
+		SizeService.onCharacterAdded(player) -- 새 Humanoid 에 걷기·점프 (몸 배율)
 		WorldService.onCharacterAdded(player)
 	end)
 

@@ -37,8 +37,8 @@ Tags.PartAttributes = {
 Tags.PlayerAttributes = {
 	Power = "Power", -- 저장된 힘 (number)
 	Money = "Money", -- 돈 (number)
-	DumbbellLevel = "DumbbellLevel", -- 가진 가장 좋은 아령 (1~20)
-	Belt = "Belt", -- 지금 띠 (1~12)
+	DumbbellLevel = "DumbbellLevel", -- 가진 가장 좋은 아령 (1~Dumbbells.COUNT)
+	Belt = "Belt", -- 지금 띠 (1~Belts.COUNT, 지금 22)
 	World = "World", -- 열린 월드 (1~3)
 	CurrentWorld = "CurrentWorld", -- 지금 있는 월드 (1~3)
 	PowerBoost = "PowerBoost", -- 힘 배수 (1, 2, 4 … 2048) — 들 때와 칠 때 둘 다 곱함
@@ -48,6 +48,9 @@ Tags.PlayerAttributes = {
 	-- 수석 추가 (설계서 7장에 적음)
 	Activity = "Activity", -- "" | "exam" | "duel" (지금 심사·대결 중인가)
 	GrandMaster = "GrandMaster", -- 월드 3 마지막 시험관을 이김 (bool, 엔딩)
+	-- 결정 13번 (Sizes): 서버 SizeService 가 정함, 겉모습은 PlayerVisualService 가 읽어서 키움
+	BodyScale = "BodyScale", -- 몸 배율 1 … Sizes.MAX_SCALE (Sizes.quantize 로 내린 값)
+	Muscle = "Muscle", -- 근육 0 … 1 (0.05 단위)
 }
 
 return Tags

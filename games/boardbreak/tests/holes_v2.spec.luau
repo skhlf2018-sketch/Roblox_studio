@@ -214,16 +214,16 @@ return function(T, Loader)
 		function()
 			local m = pure()
 			local _, log = SimPlayer.run(m)
-			local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[12] }
-			local bands = { { 1800, 3360 }, { 5160, 9600 }, { 9360, 17400 } } -- sim_progress RULES.worldEnd (결정 12번 뒤)
+			local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[m.Belts.COUNT] }
+			local bands = SimPlayer.WORLD_END -- sim_progress RULES.worldEnd (결정 13·14·16번 뒤 ±30%)
 			for w = 1, 3 do
 				T.truthy(ends[w] ~= nil, "월드 " .. w .. " 끝 있음")
 				T.truthy(ends[w] >= bands[w][1] and ends[w] <= bands[w][2], "월드 " .. w .. " 끝 " .. mmss(ends[w]))
 			end
-			-- 아래쪽 한도(월드 3 끝 5시간)까지 얼마나 남았나 — 지름길이 있으면 이 여유가 줄어듦
+			-- 아래쪽 한도(월드 3 끝 하한)까지 얼마나 남았나 — 지름길이 있으면 이 여유가 줄어듦
 			T.truthy(
 				ends[3] - bands[3][1] >= 600,
-				"월드 3 끝이 5시간 하한에서 10분 이상 위 (" .. mmss(ends[3]) .. ")"
+				"월드 3 끝이 하한 " .. mmss(bands[3][1]) .. " 에서 10분 이상 위 (" .. mmss(ends[3]) .. ")"
 			)
 		end
 	)
@@ -494,10 +494,11 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"힘 0 대결 100번 반복 (띠 3 → 4): 시험관이 이김 · 띠 3 · 월드 1 그대로 · 끝나면 상태 비움 · 끝난 뒤 DuelState 없음",
+		"힘 0 대결 100번 반복 (월드 1 대결 띠 바로 앞 → 대결 띠): 시험관이 이김 · 띠 · 월드 1 그대로 · 끝나면 상태 비움 · 끝난 뒤 DuelState 없음",
 		function()
 			local H = setup()
-			local p, session, data = join(H, 1, { power = 0, belt = 3 }, at(H.duelSpot(1)))
+			local beforeDuel = H.Belts.duelOf(1).index - 1
+			local p, session, data = join(H, 1, { power = 0, belt = beforeDuel }, at(H.duelSpot(1)))
 			for i = 1, 100 do
 				H.client(p, "StartDuel")
 				T.truthy(session.duel, "시작 " .. i)
@@ -508,7 +509,7 @@ return function(T, Loader)
 				H.advance(30)
 				T.eq(session.duel, nil, "끝남 " .. i)
 			end
-			T.eq(data.belt, 3)
+			T.eq(data.belt, beforeDuel)
 			T.eq(data.world, 1)
 			T.eq(data.stats.duelsLost, 100)
 			T.eq(data.stats.duelsWon, 0)
@@ -557,7 +558,8 @@ return function(T, Loader)
 			-- 대결 시작 직후 죽음 → 시험관이 이김
 			p2.Character.humanoid.Health = 100
 			H.teleport(p2, H.duelSpot(2))
-			d2.belt = 3
+			local beforeDuel2 = H.Belts.duelOf(2).index - 1 -- 지금 월드 2 → 월드 2 대결
+			d2.belt = beforeDuel2
 			H.advance(5)
 			H.client(p2, "StartDuel")
 			T.truthy(s2.duel)
@@ -568,7 +570,7 @@ return function(T, Loader)
 			end
 			H.advance(30)
 			T.eq(s2.duel, nil)
-			T.eq(d2.belt, 3, "죽어서 못 이김")
+			T.eq(d2.belt, beforeDuel2, "죽어서 못 이김")
 			T.eq(#H.warnings, 0, table.concat(H.warnings, " | "))
 			H.uninstall()
 		end
@@ -673,7 +675,7 @@ return function(T, Loader)
 			end
 			local lines = {}
 			local worst25, best20, worst30 = 0, math.huge, 0
-			for belt = 2, 12 do
+			for belt = 2, m.Belts.COUNT do
 				local r25, r20, r30 = threshold(belt, 0.25), threshold(belt, 0.2), threshold(belt, 0.3)
 				worst25, best20, worst30 = math.max(worst25, r25), math.min(best20, r20), math.max(worst30, r30)
 				table.insert(lines, string.format("띠%d %.2f/%.2f/%.2f", belt, r25, r20, r30))
@@ -858,11 +860,12 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"B-1 고침: 사는 시간이 앞 아령의 95% 아래로 줄어드는 아령이 없음 (사장님: 점점 더 늘어남) · 처음 20~30초 → 마지막까지 늘어남",
+		"B-1 고침: 사는 시간이 앞 아령의 95% 아래로 줄어드는 아령이 없음 (사장님: 점점 더 늘어남) · 처음 15~30초 → 마지막까지 늘어남",
 		function()
 			local m = pure()
 			local _, took = dumbbellSim(m)
-			T.truthy(took[2] >= 20 and took[2] <= 30, "3kg 아령 " .. took[2] .. "초")
+			-- 3kg 42 (사장님 고정) — 걷기가 2배 빨라져서 (결정 14번, 스폰 → 첫 매트) 20초 → 17초쯤. 아래 끝 15초
+			T.truthy(took[2] >= 15 and took[2] <= 30, "3kg 아령 " .. took[2] .. "초")
 			T.truthy(took[60] > took[40] and took[40] > took[20], "20 · 40 · 60번이 늘어남")
 			local dips = {}
 			for level = 3, 60 do
@@ -1201,8 +1204,8 @@ return function(T, Loader)
 				maxBuy, maxBuyLevel = log.buy[level] - log.buy[level - 1], level
 			end
 		end
-		local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[12] }
-		local bands = { { 1800, 3360 }, { 5160, 9600 }, { 9360, 17400 } } -- sim_progress RULES.worldEnd (결정 12번 뒤)
+		local ends = { log.worldOpen[2], log.worldOpen[3], log.belt[m.Belts.COUNT] }
+		local bands = SimPlayer.WORLD_END -- sim_progress RULES.worldEnd (결정 13·14·16번 뒤 ±30%)
 		local inBand = true
 		for w = 1, 3 do
 			if not (ends[w] and ends[w] >= bands[w][1] and ends[w] <= bands[w][2]) then
@@ -1261,7 +1264,7 @@ return function(T, Loader)
 	end
 
 	T.test(
-		"기준: 월드 끝 3개 목표 안 · 머묾 9분 안 · 아령 10분 안 — 그리고 여유 (월드 1 끝은 56분 한도에서 몇 %)",
+		"기준: 월드 끝 3개 목표 안 · 머묾 9분 안 · 아령 10분 안 — 그리고 여유 (월드 1 끝은 53분 한도에서 몇 %)",
 		function()
 			local m = pure()
 			local r = evalSim(m)
@@ -1269,8 +1272,8 @@ return function(T, Loader)
 			T.truthy(r.inBand and r.grand)
 			T.truthy(r.over9 == 0 and r.maxStay <= 540, "머묾 " .. r.maxStay)
 			T.truthy(r.maxBuy <= 600, "아령 " .. r.maxBuy)
-			local margin1 = (3360 - r.ends[1]) / 3360
-			local margin3 = (r.ends[3] - 9360) / 9360
+			local margin1 = (SimPlayer.WORLD_END[1][2] - r.ends[1]) / SimPlayer.WORLD_END[1][2]
+			local margin3 = (r.ends[3] - SimPlayer.WORLD_END[3][1]) / SimPlayer.WORLD_END[3][1]
 			local marginStay = (540 - r.maxStay) / 540
 			local marginBuy = (600 - r.maxBuy) / 600
 			print(
@@ -1287,16 +1290,16 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"맵 거리: 걷기가 2배 느려지거나(속도 8) 1.25배 빨라져도 (거리 = 시간) 월드 끝 3개 목표 안 · 머묾 9분 + 10초 안 — 길가 매트 덕에 거리는 안 중요",
+		"맵 거리: 걷기가 2배 느려지거나(진짜 빠르기 × 0.5) 1.25배 빨라져도 (거리 = 시간) 월드 끝 3개 목표 안 · 머묾 9분 + 10초 안 — 길가 매트 덕에 거리는 안 중요",
 		function()
 			local m = pure()
-			for _, speed in { 8, 12.8, 20 } do
-				local r = withSim({ WALK_SPEED = speed }, function()
+			for _, factor in { 0.5, 0.8, 1.25 } do
+				local r = withSim({ WALK_FACTOR = factor }, function()
 					return evalSim(m)
 				end)
-				print(string.format("  (걷기 속도 %s: %s)", speed, r.line))
-				T.truthy(r.inBand and r.grand, "속도 " .. speed .. " 월드 끝 " .. mmss(r.ends[3]))
-				T.truthy(r.maxStay <= 550, "속도 " .. speed .. " 머묾 " .. r.maxStay)
+				print(string.format("  (걷기 × %s: %s)", factor, r.line))
+				T.truthy(r.inBand and r.grand, "걷기 × " .. factor .. " 월드 끝 " .. mmss(r.ends[3]))
+				T.truthy(r.maxStay <= 550, "걷기 × " .. factor .. " 머묾 " .. r.maxStay)
 			end
 		end
 	)
@@ -1379,7 +1382,7 @@ return function(T, Loader)
 			T.eq(data.power, 1e6)
 			H.teleport(p, H.examSpot(1))
 			T.falsy(H.S.Exam.startExam(p))
-			data.belt = 3
+			data.belt = H.Belts.duelOf(1).index - 1
 			H.teleport(p, H.duelSpot(1))
 			T.falsy(H.S.Exam.startDuel(p))
 			T.eq(session.exam, nil)
@@ -1400,7 +1403,9 @@ return function(T, Loader)
 			local H = setup()
 			local ML = H.MapLayout
 			for world = 1, 3 do
-				local p, _, data = join(H, world, { world = 3, belt = 3 }, at(H.examSpot(world)))
+				-- 다음 띠가 대결 띠 (duelBelt) / 심사 띠 (examBelt) 인 띠 — 띠 표에서 읽음
+				local duelBelt, examBelt = H.Belts.duelOf(world).index - 1, H.Belts.ofWorld(world)[1].index
+				local p, _, data = join(H, world, { world = 3, belt = duelBelt }, at(H.examSpot(world)))
 				local session = H.S.Sessions.get(p)
 				session.currentWorld = world
 				local mats = {}
@@ -1414,15 +1419,15 @@ return function(T, Loader)
 					for _, c in { { 0, 0 }, { 1, 1 }, { -1, -1 }, { 1, -1 }, { -1, 1 } } do
 						H.teleport(p, m.x + c[1] * m.sizeX / 2, 3, m.z + c[2] * m.sizeZ / 2)
 						T.falsy(H.S.Exam.startDuel(p), "대결 시작됨 (매트 " .. m.x .. "," .. m.z .. ")")
-						data.belt = 2
+						data.belt = examBelt
 						T.falsy(H.S.Exam.startExam(p), "심사 시작됨 (매트 " .. m.x .. "," .. m.z .. ")")
-						data.belt = 3
+						data.belt = duelBelt
 					end
 				end
 				H.teleport(p, H.duelSpot(world))
 				T.truthy(H.S.Exam.startDuel(p), "대결장 가운데에서는 시작됨")
 				H.S.Exam.cancel(p)
-				data.belt = 2
+				data.belt = examBelt
 				H.teleport(p, H.examSpot(world))
 				T.truthy(H.S.Exam.startExam(p), "심사대 가운데에서는 시작됨")
 				H.S.Exam.cancel(p)

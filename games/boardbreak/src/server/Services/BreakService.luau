@@ -3,7 +3,8 @@
 	BreakService — 물건 치기 (Remote Hit(targetId)) — 서버 판정 (설계서 2장·3장, 규칙은 shared/BreakRules)
 	  - targetId = "exam" / "duel" 이면 심사·대결 송판 → ExamService.hit (같은 Remote · 같은 속도 제한)
 	  - 없는 id · 닫힌 월드의 물건 · 너무 먼 거리 → 무시 (거리 = 선임 MapLayout.targetPosition(id) 와 캐릭터 위치,
-	    닿는 거리 MapLayout.targetReach(id) + Config.HIT_REACH_SLACK)
+	    닿는 거리 MapLayout.targetReach(id) + 여유. 여유 = Config.HIT_REACH_SLACK × 그 물건 월드의 Sizes.worldScale
+	    + 몸이 커진 만큼 SizeService.bodyExtra, 높이 여유 = BreakRules.VERTICAL_SLACK × worldScale — BreakService.slackFor)
 	  - 힘 문턱 없음 (사장님 결정 11번): 피해 = 치는 힘(힘 × PowerBoost) 그대로 — 약하면 여러 번 쳐야 할 뿐. recommendPower 는 화면 표시용
 	  - 체력은 플레이어마다 따로 (session.targetHp). 깨지면 돈 = reward × 띠 배율 × (돈 2배면 2) · broken[id] += 1 · 체력 다시 가득
 	  - 속도 제한: Remotes.RateLimits.Hit (초당 5번, 넘으면 버림 — Net.on)
@@ -16,6 +17,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Config = require(Shared.Data.Config)
 local MapLayout = require(Shared.Data.MapLayout)
+local Sizes = require(Shared.Data.Sizes)
+local Targets = require(Shared.Data.Targets)
 local Economy = require(Shared.Economy)
 local BreakRules = require(Shared.BreakRules)
 local Remotes = require(Shared.Remotes)
@@ -27,9 +30,18 @@ local Snapshot = require(Server.Snapshot)
 local Validate = require(Server.Logic.Validate)
 local Character = require(Server.Util.Character)
 local Wallet = require(script.Parent.Wallet)
+local SizeService = require(script.Parent.SizeService)
 local ExamService = require(script.Parent.ExamService)
 
 local BreakService = {}
+
+-- 이 플레이어가 이 물건을 칠 때 여유 (targetReach 에 더함): (수평 여유, 높이 여유)
+--   월드가 크면 그만큼 (worldScale), 몸이 크면 팔·뿌리 높이만큼 (bodyExtra — 수평 여유에 넣으면 높이 여유에도 들어감)
+function BreakService.slackFor(player: Player, id: string): (number, number)
+	local target = Targets.get(id)
+	local scale = Sizes.worldScale(if target then target.world else 1)
+	return Config.HIT_REACH_SLACK * scale + SizeService.bodyExtra(player), BreakRules.VERTICAL_SLACK * scale
+end
 
 -- 한 번 치기 (Remote 와 테스트가 같이 씀). 판정이 났으면 HitResult, 무시했으면 nil
 function BreakService.hit(player: Player, rawId: unknown): Types.HitResult?
@@ -49,13 +61,15 @@ function BreakService.hit(player: Player, rawId: unknown): Types.HitResult?
 	if not root then
 		return nil
 	end
+	local slack, vertical = BreakService.slackFor(player, id)
 	local target = BreakRules.check(
 		id,
 		data.world,
 		root.Position,
 		MapLayout.targetPosition(id),
 		MapLayout.targetReach(id),
-		Config.HIT_REACH_SLACK
+		slack,
+		vertical
 	)
 	if not target then
 		return nil

@@ -98,23 +98,31 @@ for _, d in Dumbbells.list do
 	)
 end
 add("")
-add("### 9-3. 띠 12개")
+add(string.format("### 9-3. 띠 %d개", Belts.COUNT))
 add("")
-add("| # | id | 이름 | moneyMultiplier | needPower (추천 힘) | 받는 법 | 송판 1장 체력 |")
-add("|---|---|---|---|---|---|---|")
+add(
+	"| # | id | 이름 | moneyMultiplier | needPower (추천 힘) | 받는 법 | 송판 1장 체력 | 월드 | 띠 천 색 |"
+)
+add("|---|---|---|---|---|---|---|---|---|")
 for _, b in Belts.list do
 	local how = if b.index == 1 then "처음" elseif b.duel then "대결" else "심사"
 	local boardHp = if b.duel then b.duelBoardHp else b.examBoardHp
+	local colors = {}
+	for _, c in b.colors do
+		table.insert(colors, string.format("%d,%d,%d", c[1], c[2], c[3]))
+	end
 	add(
 		string.format(
-			"| %d | %s | %s | %s | %s | %s | %s |",
+			"| %d | %s | %s | %s | %s | %s | %s | %d | %s |",
 			b.index,
 			b.id,
 			b.name,
 			tostring(b.moneyMultiplier),
 			e(b.needPower),
 			how,
-			e(boardHp)
+			e(boardHp),
+			b.world,
+			table.concat(colors, " → ")
 		)
 	)
 end

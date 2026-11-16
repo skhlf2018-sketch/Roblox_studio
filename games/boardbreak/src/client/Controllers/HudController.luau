@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Belts = require(Shared.Data.Belts)
+local BeltLook = require(Shared.BeltLook)
 local Format = require(Shared.Format)
 local Client = script.Parent.Parent
 local State = require(Client.State)
@@ -222,7 +223,7 @@ function HudController.start()
 		local textW = math.min(170, 22 * #powerLabel.Text + 10)
 		boostBadge.Position = UDim2.new(0, 52 + textW, 0.5, 0)
 		local belt = Belts.get(State.belt())
-		beltStripe.BackgroundColor3 = Theme.beltColor(State.belt())
+		BeltLook.paint(beltStripe, belt) -- 여러 색 띠는 그러데이션 (사장님 결정 16번)
 		beltLabel.Text = if belt then belt.name else "흰 띠"
 	end
 	refreshFn = refresh

@@ -7,9 +7,10 @@
 
 	  /power 1e9      힘을 그 값으로 (1e60 까지)
 	  /money 1e9      돈을 그 값으로
-	  /belt 8         띠를 그 번호로 (1~12). 열린 월드도 띠에 맞춤 (띠 4 → 월드 2, 띠 8 → 월드 3), 12 = 그랜드 마스터
-	  /world 3        그 월드를 열고 (띠가 모자라면 그 월드 첫 띠로 올림) 그리로 순간이동
-	  /dumbbell 20    아령 레벨 (1~20)
+	  /belt 8         띠를 그 번호로 (1~Belts.COUNT, 지금 22). 열린 월드도 띠에 맞춤 (Progression.worldsFromBelt — 띠 7 빨강 → 월드 2,
+	                  띠 14 무지개 → 월드 3), 마지막 띠 = 그랜드 마스터
+	  /world 3        그 월드를 열고 (띠가 모자라면 그 월드를 여는 띠 = 앞 월드 대결 띠로 올림, Progression.beltToOpen) 그리로 순간이동
+	  /dumbbell 20    아령 레벨 (1~Dumbbells.COUNT)
 	  /buy power_8    게임패스를 무료로 받기 (Data/Products 의 key — ProductService.grant, 스튜디오/DEV 만)
 	  /unbuy          힘 배수·돈 2배를 처음으로 되돌림 + 이 접속 동안 게임패스 확인 쉼 (새 플레이어 화면 시험용)
 	  /reset          처음부터 (힘·돈·아령·띠·월드·깬 기록·패스. 영수증 기록은 남김) → 월드 1 스폰
@@ -100,7 +101,7 @@ function DevCommands.handle(player: Player, message: string): boolean
 	elseif command == "belt" then
 		local n = integerArg(arg, 1, Belts.COUNT)
 		if not n then
-			Net.notify(player, "error", "[개발] /belt <1~12>")
+			Net.notify(player, "error", "[개발] /belt <1~" .. Belts.COUNT .. ">")
 			return true
 		end
 		ExamService.cancel(player)
@@ -120,9 +121,8 @@ function DevCommands.handle(player: Player, message: string): boolean
 			return true
 		end
 		ExamService.cancel(player)
-		-- 그 월드가 열리게 띠를 맞춤 (월드 w 의 첫 띠 = 4(w-1), 저장 데이터가 앞뒤가 맞게)
-		data.belt = math.max(data.belt, 4 * (n - 1))
-		data.belt = math.max(1, data.belt)
+		-- 그 월드가 열리게 띠를 맞춤 (월드 n 을 여는 띠 = 월드 n-1 의 대결 띠, 저장 데이터가 앞뒤가 맞게)
+		data.belt = math.max(1, data.belt, Progression.beltToOpen(n))
 		data.world = math.max(data.world, Progression.worldsFromBelt(data.belt))
 		data.grandMaster = Progression.isGrandMaster(data.belt)
 		session.currentWorld = n
@@ -132,7 +132,7 @@ function DevCommands.handle(player: Player, message: string): boolean
 	elseif command == "dumbbell" then
 		local n = integerArg(arg, 1, Dumbbells.COUNT)
 		if not n then
-			Net.notify(player, "error", "[개발] /dumbbell <1~20>")
+			Net.notify(player, "error", "[개발] /dumbbell <1~" .. Dumbbells.COUNT .. ">")
 			return true
 		end
 		data.dumbbellLevel = n

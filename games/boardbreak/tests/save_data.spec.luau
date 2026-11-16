@@ -52,7 +52,7 @@ return function(T, Loader)
 		T.eq(d.broken.wood, nil)
 		T.eq(d.powerBoost, 1, "표에 없는 배수")
 		T.eq(d.moneyPass, false, "글자")
-		T.eq(d.grandMaster, false, "띠 12 가 아니면")
+		T.eq(d.grandMaster, false, "마지막 띠가 아니면")
 		T.eq(#d.receipts, 2, "중복·숫자·너무 긴 것 뺌")
 		T.eq(d.stats.hits, 0)
 		T.eq(d.stats.breaks, 0)
@@ -61,12 +61,26 @@ return function(T, Loader)
 		T.eq(d.settings.sfx, true, "글자면 기본값")
 		T.eq(d.settings.hack, nil)
 		T.eq(d.junk, nil, "모르는 칸 버림")
-		local big = DataSchema.reconcile({ power = 1e70, money = 1e61, belt = 12, world = 3, grandMaster = true }, 0)
+		local Belts = H.shared("Data/Belts")
+		local big =
+			DataSchema.reconcile({ power = 1e70, money = 1e61, belt = Belts.COUNT, world = 3, grandMaster = true }, 0)
 		T.eq(big.power, 1e60, "1e60 에서 자름")
 		T.eq(big.money, 1e60)
 		T.eq(big.world, 3)
 		T.truthy(big.grandMaster)
 		T.eq(DataSchema.reconcile("garbage", 0).belt, 1, "표가 아님")
+		-- 띠 22개 (결정 16번): 띠 개수로 자르고, 월드는 띠에 맞춤 (띠 ≥ 8 → 월드 ≥ 2 · 띠 ≥ 15 → 월드 3)
+		T.eq(DataSchema.reconcile({ belt = 99 }, 0).belt, Belts.COUNT, "99 → 마지막 띠")
+		T.eq(DataSchema.reconcile({ belt = 99 }, 0).world, 3)
+		T.eq(DataSchema.reconcile({ belt = 12, world = 3, grandMaster = true }, 0).world, 2, "9단 띠는 월드 2")
+		T.eq(DataSchema.reconcile({ belt = 12, world = 3, grandMaster = true }, 0).grandMaster, false)
+		T.eq(DataSchema.reconcile({ belt = 8, world = 1 }, 0).world, 2, "띠 8 인데 월드 1 → 2 로 맞춤")
+		T.eq(DataSchema.reconcile({ belt = 15, world = 1 }, 0).world, 3, "띠 15 인데 월드 1 → 3")
+		for belt = 1, Belts.COUNT do
+			local d2 = DataSchema.reconcile({ belt = belt, world = 1 }, 0)
+			T.eq(d2.belt, belt)
+			T.eq(d2.world, Belts.get(belt).world + (if Belts.get(belt).duel and belt < Belts.COUNT then 1 else 0))
+		end
 		H.uninstall()
 	end)
 
@@ -113,7 +127,7 @@ return function(T, Loader)
 			data.power = 1.23e45
 			data.money = 4.56e20
 			data.dumbbellLevel = 12
-			data.belt = 8
+			data.belt = 16
 			data.world = 3
 			data.broken = { cotton = 99, moon = 1 }
 			data.powerBoost = 64
@@ -133,7 +147,7 @@ return function(T, Loader)
 			T.eq(again.power, 1.23e45)
 			T.eq(again.money, 4.56e20)
 			T.eq(again.dumbbellLevel, 12)
-			T.eq(again.belt, 8)
+			T.eq(again.belt, 16)
 			T.eq(again.world, 3)
 			T.eq(again.broken.cotton, 99)
 			T.eq(again.broken.moon, 1)

@@ -39,10 +39,14 @@ return function(T, Loader)
 		T.eq(Economy.breakReward(3, 1, false), 3, "솜 흰 띠")
 		T.eq(Economy.breakReward(3, 1, true), 6, "돈 2배")
 		T.eq(Economy.breakReward(100, 2, false), 100 * Belts.get(2).moneyMultiplier, "노랑 띠")
-		T.eq(Economy.breakReward(100, 12, true), 100 * 200 * 2, "그랜드 마스터 + 돈 2배")
+		T.eq(
+			Economy.breakReward(100, Belts.COUNT, true),
+			100 * Belts.get(Belts.COUNT).moneyMultiplier * 2,
+			"그랜드 마스터 + 돈 2배"
+		)
 		T.eq(Economy.breakReward(100, 99, false), 100, "모르는 띠 = 배율 1")
 		T.eq(Economy.breakReward(0 / 0, 1, false), 0, "NaN 값")
-		T.eq(Economy.breakReward(1e60, 12, true), 1e60, "상한")
+		T.eq(Economy.breakReward(1e60, Belts.COUNT, true), 1e60, "상한")
 	end)
 
 	T.test("더하기는 1e60 에서 멈춤, 이상한 값은 0 으로", function()

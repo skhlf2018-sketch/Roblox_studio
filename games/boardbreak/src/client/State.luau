@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
+local MapLayout = require(Shared.Data.MapLayout)
 local Types = require(Shared.Types)
 local Net = require(script.Parent.Net)
 
@@ -83,6 +84,17 @@ function State.currentWorld(): number
 end
 function State.boost(): number
 	return math.max(1, State.number(Attr.PowerBoost, "powerBoost", 1))
+end
+
+-- 몸 배율 (사장님 결정 13번 — 서버 SizeService 가 Attr BodyScale 로 씀, 1 … Sizes.MAX_SCALE)
+function State.bodyScale(): number
+	local a = Players.LocalPlayer:GetAttribute(Attr.BodyScale or "BodyScale")
+	return if isNumber(a) and (a :: number) >= 1 then a :: number else 1
+end
+
+-- 지금 있는 월드의 배율 (MapLayout.worldScale — 월드 1 = 1)
+function State.worldScale(): number
+	return MapLayout.worldScale(State.currentWorld())
 end
 
 function State.moneyPass(): boolean
@@ -156,6 +168,7 @@ function State.start()
 			Attr.PowerBoost,
 			Attr.MoneyPass,
 			Attr.Activity,
+			Attr.BodyScale,
 		}
 	do
 		player:GetAttributeChangedSignal(name):Connect(function()

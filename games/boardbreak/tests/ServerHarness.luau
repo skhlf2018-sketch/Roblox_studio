@@ -703,6 +703,7 @@ function ServerHarness.install(Loader, T, options)
 			Parent = Players,
 			attrs = {},
 			Chatted = newSignal(),
+			CharacterAdded = newSignal(), -- H.spawn 이 쏨 (PlayerLifecycle.onPlayerAdded 가 연결)
 			kicked = nil,
 			groups = {},
 		}
@@ -747,6 +748,7 @@ function ServerHarness.install(Loader, T, options)
 			WalkSpeed = 16,
 			JumpHeight = 7.2,
 			JumpPower = 50,
+			UseJumpPower = true, -- 서버(SizeService)가 false 로 바꾸고 JumpHeight 를 씀
 			Sit = false,
 			PlatformStand = false,
 		}
@@ -779,6 +781,9 @@ function ServerHarness.install(Loader, T, options)
 		end
 		humanoid.Parent = character
 		player.Character = character
+		if player.CharacterAdded then
+			player.CharacterAdded:Fire(character)
+		end
 		return character
 	end
 

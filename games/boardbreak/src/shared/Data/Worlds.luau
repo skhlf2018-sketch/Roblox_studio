@@ -67,11 +67,12 @@ function Worlds.get(index: number): World?
 	return list[index]
 end
 
--- 대결 송판 체력 = 그 월드 대결 띠 (4·8·12) 의 duelBoardHp (Belts 가 Worlds 를 require 하지 않게 여기서 한 번)
+-- 대결 송판 체력 = 그 월드 대결 띠 (마지막 띠 — 빨강 · 무지개 · 천상) 의 duelBoardHp
+-- (Belts 가 Worlds 를 require 하지 않게 여기서 한 번)
 do
 	local Belts = require(script.Parent.Belts)
 	for _, world in list do
-		local belt = Belts.get(world.index * 4)
+		local belt = Belts.duelOf(world.index)
 		world.duelBoardHp = if belt then belt.duelBoardHp else 0
 	end
 end

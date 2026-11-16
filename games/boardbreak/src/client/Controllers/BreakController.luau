@@ -11,6 +11,7 @@
 	        마지막으로 안 체력을 기억해 두었다가 물건이 다시 연결되면(스트리밍) 같은 단계로 다시 그림.
 	      힘 문턱 없음 — "힘이 부족해요" 글 없음. 물건 위 "💪 추천 힘 N" 은 내 치는 힘이 모자라면 주황색.
 	      체력 막대에 남은 타격 수 어림 "약 N번".
+  큰 월드 (사장님 결정 13번): 거리는 MapLayout (배율 곱한 값), 글 높이·조각 크기·흔들림 상한은 그 물건 월드 배율(scaleOf) 배.
 	  물건 체력은 플레이어마다 따로라 서버는 모델을 안 바꿈 — 막대·깨짐은 전부 이 컨트롤러가 그림.
 	공개: nearest() · hitTarget(id) · onHitResult(r) · button · models()
 ]]
@@ -78,6 +79,12 @@ end
 
 function BreakController.models(): { [string]: Model }
 	return models
+end
+
+-- 물건이 있는 월드의 배율 (사장님 결정 13번 — 글 높이·조각 크기·흔들림이 월드 크기에 맞게). 모르면 1
+function BreakController.scaleOf(model: Model): number
+	local w = model:GetAttribute(PA.World)
+	return if type(w) == "number" then MapLayout.worldScale(w) else 1
 end
 
 -- 지금 칠 수 있는 가장 가까운 물건 (지금 월드, reach 안). 없으면 nil
@@ -151,7 +158,7 @@ function BreakController.hitTarget(id: string)
 		return
 	end
 	NotifyController.toast(target.name .. " 앞으로 이동", "info")
-	Walk.to(Vector3.new(road.x, road.y, road.z), reach - 1, function()
+	Walk.to(Vector3.new(road.x, road.y, road.z), reach - MapLayout.worldScale(target.world), function()
 		lastHitAt = os.clock()
 		Net.send(Remotes.ToServer.Hit, id)
 	end)
@@ -161,7 +168,15 @@ end
 -- 연출 (내 화면에서만)
 ------------------------------------------------------------------
 
-local function floatText(adornee: BasePart, offsetY: number, text: string, color: Color3, size: number, seconds: number)
+local function floatText(
+	adornee: BasePart,
+	offsetY: number,
+	text: string,
+	color: Color3,
+	size: number,
+	seconds: number,
+	rise: number?
+)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "FloatText"
 	gui.Size = UDim2.fromOffset(260, size + 14)
@@ -174,7 +189,7 @@ local function floatText(adornee: BasePart, offsetY: number, text: string, color
 	Ui.tween(
 		gui,
 		TweenInfo.new(seconds, Enum.EasingStyle.Quad),
-		{ StudsOffsetWorldSpace = Vector3.new(0, offsetY + 3, 0) }
+		{ StudsOffsetWorldSpace = Vector3.new(0, offsetY + (rise or 3), 0) }
 	)
 	Ui.tween(label, TweenInfo.new(seconds), { TextTransparency = 1 })
 	task.delay(seconds + 0.05, function()
@@ -194,7 +209,7 @@ local function hpBar(id: string, model: Model): HpBar?
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "HpBar_" .. id
 	gui.Size = UDim2.fromOffset(210, 30)
-	gui.StudsOffsetWorldSpace = Vector3.new(0, (heightOf(model) + 1) / 2 + 1, 0)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, (heightOf(model) + 1) / 2 + BreakController.scaleOf(model), 0)
 	gui.AlwaysOnTop = true
 	gui.LightInfluence = 0
 	gui.Adornee = hitbox
@@ -290,10 +305,11 @@ local function shards(model: Model)
 	local r = model:GetAttribute("Radius")
 	local radius = if type(r) == "number" then r else 3
 	local center = hitbox.CFrame.Position
+	local k = BreakController.scaleOf(model)
 	for i = 1, count do
 		local p = Instance.new("Part")
 		p.Name = "Shard"
-		p.Size = Vector3.one * math.clamp(radius * 0.3, 0.4, 6)
+		p.Size = Vector3.one * math.clamp(radius * 0.3, 0.4 * k, 6 * k)
 		p.Color = color
 		p.Material = Enum.Material.SmoothPlastic
 		p.CanCollide = false
@@ -304,7 +320,8 @@ local function shards(model: Model)
 		p.CFrame = CFrame.new(center + Vector3.new(math.cos(a) * radius * 0.4, 0, math.sin(a) * radius * 0.4))
 		p.Parent = Workspace
 		pcall(function()
-			p.AssemblyLinearVelocity = Vector3.new(math.cos(a) * 18, 28 + (i % 3) * 6, math.sin(a) * 18)
+			local v = math.sqrt(k) -- 큰 월드: 같은 시간에 크기에 맞게 더 멀리 (높이 ∝ v²)
+			p.AssemblyLinearVelocity = Vector3.new(math.cos(a) * 18 * v, (28 + (i % 3) * 6) * v, math.sin(a) * 18 * v)
 		end)
 		task.delay(1.1, function()
 			p:Destroy()
@@ -326,13 +343,14 @@ function BreakController.onHitResult(r: any)
 		return
 	end
 	local top = (heightOf(model) + 1) / 2
+	local k = BreakController.scaleOf(model)
 	-- (옛 서버의 reason "weak" 도 그냥 보통 타격으로 그림 — "힘이 부족해요" 글은 더 없음)
 	local damage = tonumber(r.damage) or 0
 	local hp = tonumber(r.hp) or 0
 	local hpMax = tonumber(r.hpMax) or 1
 	known[id] = { hp = if r.broken then hpMax else hp, hpMax = hpMax, damage = damage }
 	if damage > 0 then
-		floatText(hitbox, top + 1, "-" .. Format.number(damage), C.white, 26, 0.6)
+		floatText(hitbox, top + k, "-" .. Format.number(damage), C.white, 26, 0.6, 3 * k)
 	end
 	if r.broken then
 		shards(model)
@@ -344,14 +362,14 @@ function BreakController.onHitResult(r: any)
 		end)
 		local reward = tonumber(r.reward) or 0
 		if reward > 0 then
-			floatText(hitbox, top + 3, "+💰 " .. Format.number(reward), C.money, 40, 1.2)
+			floatText(hitbox, top + 3 * k, "+💰 " .. Format.number(reward), C.money, 40, 1.2, 3 * k)
 		end
 		setHp(id, model, hpMax, hpMax)
 	else
 		-- 금은 맞히는 상자(Hitbox)가 아니라 물건의 보이는 겉면에 붙음 (단계가 바뀔 때만 레이캐스트)
 		local before = Cracks.stageOf(model)
 		local stage = Cracks.showModel(model, Cracks.stage(hp, hpMax), Cracks.seedOf(id))
-		local radius = math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20)
+		local radius = math.clamp(model:GetAttribute("Radius") :: number? or 2, 1, 20 * k)
 		shake(model, radius * (if stage > before then 0.12 else 0.05))
 		setHp(id, model, hp, hpMax)
 	end

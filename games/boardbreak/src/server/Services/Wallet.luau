@@ -2,6 +2,8 @@
 --[[
 	Wallet — 힘·돈 숫자를 바꾸는 유일한 통로 (서버 전용, 첫 게임 Wallet 을 송판 깨기에 맞춤)
 	바꾸면 Attribute(Power · Money)와 플레이어 목록(leaderstats "힘" · "돈", 글자 = "1.5K")도 같이 갱신.
+	몸 크기(SizeService — BodyScale · Muscle · 걷기 빠르기)도 여기서 같이 맞춤: 힘이 바뀌는 모든 길(들기 · 개발 명령 · /reset ·
+	불러오기)이 Wallet.sync 를 지나므로 한 곳만 걸면 빠지는 길이 없음 (data.power 를 바꾼 코드는 꼭 Wallet.sync 를 부를 것).
 	클라에는 힘·돈을 바꾸는 Remote 가 없습니다. 상한 1e60 (Economy.clampPower / clampMoney — NaN·무한·음수 막음)
 ]]
 
@@ -13,6 +15,7 @@ local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local Server = script.Parent.Parent
 local Sessions = require(Server.Sessions)
+local SizeService = require(script.Parent.SizeService)
 
 local Attr = Tags.PlayerAttributes
 
@@ -65,6 +68,7 @@ function Wallet.sync(player: Player)
 	if money then
 		money.Value = Format.number(data.money)
 	end
+	SizeService.refresh(player) -- 맨 힘 → BodyScale · Muscle · 걷기 (바뀐 것만 씀)
 end
 
 function Wallet.addMoney(player: Player, amount: number): number

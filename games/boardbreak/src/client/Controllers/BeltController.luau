@@ -2,13 +2,14 @@
 --[[
 	BeltController — 띠 창 "Belts" (선임)
 	  열기: 왼쪽 메뉴 "띠·심사" · 도장의 띠 표지판(BeltBoard) · 심사대(ExamPad) · 대결장(DuelArena) 을 누르거나 탭.
-	  위: 12개 띠 (색 띠 + 이름 + 💪 필요한 힘 / ⚔️ 시험관 대결 + 돈 ×배율). 지금 띠는 노란 테두리 "지금 내 띠".
+	  위: Belts.list 전부 (사장님 결정 16번: 22개 — 스크롤, 열면 다음 띠 줄로 내림 scrollTo). 칸 = 띠 천(여러 색이면 BeltLook 그러데이션)
+	      + 이름 + 💪 추천 힘 / ⚔️ 시험관 대결(belt.duel) + 돈 ×배율 + "월드 N"(belt.world). 지금 띠는 "지금 내 띠".
 	  아래: 다음 띠 조건 ("노랑 띠 — 💪 200K 필요 (지금 12K)") + 버튼
-	      심사 띠 → "🥋 심사 보기" → StartExam()   /  각 월드 네 번째 띠 → "⚔️ 시험관과 대결" → StartDuel()
-	      심사대·대결장에서 멀면 그쪽으로 걸어간 뒤 보냄 (서버가 거리·힘을 다시 검사).
+	      심사 띠 → "🥋 심사 보기" → StartExam()   /  각 월드 마지막 띠(belt.duel) → "⚔️ 시험관과 대결" → StartDuel()
+	      심사대·대결장에서 멀면 그쪽으로 걸어간 뒤 보냄 (서버가 거리를 다시 검사 — 반지름 × 월드 배율).
 	      힘 조건 없이 늘 누를 수 있음 (추천 힘보다 약하면 "추천 힘 N — 지금은 어려울 수 있어요"). 9단 띠면 "그랜드 마스터!"
-	  도장 띠 표지판(SurfaceGui Belt_1..12)에도 지금 내 띠를 초록 테두리로 (내 화면에서만).
-	공개: NAME · render() · nextBelt() · startNext()
+	  도장 띠 표지판(SurfaceGui Belt_1..Belts.COUNT)에도 지금 내 띠를 초록 테두리로 (내 화면에서만).
+	공개: NAME · render() · nextBelt() · startNext() · scrollTo(index) · scroll
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -16,6 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.Shared
 local Belts = require(Shared.Data.Belts)
+local BeltLook = require(Shared.BeltLook)
 local Config = require(Shared.Data.Config)
 local MapLayout = require(Shared.Data.MapLayout)
 local Format = require(Shared.Format)
@@ -32,6 +34,7 @@ local HudController = require(script.Parent.HudController)
 local NotifyController = require(script.Parent.NotifyController)
 
 local BeltController = {}
+BeltController.scroll = nil :: ScrollingFrame?
 local NAME = "Belts"
 BeltController.NAME = NAME
 
@@ -60,16 +63,39 @@ function BeltController.startNext(): boolean
 	local world = State.currentWorld()
 	local remote = if nxt.duel then Remotes.ToServer.StartDuel else Remotes.ToServer.StartExam
 	local spot = if nxt.duel then MapLayout.duelArena(world) else MapLayout.examPad(world)
-	local radius = if nxt.duel then Config.DUEL_RADIUS else Config.EXAM_RADIUS
+	-- 서버 판정 거리 = Config 반지름 × 그 월드 배율 (수석 SizeService · 사장님 결정 13번)
+	local ws = MapLayout.worldScale(world)
+	local radius = (if nxt.duel then Config.DUEL_RADIUS else Config.EXAM_RADIUS) * ws
 	local pos = Vector3.new(spot.x, spot.y, spot.z)
 	Windows.close(NAME)
-	if Walk.flatDistance(pos) > radius - 4 then
+	if Walk.flatDistance(pos) > radius - 4 * ws then
 		NotifyController.toast(if nxt.duel then "대결장으로 이동" else "심사대로 이동", "info")
 	end
-	Walk.to(pos, radius - 6, function()
+	Walk.to(pos, radius - 6 * ws, function()
 		Net.send(remote)
 	end)
 	return true
+end
+
+BeltController.CARD = Vector2.new(186, 96)
+BeltController.GAP = 8
+
+-- 띠 창 스크롤을 그 띠 줄로 (띠 22개 — 사장님 결정 16번). 반환: 내린 캔버스 y
+function BeltController.scrollTo(index: number): number
+	local scroll = BeltController.scroll
+	if not scroll then
+		return 0
+	end
+	local cellW = BeltController.CARD.X + BeltController.GAP
+	local ok, abs = pcall(function(): number
+		return scroll.AbsoluteSize.X
+	end)
+	local width = if ok and abs > 0 then abs else SIZE.X - 40 -- 화면에 아직 안 그려졌으면 창 크기로 어림
+	local cols = math.max(1, math.floor((width - 8 + BeltController.GAP) / cellW))
+	local row = (math.clamp(index, 1, Belts.COUNT) - 1) // cols
+	local y = math.max(0, row * (BeltController.CARD.Y + BeltController.GAP) - BeltController.GAP)
+	scroll.CanvasPosition = Vector2.new(0, y)
+	return y
 end
 
 local renderFn: (() -> ())? = nil
@@ -134,11 +160,20 @@ function BeltController.start()
 			Name = "Stripe",
 			Position = UDim2.fromOffset(10, 8),
 			Size = UDim2.new(1, -20, 0, 14),
-			BackgroundColor3 = Theme.beltColor(belt.index),
+			BackgroundColor3 = Theme.beltColor(belt.index), -- 여러 색 띠는 아래 BeltLook.paint 가 그러데이션으로
 			Parent = card,
 		})
 		Ui.corner(4).Parent = stripe
 		Ui.stroke(C.winEdge, 2).Parent = stripe
+		BeltLook.paint(stripe, belt)
+		-- 어느 월드 띠인가 (belt.world — 월드마다 띠 개수가 다름)
+		Ui.label(string.format("월드 %d", belt.world), UDim2.new(0.42, -6, 0, 18), 14, Theme.worldColor(belt.world), {
+			Name = "World",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -5, 0, 74),
+			TextScaled = true,
+			Parent = card,
+		})
 		Ui.label(belt.name, UDim2.new(1, -10, 0, 26), 22, C.white, {
 			Name = "Name",
 			Position = UDim2.fromOffset(5, 24),
@@ -155,7 +190,7 @@ function BeltController.start()
 			TextScaled = true,
 			Parent = card,
 		})
-		local state = Ui.label("", UDim2.new(1, -10, 0, 18), 16, C.green, {
+		local state = Ui.label("", UDim2.new(0.58, -10, 0, 18), 16, C.green, {
 			Name = "State",
 			Position = UDim2.fromOffset(5, 74),
 			TextScaled = true,
@@ -238,8 +273,9 @@ function BeltController.start()
 				)
 		)
 			.. (
-				if nxt.duel
-					then " · 송판 15장 먼저 격파 시 승리 → 다음 월드"
+				if nxt.duel and nxt.index >= Belts.COUNT
+					then " · 송판 15장 먼저 격파 시 승리 → 그랜드 마스터"
+					elseif nxt.duel then " · 송판 15장 먼저 격파 시 승리 → 다음 월드"
 					else " · 20초 안에 송판 10장!"
 			)
 		if State.activity() ~= "" then
@@ -254,7 +290,12 @@ function BeltController.start()
 		end
 	end
 	renderFn = render
-	Windows.register(NAME, window, render)
+	-- 띠가 많아서(22개) 창이 스크롤됨 → 열 때 "다음 띠"(없으면 지금 띠) 줄이 보이게 내림
+	BeltController.scroll = scroll
+	Windows.register(NAME, window, function()
+		render()
+		BeltController.scrollTo(math.min(State.belt() + 1, Belts.COUNT))
+	end)
 	render()
 	State.onChanged(function()
 		if Windows.isOpen(NAME) then

@@ -2,12 +2,12 @@
 --[[
 	ExamRules — 승급 심사 · 시험관 대결 상태 기계 (순수 로직, Lune 테스트 대상). 설계서 4장. 시각(now)은 밖에서 넣음.
 
-	승급 심사 (심사 띠: 2·3 / 5·6·7 / 9·10·11):
+	승급 심사 (심사 띠: 흰 띠·대결 띠를 뺀 나머지 — 지금 2~6 / 8~13 / 15~21):
 	  startExam(belt, now) → { phase "start", total 10, endsAt = now + 20초, boardHp = Belts.examBoardHp }
 	  examHit(state, damage, now)  송판 1장 체력을 깎음 → 0 이하면 깬 수 +1, 다음 송판 가득 (넘친 피해는 버림 — 한 번에 1장).
 	                               10장 다 깨면 "pass". 시간이 지난 뒤 친 것은 "fail" (치기 전에 시간 확인)
 	  examTick(state, now)         시간이 다 됐는데 덜 깼으면 "fail"
-	시험관 대결 (각 월드 네 번째 띠: 4·8·12):
+	시험관 대결 (각 월드 마지막 띠 Belts.duelOf(w): 지금 7 · 14 · 22):
 	  startDuel(world, belt, now) → { phase "start", total 15, startsAt = now + 카운트다운, endsAt = startsAt + DUEL_MAX_SECONDS }
 	  시험관은 startsAt 부터 examinerSecondsPerBoard 초마다 1장 (플레이어 힘과 상관없음) → theirsAt(state, now)
 	  duelHit(state, damage, now)  카운트다운 중이면 무시. 먼저 시험관 진행을 now 까지 반영 → 시험관이 다 깼으면 "lose".
@@ -134,7 +134,7 @@ end
 -- 시험관 대결
 ------------------------------------------------------------------
 
--- belt = 대결 띠 (4·8·12). 시험관은 그 띠의 월드. 대결 띠가 아니면 nil
+-- belt = 대결 띠 (각 월드 마지막 띠). 시험관은 그 띠의 월드. 대결 띠가 아니면 nil
 function ExamRules.startDuel(belt: number, now: number): Duel?
 	local b = Belts.get(belt)
 	if not b or not b.duel then

@@ -24,8 +24,8 @@ export type PlayerData = {
 	version: number,
 	power: number, -- 저장된 힘 (아령으로 쌓임, 힘 배수 전 값이 아님 — 들 때 배수를 곱해서 쌓음)
 	money: number,
-	dumbbellLevel: number, -- 가진 가장 좋은 아령 (1~20)
-	belt: number, -- 지금 띠 (1~12)
+	dumbbellLevel: number, -- 가진 가장 좋은 아령 (1~Dumbbells.COUNT)
+	belt: number, -- 지금 띠 (1~Belts.COUNT, 지금 22)
 	world: number, -- 열린 월드 (1~3)
 	broken: { [string]: number }, -- 물건 id → 깬 횟수
 	powerBoost: number, -- 힘 배수 (1, 2, 4 … 2048)

@@ -5,11 +5,13 @@ return function(T, Loader)
 	local Belts = Loader.require("ReplicatedStorage/Shared/Data/Belts")
 	local Worlds = Loader.require("ReplicatedStorage/Shared/Data/Worlds")
 	local Config = Loader.require("ReplicatedStorage/Shared/Data/Config")
+	-- 대결 띠 = 각 월드 마지막 띠 (사장님 결정 16번 — 띠 표에서 읽음, 지금 7 · 14 · 22)
+	local D1, D2, D3 = Belts.duelOf(1).index, Belts.duelOf(2).index, Belts.duelOf(3).index
 
 	T.suite("exam_rules: 승급 심사")
 
-	T.test("심사 띠만 시작 (1 · 4 · 8 · 12 · 13 · NaN 은 nil)", function()
-		for _, b in { 1, 4, 8, 12, 13, 0, 0 / 0 } do
+	T.test("심사 띠만 시작 (흰 띠 · 대결 띠 3개 · 끝 다음 · 0 · NaN 은 nil)", function()
+		for _, b in { 1, D1, D2, D3, Belts.COUNT + 1, 0, 0 / 0 } do
 			T.eq(ExamRules.startExam(b, 0), nil, "띠 " .. tostring(b))
 		end
 		local s = ExamRules.startExam(2, 100)
@@ -64,11 +66,15 @@ return function(T, Loader)
 
 	T.suite("exam_rules: 시험관 대결")
 
-	T.test("대결 띠만 (4 · 8 · 12), 시험관 = 그 띠의 월드", function()
-		T.eq(ExamRules.startDuel(3, 0), nil)
-		T.eq(ExamRules.startDuel(13, 0), nil)
+	T.test("대결 띠만 (각 월드 마지막 띠), 시험관 = 그 띠의 월드", function()
+		T.eq(ExamRules.startDuel(D1 - 1, 0), nil)
+		T.eq(ExamRules.startDuel(D2 - 1, 0), nil)
+		T.eq(ExamRules.startDuel(Belts.COUNT + 1, 0), nil)
+		for b = 1, Belts.COUNT do
+			T.eq(ExamRules.startDuel(b, 0) ~= nil, Belts.get(b).duel, "띠 " .. b)
+		end
 		for w = 1, 3 do
-			local d = ExamRules.startDuel(w * 4, 10)
+			local d = ExamRules.startDuel(Belts.duelOf(w).index, 10)
 			T.eq(d.world, w)
 			T.eq(d.examiner, Worlds.get(w).examiner)
 			T.eq(d.secondsPerBoard, Worlds.get(w).examinerSecondsPerBoard)
@@ -78,7 +84,7 @@ return function(T, Loader)
 	end)
 
 	T.test("카운트다운 중 친 것은 무시 · 시험관도 그 뒤에 시작", function()
-		local d = ExamRules.startDuel(4, 0)
+		local d = ExamRules.startDuel(D1, 0)
 		local changed = ExamRules.duelHit(d, 1e50, 1)
 		T.falsy(changed)
 		T.eq(d.mine, 0)
@@ -87,8 +93,8 @@ return function(T, Loader)
 	end)
 
 	T.test("needPower 로 초당 4번이면 시험관보다 먼저 15장 → win", function()
-		local belt = Belts.get(4)
-		local d = ExamRules.startDuel(4, 0)
+		local belt = Belts.get(D1)
+		local d = ExamRules.startDuel(D1, 0)
 		local t = d.startsAt
 		while not d.finished do
 			ExamRules.duelHit(d, belt.needPower, t)
@@ -100,14 +106,14 @@ return function(T, Loader)
 	end)
 
 	T.test("느리면 시험관이 먼저 → lose (같은 순간이면 시험관 승)", function()
-		local d = ExamRules.startDuel(8, 0)
+		local d = ExamRules.startDuel(D2, 0)
 		local finish = ExamRules.examinerFinishAt(d)
 		T.truthy(ExamRules.duelTick(d, finish - 0.01) or true)
 		T.falsy(d.finished, "아직")
 		ExamRules.duelTick(d, finish)
 		T.eq(d.phase, "lose")
 		-- 같은 순간에 마지막 송판: 시험관 승
-		local e = ExamRules.startDuel(4, 0)
+		local e = ExamRules.startDuel(D1, 0)
 		e.mine = 14
 		e.boardHp = 1
 		ExamRules.duelHit(e, 1e50, ExamRules.examinerFinishAt(e))
@@ -115,7 +121,7 @@ return function(T, Loader)
 	end)
 
 	T.test("시간 초과 lose · 끝난 뒤 치기 무시", function()
-		local d = ExamRules.startDuel(12, 0)
+		local d = ExamRules.startDuel(D3, 0)
 		d.secondsPerBoard = 1e9 -- 시험관이 아주 느려도
 		ExamRules.duelTick(d, d.endsAt)
 		T.eq(d.phase, "lose")

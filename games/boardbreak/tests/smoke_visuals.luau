@@ -60,6 +60,9 @@ roblox.implementMethod("Model", "PivotTo", function(model, cf)
 		end
 	end
 end)
+pcall(roblox.implementMethod, "Model", "WaitForChild", function(model, name)
+	return model:FindFirstChild(name)
+end)
 roblox.implementMethod("Model", "GetPivot", function(model)
 	local primary = model.PrimaryPart
 	return if primary then primary.CFrame else CFrame.new()
@@ -316,8 +319,9 @@ local function body()
 		local road = MapLayout.roadPoint(t.id)
 		local p = MapLayout.targetPosition(t.id)
 		local ox = MapLayout.worldOrigin(t.world).x
+		local ws = MapLayout.worldScale(t.world)
 		local dist = math.sqrt((road.x - p.x) ^ 2 + (road.z - p.z) ^ 2)
-		if math.abs(road.x - ox) > MapLayout.ROAD_HALF or dist > MapLayout.targetReach(t.id) - 1 then
+		if math.abs(road.x - ox) > MapLayout.ROAD_HALF * ws or dist > MapLayout.targetReach(t.id) - ws then
 			reachOk = false
 			print("    설 자리 없음: " .. t.id .. " dist " .. dist .. " reach " .. MapLayout.targetReach(t.id))
 		end
@@ -510,10 +514,11 @@ local function body()
 	for w = 1, 3 do
 		local ids = MapLayout.targetIds(w)
 		local ox = MapLayout.worldOrigin(w).x
+		local ws = MapLayout.worldScale(w)
 		for i, a in ids do
 			local pa = MapLayout.targetPosition(a)
 			local ea = extents[a] or 0
-			if ea > MapLayout.targetRadius(a) * 1.45 + 1 then
+			if ea > MapLayout.targetRadius(a) * 1.45 + ws then
 				tooWide += 1
 				print(
 					string.format(
@@ -524,11 +529,11 @@ local function body()
 					)
 				)
 			end
-			if math.abs(pa.x - ox) - ea < MapLayout.ROAD_HALF then
+			if math.abs(pa.x - ox) - ea < MapLayout.ROAD_HALF * ws then
 				roadHit += 1
 				print(string.format("    길을 막음: %s (가운데 %.1f · 실제 %.1f)", a, pa.x - ox, ea))
 			end
-			if pa.z - ea < MapLayout.LOBBY_HALF + 2 then
+			if pa.z - ea < (MapLayout.LOBBY_HALF + 2) * ws then
 				lobbyHit += 1
 				print("    로비와 겹침: " .. a)
 			end
@@ -536,7 +541,7 @@ local function body()
 				local b = ids[j]
 				local pb = MapLayout.targetPosition(b)
 				local dist = math.sqrt((pa.x - pb.x) ^ 2 + (pa.z - pb.z) ^ 2)
-				if dist < ea + (extents[b] or 0) + 1 then
+				if dist < ea + (extents[b] or 0) + ws then
 					overlap += 1
 					print(
 						string.format(
@@ -589,6 +594,7 @@ local function body()
 		local part = roadParts[t.id]
 		local p = MapLayout.targetPosition(t.id)
 		local ox = MapLayout.worldOrigin(t.world).x
+		local ws = MapLayout.worldScale(t.world)
 		if not (mp and part and part:GetAttribute(A.World) == t.world) then
 			rmTag += 1
 			print("    길가 매트 없음/태그·Attr 틀림: " .. t.id)
@@ -605,7 +611,7 @@ local function body()
 			-- 물건(실제 파트 크기)과 안 겹침
 			local half = math.max(part.Size.X, part.Size.Z) / 2
 			local dist = math.sqrt((mp.x - p.x) ^ 2 + (mp.z - p.z) ^ 2)
-			if dist < (extents[t.id] or 0) + 0.5 then
+			if dist < (extents[t.id] or 0) + 0.5 * ws then
 				rmTarget += 1
 				print("    물건과 겹침: " .. t.id)
 			end
@@ -613,7 +619,7 @@ local function body()
 				if other ~= t.id then
 					local q = MapLayout.targetPosition(other)
 					local ea = extents[other] or 0
-					if math.sqrt((mp.x - q.x) ^ 2 + (mp.z - q.z) ^ 2) < ea + half - 0.5 then
+					if math.sqrt((mp.x - q.x) ^ 2 + (mp.z - q.z) ^ 2) < ea + half - 0.5 * ws then
 						-- 대략 원 판정이 겹치면 사각형으로 다시
 						local rx = math.abs(mp.x - q.x) - part.Size.X / 2
 						local rz = math.abs(mp.z - q.z) - part.Size.Z / 2
@@ -627,9 +633,9 @@ local function body()
 			-- 길 위, 가운데 통로(±1.5)는 비워 둠, 안 부딪힘 (길을 막지 않음)
 			local x0, x1 = mp.x - part.Size.X / 2 - ox, mp.x + part.Size.X / 2 - ox
 			if
-				math.abs(x0) > MapLayout.ROAD_HALF
-				or math.abs(x1) > MapLayout.ROAD_HALF
-				or (x0 < 1.5 and x1 > -1.5)
+				math.abs(x0) > MapLayout.ROAD_HALF * ws
+				or math.abs(x1) > MapLayout.ROAD_HALF * ws
+				or (x0 < 1.5 * ws and x1 > -1.5 * ws)
 				or part.CanCollide
 			then
 				rmRoad += 1
@@ -653,7 +659,8 @@ local function body()
 		local model = MapBuilder.getTarget(t.id)
 		local gui = model and model.PrimaryPart and model.PrimaryPart:FindFirstChild("TargetInfo")
 		local r = MapLayout.targetRadius(t.id)
-		local want = math.clamp(r * 6, 60, 400)
+		local wsT = MapLayout.worldScale(t.world)
+		local want = math.clamp(r / wsT * 6, 60, 400) * wsT -- 배율 1 로 정한 거리 × 월드 배율
 		if not (gui and math.abs(gui.MaxDistance - want) < 0.01) then
 			rmInfo += 1
 			print("    글 거리 틀림: " .. t.id)
@@ -898,13 +905,14 @@ local function body()
 		local roof = lobby and lobby:FindFirstChild("Roof")
 		local ceil = roof and roof:FindFirstChild("Ceiling")
 		local rect = MapLayout.lobbyRect(w)
+		local ws = MapLayout.worldScale(w)
 		if not ceil then
 			roofOk = false
 			print("    천장 없음: 월드 " .. w)
 		else
 			local r = xzRect(ceil)
 			local bottom = ceil.CFrame.Position.Y - ceil.Size.Y / 2
-			if r.x0 > rect.x0 or r.x1 < rect.x1 or r.z0 > rect.z0 or r.z1 < rect.z1 or bottom < 18 then
+			if r.x0 > rect.x0 or r.x1 < rect.x1 or r.z0 > rect.z0 or r.z1 < rect.z1 or bottom < 18 * ws then
 				roofOk = false
 				print(string.format("    천장이 덜 덮음/낮음: 월드 %d 아랫면 %.1f", w, bottom))
 			end
@@ -920,9 +928,13 @@ local function body()
 			end
 			-- 정문(가운데 x ±9, 높이 0~14)과 월드 문 앞(x ±3.5, 높이 0~9.5)은 비어 있어야 함
 			local cx = (rect.x0 + rect.x1) / 2
-			local holes = { { x0 = cx - 9, x1 = cx + 9, z0 = rect.z1 - 2, z1 = rect.z1 + 3, y1 = 14 } }
+			local holes =
+				{ { x0 = cx - 9 * ws, x1 = cx + 9 * ws, z0 = rect.z1 - 2 * ws, z1 = rect.z1 + 3 * ws, y1 = 14 * ws } }
 			for _, d in MapLayout.doors(w) do
-				table.insert(holes, { x0 = d.x - 3.5, x1 = d.x + 3.5, z0 = d.z - 1, z1 = d.z + 4, y1 = 9.5 })
+				table.insert(
+					holes,
+					{ x0 = d.x - d.halfX, x1 = d.x + d.halfX, z0 = d.z - ws, z1 = d.z + 4 * ws, y1 = 9.5 * ws }
+				)
 			end
 			for _, d in roof:GetDescendants() do
 				if d:IsA("BasePart") then
@@ -1024,10 +1036,811 @@ local function body()
 	)
 	check(PVS.apply(fakeChar(), 5) == 0, "힘 100 미만 → 아우라 없음")
 
-	local board = CollectionService:GetTagged(Tags.BeltBoard)[1]
-	local sg = board.PrimaryPart and board.PrimaryPart:FindFirstChild("Sign")
-	local grid = sg and sg.Board:FindFirstChild("Belts")
-	check(grid and grid:FindFirstChild("Belt_1") and grid:FindFirstChild("Belt_12"), "띠 표지판 Belt_1..12 칸")
+	print("[띠 표지판 (사장님 결정 16번 — Belts.COUNT 개)]")
+	local Belts = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Belts"))
+	local BeltLook = requireNode(Loader.get("ReplicatedStorage/Shared/BeltLook"))
+	for _, board in CollectionService:GetTagged(Tags.BeltBoard) do
+		local w = board:GetAttribute(A.World)
+		local sg = board.PrimaryPart and board.PrimaryPart:FindFirstChild("Sign")
+		local grid = sg and sg.Board:FindFirstChild("Belts")
+		local cellsOk, inside, overlapCells, gradOk = 0, true, 0, true
+		local rects = {}
+		for i = 1, Belts.COUNT do
+			local cell = grid and grid:FindFirstChild("Belt_" .. i)
+			if cell then
+				cellsOk += 1
+				local p, s = cell.Position, cell.Size
+				local r = { x0 = p.X.Scale, x1 = p.X.Scale + s.X.Scale, z0 = p.Y.Scale, z1 = p.Y.Scale + s.Y.Scale }
+				if r.x0 < 0 or r.z0 < 0 or r.x1 > 1 + 1e-6 or r.z1 > 1 + 1e-6 or p.X.Offset ~= 0 or p.Y.Offset ~= 0 then
+					inside = false
+					print(string.format("    표지판 밖: 월드 %d Belt_%d", w, i))
+				end
+				for _, o in rects do
+					if rectsOverlap(r, o) then
+						overlapCells += 1
+					end
+				end
+				table.insert(rects, r)
+				local stripe = cell:FindFirstChild("Stripe")
+				local many = #BeltLook.colors(Belts.get(i)) > 1
+				if not stripe or (many and not stripe:FindFirstChild("BeltGradient")) then
+					gradOk = false
+				end
+			end
+		end
+		check(
+			cellsOk == Belts.COUNT and inside and overlapCells == 0 and gradOk,
+			string.format(
+				"월드 %d 띠 표지판: Belt_1..%d 칸이 다 판 안 · 안 겹침 · 여러 색 띠는 그러데이션 (%d칸)",
+				w,
+				Belts.COUNT,
+				cellsOk
+			)
+		)
+	end
+	local board1 = CollectionService:GetTagged(Tags.BeltBoard)[1]
+	local top = board1.PrimaryPart.CFrame.Position.Y + board1.PrimaryPart.Size.Y / 2
+	local ws1 = MapLayout.worldScale(board1:GetAttribute(A.World))
+	check(top < Dojo.ROOF_Y * ws1, string.format("띠 표지판 위 끝 %.1f < 천장 %.0f", top / ws1, Dojo.ROOF_Y))
+	local rb = Belts.byId and Belts.byId("rainbow")
+	if rb then
+		check(#BeltLook.colors(rb) >= 6, "무지개 띠 = 무지개 6색")
+	end
+	local yt = Belts.byId and Belts.byId("youtube")
+	if yt then
+		local cell
+		for _, d in board1:GetDescendants() do
+			if d.Name == "Belt_" .. yt.index then
+				cell = d
+			end
+		end
+		local imgs = 0
+		for _, d in cell and cell:GetDescendants() or {} do
+			if d:IsA("ImageLabel") or d:IsA("Decal") then
+				imgs += 1
+			end
+		end
+		check(cell and imgs == 0, "유튜브 띠 칸: 이름 + 빨강·흰 천만 (그림·로고 없음)")
+	end
+
+	print("[크기 (사장님 결정 13번) — 월드 배율 · 맵]")
+	local Sizes = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Sizes"))
+	local Build = requireNode(Loader.get("ServerScriptService/Server/Map/Build"))
+	local function ser(v)
+		if type(v) == "table" then
+			local keys = {}
+			for k in v do
+				table.insert(keys, tostring(k))
+			end
+			table.sort(keys)
+			local out = {}
+			for _, k in keys do
+				local val = v[k]
+				if val == nil then
+					val = v[tonumber(k)]
+				end
+				table.insert(out, k .. "=" .. ser(val))
+			end
+			return "{" .. table.concat(out, ",") .. "}"
+		elseif type(v) == "number" then
+			return string.format("%.6f", v)
+		end
+		return tostring(v)
+	end
+	local base = MapLayout.base
+	local same1 = true
+	for _, f in
+		{
+			"spawn",
+			"trainMats",
+			"roadMats",
+			"dumbbellShop",
+			"beltBoard",
+			"examPad",
+			"duelArena",
+			"doors",
+			"lobbyRect",
+			"targetArea",
+			"worldOrigin",
+		}
+	do
+		if ser(MapLayout[f](1)) ~= ser(base[f](1)) then
+			same1 = false
+			print("    월드 1 다름: " .. f)
+		end
+	end
+	for _, id in MapLayout.targetIds(1) do
+		for _, f in { "targetPosition", "targetRadius", "targetReach", "roadPoint", "matPoint", "matWalkDistance" } do
+			if ser(MapLayout[f](id)) ~= ser(base[f](id)) then
+				same1 = false
+				print("    월드 1 다름: " .. f .. " " .. id)
+			end
+		end
+	end
+	check(
+		same1 and MapLayout.worldScale(1) == 1,
+		"월드 1 = 배율 1 그대로 (자리·반지름·reach·매트·문 전부 옛 숫자와 같음)"
+	)
+	check(
+		MapLayout.targetReach("cotton") == 2.5 * 1.35 + 8 and MapLayout.spawn(1).z == -36,
+		"월드 1 숫자 그대로 (솜 reach 11.375 · 스폰 z -36)"
+	)
+	local scaledOk = true
+	for w = 2, 3 do
+		local s = MapLayout.worldScale(w)
+		local o = MapLayout.worldOrigin(w).x
+		if math.abs(s - Sizes.worldScale(w)) > 1e-9 then
+			scaledOk = false
+		end
+		for _, id in MapLayout.targetIds(w) do
+			local p, b = MapLayout.targetPosition(id), base.targetPosition(id)
+			if
+				math.abs(p.x - (o + (b.x - o) * s)) > 1e-6
+				or math.abs(p.z - b.z * s) > 1e-6
+				or math.abs(p.y - b.y * s) > 1e-6
+				or math.abs(MapLayout.targetReach(id) - base.targetReach(id) * s) > 1e-6
+				or math.abs(MapLayout.targetRadius(id) - base.targetRadius(id) * s) > 1e-6
+				or MapLayout.matWalkDistance(id) ~= 0
+			then
+				scaledOk = false
+				print("    배율 틀림: " .. id)
+			end
+		end
+		local sp, bs = MapLayout.spawn(w), base.spawn(w)
+		if math.abs(sp.sizeX - bs.sizeX * s) > 1e-6 or math.abs(sp.z - bs.z * s) > 1e-6 then
+			scaledOk = false
+		end
+	end
+	check(
+		scaledOk,
+		string.format(
+			"월드 2·3 = 원점 기준 × worldScale (%.1f · %.1f): 자리·반지름·reach(여유 포함)·스폰 · 매트에서 바로 침",
+			MapLayout.worldScale(2),
+			MapLayout.worldScale(3)
+		)
+	)
+	-- 실제로 지은 월드: 폴더 Attr Scale · 물건 자리 · 가장 긴 파트 · 월드끼리 거리
+	local builtOk = true
+	for w = 1, 3 do
+		local f = map["World" .. w]
+		if f:GetAttribute("Scale") ~= MapLayout.worldScale(w) then
+			builtOk = false
+		end
+	end
+	for _, t in Targets.list do
+		local m = MapBuilder.getTarget(t.id)
+		local p = MapLayout.targetPosition(t.id)
+		local hb = m and m.PrimaryPart
+		if
+			not hb
+			or math.abs(hb.CFrame.Position.X - p.x) > 0.05 -- float32: x 30,000 근처는 0.002 단위
+			or math.abs(hb.CFrame.Position.Z - p.z) > 0.05
+			or math.abs(m:GetAttribute("Radius") - MapLayout.targetRadius(t.id)) > 1e-6
+		then
+			builtOk = false
+			print(
+				string.format(
+					"    지은 자리 틀림: %s hb %s want %.2f,%.2f r %s %s",
+					t.id,
+					tostring(hb and hb.CFrame.Position),
+					p.x,
+					p.z,
+					tostring(m and m:GetAttribute("Radius")),
+					tostring(MapLayout.targetRadius(t.id))
+				)
+			)
+		end
+	end
+	check(
+		builtOk,
+		"지은 물건 41개 = MapLayout 자리(배율 곱함) · Attr Radius = targetRadius · 월드 폴더 Attr Scale"
+	)
+	local longest, which = MapBuilder.maxPartAxis()
+	check(
+		longest <= 2048,
+		string.format("가장 긴 파트 축 %.0f ≤ 2048 (%s)", longest, which and which:GetFullName() or "-")
+	)
+	local boxes3 = {}
+	for w = 1, 3 do
+		local x0, x1, z0, z1, y1 = math.huge, -math.huge, math.huge, -math.huge, -math.huge
+		for _, d in map["World" .. w]:GetDescendants() do
+			if d:IsA("BasePart") then
+				for _, pt in partCorners(d) do
+					x0, x1 = math.min(x0, pt.X), math.max(x1, pt.X)
+					z0, z1 = math.min(z0, pt.Z), math.max(z1, pt.Z)
+					y1 = math.max(y1, pt.Y)
+				end
+			end
+		end
+		boxes3[w] = { x0 = x0, x1 = x1, z0 = z0, z1 = z1 }
+		print(
+			string.format(
+				"    월드 %d (배율 %.1f, 원점 x %d): x %.0f..%.0f (%.0f) · z %.0f..%.0f (%.0f) · 가장 높은 곳 %.0f",
+				w,
+				MapLayout.worldScale(w),
+				MapLayout.worldOrigin(w).x,
+				x0,
+				x1,
+				x1 - x0,
+				z0,
+				z1,
+				z1 - z0,
+				y1
+			)
+		)
+	end
+	local gapMin = math.min(boxes3[2].x0 - boxes3[1].x1, boxes3[3].x0 - boxes3[2].x1)
+	check(
+		gapMin >= 3000,
+		string.format("월드끼리 안 겹치고 멀리 (가장 가까운 틈 %.0f ≥ 3000)", gapMin)
+	)
+	local whereOk = true
+	for w = 1, 3 do
+		for _, d in map["World" .. w]:GetDescendants() do
+			if d:IsA("BasePart") and MapLayout.worldAt(d.CFrame.Position) ~= w then
+				whereOk = false
+			end
+		end
+	end
+	check(whereOk, "모든 파트가 자기 월드 땅 (worldAt)")
+	-- 아파트 높이 = Sizes.APARTMENT_HEIGHT (마지막 아령 = 그 2배)
+	local apt = MapBuilder.getTarget("apartment")
+	local aptBase = MapLayout.targetPosition("apartment").y
+	local aptTop = -math.huge
+	for _, d in apt:GetDescendants() do
+		if d:IsA("BasePart") and d.Name ~= "Hitbox" then
+			for _, pt in partCorners(d) do
+				aptTop = math.max(aptTop, pt.Y)
+			end
+		end
+	end
+	local aptH = aptTop - aptBase
+	check(
+		math.abs(aptH - Sizes.APARTMENT_HEIGHT) <= Sizes.APARTMENT_HEIGHT * 0.01,
+		string.format(
+			"지은 월드 1 아파트 높이 %.3f = Sizes.APARTMENT_HEIGHT %.3f (±1%%)",
+			aptH,
+			Sizes.APARTMENT_HEIGHT
+		)
+	)
+	-- 빛·글·클릭 거리
+	local lightOk, ppsOk, clickOk = true, true, true
+	for w = 1, 3 do
+		local ws = MapLayout.worldScale(w)
+		for _, d in map["World" .. w]:GetDescendants() do
+			if (d:IsA("PointLight") or d:IsA("SpotLight") or d:IsA("SurfaceLight")) and d.Range > 60 then
+				lightOk = false
+			elseif d:IsA("SurfaceGui") and w == 3 and d.Name == "Sign" and d.PixelsPerStud > 40 / ws + 1e-6 then
+				ppsOk = false
+			end
+		end
+	end
+	for _, t in Targets.list do
+		local click = MapBuilder.getTarget(t.id):FindFirstChild("Click")
+		if click.MaxActivationDistance < MapLayout.targetReach(t.id) + MapBuilder.CLICK_BODY_PAD then
+			clickOk = false
+		end
+	end
+	check(lightOk, "빛 범위 ≤ 60 (로블록스 상한)")
+	check(ppsOk, "월드 3 표지판 글 픽셀 밀도 = 월드 1 ÷ 11 (같은 글자 크기·그림 메모리)")
+	check(
+		clickOk,
+		"물건 ClickDetector 거리 ≥ targetReach(배율 곱함) + 몸 여유 " .. MapBuilder.CLICK_BODY_PAD
+	)
+	-- 거인이 안 끼임: 지붕 전체 + 문 위 들보 = GiantPass
+	local passOk = true
+	for w = 1, 3 do
+		local roof = map["World" .. w].Lobby.Roof
+		for _, d in roof:GetDescendants() do
+			if d:IsA("BasePart") and d:GetAttribute("GiantPass") ~= true then
+				passOk = false
+			end
+		end
+	end
+	for _, door in CollectionService:GetTagged(Tags.WorldDoor) do
+		local l = door:FindFirstChild("Lintel")
+		if not (l and l:GetAttribute("GiantPass") == true) then
+			passOk = false
+		end
+	end
+	check(
+		passOk and Build.PASS_GROUP ~= nil and Build.PLAYER_GROUP ~= nil,
+		"지붕·윗벽·천장·문 위 들보 = 플레이어 몸과 안 부딪힘 (GiantPass 충돌 그룹)"
+	)
+	for w = 1, 3 do
+		local roofY = map["World" .. w].Lobby.Roof.Ceiling.CFrame.Position.Y
+			- map["World" .. w].Lobby.Roof.Ceiling.Size.Y / 2
+		local portal
+		for _, door in CollectionService:GetTagged(Tags.WorldDoor) do
+			if door:GetAttribute(A.World) == w then
+				portal = door:FindFirstChild("Portal")
+			end
+		end
+		print(
+			string.format(
+				"    월드 %d: 천장 아랫면 %.0f · 문 구멍 위 %.1f (가장 큰 몸 키 ≈ %.0f)",
+				w,
+				roofY,
+				portal.CFrame.Position.Y + portal.Size.Y / 2,
+				Sizes.AVATAR_HEIGHT * Sizes.MAX_SCALE
+			)
+		)
+	end
+	-- 엔진은 Part.Size 를 넣는 순간 한 축 2048 로 자름 (본부장 2026-11-16 스튜디오: 그 때문에 월드 2·3 바닥이 잘려 허공).
+	--   Build.setSize 가 엔진과 똑같이 자르고 횟수를 셈 → 맵을 다 지은 뒤 0 이어야 함
+	check(
+		Build.clamped == 0,
+		"맵 짓는 동안 엔진이 잘랐을 크기(한 축 > 2048)를 한 번도 안 넣음 ("
+			.. Build.clamped
+			.. ")"
+	)
+	do
+		local probe = Instance.new("Part")
+		local before = Build.clamped
+		Build.setSize(probe, Vector3.new(3000, 2, 5))
+		check(
+			probe.Size.X == 2048 and Build.clamped == before + 1,
+			"Build.setSize = 엔진처럼 2048 로 자름 (Lune 가짜에도 같은 규칙)"
+		)
+		Build.clamped = before
+		probe:Destroy()
+	end
+	-- 바닥: 월드마다 Ground 조각이 worldRect 를 빈틈없이 덮고, 서는 자리 아래에 부딪히는 바닥이 있음
+	local function aabb(p)
+		local x0, x1, y1, z0, z1 = math.huge, -math.huge, -math.huge, math.huge, -math.huge
+		for _, pt in partCorners(p) do
+			x0, x1 = math.min(x0, pt.X), math.max(x1, pt.X)
+			z0, z1 = math.min(z0, pt.Z), math.max(z1, pt.Z)
+			y1 = math.max(y1, pt.Y)
+		end
+		return x0, x1, z0, z1, y1
+	end
+	for w = 1, 3 do
+		local ws = MapLayout.worldScale(w)
+		local floors, grounds = {}, {}
+		for _, d in map["World" .. w]:GetDescendants() do
+			if d:IsA("BasePart") and d.CanCollide then
+				local x0, x1, z0, z1, top = aabb(d)
+				local box = { x0 = x0, x1 = x1, z0 = z0, z1 = z1, top = top, name = d.Name }
+				table.insert(floors, box)
+				if d.Name == "Ground" then
+					table.insert(grounds, box)
+				end
+			end
+		end
+		local rect = MapLayout.worldRect(w)
+		local holes = 0
+		local n = 40
+		for i = 0, n do
+			for j = 0, n do
+				local x = rect.x0 + 0.5 + (rect.x1 - rect.x0 - 1) * i / n
+				local z = rect.z0 + 0.5 + (rect.z1 - rect.z0 - 1) * j / n
+				local hit = false
+				for _, g in grounds do
+					if x >= g.x0 and x <= g.x1 and z >= g.z0 and z <= g.z1 then
+						hit = true
+						break
+					end
+				end
+				if not hit then
+					holes += 1
+				end
+			end
+		end
+		check(
+			holes == 0,
+			string.format(
+				"월드 %d 땅(Ground %d조각)이 worldRect %.0f × %.0f 를 빈틈없이 덮음 (빈 곳 %d / %d)",
+				w,
+				#grounds,
+				rect.x1 - rect.x0,
+				rect.z1 - rect.z0,
+				holes,
+				(n + 1) * (n + 1)
+			)
+		)
+		-- 아래로 쏘기: 그 자리 바닥 높이(y0) 근처(-3·배율 ~ +10·배율)에 위가 있는 부딪히는 파트
+		local function landed(x, y0, z)
+			for _, f in floors do
+				if
+					x >= f.x0
+					and x <= f.x1
+					and z >= f.z0
+					and z <= f.z1
+					and f.top <= y0 + 10 * ws
+					and f.top >= y0 - 3 * ws
+				then
+					return true
+				end
+			end
+			return false
+		end
+		local spots = {}
+		for _, id in MapLayout.targetIds(w) do
+			local p = MapLayout.targetPosition(id)
+			table.insert(spots, { "물건 " .. id, p.x, p.y, p.z })
+			local rp = MapLayout.roadPoint(id)
+			table.insert(spots, { "길 " .. id, rp.x, 0, rp.z })
+		end
+		for _, m in MapLayout.roadMats(w) do
+			table.insert(spots, { "길가 매트 " .. m.targetId, m.x, 0, m.z })
+		end
+		for i, m in MapLayout.trainMats(w) do
+			table.insert(spots, { "도장 매트 " .. i, m.x, 0, m.z })
+		end
+		local sp, ep, da = MapLayout.spawn(w), MapLayout.examPad(w), MapLayout.duelArena(w)
+		table.insert(spots, { "스폰", sp.x, 0, sp.z })
+		table.insert(spots, { "심사대", ep.x, 0, ep.z })
+		table.insert(spots, { "대결장", da.x, 0, da.z })
+		for _, d in MapLayout.doors(w) do
+			table.insert(spots, { "포털 → " .. d.world, d.x, 0, d.z + d.front / 2 })
+		end
+		local fell = {}
+		for _, s in spots do
+			if not landed(s[2], s[3], s[4]) then
+				table.insert(fell, s[1])
+			end
+		end
+		check(
+			#fell == 0,
+			string.format(
+				"월드 %d: 서는 자리 %d곳(물건·길·길가 매트·도장 매트·스폰·심사대·대결장·포털) 아래에 부딪히는 바닥%s",
+				w,
+				#spots,
+				if #fell > 0 then " — 없음: " .. table.concat(fell, ", ") else ""
+			)
+		)
+	end
+
+	-- 큰 월드가 어둡지 않게 (본부장 2026-11-16: 월드 3 도장 안이 거의 까맘)
+	local function lum(col)
+		return (col.R + col.G + col.B) / 3
+	end
+	local shadowOk = true
+	for w = 2, 3 do
+		for _, d in map["World" .. w].Lobby.Roof:GetDescendants() do
+			if d:IsA("BasePart") and d.CastShadow then
+				shadowOk = false
+				print("    그림자 드리움: 월드 " .. w .. " " .. d.Name)
+			end
+		end
+	end
+	check(shadowOk, "큰 월드(2·3) 도장 지붕은 그림자를 안 드리움 (해·하늘빛이 안으로)")
+	local lobby3 = map.World3.Lobby
+	local glow, glowBad = 0, false
+	for _, d in lobby3:GetChildren() do
+		if d.Name == "GlowTrim" then
+			glow += 1
+			if d.Material ~= roblox.Enum.Material.Neon or d.CanCollide or d.CastShadow then
+				glowBad = true
+			end
+		end
+	end
+	check(
+		glow >= 8 and not glowBad,
+		"월드 3 도장 벽 아래·위 네온 띠 " .. glow .. "개 (스스로 빛남 · 안 부딪힘)"
+	)
+	local inside = {
+		{ "바닥", lobby3:FindFirstChild("DojoFloor") },
+		{ "왼쪽 벽", lobby3:FindFirstChild("WallL") },
+		{ "뒤 벽", lobby3:FindFirstChild("WallB") },
+		{ "천장", lobby3.Roof:FindFirstChild("Ceiling") },
+	}
+	local brightOk = true
+	for _, e in inside do
+		local p = e[2]
+		if not p or lum(p.Color) < 0.35 or p.Material == roblox.Enum.Material.Metal then
+			brightOk = false
+			print(string.format("    어두움: 월드 3 %s %s", e[1], p and tostring(p.Color) or "없음"))
+		end
+	end
+	check(
+		brightOk,
+		"월드 3 도장 바닥·벽·천장 = 밝은 색 (≥ 0.35) · 어두운 곳에서 검게 보이는 Metal 아님"
+	)
+	local roadOk, groundOk, pedOk = true, true, true
+	for _, d in map.World3:GetChildren() do
+		if d:IsA("BasePart") and d.Name == "Road" and (d.Transparency > 0 or lum(d.Color) < 0.3) then
+			roadOk = false
+		elseif d:IsA("BasePart") and d.Name == "Ground" and lum(d.Color) < 0.15 then
+			groundOk = false
+		end
+	end
+	for _, t in Targets.byWorld(3) do
+		local ped = MapBuilder.getTarget(t.id):FindFirstChild("Pedestal")
+		if not ped or lum(ped.Color) < 0.4 then
+			pedOk = false
+		end
+	end
+	check(
+		roadOk and groundOk and pedOk,
+		"월드 3 밖: 길 불투명·밝음 (≥ 0.3) · 땅 짙은 남색 (≥ 0.15) · 받침대 밝음 (≥ 0.4) — 하늘은 그대로 깜깜"
+	)
+
+	-- 포털 칸 (사장님 결정 15번)
+	local doorOk = true
+	for w = 1, 3 do
+		local ws = MapLayout.worldScale(w)
+		for _, d in MapLayout.doors(w) do
+			if MapLayout.doorAt({ x = d.x, y = 3 * ws, z = d.z + 0.3 * ws }, w) ~= d.world then
+				doorOk = false
+				print("    포털 안인데 아님: 월드 " .. w .. " → " .. d.world)
+			end
+		end
+		local sp = MapLayout.spawn(w)
+		for _, body in { 1, ws, Sizes.MAX_SCALE } do
+			if MapLayout.doorAt({ x = sp.x, y = 3 * body, z = sp.z }, w, body) ~= nil then
+				doorOk = false
+				print(string.format("    스폰이 포털 안: 월드 %d 몸 %.1f", w, body))
+			end
+		end
+		if MapLayout.doorAt({ x = sp.x, y = 3 * ws, z = sp.z + 30 * ws }, w) ~= nil then
+			doorOk = false
+		end
+	end
+	check(
+		doorOk,
+		"포털 칸: 문 안 = 그 월드 · 스폰(보통 몸 · 그 월드 몸 · 가장 큰 몸)은 포털 밖 (도착해도 바로 안 돌아감)"
+	)
+
+	print("[크기 — 몸 · 근육 · 아령 (서버 PlayerVisualService)]")
+	local DumbbellLook2 = requireNode(Loader.get("ReplicatedStorage/Shared/DumbbellLook"))
+	local lastLv = #Dumbbells.list
+	check(
+		math.abs(DumbbellLook2.barLength(lastLv, 1) - (Sizes.LAST_DUMBBELL_LENGTH or 2.42)) < 1e-6,
+		string.format(
+			"마지막 아령 봉 길이 (배율 1) %.3f = Sizes.LAST_DUMBBELL_LENGTH",
+			DumbbellLook2.barLength(lastLv, 1)
+		)
+	)
+	local finalK = Sizes.MAX_SCALE * Sizes.dumbbellScale(lastLv)
+	local finalModel = DumbbellLook2.build(nil, lastLv, finalK, false)
+	local finalLen = 0
+	for _, p in finalModel:GetDescendants() do
+		if p:IsA("BasePart") then
+			finalLen = math.max(finalLen, p.Size.X, p.Size.Y, p.Size.Z)
+		end
+	end
+	local wantFinal = 2 * Sizes.APARTMENT_HEIGHT
+	check(
+		math.abs(finalLen - wantFinal) <= wantFinal * 0.02,
+		string.format(
+			"가장 큰 몸 + 마지막 아령: 실제로 만든 봉 %.2f = 아파트 높이 × 2 %.2f (±2%%)",
+			finalLen,
+			wantFinal
+		)
+	)
+	local noCollide = true
+	for _, p in finalModel:GetDescendants() do
+		if p:IsA("BasePart") and (p.CanCollide or p.CanTouch or p.CanQuery or p.Anchored) then
+			noCollide = false
+		end
+	end
+	check(noCollide, "손 아령은 안 부딪힘 · 안 맞음 · 고정 안 됨 (75 스터드여도)")
+	local function r15Char(heightBase)
+		local ch = fakeChar()
+		local hm = ch:FindFirstChildOfClass("Humanoid")
+		hm.RigType = roblox.Enum.HumanoidRigType.R15
+		local v = Instance.new("NumberValue")
+		v.Name = "BodyHeightScale"
+		v.Value = heightBase or 1
+		v.Parent = hm
+		return ch, hm
+	end
+	local chB, hmB = r15Char(1.05)
+	local sc = PVS.applyBody(chB, 10, 1)
+	local function val(name)
+		local v = hmB:FindFirstChild(name)
+		return v and v.Value or -1
+	end
+	local shape = PVS.bodyShape(10, 1)
+	check(
+		sc == 10
+			and math.abs(val("BodyHeightScale") - 10 * 1.05) < 1e-6
+			and math.abs(val("BodyWidthScale") - shape.width) < 1e-6
+			and math.abs(val("BodyDepthScale") - shape.depth) < 1e-6
+			and math.abs(val("HeadScale") - shape.head) < 1e-6
+			and chB:GetAttribute("VisualScale") == 10,
+		string.format(
+			"R15 몸 배율 10 · 근육 1 → 키 %.2f (원래 1.05 × 10) · 너비 %.1f · 깊이 %.1f · 머리 %.1f (머리는 덜 큼)",
+			val("BodyHeightScale"),
+			val("BodyWidthScale"),
+			val("BodyDepthScale"),
+			val("HeadScale")
+		)
+	)
+	check(
+		shape.width > shape.height and shape.depth > shape.height and shape.head < shape.height,
+		"근육 = 어깨·가슴·팔다리 넓고 두꺼움 · 머리는 몸보다 덜 커짐"
+	)
+	local s0 = PVS.bodyShape(1, 0)
+	check(
+		s0.height == 1 and s0.width == 1 and s0.depth == 1 and s0.head == 1,
+		"힘 0 (배율 1 · 근육 0) = 원래 몸 그대로"
+	)
+	hmB:FindFirstChild("BodyWidthScale"):SetAttribute("Mark", 1)
+	local w0 = val("BodyWidthScale")
+	PVS.applyBody(chB, 10, 1)
+	check(val("BodyWidthScale") == w0, "같은 배율이면 아무것도 다시 안 씀 (깜빡임 없음)")
+	PVS.applyBody(chB, 10.2, 1)
+	check(
+		math.abs(val("BodyHeightScale") - 10.2 * 1.05) < 1e-6,
+		"2% 커지면 값만 바꿈 (원래 비율 1.05 는 기억)"
+	)
+	-- 두 번 곱하기 없음 (본부장 2026-11-16 스튜디오: 리스폰 뒤 키 10.98² = 120.6). 아바타 로딩 = 크기 값 4개를 그 사람 값으로 덮어씀
+	local AVATAR = { BodyHeightScale = 1.05, BodyWidthScale = 0.9, BodyDepthScale = 1, HeadScale = 0.95 }
+	local function freshR15(startValues)
+		local ch = fakeChar()
+		local hm = ch:FindFirstChildOfClass("Humanoid")
+		hm.RigType = roblox.Enum.HumanoidRigType.R15
+		for _, name in PVS.SCALE_VALUES do
+			local v = Instance.new("NumberValue")
+			v.Name = name
+			v.Value = if startValues then startValues[name] else 1
+			v.Parent = hm
+		end
+		return ch, hm
+	end
+	local function appearanceLoads(hm)
+		for name, value in AVATAR do
+			hm:FindFirstChild(name).Value = value
+		end
+	end
+	local function exact(hm, scale, muscle)
+		local sh = PVS.bodyShape(scale, muscle)
+		local mult =
+			{ BodyHeightScale = sh.height, BodyWidthScale = sh.width, BodyDepthScale = sh.depth, HeadScale = sh.head }
+		local bad = {}
+		for name, orig in AVATAR do
+			local got = hm:FindFirstChild(name).Value
+			if math.abs(got - orig * mult[name]) > 1e-4 then
+				table.insert(bad, string.format("%s %.3f (기대 %.3f)", name, got, orig * mult[name]))
+			end
+		end
+		return #bad == 0, table.concat(bad, " · ")
+	end
+	local S = 10.98
+	-- 1) 리스폰 (본부장이 본 순서): 아바타 값이 이미 들어온 새 몸 → 키움 → 아바타 로딩 끝 신호(값은 그대로) → 다시 맞춤 × 3
+	local c1, h1 = freshR15(AVATAR)
+	PVS.applyBody(c1, S, 0.6)
+	for _ = 1, 3 do
+		PVS.applyBody(c1, S, 0.6) -- CharacterAppearanceLoaded · BodyScale · Muscle 이벤트가 몇 번 와도
+	end
+	local ok1, why1 = exact(h1, S, 0.6)
+	check(
+		ok1,
+		"리스폰: 아바타가 먼저 들어온 몸을 여러 번 맞춰도 원래 × " .. S .. " 한 번만 " .. why1
+	)
+	-- 2) 첫 접속 (실제 서버 순서): 기본값 1 인 몸 → 키움 → 그 뒤에 아바타 로딩이 값을 덮어씀 → 다시 맞춤
+	local c2, h2 = freshR15(nil)
+	PVS.applyBody(c2, S, 0.6)
+	appearanceLoads(h2)
+	PVS.applyBody(c2, S, 0.6)
+	PVS.applyBody(c2, S, 0.6)
+	local ok2, why2 = exact(h2, S, 0.6)
+	check(
+		ok2,
+		"첫 접속: 키운 뒤 아바타가 늦게 들어와도 아바타 값 × " .. S .. " 한 번만 " .. why2
+	)
+	-- 3) 그 몸이 커짐 (12) → 작아짐 (5) → 다시 S: 언제나 아바타 값 × 그 배율
+	PVS.applyBody(c2, 12, 0.8)
+	PVS.applyBody(c2, 5, 0.3)
+	PVS.applyBody(c2, S, 0.6)
+	local ok3, why3 = exact(h2, S, 0.6)
+	check(ok3, "커졌다 작아졌다 해도 원래 값은 그대로 (× 배율 한 번) " .. why3)
+	-- 4) 리스폰: 새 몸(값 1)에서 다시 — 앞 몸의 기억이 안 섞임, 아바타는 늦게
+	local c4, h4 = freshR15(nil)
+	PVS.applyBody(c4, S, 0.6)
+	PVS.applyBody(c4, S, 0.6)
+	appearanceLoads(h4)
+	PVS.applyBody(c4, S, 0.6)
+	local ok4, why4 = exact(h4, S, 0.6)
+	check(ok4, "새 몸 + 늦은 아바타 로딩 뒤에도 정확 " .. why4)
+	check(
+		h4:FindFirstChild("BodyHeightScale").Value < Sizes.MAX_SCALE * 1.2,
+		string.format(
+			"키 값이 배율 상한 근처 (%.2f — 120 같은 두 번 곱한 값 아님)",
+			h4:FindFirstChild("BodyHeightScale").Value
+		)
+	)
+
+	-- 5) 진짜 이벤트 순서로 (PlayerVisualService.watch — CharacterAdded · CharacterAppearanceLoaded · Attr 바뀜)
+	local function sig()
+		local hs = {}
+		return {
+			Connect = function(_, fn)
+				table.insert(hs, fn)
+				return {
+					Disconnect = function()
+						local i = table.find(hs, fn)
+						if i then
+							table.remove(hs, i)
+						end
+					end,
+				}
+			end,
+			Fire = function(_, ...)
+				for _, h in table.clone(hs) do
+					h(...)
+				end
+			end,
+		}
+	end
+	local fp = {
+		Character = nil,
+		attrs = { BodyScale = S, Muscle = 0.6, Power = 0 },
+		sigs = {},
+		CharacterAdded = sig(),
+		CharacterAppearanceLoaded = sig(),
+	}
+	function fp:GetAttribute(k)
+		return self.attrs[k]
+	end
+	function fp:GetAttributeChangedSignal(k)
+		self.sigs[k] = self.sigs[k] or sig()
+		return self.sigs[k]
+	end
+	function fp:SetAttribute(k, v)
+		self.attrs[k] = v
+		if self.sigs[k] then
+			self.sigs[k]:Fire()
+		end
+	end
+	PVS.watch(fp)
+	-- 리스폰 (아바타가 먼저): CharacterAdded → 키움 → CharacterAppearanceLoaded (값 그대로) → 다시
+	local c5, h5 = freshR15(AVATAR)
+	fp.Character = c5
+	fp.CharacterAdded:Fire(c5)
+	fp.CharacterAppearanceLoaded:Fire(c5)
+	fp:SetAttribute("Power", 1e20)
+	fp.CharacterAppearanceLoaded:Fire(c5)
+	local ok5, why5 = exact(h5, S, 0.6)
+	check(
+		ok5,
+		"이벤트 순서 (리스폰: 아바타 먼저 → 키움 → 로딩 끝 신호 ×2 · 힘 바뀜): 원래 × 배율 한 번 "
+			.. why5
+	)
+	-- 첫 접속 (아바타가 나중): CharacterAdded → 키움 → 아바타 값이 덮어씀 → CharacterAppearanceLoaded
+	local c6, h6 = freshR15(nil)
+	fp.Character = c6
+	fp.CharacterAdded:Fire(c6)
+	appearanceLoads(h6)
+	fp.CharacterAppearanceLoaded:Fire(c6)
+	fp.CharacterAppearanceLoaded:Fire(c6)
+	local ok6, why6 = exact(h6, S, 0.6)
+	check(
+		ok6,
+		"이벤트 순서 (첫 접속: 키움 → 아바타가 덮어씀 → 로딩 끝 신호 ×2): 아바타 값 × 배율 한 번 "
+			.. why6
+	)
+	fp:SetAttribute("BodyScale", 12)
+	fp:SetAttribute("BodyScale", S)
+	local ok7, why7 = exact(h6, S, 0.6)
+	check(ok7, "그 뒤 몸 배율이 바뀌었다 돌아와도 정확 " .. why7)
+	PVS.unwatch(fp)
+
+	-- 아우라도 몸 배율로 (다시 안 만들고 크기만)
+	local chA = fakeChar()
+	PVS.apply(chA, 2e7)
+	local attachA = chA.HumanoidRootPart:FindFirstChild("AuraAttach")
+	attachA:SetAttribute("Mark", 1)
+	PVS.rememberBase(chA, chA.HumanoidRootPart)
+	chA:SetAttribute("VisualScale", 10)
+	PVS.apply(chA, 2e7)
+	local ringA = chA:FindFirstChild("AuraRing")
+	local lightA = chA.HumanoidRootPart:FindFirstChild("AuraLight")
+	local same3 = chA.HumanoidRootPart:FindFirstChild("AuraAttach")
+	check(
+		same3:GetAttribute("Mark") == 1
+			and math.abs(same3.Position.Y - -15) < 1e-6
+			and ringA.Size.Y > 40
+			and (not lightA or lightA.Range <= 60),
+		string.format(
+			"몸 배율 10 → 아우라 그대로 두고 크기만 (고리 지름 %.0f · 높이 %.0f · 빛 ≤ 60)",
+			ringA.Size.Y,
+			same3.Position.Y
+		)
+	)
 end
 
 local ok, err = pcall(body)

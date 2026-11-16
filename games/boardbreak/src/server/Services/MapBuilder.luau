@@ -8,6 +8,10 @@
 	  MapBuilder.PART_BUDGET        { map = 6000, world = 2200, target = 15 }
 
 	자리는 전부 shared/Data/MapLayout (수석 서버도 같은 숫자로 거리·매트 판정).
+	크기 (사장님 결정 13번): 월드마다 MapLayout.base(배율 1) 자리로 지은 뒤 Build.scaleTree 로 원점 기준 통째로
+	  MapLayout.worldScale(w) 배 (월드 1 = 1 그대로 · 2 ≈ 5.5 · 3 ≈ 11) → Build.splitLarge 로 2,048 넘는 판을 조각 →
+	  ClickDetector 거리 + CLICK_BODY_PAD (가장 큰 몸 뿌리 높이). 월드 폴더 Attr Scale. 지붕·문 위 들보 = 거인과 안 부딪힘.
+	  MapBuilder.maxPartAxis() → 가장 긴 파트 축 (스모크: ≤ 2,048)
 	월드 테마: 1 태권도장 마을 (나무 바닥 도장 · 마을 길 · 나무·집) / 2 지구 한 바퀴 (도시 빌딩 · 바다 · 산)
 	          / 3 우주 (검은 바닥 + 별 · 물건은 떠 있는 받침대 위)
 	물건 41개: Model "Target_<id>" (태그 BreakTarget, Attr TargetId·World), 모양은 Map/TargetLooks,
@@ -25,7 +29,10 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage.Shared
 local MapLayout = require(Shared.Data.MapLayout)
+-- 짓기는 배율 1 자리로 (MapBuilder 가 월드를 다 지은 뒤 통째로 worldScale 배 키움)
+local Layout = MapLayout.base
 local Targets = require(Shared.Data.Targets)
+local Sizes = require(Shared.Data.Sizes)
 local Format = require(Shared.Format)
 local Tags = require(Shared.Tags)
 local MapFolder = script.Parent.Parent.Map
@@ -34,6 +41,9 @@ local Dojo = require(MapFolder.Dojo)
 local TargetLooks = require(MapFolder.TargetLooks)
 
 local MapBuilder = {}
+
+-- ClickDetector 거리에 더하는 몸 여유: 가장 큰 몸(MAX_SCALE)의 뿌리 높이쯤 (거인이 작은 월드에서도 누를 수 있게)
+MapBuilder.CLICK_BODY_PAD = math.ceil(Sizes.MAX_SCALE * 3)
 
 MapBuilder.PART_BUDGET = {
 	map = 6000, -- Workspace.Map 전체
@@ -98,19 +108,23 @@ MapBuilder.THEMES = {
 	},
 	{
 		dojo = {
-			floor = c(30, 32, 48),
-			floorMaterial = M.Metal,
-			wall = c(50, 52, 80),
-			wallMaterial = M.Metal,
+			-- 본부장 2026-11-16 확인: 11배 우주 도장 안이 거의 까맘 (밤 + 빛 범위 상한 60) → 밝은 회보라 매끈한 바닥·벽
+			--   (Metal 은 어두운 곳에서 더 검게 보임) + 벽 아래 네온 띠(glow) · 클라 조명(WorldController.LIGHTS 3)이 안을 밝힘
+			floor = c(96, 100, 142),
+			floorMaterial = M.SmoothPlastic,
+			wall = c(122, 124, 172),
+			wallMaterial = M.SmoothPlastic,
 			trim = c(150, 100, 255),
 			mat = { c(140, 80, 230), c(60, 200, 230) },
 			accent = c(170, 110, 255),
 			name = "🚀 우주 도장",
+			glow = true,
 		},
-		ground = c(14, 14, 22),
+		-- 밖: 하늘은 깜깜한 우주 그대로, 걷는 땅·길은 보이게 (검정 → 짙은 남색 · 투명 유리 길 → 불투명 밝은 길)
+		ground = c(40, 40, 62),
 		groundMaterial = M.Slate,
-		road = c(40, 40, 70),
-		roadMaterial = M.Glass,
+		road = c(84, 88, 138),
+		roadMaterial = M.SmoothPlastic,
 		edge = c(120, 200, 255),
 		edgeMaterial = M.Neon,
 	},
@@ -162,9 +176,9 @@ local function longFloor(
 end
 
 local function ground(world: number, parent: Instance, theme: WorldTheme)
-	local area = MapLayout.targetArea(world)
-	local lobby = MapLayout.lobbyRect(world)
-	local ox = MapLayout.worldOrigin(world).x
+	local area = Layout.targetArea(world)
+	local lobby = Layout.lobbyRect(world)
+	local ox = Layout.worldOrigin(world).x
 	local x0 = math.min(area.x0, lobby.x0) - 40
 	local x1 = math.max(area.x1, lobby.x1) + 40
 	-- 밖 땅 (로비 둘레 + 물건 줄)
@@ -172,7 +186,7 @@ local function ground(world: number, parent: Instance, theme: WorldTheme)
 	-- 가운데 길
 	local rh = MapLayout.ROAD_HALF
 	longFloor(parent, "Road", ox - rh, ox + rh, lobby.z1, area.z1, -0.4, 1, theme.road, theme.roadMaterial, {
-		transparency = if world == 3 then 0.2 else 0,
+		transparency = 0,
 	})
 	-- 길 가장자리 줄 2개
 	for _, sx in { -1, 1 } do
@@ -221,7 +235,7 @@ local ROAD_TOP = 0.1 -- 길 판 윗면 (Road: y -0.4, 두께 1)
 
 local function roadMats(world: number, parent: Instance, theme: WorldTheme)
 	local folder = Build.folder("RoadMats", parent)
-	for i, m in MapLayout.roadMats(world) do
+	for i, m in Layout.roadMats(world) do
 		local color = theme.dojo.mat[(i - 1) % #theme.dojo.mat + 1]
 		local attrs: { [string]: any } = { [PA.World] = world, [PA.TargetId] = m.targetId }
 		local mat = Build.part(
@@ -266,7 +280,7 @@ end
 
 -- 물건 줄 밖 장식 자리 (길·물건과 안 겹치게 바깥 가장자리)
 local function outerSpots(world: number, count: number, margin: number): { Vector3 }
-	local area = MapLayout.targetArea(world)
+	local area = Layout.targetArea(world)
 	local list: { Vector3 } = {}
 	local rand = rng(world * 977)
 	for i = 1, count do
@@ -345,11 +359,11 @@ end
 
 local function decorEarth(parent: Instance)
 	local folder = Build.folder("Decor", parent)
-	local area = MapLayout.targetArea(2)
+	local area = Layout.targetArea(2)
 	local rand = rng(23)
 	-- 왼쪽: 도시 빌딩
 	for i, p in outerSpots(2, 24, 8) do
-		if p.X < MapLayout.worldOrigin(2).x then
+		if p.X < Layout.worldOrigin(2).x then
 			local h = 20 + rand() * 50
 			local w = 8 + rand() * 6
 			local tint = c(150, 175, 205):Lerp(c(220, 220, 230), rand())
@@ -403,7 +417,7 @@ local function decorEarth(parent: Instance)
 	end
 	-- 뒤: 산 (쐐기 2개씩) 4개
 	for i = 1, 4 do
-		local x = MapLayout.worldOrigin(2).x + (i - 2.5) * 70
+		local x = Layout.worldOrigin(2).x + (i - 2.5) * 70
 		local z = area.z1 + 60
 		local h = 40 + i * 8
 		Build.part(
@@ -421,8 +435,8 @@ end
 
 local function decorSpace(parent: Instance)
 	local folder = Build.folder("Decor", parent)
-	local area = MapLayout.targetArea(3)
-	local lobby = MapLayout.lobbyRect(3)
+	local area = Layout.targetArea(3)
+	local lobby = Layout.lobbyRect(3)
 	local rand = rng(37)
 	local x0, x1 = math.min(area.x0, lobby.x0) - 40, math.max(area.x1, lobby.x1) + 40
 	local z0, z1 = lobby.z0 - 40, area.z1 + 30
@@ -430,7 +444,7 @@ local function decorSpace(parent: Instance)
 	for i = 1, 140 do
 		local x = x0 + rand() * (x1 - x0)
 		local z = z0 + rand() * (z1 - z0)
-		local inRoad = math.abs(x - MapLayout.worldOrigin(3).x) < MapLayout.ROAD_HALF + 2
+		local inRoad = math.abs(x - Layout.worldOrigin(3).x) < MapLayout.ROAD_HALF + 2
 		local sky = i % 2 == 0
 		if not (inRoad and not sky) then
 			local y = if sky then 60 + rand() * 120 else -0.45
@@ -483,15 +497,15 @@ local function infoText(target: Targets.Target): (string, string)
 end
 
 local function buildTarget(target: Targets.Target, parent: Instance): Model?
-	local pos = MapLayout.targetPosition(target.id)
+	local pos = Layout.targetPosition(target.id)
 	if not pos then
 		warn("[MapBuilder] 자리가 없는 물건: " .. target.id)
 		return nil
 	end
-	local r = MapLayout.targetRadius(target.id)
+	local r = Layout.targetRadius(target.id)
 	local model = Build.model("Target_" .. target.id, parent)
 	local base = v3(pos)
-	local road = MapLayout.roadPoint(target.id)
+	local road = Layout.roadPoint(target.id)
 	local toward = if road then Vector3.new(road.x, base.Y, road.z) else base + Vector3.new(0, 0, -1)
 	local baseCf = CFrame.lookAt(base, toward)
 	if target.world == 3 then
@@ -502,7 +516,7 @@ local function buildTarget(target: Targets.Target, parent: Instance): Model?
 			"VCyl",
 			Vector3.new(r * 2, 1, 0),
 			CFrame.new(base.X, top - 0.5, base.Z),
-			c(70, 70, 95),
+			c(110, 110, 150), -- 밤에도 보이는 밝은 회보라 (본부장 2026-11-16: 월드 3 이 너무 어두움)
 			M.Slate,
 			{
 				collide = true,
@@ -557,7 +571,7 @@ local function buildTarget(target: Targets.Target, parent: Instance): Model?
 	Build.text(frame, "Name", UDim2.fromScale(0, 0), UDim2.fromScale(1, 0.4), target.name, WHITE)
 	Build.text(frame, "Reward", UDim2.fromScale(0, 0.4), UDim2.fromScale(1, 0.3), reward, c(255, 215, 60))
 	Build.text(frame, "Need", UDim2.fromScale(0, 0.7), UDim2.fromScale(1, 0.3), need, c(255, 235, 150))
-	Build.click(model, "Click", MapLayout.targetReach(target.id) + 60)
+	Build.click(model, "Click", Layout.targetReach(target.id) + 60)
 	CollectionService:AddTag(model, Tags.BreakTarget)
 	targetModels[target.id] = model
 	return model
@@ -585,11 +599,51 @@ local function buildWorld(world: number, parent: Instance): Folder
 	else
 		decorSpace(folder)
 	end
+	-- 사장님 결정 13번: 배율 1 로 지은 월드를 원점 기준으로 통째로 worldScale 배 (월드 1 = 1 이라 그대로)
+	--   → 2,048 넘는 판은 조각으로 (Workspace 에 넣기 전이라 파트가 밀려나지 않음)
+	local s = MapLayout.worldScale(world)
+	Build.scaleTree(folder, MapLayout.worldOrigin(world).x, s)
+	Build.splitLarge(folder)
+	-- 큰 월드 도장: 천장 들보 등이 천장 아래로 빛(범위 60)을 못 내림 → 지붕 전체가 그림자를 안 드리워서 해·하늘빛이 들어옴
+	--   (본부장 2026-11-16: 월드 3 도장 안이 까맘. 조명은 클라 WorldController.LIGHTS 가 월드마다 맞춤)
+	if s > 1 then
+		local lobby = folder:FindFirstChild("Lobby")
+		local roofF = lobby and lobby:FindFirstChild("Roof")
+		if roofF then
+			for _, d in roofF:GetDescendants() do
+				if d:IsA("BasePart") then
+					d.CastShadow = false
+				end
+			end
+		end
+	end
+	for _, d in folder:GetDescendants() do
+		if d:IsA("ClickDetector") then
+			d.MaxActivationDistance += MapBuilder.CLICK_BODY_PAD
+		end
+	end
+	folder:SetAttribute("Scale", s)
 	worldFolders[world] = folder
 	return folder
 end
 
+-- 모든 월드 파트 중 가장 긴 축 (스모크: 2,048 이하)
+function MapBuilder.maxPartAxis(): (number, BasePart?)
+	local best, which = 0, nil
+	for world = 1, MapLayout.WORLD_COUNT do
+		local f = worldFolders[world]
+		if f then
+			local n, p = Build.maxAxis(f)
+			if n > best then
+				best, which = n, p
+			end
+		end
+	end
+	return best, which
+end
+
 local function buildMap(): Folder
+	Build.registerGroups()
 	local map = Instance.new("Folder")
 	map.Name = "Map"
 	for world = 1, MapLayout.WORLD_COUNT do

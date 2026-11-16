@@ -5,7 +5,9 @@
 	  R15: RightUpperArm.RightShoulder · RightLowerArm.RightElbow (+ 왼쪽) / R6: Torso["Right Shoulder"] (+ Left)
 	  Lift.play(character, kind)  kind: "one" (한 손 들기) | "two" (두 손 들기) | "chop" (내리치기)
 	  Lift.step(dt)               Heartbeat 에서 부름 (진행 중인 동작 전부)
-	  Lift.isPlaying(character) · Lift.reset(character) · Lift.DURATION
+	  Lift.isPlaying(character) · Lift.reset(character) · Lift.DURATION · Lift.restOf(motor)
+	  몸이 커져도 (사장님 결정 13번 — 서버가 몸 크기를 바꾸면 관절 C0 도 바뀜) 쉬는 C0 를 매 프레임 R15 RigAttachment 에서 다시 읽어서
+	  들기 도중에 커져도 팔이 몸에서 떨어지지 않고, 끝나면 새 크기 자리로 돌아감 (R6 은 기억한 C0 × 배율 비율).
 	클라에서 바꾼 C0 는 서버로 복제되지 않으므로, 다른 플레이어 팔은 각 클라가 복제된 Attribute(Power 증가)를 보고
 	같은 동작을 자기 화면에서 다시 그림 (TrainController). 사범님은 서버가 만든 모델이라 DuelState 로 각 클라가 그림.
 ]]
@@ -17,7 +19,7 @@ Lift.DURATION = 0.25
 type Joint = { motor: Motor6D, base: CFrame, role: string }
 type Play = { character: Model, kind: string, t: number, queued: boolean, joints: { Joint } }
 
-local bases: { [Motor6D]: CFrame } = setmetatable({}, { __mode = "k" }) :: any
+local bases: { [Motor6D]: { cf: CFrame, scale: number } } = setmetatable({}, { __mode = "k" }) :: any
 local playing: { [Model]: Play } = {}
 
 local function motor(parent: Instance?, name: string): Motor6D?
@@ -25,17 +27,37 @@ local function motor(parent: Instance?, name: string): Motor6D?
 	return if m and m:IsA("Motor6D") then m else nil
 end
 
+-- 관절의 "쉬는" C0. R15 는 Part0 의 RigAttachment (몸이 커지면 엔진이 Attachment 와 C0 를 같이 다시 계산 — 서버가
+--   몸을 키워도 들기 동작이 옛 크기 C0 로 되돌아가지 않음, 사장님 결정 13번). Attachment 가 없으면 처음 본 C0 를 기억.
+local function restOf(m: Motor6D): CFrame
+	local p0 = m.Part0
+	local a = p0 and p0:FindFirstChild(m.Name .. "RigAttachment")
+	if a and a:IsA("Attachment") then
+		return a.CFrame
+	end
+	-- R6 (Attachment 없음): 처음 본 C0 를 그때 몸 배율과 함께 기억 → 배율이 바뀌면 자리만 그 비율로 (Model:ScaleTo 와 같게)
+	local model = m:FindFirstAncestorWhichIsA("Model")
+	local raw = model and model:GetAttribute("VisualScale")
+	local scale = if type(raw) == "number" and raw > 0 then raw else 1
+	local entry = bases[m]
+	if not entry then
+		entry = { cf = m.C0, scale = scale }
+		bases[m] = entry
+	end
+	if entry.scale ~= scale then
+		local k = scale / entry.scale
+		return CFrame.new(entry.cf.Position * k) * entry.cf.Rotation
+	end
+	return entry.cf
+end
+Lift.restOf = restOf
+
 -- 캐릭터의 팔 관절 (R15 우선, 없으면 R6)
 function Lift.joints(character: Model): { Joint }
 	local list: { Joint } = {}
 	local function add(m: Motor6D?, role: string)
 		if m then
-			local base = bases[m]
-			if not base then
-				base = m.C0
-				bases[m] = base
-			end
-			table.insert(list, { motor = m, base = base, role = role })
+			table.insert(list, { motor = m, base = restOf(m), role = role })
 		end
 	end
 	local rs = motor(character:FindFirstChild("RightUpperArm"), "RightShoulder")
@@ -90,6 +112,8 @@ end
 local function apply(play: Play, u: number)
 	for _, j in play.joints do
 		if j.motor.Parent then
+			-- 쉬는 자리는 매번 다시 읽음 (들기 도중에 몸이 커져도 팔이 몸에서 안 떨어짐)
+			j.base = restOf(j.motor)
 			local extra = pose(play.kind, j.role, u)
 			j.motor.C0 = if extra then j.base * extra else j.base
 		end
@@ -101,7 +125,7 @@ function Lift.reset(character: Model)
 	playing[character] = nil
 	if play then
 		for _, j in play.joints do
-			j.motor.C0 = j.base
+			j.motor.C0 = restOf(j.motor)
 		end
 	end
 end

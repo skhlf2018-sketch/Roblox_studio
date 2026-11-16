@@ -7,9 +7,10 @@
 	  · receipts · stats · settings · lastSaveTime.
 	불러온 데이터는 믿지 않고 한 칸씩 검사:
 	  - 힘·돈: 0 이상 유한수, 1e60 에서 자름 (NaN·무한·음수 → 0)
-	  - dumbbellLevel 1~20 · belt 1~12 (정수) · world = 1 ~ 띠로 열리는 월드 (Progression.worldsFromBelt) — 띠보다 앞선 월드는 못 감
+	  - dumbbellLevel 1~Dumbbells.COUNT · belt 1~Belts.COUNT (정수, 지금 22) · world = 띠로 열리는 월드 (Progression.worldsFromBelt)
+	    — 월드는 대결 띠로만 열리므로 띠와 항상 같게 맞춤 (띠 7 이상 = 월드 2 이상, 띠 14 이상 = 월드 3. 띠보다 앞선 월드도, 띠보다 뒤처진 월드도 없음)
 	  - broken: 아는 물건 id → 0 이상 정수만
-	  - powerBoost: 1 또는 표의 배수 (2 … 2048) — 아니면 1 · moneyPass·grandMaster: bool (grandMaster 는 띠 12 일 때만)
+	  - powerBoost: 1 또는 표의 배수 (2 … 2048) — 아니면 1 · moneyPass·grandMaster: bool (grandMaster 는 마지막 띠일 때만)
 	  - receipts: 1~64자 글자, 중복 없이 최근 RECEIPT_HISTORY_MAX 개 · stats: 칸마다 0 이상 유한수 · settings: 아는 키만 bool
 	저장된 버전이 이 서버보다 크면 DataService 가 이번 접속 저장을 끔 (isNewerVersion).
 ]]
@@ -181,7 +182,7 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	data.money = Economy.clampMoney(src.money)
 	data.dumbbellLevel = integerIn(src.dumbbellLevel, 1, Dumbbells.COUNT, 1)
 	data.belt = integerIn(src.belt, 1, Belts.COUNT, 1)
-	data.world = integerIn(src.world, 1, Progression.worldsFromBelt(data.belt), 1)
+	data.world = Progression.worldsFromBelt(data.belt) -- 저장된 world 는 믿지 않음 (띠에서 정해짐)
 	data.broken = DataSchema.cleanBroken(src.broken)
 	data.powerBoost = Economy.boost(src.powerBoost)
 	data.moneyPass = src.moneyPass == true

@@ -2,7 +2,7 @@
 --[[
 	TrainController — 아령 들기 (선임)
 	  - 수련 매트(MapLayout.isOnTrainMat) 위에 서면 화면 아래 큰 "들기" 버튼 (터치: 오른쪽 점프 버튼 위). 매트 밖이면 숨김.
-	  - 누르는 순간 Train() 한 번 + 누르고 있으면 0.25초마다 (초당 4번).
+	  - 누르는 순간 Train() 한 번 + 누르고 있으면 Config.AUTO_REPEAT_SECONDS (0.22초)마다 (초당 4.5번 — 서버 한도 5번 아래).
 	    매트 위에서 화면 "빈 곳"을 눌러도 한 번 — 물건·버튼·표지판(ClickDetector 가 있는 모델)을 누른 것이면 들기는 안 보냄
 	    (물건 클릭은 BreakController 가 Hit 만 보냄).
 	  - 손에 진짜 아령 (shared/DumbbellLook: 손잡이 봉 + 원판, 무거울수록 크고 여러 장 · 상한 넘으면 빛).

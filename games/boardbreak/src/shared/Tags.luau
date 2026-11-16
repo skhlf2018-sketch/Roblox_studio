@@ -18,7 +18,7 @@ local Tags = {
 	DuelArena = "DuelArena",
 	-- 아령 가게. Attr: World → 가게 창 → BuyDumbbell()
 	DumbbellShop = "DumbbellShop",
-	-- 띠 표지판 (12개 띠와 지금 내 띠). Attr: World
+	-- 띠 표지판 (띠 Belts.COUNT 개(지금 22)와 지금 내 띠). Attr: World
 	BeltBoard = "BeltBoard",
 	-- 월드 이동 문 (로비). Attr: World(문이 있는 월드), TargetWorld(가는 월드) → Travel(TargetWorld)
 	WorldDoor = "WorldDoor",

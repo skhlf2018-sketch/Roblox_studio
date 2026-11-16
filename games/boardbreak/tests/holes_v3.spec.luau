@@ -1255,19 +1255,65 @@ return function(T, Loader)
 		end
 	)
 
-	T.skip(
-		"[B-6b] 뿌리 좌표가 NaN 이면 심사 시작 · 대결 시작 · 심사·대결 송판 치기가 통과함 (C-1)",
-		"ExamService.near (ExamService.luau:62) — dx*dx+dz*dz > r² 가 NaN 이면 거짓, |y 차| > r 도 거짓이라 '가깝다' 로 지나가고 isOnTrainMat(NaN) 이 거짓이라 not 으로 참. 좌표 한 축만 NaN 이어도 심사대·대결장이 아무리 멀어도 시작 · 송판 치기 (BreakRules.inReach 는 NaN 을 거름)",
+	T.test(
+		"[B-6b] C-1 고침: 뿌리 좌표가 NaN 이면 (축 하나만) 심사 시작 · 대결 시작 · 심사·대결 송판 치기 전부 안 됨 — ExamService.near 가 NaN 을 거름",
 		function()
 			weirdPositionCheck({ 0 / 0 }, { exam = true })
 		end
 	)
 
-	T.skip(
-		"[B-6c] 뿌리 높이(y)가 NaN 이면 매트 높이 검사가 빠져 들림 (C-1)",
-		"MapLayout.isOnTrainMat (MapLayout.luau:412) 의 y < 아래 or y > 위 가 NaN 이면 둘 다 거짓이라 높이 검사를 지나감 (x·z 가 매트 안이면 들림). x 나 z 가 NaN 이면 onSpot 이 막아 줌",
+	T.test(
+		"[B-6c] C-1 고침: 뿌리 좌표가 NaN 이면 (높이 포함, 축 하나만) 들기 안 됨 — MapLayout.isOnTrainMat 높이 검사 · SizeService.isOnTrainMat 이 NaN 을 거름",
 		function()
 			weirdPositionCheck({ 0 / 0 }, { train = true })
+		end
+	)
+
+	T.test(
+		"[B-6d] C-1 고침 (같은 모양 전부): NaN 이 섞인 자리는 매트 · 문 · 물건 닿기 어디서도 '안' — MapLayout.isOnTrainMat · doorAt · BreakRules.inReach (월드 1·2·3, 큰 몸 포함)",
+		function()
+			local H = setup()
+			local ML = H.MapLayout
+			local BR = H.shared("BreakRules")
+			local nan = 0 / 0
+			for world = 1, 3 do
+				local mat = ML.trainMats(world)[1]
+				local door = ML.doors(world)[1]
+				local target = ML.targetPosition(ML.targetIds(world)[1])
+				for axis = 1, 3 do
+					local function with(x, y, z)
+						local c = { x, y, z }
+						c[axis] = nan
+						return { x = c[1], y = c[2], z = c[3] }
+					end
+					local label = string.format("월드 %d 축 %d", world, axis)
+					T.falsy(ML.isOnTrainMat(with(mat.x, 3, mat.z), world), label .. " 매트")
+					T.eq(ML.doorAt(with(door.x, door.y + 3, door.z), world, 1), nil, label .. " 문")
+					T.eq(ML.doorAt(with(door.x, door.y + 3, door.z), world, 13.9), nil, label .. " 문 (거인)")
+					T.falsy(BR.inReach(with(target.x, target.y + 3, target.z), target, 1e9, 1e9), label .. " 물건")
+					-- 물건 자리 쪽이 NaN 이어도 멂
+					T.falsy(
+						BR.inReach(
+							{ x = target.x, y = target.y, z = target.z },
+							with(target.x, target.y, target.z),
+							1e9,
+							6
+						),
+						label .. " 물건 자리 NaN"
+					)
+				end
+				-- 진짜 자리는 그대로 됨 (월드 1 결과 그대로)
+				T.truthy(
+					ML.isOnTrainMat({ x = mat.x, y = 3 * ML.worldScale(world), z = mat.z }, world),
+					"월드 " .. world .. " 매트"
+				)
+				T.eq(
+					ML.doorAt({ x = door.x, y = door.y + 3, z = door.z }, world, 1),
+					door.world,
+					"월드 " .. world .. " 문"
+				)
+			end
+			H.uninstall()
 		end
 	)
 
@@ -2074,34 +2120,42 @@ return function(T, Loader)
 		end
 	)
 
-	T.skip(
-		"[D-3b] 터무니없이 큰 띠 값 (1e15 · 1e308) 이 최고 띠(22 — 월드 3 · 돈 ×200) 로 올라감 (C-2)",
-		"DataSchema.luau:184 integerIn(src.belt, 1, COUNT, 1) 이 범위 밖 큰 값을 맨 위(22)로 맞춤 — NaN · 무한은 1 로 돌아가는데 1e308 은 22 (힘 · 돈이 1e60 으로 맞춰지는 것과 같은 방식이지만 띠는 월드·배율 ×200 이 같이 따라옴)",
+	T.test(
+		"[D-3b] C-2 고침: 터무니없이 큰 띠 값 (23 · 1e15 · 1e308) 은 최고 띠(22)로 올라가지 않고 1 로 (월드 1 · 배율 1) — 수석 DataSchema.integerOr",
 		function()
 			local H = setup()
-			for i, belt in { 1e15, 1e308 } do
+			for i, belt in { 23, 1e15, 1e308 } do
 				local _, _, data = joinReal(H, 1200 + i, { version = 1, power = 100, belt = belt })
-				T.truthy(
-					data.belt < 22,
+				T.eq(
+					data.belt,
+					1,
 					"터무니없는 띠 " .. tostring(belt) .. " → 띠 " .. data.belt .. " 월드 " .. data.world
 				)
+				T.eq(data.world, 1)
+				T.eq(data.grandMaster, false)
 			end
+			T.eq(#H.warnings, 0, table.concat(H.warnings, " | "))
+			H.uninstall()
 		end
 	)
 
-	T.skip(
-		"[D-3c] 저장된 띠가 22 인데 그랜드 마스터 표시가 없으면 (손으로 고친 저장 · 위 D-3b) 띠 22 + GrandMaster 거짓이 됨 (C-2)",
-		"DataSchema.reconcile 가 grandMaster = 저장된 표시 and 띠 22 로만 정함 — 띠에서 정하지 않아서 한쪽 방향(표시 ⇒ 22)만 지켜짐. 심사·대결·개발 명령은 둘을 같이 쓰므로 정상 플레이에서는 안 생김",
+	T.test(
+		"[D-3c] C-2 고침: 그랜드 마스터는 띠에서 정함 — 저장된 띠가 22 면 표시가 없어도 참 · 22 가 아니면 표시가 있어도 거짓",
 		function()
 			local H = setup()
-			local _, _, data = joinReal(H, 1210, { version = 1, power = 100, belt = 22 })
+			local p, _, data = joinReal(H, 1210, { version = 1, power = 100, belt = 22 })
 			T.truthy(data.grandMaster, "띠 22 인데 그랜드 마스터 아님")
+			T.eq(p:GetAttribute("GrandMaster"), true, "Attribute 도")
+			local _, _, d2 = joinReal(H, 1211, { version = 1, power = 100, belt = 21, grandMaster = true })
+			T.eq(d2.grandMaster, false, "띠 21 + 표시 → 거짓")
+			T.eq(#H.warnings, 0, table.concat(H.warnings, " | "))
+			H.uninstall()
 		end
 	)
 
 	T.skip(
 		"[D-4] 옛 12띠 저장 (version 1 그대로) 이 22띠 표에서 진행도가 줄어듦: 옛 그랜드 마스터 → 9단 띠 · 월드 2 (월드 3 · 칭호 사라짐) · 옛 대결 4번 → 파랑 띠 · 월드 1 (C-3)",
-		"Config.SCHEMA_VERSION 이 1 그대로라 DataSchema.migrate 가 띠 번호를 안 옮김 — 12띠의 번호가 22띠 표에서 다른 띠를 가리킴. 게시 전 저장이면 무시해도 되지만 게시 뒤에는 version 2 + 번호 옮기기 필요",
+		"게시 전이라 일부러 안 고침 (C-3 — 지금 저장은 스튜디오 시험 데이터뿐, /reset 으로 지움). Config.SCHEMA_VERSION 이 1 그대로라 DataSchema.migrate 가 띠 번호를 안 옮김 — 게시한 뒤에 옛 저장이 생기면 version 2 + 번호 옮기기 (4→7 · 8→14 · 12→22) 가 필요",
 		function()
 			local H = setup()
 			local _, _, data =
@@ -2636,10 +2690,11 @@ return function(T, Loader)
 		end
 	)
 
-	T.skip(
-		"[F-2] 옛 가정이 남은 글 (주석): 12개 띠 · 월드의 4번째 띠 · 9단 띠 = 그랜드 마스터 · 옛 추천 힘 숫자 · 반복 0.25초 (C-4)",
-		"주석만 틀림 (동작은 표에서 읽음): Remotes.luau:18 · Tags.luau:21 · Theme.luau:78 · BeltController.luau:10 · Visuals.luau:6 · TrainController.luau:5 — 낮음",
+	T.test(
+		"[F-2] C-4 고침: 옛 가정이 남은 글 (주석) 없음 — 12개 띠 · 월드의 4번째 띠 · 9단 띠 = 그랜드 마스터 · 옛 추천 힘 숫자 · 반복 0.25초 · 안 쓰는 WORLD_SPACING 상수도 지움",
 		function()
+			local ML = Loader.require("ReplicatedStorage/Shared/Data/MapLayout")
+			T.eq(ML.WORLD_SPACING, nil, "WORLD_SPACING 지움 (원점은 ORIGIN_X)")
 			local offenders = {}
 			eachSourceLine(function(name, n, line)
 				-- 일부러 옛날을 말하는 글 (옛 12개 표 · '4개씩 가정 없음') 은 통과

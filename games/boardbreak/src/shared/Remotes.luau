@@ -15,7 +15,7 @@
 	                           심사 중이면 "exam", 대결 중이면 "duel" (심사·대결 송판 치기 — 같은 Remote, 같은 속도 제한)
 	  BuyDumbbell()            다음 아령 사기 (순서대로만)
 	  StartExam()              승급 심사 시작 (심사대 ExamPad 근처, 다음 띠가 심사 띠일 때 — 힘 조건 없음, 약하면 떨어질 뿐)
-	  StartDuel()              시험관 대결 시작 (대결장 DuelArena 근처, 다음 띠가 그 월드 4번째 띠일 때)
+	  StartDuel()              시험관 대결 시작 (대결장 DuelArena 근처, 다음 띠가 그 월드 대결 띠(마지막 띠 — Belts.duelOf)일 때)
 	  Travel(worldIndex)       열린 월드로 이동 (서버가 순간이동: MapLayout.spawn(world))
 	  SetSetting(key, value)   설정 (Config.SETTINGS 의 키, boolean)
 

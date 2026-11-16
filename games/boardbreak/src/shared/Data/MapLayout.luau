@@ -63,7 +63,6 @@ export type RoadMat = Spot & { targetId: string }
 MapLayout.WORLD_COUNT = 3
 -- 월드 원점 x. 월드 3 (배율 ≈ 11) 은 x 로 약 ±2,400 · z 로 약 -1,000 ~ 6,000 까지 → 이웃 월드와 5,000 스터드 넘게 떨어지게
 MapLayout.ORIGIN_X = { 0, 10000, 30000 }
-MapLayout.WORLD_SPACING = 10000 -- (옛 이름 — 원점 사이 간격은 ORIGIN_X 가 기준)
 MapLayout.FLOOR_Y = 0
 MapLayout.LOBBY_HALF = 50 -- 로비 x·z 반 너비 (배율 1)
 MapLayout.ROAD_HALF = 7 -- 물건 줄 가운데 길 반 너비 (배율 1)
@@ -409,7 +408,7 @@ local function makeView(scaleOf: (number) -> number)
 			return false
 		end
 		local s = S(world)
-		if y < MapLayout.FLOOR_Y - 3 * s or y > MapLayout.FLOOR_Y + 10 * s then
+		if not (y >= MapLayout.FLOOR_Y - 3 * s and y <= MapLayout.FLOOR_Y + 10 * s) then -- NaN 높이도 밖 (C-1)
 			return false
 		end
 		for _, m in L.trainMats(world) do
@@ -493,7 +492,7 @@ local function makeView(scaleOf: (number) -> number)
 		local s = S(world)
 		local body = math.max(1, tonumber(bodyScale) or 1)
 		local pad = MapLayout.BODY_RADIUS * body
-		if y < MapLayout.FLOOR_Y - 3 * s or y > MapLayout.FLOOR_Y + 10.4 * s + 6 * body then
+		if not (y >= MapLayout.FLOOR_Y - 3 * s and y <= MapLayout.FLOOR_Y + 10.4 * s + 6 * body) then -- NaN 높이도 밖 (C-1)
 			return nil
 		end
 		for _, d in L.doors(world) do

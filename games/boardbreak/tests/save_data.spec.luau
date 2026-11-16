@@ -69,9 +69,14 @@ return function(T, Loader)
 		T.eq(big.world, 3)
 		T.truthy(big.grandMaster)
 		T.eq(DataSchema.reconcile("garbage", 0).belt, 1, "표가 아님")
-		-- 띠 22개 (결정 16번): 띠 개수로 자르고, 월드는 띠에 맞춤 (띠 ≥ 8 → 월드 ≥ 2 · 띠 ≥ 15 → 월드 3)
-		T.eq(DataSchema.reconcile({ belt = 99 }, 0).belt, Belts.COUNT, "99 → 마지막 띠")
-		T.eq(DataSchema.reconcile({ belt = 99 }, 0).world, 3)
+		-- 띠 22개 (결정 16번): 범위 밖은 1 (맨 위로 안 맞춤 — C-2), 월드는 띠에 맞춤 (띠 ≥ 8 → 월드 ≥ 2 · 띠 ≥ 15 → 월드 3)
+		T.eq(DataSchema.reconcile({ belt = 99 }, 0).belt, 1, "99 → 1 (C-2)")
+		T.eq(DataSchema.reconcile({ belt = 99 }, 0).world, 1)
+		T.eq(
+			DataSchema.reconcile({ belt = Belts.COUNT }, 0).grandMaster,
+			true,
+			"마지막 띠면 표시 없어도 그랜드 마스터 (C-2)"
+		)
 		T.eq(DataSchema.reconcile({ belt = 12, world = 3, grandMaster = true }, 0).world, 2, "9단 띠는 월드 2")
 		T.eq(DataSchema.reconcile({ belt = 12, world = 3, grandMaster = true }, 0).grandMaster, false)
 		T.eq(DataSchema.reconcile({ belt = 8, world = 1 }, 0).world, 2, "띠 8 인데 월드 1 → 2 로 맞춤")

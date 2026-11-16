@@ -63,7 +63,11 @@ function SizeService.bodyExtra(player: Player): number
 end
 
 -- 수련 매트 위인가 (큰 몸은 뿌리가 높이 있어서 "보통 몸이면 뿌리가 있을 높이" 로도 봄 — 겉모습이 아직 안 커졌어도 됨)
+-- 좌표가 NaN 이면 아님 (C-1)
 function SizeService.isOnTrainMat(player: Player, position: Vector3, world: number): boolean
+	if position.X ~= position.X or position.Y ~= position.Y or position.Z ~= position.Z then
+		return false
+	end
 	if MapLayout.isOnTrainMat(position, world) then
 		return true
 	end

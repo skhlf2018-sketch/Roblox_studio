@@ -7,10 +7,10 @@
 	  · receipts · stats · settings · lastSaveTime.
 	불러온 데이터는 믿지 않고 한 칸씩 검사:
 	  - 힘·돈: 0 이상 유한수, 1e60 에서 자름 (NaN·무한·음수 → 0)
-	  - dumbbellLevel 1~Dumbbells.COUNT · belt 1~Belts.COUNT (정수, 지금 22) · world = 띠로 열리는 월드 (Progression.worldsFromBelt)
+	  - dumbbellLevel 1~Dumbbells.COUNT · belt 1~Belts.COUNT (정수, 지금 22 — 범위 밖이면 1, C-2) · world = 띠로 열리는 월드 (Progression.worldsFromBelt)
 	    — 월드는 대결 띠로만 열리므로 띠와 항상 같게 맞춤 (띠 7 이상 = 월드 2 이상, 띠 14 이상 = 월드 3. 띠보다 앞선 월드도, 띠보다 뒤처진 월드도 없음)
 	  - broken: 아는 물건 id → 0 이상 정수만
-	  - powerBoost: 1 또는 표의 배수 (2 … 2048) — 아니면 1 · moneyPass·grandMaster: bool (grandMaster 는 마지막 띠일 때만)
+	  - powerBoost: 1 또는 표의 배수 (2 … 2048) — 아니면 1 · moneyPass: bool · grandMaster = 마지막 띠인가 (저장된 표시는 안 봄)
 	  - receipts: 1~64자 글자, 중복 없이 최근 RECEIPT_HISTORY_MAX 개 · stats: 칸마다 0 이상 유한수 · settings: 아는 키만 bool
 	저장된 버전이 이 서버보다 크면 DataService 가 이번 접속 저장을 끔 (isNewerVersion).
 ]]
@@ -93,6 +93,18 @@ local function integerIn(value: unknown, minValue: number, maxValue: number, fal
 		return fallback
 	end
 	return math.clamp(math.floor(n), minValue, maxValue)
+end
+
+-- 범위 안 정수면 그 값, 범위 밖이면 (맨 끝으로 맞추지 않고) fallback — 띠처럼 월드·배율이 따라오는 칸 (C-2)
+local function integerOr(value: unknown, minValue: number, maxValue: number, fallback: number): number
+	if typeof(value) ~= "number" then
+		return fallback
+	end
+	local n = math.floor(value :: number)
+	if not (n >= minValue and n <= maxValue) then -- NaN · ±무한 · 범위 밖
+		return fallback
+	end
+	return n
 end
 
 function DataSchema.versionOf(raw: unknown): number
@@ -181,12 +193,13 @@ function DataSchema.reconcile(raw: unknown, now: number): PlayerData
 	data.power = Economy.clampPower(src.power)
 	data.money = Economy.clampMoney(src.money)
 	data.dumbbellLevel = integerIn(src.dumbbellLevel, 1, Dumbbells.COUNT, 1)
-	data.belt = integerIn(src.belt, 1, Belts.COUNT, 1)
+	-- 띠: 범위 밖(23 · 1e15 · 1e308 …)은 맨 위가 아니라 1 로 (월드 3 · 돈 ×200 이 같이 따라오므로 — C-2)
+	data.belt = integerOr(src.belt, 1, Belts.COUNT, 1)
 	data.world = Progression.worldsFromBelt(data.belt) -- 저장된 world 는 믿지 않음 (띠에서 정해짐)
 	data.broken = DataSchema.cleanBroken(src.broken)
 	data.powerBoost = Economy.boost(src.powerBoost)
 	data.moneyPass = src.moneyPass == true
-	data.grandMaster = src.grandMaster == true and Progression.isGrandMaster(data.belt)
+	data.grandMaster = Progression.isGrandMaster(data.belt) -- 저장된 표시는 안 믿음 (띠에서 정해짐 — C-2)
 	data.receipts = DataSchema.cleanReceipts(src.receipts)
 	data.stats = DataSchema.cleanStats(src.stats)
 	data.settings = DataSchema.cleanSettings(src.settings)

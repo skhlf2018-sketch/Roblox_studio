@@ -75,7 +75,7 @@ local function rgb(t: { number }?): Color3
 	return Color3.fromRGB(t[1], t[2], t[3])
 end
 
--- 띠 색 (1~12, 없으면 회색)
+-- 띠 색 (1~Belts.COUNT, 없으면 회색)
 function Theme.beltColor(index: number): Color3
 	local belt = Belts.get(index)
 	return rgb(if belt then belt.color else nil)

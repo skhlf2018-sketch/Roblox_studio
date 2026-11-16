@@ -46,6 +46,7 @@ end
 -- 살아 있는 캐릭터가 spot 에서 (baseRadius × 그 월드 worldScale) 안, 그리고 수련 매트(도장·길가) 위가 아님
 --   (죽은 캐릭터는 시작·치기 안 됨 — A-1 · 대결장 옆 도장 매트 가장자리가 대결장 가운데에서 20 스터드라
 --    반경만으로는 못 막음 → 매트 위면 따로 막음 — A-2). 높이 차는 몸이 커진 만큼 더 봐 줌 (큰 몸은 뿌리가 높음)
+--   좌표가 NaN 이면 안 됨 (C-1 — 비교는 "안쪽이면 참" 으로만 써서 NaN 비교가 거짓 → 멂)
 local function near(
 	player: Player,
 	spot: { x: number, y: number, z: number }?,
@@ -58,8 +59,13 @@ local function near(
 	end
 	local radius = ExamService.radiusFor(baseRadius, world)
 	local p = root.Position
+	if p.X ~= p.X or p.Y ~= p.Y or p.Z ~= p.Z then
+		return false
+	end
 	local dx, dz = p.X - spot.x, p.Z - spot.z
-	if dx * dx + dz * dz > radius * radius or math.abs(p.Y - spot.y) > radius + SizeService.bodyExtra(player) then
+	local inside = dx * dx + dz * dz <= radius * radius
+		and math.abs(p.Y - spot.y) <= radius + SizeService.bodyExtra(player)
+	if not inside then
 		return false
 	end
 	return not SizeService.isOnTrainMat(player, p, world)

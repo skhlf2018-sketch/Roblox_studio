@@ -53,7 +53,7 @@ function BreakRules.inReach(
 		return false
 	end
 	local dx, dz = cx - targetPos.x, cz - targetPos.z
-	if dx * dx + dz * dz > r * r then
+	if not (dx * dx + dz * dz <= r * r) then -- (NaN 이 어디서 와도 "멂" — C-1)
 		return false
 	end
 	local up = if type(vertical) == "number"

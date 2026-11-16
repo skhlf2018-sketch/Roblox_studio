@@ -749,7 +749,7 @@ end
 -- 시험관 NPC (도복 + 띠, 파트로만). base = 발 가운데, 앞(-Z) = 플레이어 쪽
 local function blockExaminer(parent: Instance, base: CFrame, beltColor: Color3, name: string): Model
 	local npc = Build.model("Examiner", parent)
-	local dobok = c(248, 248, 250)
+	local dobok = c(22, 22, 26) -- 사장님 2026-11-16: 검은 도복
 	local skin = c(255, 214, 170)
 	local torso = Build.part(npc, "Block", Vector3.new(2.2, 2.4, 1.2), base * CFrame.new(0, 3.6, 0), dobok, M.Fabric, {
 		collide = false,
@@ -843,11 +843,12 @@ end
 -- 사범님 (진짜 로블록스 R15 몸). 서버에서 기본 몸을 만들고 피부·흰 도복·깃·띠·머리카락·얼굴을 입힘 (외부 에셋 id 없음).
 --   Dojo.createRig() 이 실패하면(테스트 환경 등) 블록 모델로 대체. 테스트는 Dojo.createRig 를 바꿔 끼울 수 있음.
 local SKIN = c(234, 184, 146)
-local DOBOK = c(250, 250, 252)
--- 월드마다: 띠 색 · 깃/소매 줄 색 · 머리 색 (1 검은 띠 · 2 빨강 줄 · 3 금색)
+-- 사장님 2026-11-16: "사범님 도복 검정색" → 검은 도복. 띠·깃은 검정 위에서 보이게 밝은 색으로
+local DOBOK = c(22, 22, 26)
+-- 월드마다: 띠 색 · 깃/소매 줄 색 · 머리 색 (1 빨간 띠 + 흰 줄 · 2 금색 띠 + 빨강 줄 · 3 금색 띠 + 금색 줄)
 local EXAMINER_STYLE = {
-	{ belt = c(20, 20, 24), trim = c(20, 20, 24), hair = c(30, 24, 20) },
-	{ belt = c(20, 20, 24), trim = c(210, 30, 40), hair = c(50, 36, 28) },
+	{ belt = c(210, 30, 40), trim = c(240, 240, 240), hair = c(30, 24, 20) },
+	{ belt = c(240, 190, 40), trim = c(210, 30, 40), hair = c(50, 36, 28) },
 	{ belt = c(240, 190, 40), trim = c(240, 190, 40), hair = c(200, 200, 205) },
 }
 
@@ -933,7 +934,8 @@ function Dojo.dressExaminer(rig: Model, world: number, name: string)
 		local p = bodyPart(rig, n)
 		if p then
 			p.Color = DOBOK
-			p.Material = M.Fabric
+			-- 사장님 2026-11-16: 검은 도복 (매끈한 재질 — Fabric 은 얼룩덜룩해 보임)
+			p.Material = Enum.Material.SmoothPlastic
 		end
 	end
 	for _, n in { "Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot" } do

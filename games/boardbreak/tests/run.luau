@@ -25,6 +25,7 @@ local specs = {
 	{ "save_data.spec", require("./save_data.spec") },
 	{ "design_doc.spec", require("./design_doc.spec") },
 	{ "holes_v1.spec", require("./holes_v1.spec") },
+	{ "holes_v2.spec", require("./holes_v2.spec") },
 }
 
 local filters: { string } = {}

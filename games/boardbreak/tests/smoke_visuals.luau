@@ -881,12 +881,12 @@ local function body()
 	check(
 		r15
 			and r15.HumanoidRootPart.Anchored
-			and r15.UpperTorso.Color == roblox.Color3.fromRGB(250, 250, 252)
+			and r15.UpperTorso.Color == roblox.Color3.fromRGB(22, 22, 26)
 			and r15:FindFirstChild("Collar")
 			and r15:FindFirstChild("Hair")
 			and r15:FindFirstChild("BeltKnot")
 			and r15.Head:FindFirstChildOfClass("Decal"),
-		"R15 사범님: 뿌리 고정 · 흰 도복 · 깃 · 머리카락 · 띠 매듭 · 얼굴"
+		"R15 사범님: 뿌리 고정 · 검은 도복(사장님 2026-11-16) · 깃 · 머리카락 · 띠 매듭 · 얼굴"
 	)
 	local foot = r15 and r15.LeftFoot.CFrame.Position.Y - 0.15
 	check(foot and math.abs(foot - 0.6) < 0.05, "사범님 발이 대결장 바닥 위 (" .. tostring(foot) .. ")")

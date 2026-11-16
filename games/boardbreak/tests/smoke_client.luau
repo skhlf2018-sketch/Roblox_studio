@@ -1457,6 +1457,43 @@ local function body()
 	end
 	check(not dup, '서버 "힘이 부족해요" 토스트는 안 띄움 (물건 위 빨간 글이 대신)')
 
+	-- 큰 창이 열려 있으면 알림이 창 글씨를 가리지 않게 창 위 한 줄로 (사장님: 아령 가게 위에 글씨 겹침)
+	local function toastCount(): number
+		local n = 0
+		for _, t in toast:GetChildren() do
+			if t:IsA("TextLabel") then
+				n += 1
+			end
+		end
+		return n
+	end
+	local NotifyWindows = client("UI/Windows")
+	local ShopForToast = client("Controllers/DumbbellShopController")
+	holdDelays = true
+	fire(R.Notify, { kind = "success", text = "알림 하나" })
+	fire(R.Notify, { kind = "success", text = "알림 둘" })
+	check(toast.AnchorPoint.Y == 1 and toastCount() >= 2, "창 닫힘: 알림은 아래 가운데 여러 줄")
+	NotifyWindows.open(ShopForToast.NAME)
+	check(
+		toast.AnchorPoint.Y == 0 and toast.Position.Y.Scale == 0,
+		"창 열림: 알림 자리가 화면 맨 위 (창 위 빈 자리)"
+	)
+	check(toastCount() == 1, "창 열림: 알림은 한 줄만 남음")
+	fire(R.Notify, { kind = "success", text = "창 위 알림" })
+	local onTop: TextLabel? = nil
+	for _, t in toast:GetChildren() do
+		if t:IsA("TextLabel") then
+			onTop = t
+		end
+	end
+	check(
+		toastCount() == 1 and onTop ~= nil and onTop.Text == "창 위 알림" and onTop.BackgroundTransparency < 1,
+		"창 열림: 새 알림이 와도 한 줄 · 어두운 칩 바탕"
+	)
+	NotifyWindows.close()
+	check(toast.AnchorPoint.Y == 1 and toast.Position.Y.Scale == 1, "창 닫힘: 알림 자리가 다시 아래")
+	holdDelays = false
+
 	print("[폰 화면 844×390 (터치)]")
 	local Layout = client("UI/Layout")
 	local Ui = client("UI/Ui")

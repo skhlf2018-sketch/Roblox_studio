@@ -51,6 +51,14 @@ local Sounds: { [string]: SoundDef } = {
 	HitWeak = sfx(9119103113, 0.35, "힘이 부족해서 튕김 (뿡)", 0.05),
 	Break = sfx(74041775202019, 0.7, "물건이 깨짐 (쨍그랑/와장창)", 0.1),
 	BreakBig = sfx(9113540599, 0.8, "큰 물건이 깨짐 (쿵 + 반짝)"),
+	-- 사장님 결정 18번 "부서질 때 클수록 콰쾅쾅쾅": 큰 물건일수록 아래 층을 여러 번 겹침 (client/BreakFx 가 순서·크기·높낮이를 정함).
+	--   본부장이 스튜디오에서 불러와지는 것만 확인함 (소리는 아직 안 들어 봄) — 하나가 안 불러와지면 그 층만 빠짐.
+	--   volume 은 기본값 (BreakFx 가 층마다 다시 정함)
+	BreakBoom = sfx(138533090376585, 0.9, "큰 폭발 쾅 (Explosion Blast Impact Boom, 3.06초)"),
+	BreakStone1 = sfx(114854126016837, 0.8, "돌덩이 깨짐 1 (StoneBlock_Break1, 2.74초)"),
+	BreakStone2 = sfx(140038243287227, 0.8, "돌덩이 깨짐 2 (StoneBlock_Break2, 3.44초)"),
+	BreakDebris = sfx(94676636060460, 0.6, "와르르 잔해 꼬리 ([SFX] Debris, 2.55초)"),
+	WoodCrack = sfx(9126240449, 0.7, "두꺼운 나무 쪼개짐 (Wood Crack Thick Splintering, 3.36초)"),
 	-- 심사·대결·띠
 	ExamStart = sfx(601149073, 0.6, "승급 심사 시작 (반짝 알림)"),
 	DuelStart = sfx(16903690359, 0.6, "시험관 대결 시작 (삐용 신호)"),

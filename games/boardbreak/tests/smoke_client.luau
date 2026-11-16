@@ -1737,6 +1737,113 @@ local function body()
 	)
 	setAttr(A.CurrentWorld, 1)
 
+	do
+		print("[깨짐 소리 · 흔들림 — 클수록 콰쾅쾅쾅 (사장님 결정 18번)]")
+		local BreakFx = client("BreakFx")
+		local SoundC = ctrl("SoundController")
+		local SoundsD = shared("Data/Sounds")
+		local TargetsD = shared("Data/Targets")
+		local mono, gapOk, varied, capOk = true, true, true, true
+		local prev
+		for _, t in TargetsD.list do
+			local p = BreakFx.plan(t.id)
+			if prev then
+				if
+					p.booms < prev.booms
+					or p.volume < prev.volume - 1e-9
+					or p.pitch > prev.pitch + 1e-9
+					or p.shake.angle < prev.shake.angle - 1e-9
+				then
+					mono = false
+					print("    줄어듦: " .. t.id)
+				end
+			end
+			if p.volume > BreakFx.LOUDNESS_CAP + 1e-9 then
+				capOk = false
+			end
+			for k = 2, p.booms do
+				local a, b = p.layers[k - 1], p.layers[k]
+				local gap = b.delay - a.delay
+				if gap < BreakFx.GAP_MIN - 1e-9 or gap > BreakFx.GAP_MAX + 1e-9 then
+					gapOk = false
+				end
+				if
+					a.sound == b.sound
+					and math.abs(a.speed - b.speed) < 1e-3
+					and math.abs(a.volume - b.volume) < 1e-3
+				then
+					varied = false
+				end
+			end
+			prev = p
+		end
+		check(
+			mono,
+			"솜 → 우주: 쾅 수·전체 크기·흔들림은 안 줄고 높낮이는 안 올라감 (41개)"
+		)
+		check(capOk, "전체 크기(층 볼륨 합) ≤ " .. BreakFx.LOUDNESS_CAP .. " (겹쳐도 안 찢어짐)")
+		check(gapOk, "쾅 사이 간격 0.12 ~ 0.2 초")
+		check(varied, "다음 쾅은 소리·높낮이·크기가 달라짐 (같은 소리 기계적 반복 아님)")
+		local cotton = BreakFx.plan("cotton")
+		check(
+			cotton.booms == 1
+				and #cotton.layers == 1
+				and cotton.layers[1].sound == "Break"
+				and math.abs(cotton.layers[1].volume - SoundsD.Break.volume) < 1e-9
+				and cotton.pitch == 1,
+			"솜 = 쾅 1번 · 오늘의 Break 그대로 (쨍)"
+		)
+		local uni = BreakFx.plan("universe")
+		local debris = false
+		for _, l in uni.layers do
+			if l.sound == "BreakDebris" then
+				debris = true
+			end
+		end
+		check(
+			uni.booms == BreakFx.BOOM_MAX and debris and uni.pitch < 0.6,
+			string.format("우주 = 쾅 %d번(최대) + 와르르 꼬리 · 낮은 소리 %.2f", uni.booms, uni.pitch)
+		)
+		local named = true
+		for _, l in uni.layers do
+			local d = SoundsD[l.sound]
+			if not (d and string.find(d.id, "rbxassetid://", 1, true) and d.id ~= "rbxassetid://0") then
+				named = false
+			end
+		end
+		check(named, "깨짐 층 소리가 전부 Sounds 표에 있음 (id 0 아님)")
+		check(
+			BreakFx.plan("universe", true).shake.angle == 0 and uni.shake.angle > cotton.shake.angle * 5,
+			string.format(
+				"흔들림: 솜 %.2f° → 우주 %.2f° (%.2f초) · 저사양이면 0",
+				cotton.shake.angle,
+				uni.shake.angle,
+				uni.shake.seconds
+			)
+		)
+		SoundC.setSfxEnabled(false)
+		local off = SoundC.playBreak("universe")
+		SoundC.setSfxEnabled(true)
+		check(off == 0, "효과음 끔 → 깨짐 소리 0층")
+		local nC = SoundC.playBreak("cotton")
+		local nU, sumU = SoundC.playBreak("universe")
+		check(
+			nC == 1 and nU == #uni.layers and sumU <= BreakFx.LOUDNESS_CAP + 1e-9,
+			string.format("소리 켬: 솜 %d층 · 우주 %d층 (합 %.2f)", nC, nU, sumU)
+		)
+		check(SoundC.playBreak("exam") == 1, "심사·대결 송판 = 오늘의 Break 하나")
+		-- 흔들림: 내 물건이 깨질 때만, 심사 송판은 안 흔듦
+		local BreakC2 = ctrl("BreakController")
+		BreakC2.lastShake = nil
+		fire(R.HitResult, { targetId = "exam", damage = 1, hp = 0, hpMax = 1, broken = true })
+		check(BreakC2.lastShake == nil, "심사·대결 송판이 깨져도 화면 안 흔듦")
+		fire(R.HitResult, { targetId = "universe", damage = 9, hp = 0, hpMax = 9, broken = true, reward = 1 })
+		check(
+			BreakC2.lastShake and math.abs(BreakC2.lastShake.angle - uni.shake.angle) < 1e-9,
+			"우주가 깨지면 그 크기만큼 흔들림"
+		)
+	end
+
 	print("[힘 배수]")
 	local Boost = ctrl("BoostController")
 	Windows.open(Boost.NAME)

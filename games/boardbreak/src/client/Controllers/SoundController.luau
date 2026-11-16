@@ -6,6 +6,7 @@
 	  SoundController.setTense(true)              -- 심사·대결 중 긴장 음악
 	  SoundController.setMusicEnabled(false) / setSfxEnabled(false)  -- 설정 창
 	ID 가 "rbxassetid://0" 이면 조용히 건너뜀.
+	깨짐: SoundController.playBreak(targetId) — 클수록 콰쾅쾅쾅 (client/BreakFx, 사장님 결정 18번). 층마다 playLayer (못 불러온 층만 빠짐).
 	서버 이벤트: Notify(error/success) · HitResult(치기·약함·깨짐) · TrainResult(들기, 0.2초에 한 번) · ExamState · DuelState
 	  · 돈이 들어오면 짤랑 (2초에 한 번) · CurrentWorld 가 바뀌면 월드 음악.
 ]]
@@ -20,6 +21,7 @@ local Sounds = require(Shared.Data.Sounds)
 local Remotes = require(Shared.Remotes)
 local Tags = require(Shared.Tags)
 local Net = require(script.Parent.Parent.Net)
+local BreakFx = require(script.Parent.Parent.BreakFx)
 
 local SoundController = {}
 
@@ -99,6 +101,76 @@ function SoundController.play(name: string)
 	else
 		SoundService:PlayLocalSound(base)
 	end
+end
+
+-- 한 층: name 소리를 volume · speed 로, delay 초 뒤에 (효과음 설정이 꺼져 있으면 안 냄 — 기다리는 동안 꺼져도).
+--   그 소리가 아직 안 불러와졌거나 못 불러오면 그 층만 빠짐 (나머지 층은 그대로). 보냈으면 true
+function SoundController.playLayer(name: string, volume: number, speed: number, delay: number): boolean
+	if not sfxEnabled then
+		return false
+	end
+	local def = Sounds[name]
+	if not def or not hasId(def) or def.music then
+		return false
+	end
+	local base = getSound(name)
+	if not base then
+		return false
+	end
+	local okLoad, loaded = pcall(function(): boolean
+		return base.IsLoaded
+	end)
+	if okLoad and loaded == false then
+		return false -- 아직 못 불러옴 (다음 깨짐부터 남)
+	end
+	local variation = def.pitchVariation or 0
+	local function go()
+		if not sfxEnabled then
+			return
+		end
+		local s = base:Clone()
+		s.Volume = volume
+		-- 그 소리의 높낮이 흔들기(pitchVariation, Break 는 ±0.1)도 오늘처럼 — 같은 물건을 여러 번 깨도 똑같지 않게
+		local v = variation
+		s.PlaybackSpeed = speed * (if v > 0 then 1 + rng:NextNumber(-v, v) else 1)
+		s.Parent = getFolder()
+		s.Ended:Connect(function()
+			s:Destroy()
+		end)
+		s:Play()
+		task.delay(10, function()
+			if s.Parent then
+				s:Destroy()
+			end
+		end)
+	end
+	if delay > 0 then
+		task.delay(delay, go)
+	else
+		go()
+	end
+	return true
+end
+
+-- 깨짐 소리 (사장님 결정 18번 — 클수록 콰쾅쾅쾅, client/BreakFx.plan). 물건이 아니면 (심사·대결 송판) 오늘의 Break 하나.
+--   반환: 보낸 층 수 · 그 층들 볼륨 합 (테스트용)
+function SoundController.playBreak(targetId: string?): (number, number)
+	if not sfxEnabled then
+		return 0, 0
+	end
+	if type(targetId) ~= "string" or BreakFx.progress(targetId) == nil then
+		SoundController.play("Break")
+		return 1, Sounds.Break.volume
+	end
+	local plan = BreakFx.plan(targetId)
+	local count, sum = 0, 0
+	for _, layer in plan.layers do
+		if SoundController.playLayer(layer.sound, layer.volume, layer.speed, layer.delay) then
+			count += 1
+			sum += layer.volume
+		end
+	end
+	return count, sum
 end
 
 local function fadeTo(target: Sound?)
@@ -188,6 +260,10 @@ function SoundController.start()
 	local E = Remotes.ToClient
 	local player = Players.LocalPlayer
 	local Attr = Tags.PlayerAttributes
+	-- 깨짐 층 소리를 미리 만들어 불러오기 시작 (처음 깰 때 빠지지 않게)
+	for _, name in { "Break", "BreakBig", "BreakBoom", "BreakStone1", "BreakStone2", "BreakDebris", "WoodCrack" } do
+		getSound(name)
+	end
 
 	Net.on(E.Notify, function(payload: any)
 		local kind = if type(payload) == "table" then payload.kind else nil
@@ -206,8 +282,7 @@ function SoundController.start()
 		if r.reason == "weak" then
 			SoundController.play("HitWeak")
 		elseif r.broken then
-			local big = type(r.reward) == "number" and r.reward >= 1e6
-			SoundController.play(if big then "BreakBig" else "Break")
+			SoundController.playBreak(r.targetId)
 		else
 			SoundController.play("Hit")
 		end

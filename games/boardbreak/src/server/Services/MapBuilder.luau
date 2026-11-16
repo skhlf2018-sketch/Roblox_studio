@@ -604,9 +604,9 @@ local function buildWorld(world: number, parent: Instance): Folder
 	local s = MapLayout.worldScale(world)
 	Build.scaleTree(folder, MapLayout.worldOrigin(world).x, s)
 	Build.splitLarge(folder)
-	-- 큰 월드 도장: 천장 들보 등이 천장 아래로 빛(범위 60)을 못 내림 → 지붕 전체가 그림자를 안 드리워서 해·하늘빛이 들어옴
-	--   (본부장 2026-11-16: 월드 3 도장 안이 까맘. 조명은 클라 WorldController.LIGHTS 가 월드마다 맞춤)
-	if s > 1 then
+	-- 모든 월드 도장 지붕은 그림자를 안 드리움 → 해·하늘빛이 들어옴 (본부장 2026-11-16: 월드 3 도장 안이 까맘 ·
+	--   결정 17번: 천장이 높아져도(월드 1 은 100) 바닥이 어두워지지 않게. 조명은 클라 WorldController.LIGHTS 가 월드마다 맞춤)
+	do
 		local lobby = folder:FindFirstChild("Lobby")
 		local roofF = lobby and lobby:FindFirstChild("Roof")
 		if roofF then

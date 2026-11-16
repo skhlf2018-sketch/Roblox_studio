@@ -20,6 +20,7 @@ local Layout = MapLayout.base
 local Belts = require(Shared.Data.Belts)
 local Worlds = require(Shared.Data.Worlds)
 local Dumbbells = require(Shared.Data.Dumbbells)
+local Sizes = require(Shared.Data.Sizes)
 local DumbbellLook = require(Shared.DumbbellLook)
 local BeltLook = require(Shared.BeltLook)
 local Format = require(Shared.Format)
@@ -200,21 +201,23 @@ local function shell(world: number, parent: Instance, theme: Theme)
 			end
 		end
 	end
-	-- 모서리 기둥 4개 + 등불
+	-- 모서리 기둥 4개 (천장까지 — 사장님 결정 17번) + 등불 (높이는 그대로, 기둥 바깥 모서리에 붙음)
+	local pillarH = Dojo.roofY(world) + 1
 	for _, p in { { rect.x0, rect.z0 }, { rect.x1, rect.z0 }, { rect.x0, rect.z1 }, { rect.x1, rect.z1 } } do
 		Build.solid(
 			parent,
 			"Pillar",
-			Vector3.new(3.5, WALL_H + 3, 3.5),
-			CFrame.new(p[1], (WALL_H + 3) / 2, p[2]),
+			Vector3.new(3.5, pillarH, 3.5),
+			CFrame.new(p[1], pillarH / 2, p[2]),
 			theme.trim,
 			M.Wood
 		)
+		local out = Vector3.new(if p[1] < cx then -1 else 1, 0, if p[2] < 0 then -1 else 1) * 2.4
 		local lamp = Build.part(
 			parent,
 			"Ball",
 			Vector3.one * 2.2,
-			CFrame.new(p[1], WALL_H + 4.2, p[2]),
+			CFrame.new(Vector3.new(p[1], WALL_H + 4.2, p[2]) + out),
 			c(255, 220, 140),
 			M.Neon
 		)
@@ -255,12 +258,115 @@ local function shell(world: number, parent: Instance, theme: Theme)
 end
 
 ------------------------------------------------------------------
--- 지붕·천장 (Lobby/Roof). 벽 위(WALL_H)부터 천장(ROOF_Y)까지 윗벽으로 메우고, 천장 판 + 월드 테마 지붕 + 천장 등.
+-- 지붕·천장 (Lobby/Roof). 벽 위(WALL_H)부터 천장(roofY)까지 윗벽으로 메우고, 천장 판 + 월드 테마 지붕 + 천장 등.
 --   정문(가운데 x ±10)은 높이 17 까지 비워 둠, 월드 문은 로비 안쪽에 있어 그대로.
+--   사장님 결정 17번 ("도장을 뚫고 나왔으니까 천장만 겁나 높여"): 천장 아랫면(진짜 스터드, 월드 배율 곱한 값)이
+--   가장 큰 몸 키(Sizes.MAX_SCALE × AVATAR_HEIGHT ≈ 75) × CLEAR(1.3) ≈ 98 이상. 바닥 넓이·자리·문·표지판·매트 높이는 그대로.
+--   천장 등은 옛 천장 높이(LAMP_CEIL 20)에 매단 채 (끈으로 새 천장에) → 바닥 밝기는 예전과 같음.
+--   새로 생긴 높은 윗벽: 나무 띠(BAND_GAP 마다) · 월드 1 은 태권도 정신 현수막 5장 + 위쪽 채광창 (빈 굴뚝처럼 안 보이게).
 ------------------------------------------------------------------
 
-Dojo.ROOF_Y = 20 -- 천장 아랫면 높이 (카메라가 천장에 끼지 않게 18 이상)
+Dojo.ROOF_Y = 20 -- 옛 천장 높이 (배율 1). 천장 등은 이 높이에 매달림
+Dojo.LAMP_CEIL = 20
+Dojo.CLEAR = 1.3
+-- 월드마다 천장 아랫면 (배율 1 숫자): 1 = 100 (진짜 100) · 2 = 24 (진짜 132 — 110 은 75 몸 옆에서 답답해 보여 조금 올림) · 3 = 20 (진짜 220)
+Dojo.ROOF_Y_BY_WORLD = { 100, 24, 20 }
+Dojo.BAND_GAP = 18
 Dojo.GATE_CLEAR = 17 -- 정문 위 윗벽 아랫면
+
+-- 그 월드 천장 아랫면 (배율 1 숫자). 표 값과 "가장 큰 몸 × CLEAR ÷ 월드 배율" 중 큰 것
+function Dojo.roofY(world: number): number
+	local w = math.clamp(math.floor(world), 1, #Dojo.ROOF_Y_BY_WORLD)
+	local need = Dojo.CLEAR * Sizes.MAX_SCALE * Sizes.AVATAR_HEIGHT / MapLayout.worldScale(w)
+	return math.max(Dojo.ROOF_Y_BY_WORLD[w], math.ceil(need))
+end
+
+-- 높아진 윗벽 안쪽 꾸밈 (윗벽이 20 스터드 넘게 높을 때만): 나무 띠 (BAND_GAP 마다, 우주 도장은 네온) ·
+--   월드 1: 태권도 정신 현수막 (양옆 벽 4장 예의·염치·인내·극기 + 뒤 벽 태권도) · 위쪽 채광창 8개. 전부 안 부딪힘·그림자 없음
+local TENETS = { "예\n의", "염\n치", "인\n내", "극\n기" }
+
+function Dojo.upperDecor(world: number, folder: Instance, theme: Theme, rect: MapLayout.Rect, top: number)
+	if top - WALL_H < 20 then
+		return
+	end
+	local cx = (rect.x0 + rect.x1) / 2
+	local cz = (rect.z0 + rect.z1) / 2
+	local w = rect.x1 - rect.x0
+	local d = rect.z1 - rect.z0
+	local bandMat = if theme.glow then M.Neon else M.Wood
+	local bandColor = if theme.glow then theme.accent else theme.trim
+	local y = WALL_H + Dojo.BAND_GAP
+	while y < top - 6 do
+		for _, b in
+			{
+				{ rect.x0 + 0.3, cz, 0.6, d },
+				{ rect.x1 - 0.3, cz, 0.6, d },
+				{ cx, rect.z0 + 0.3, w, 0.6 },
+				{ cx, rect.z1 - 0.3, w, 0.6 },
+			}
+		do
+			Build.part(
+				folder,
+				"Block",
+				Vector3.new(b[3], 1.2, b[4]),
+				CFrame.new(b[1], y, b[2]),
+				bandColor,
+				bandMat,
+				{ name = "WallBand", shadow = false }
+			)
+		end
+		y += Dojo.BAND_GAP
+	end
+	if world ~= 1 then
+		return
+	end
+	local red, blue = c(190, 40, 45), c(40, 70, 170)
+	local bannerH = 34
+	local by = WALL_H + 14 + bannerH / 2 -- 아래 끝 23 (문 간판·띠 표지판·가게 간판 위)
+	local function banner(pos: Vector3, inward: Vector3, width: number, color: Color3, text: string)
+		local board = Build.part(
+			folder,
+			"Block",
+			Vector3.new(width, bannerH, 0.3),
+			CFrame.lookAt(pos, pos + inward),
+			color,
+			M.Fabric,
+			{ name = "Banner", shadow = false }
+		)
+		local frame = Build.surfaceSign(board, color, 10)
+		Build.text(frame, "Word", UDim2.fromScale(0.1, 0.06), UDim2.fromScale(0.8, 0.88), text, WHITE)
+	end
+	local k = 0
+	for _, side in { -1, 1 } do
+		local x = if side < 0 then rect.x0 + 0.5 else rect.x1 - 0.5
+		for _, z in { -20, 20 } do
+			k += 1
+			banner(
+				Vector3.new(x, by, cz + z),
+				Vector3.new(-side, 0, 0),
+				10,
+				if k % 2 == 1 then red else blue,
+				TENETS[k]
+			)
+		end
+	end
+	banner(Vector3.new(cx, by, rect.z0 + 0.5), Vector3.new(0, 0, 1), 26, red, "🥋 태권도")
+	-- 위쪽 채광창 (양옆 벽, 천장 아래)
+	for _, side in { -1, 1 } do
+		local x = if side < 0 then rect.x0 + 0.25 else rect.x1 - 0.25
+		for _, z in { -36, -12, 12, 36 } do
+			Build.part(
+				folder,
+				"Block",
+				Vector3.new(0.4, 12, 14),
+				CFrame.new(x, top - 10, cz + z),
+				c(205, 225, 240),
+				M.Glass,
+				{ name = "ClerestoryWindow", transparency = 0.25, shadow = false }
+			)
+		end
+	end
+end
 
 local function roof(world: number, parent: Instance, theme: Theme)
 	local folder = Build.folder("Roof", parent)
@@ -269,7 +375,7 @@ local function roof(world: number, parent: Instance, theme: Theme)
 	local cz = (rect.z0 + rect.z1) / 2
 	local w = rect.x1 - rect.x0
 	local d = rect.z1 - rect.z0
-	local top = Dojo.ROOF_Y
+	local top = Dojo.roofY(world)
 	local uh = top - WALL_H
 	local uy = WALL_H + uh / 2
 	-- 윗벽 (왼·오른·뒤 + 앞 양옆 + 정문 위 상인방)
@@ -348,20 +454,36 @@ local function roof(world: number, parent: Instance, theme: Theme)
 			if world == 2 then M.Metal else M.Wood
 		)
 	end
-	-- 천장 등 3 × 2 (안이 어둡지 않게)
+	-- 천장 등 3 × 2 (안이 어둡지 않게) — 옛 천장 높이에 매닮 (빛 범위 상한 60 이라 높은 천장에 붙이면 바닥까지 못 닿음)
+	local lampY = math.min(top, Dojo.LAMP_CEIL) - 1
 	for _, lx in { -30, 0, 30 } do
 		for _, lz in { -22, 18 } do
 			local lamp = Build.part(
 				folder,
 				"CeilingLamp",
 				Vector3.new(6, 0.4, 2.5),
-				CFrame.new(cx + lx, top - 1, cz + lz),
+				CFrame.new(cx + lx, lampY, cz + lz),
 				if world == 3 then theme.accent else c(255, 245, 220),
 				M.Neon
 			)
 			Build.light(lamp, if world == 3 then c(210, 190, 255) else c(255, 240, 215), 45, 1.4)
+			if top - lampY > 2 then
+				-- 매단 끈 (천장 → 등)
+				local len = top - lampY - 0.2
+				Build.part(
+					folder,
+					"LampCord",
+					Vector3.new(0.25, len, 0),
+					CFrame.new(cx + lx, lampY + 0.2 + len / 2, cz + lz),
+					c(40, 36, 32),
+					M.SmoothPlastic,
+					{ shadow = false }
+				)
+			end
 		end
 	end
+	-- 높아진 윗벽 꾸밈 (사장님 결정 17번)
+	Dojo.upperDecor(world, folder, theme, rect, top)
 	-- 월드 테마 지붕 (천장 위)
 	if world == 1 then
 		-- 기와지붕: 박공 쐐기 2개 + 처마 + 용마루

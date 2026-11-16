@@ -958,6 +958,102 @@ local function body()
 		"세 월드 도장 천장: 로비를 다 덮음 · 높이 ≥ 18 · 천장 등 · 정문·월드 문 뚫림"
 	)
 
+	do
+		print("[도장 천장 높이 (사장님 결정 17번 — 천장만 겁나 높임)]")
+		local SizesR = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Sizes"))
+		local needClear = Dojo.CLEAR * SizesR.MAX_SCALE * SizesR.AVATAR_HEIGHT
+		local clearOk, keepOk, lampOk, attrOk = true, true, true, true
+		for w = 1, 3 do
+			local ws = MapLayout.worldScale(w)
+			local lobby = map["World" .. w].Lobby
+			local ceil = lobby.Roof.Ceiling
+			local bottom = ceil.CFrame.Position.Y - ceil.Size.Y / 2
+			print(
+				string.format(
+					"    월드 %d: 천장 아랫면 %.1f (필요 %.1f = %.1f × 가장 큰 몸 %.1f) · 배율 1 숫자 %d",
+					w,
+					bottom,
+					needClear,
+					Dojo.CLEAR,
+					SizesR.MAX_SCALE * SizesR.AVATAR_HEIGHT,
+					Dojo.roofY(w)
+				)
+			)
+			if bottom < needClear then
+				clearOk = false
+			end
+			if math.abs((ceil:GetAttribute("RoofBottom") or -1) - bottom) > 0.01 then
+				attrOk = false
+			end
+			-- 등은 옛 천장 높이(19)에 매달림 → 바닥 밝기 그대로
+			for _, d in lobby.Roof:GetChildren() do
+				if
+					d.Name == "CeilingLamp"
+					and math.abs(d.CFrame.Position.Y - (Dojo.LAMP_CEIL - 1) * ws) > 0.01 * ws
+				then
+					lampOk = false
+				end
+			end
+			-- 쓰는 것들은 높이 그대로: 문 구멍 위 9.4 · 정문 간판 15 · 띠 표지판 위 16 (× 배율)
+			for _, door in CollectionService:GetTagged(Tags.WorldDoor) do
+				if door:GetAttribute(A.World) == w then
+					local p = door.Portal
+					if math.abs(p.CFrame.Position.Y + p.Size.Y / 2 - 9.4 * ws) > 0.01 * ws then
+						keepOk = false
+					end
+				end
+			end
+			local gs = lobby:FindFirstChild("GateSign")
+			if not gs or math.abs(gs.CFrame.Position.Y - 15 * ws) > 0.01 * ws then
+				keepOk = false
+			end
+			for _, b in CollectionService:GetTagged(Tags.BeltBoard) do
+				if b:GetAttribute(A.World) == w then
+					local bp = b.PrimaryPart
+					if math.abs(bp.CFrame.Position.Y + bp.Size.Y / 2 - 16 * ws) > 0.01 * ws then
+						keepOk = false
+					end
+				end
+			end
+		end
+		check(
+			clearOk,
+			string.format(
+				"세 월드 천장 아랫면 ≥ 1.3 × 가장 큰 몸 키 = %.1f (진짜 스터드)",
+				needClear
+			)
+		)
+		check(attrOk, "Ceiling Attr RoofBottom = 진짜 천장 아랫면")
+		check(
+			lampOk,
+			"천장 등은 옛 천장 높이(19 × 배율)에 매달림 — 빛 범위 60 안에 바닥 (밝기 그대로)"
+		)
+		check(keepOk, "문 구멍 · 정문 간판 · 띠 표지판 높이는 그대로 (천장만 높아짐)")
+		local decor = { Banner = 0, ClerestoryWindow = 0, WallBand = 0, LampCord = 0 }
+		for _, d in map.World1.Lobby.Roof:GetChildren() do
+			if decor[d.Name] then
+				decor[d.Name] += 1
+			end
+		end
+		check(
+			decor.Banner >= 5 and decor.ClerestoryWindow >= 8 and decor.WallBand >= 12 and decor.LampCord == 6,
+			string.format(
+				"월드 1 높은 윗벽 꾸밈: 태권도 현수막 %d · 채광창 %d · 나무 띠 %d · 등 끈 %d",
+				decor.Banner,
+				decor.ClerestoryWindow,
+				decor.WallBand,
+				decor.LampCord
+			)
+		)
+		local pillarOk = true
+		for _, d in map.World1.Lobby:GetChildren() do
+			if d.Name == "Pillar" and d.CFrame.Position.Y + d.Size.Y / 2 < Dojo.roofY(1) then
+				pillarOk = false
+			end
+		end
+		check(pillarOk, "모서리 기둥이 새 천장까지 올라감")
+	end
+
 	print("[가게 진열 아령]")
 	local Dumbbells = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Dumbbells"))
 	local shopM = CollectionService:GetTagged(Tags.DumbbellShop)[1]
@@ -1036,73 +1132,84 @@ local function body()
 	)
 	check(PVS.apply(fakeChar(), 5) == 0, "힘 100 미만 → 아우라 없음")
 
-	print("[띠 표지판 (사장님 결정 16번 — Belts.COUNT 개)]")
-	local Belts = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Belts"))
-	local BeltLook = requireNode(Loader.get("ReplicatedStorage/Shared/BeltLook"))
-	for _, board in CollectionService:GetTagged(Tags.BeltBoard) do
-		local w = board:GetAttribute(A.World)
-		local sg = board.PrimaryPart and board.PrimaryPart:FindFirstChild("Sign")
-		local grid = sg and sg.Board:FindFirstChild("Belts")
-		local cellsOk, inside, overlapCells, gradOk = 0, true, 0, true
-		local rects = {}
-		for i = 1, Belts.COUNT do
-			local cell = grid and grid:FindFirstChild("Belt_" .. i)
-			if cell then
-				cellsOk += 1
-				local p, s = cell.Position, cell.Size
-				local r = { x0 = p.X.Scale, x1 = p.X.Scale + s.X.Scale, z0 = p.Y.Scale, z1 = p.Y.Scale + s.Y.Scale }
-				if r.x0 < 0 or r.z0 < 0 or r.x1 > 1 + 1e-6 or r.z1 > 1 + 1e-6 or p.X.Offset ~= 0 or p.Y.Offset ~= 0 then
-					inside = false
-					print(string.format("    표지판 밖: 월드 %d Belt_%d", w, i))
-				end
-				for _, o in rects do
-					if rectsOverlap(r, o) then
-						overlapCells += 1
+	do
+		print("[띠 표지판 (사장님 결정 16번 — Belts.COUNT 개)]")
+		local Belts = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Belts"))
+		local BeltLook = requireNode(Loader.get("ReplicatedStorage/Shared/BeltLook"))
+		for _, board in CollectionService:GetTagged(Tags.BeltBoard) do
+			local w = board:GetAttribute(A.World)
+			local sg = board.PrimaryPart and board.PrimaryPart:FindFirstChild("Sign")
+			local grid = sg and sg.Board:FindFirstChild("Belts")
+			local cellsOk, inside, overlapCells, gradOk = 0, true, 0, true
+			local rects = {}
+			for i = 1, Belts.COUNT do
+				local cell = grid and grid:FindFirstChild("Belt_" .. i)
+				if cell then
+					cellsOk += 1
+					local p, s = cell.Position, cell.Size
+					local r = { x0 = p.X.Scale, x1 = p.X.Scale + s.X.Scale, z0 = p.Y.Scale, z1 = p.Y.Scale + s.Y.Scale }
+					if
+						r.x0 < 0
+						or r.z0 < 0
+						or r.x1 > 1 + 1e-6
+						or r.z1 > 1 + 1e-6
+						or p.X.Offset ~= 0
+						or p.Y.Offset ~= 0
+					then
+						inside = false
+						print(string.format("    표지판 밖: 월드 %d Belt_%d", w, i))
+					end
+					for _, o in rects do
+						if rectsOverlap(r, o) then
+							overlapCells += 1
+						end
+					end
+					table.insert(rects, r)
+					local stripe = cell:FindFirstChild("Stripe")
+					local many = #BeltLook.colors(Belts.get(i)) > 1
+					if not stripe or (many and not stripe:FindFirstChild("BeltGradient")) then
+						gradOk = false
 					end
 				end
-				table.insert(rects, r)
-				local stripe = cell:FindFirstChild("Stripe")
-				local many = #BeltLook.colors(Belts.get(i)) > 1
-				if not stripe or (many and not stripe:FindFirstChild("BeltGradient")) then
-					gradOk = false
+			end
+			check(
+				cellsOk == Belts.COUNT and inside and overlapCells == 0 and gradOk,
+				string.format(
+					"월드 %d 띠 표지판: Belt_1..%d 칸이 다 판 안 · 안 겹침 · 여러 색 띠는 그러데이션 (%d칸)",
+					w,
+					Belts.COUNT,
+					cellsOk
+				)
+			)
+		end
+		local board1 = CollectionService:GetTagged(Tags.BeltBoard)[1]
+		local top = board1.PrimaryPart.CFrame.Position.Y + board1.PrimaryPart.Size.Y / 2
+		local ws1 = MapLayout.worldScale(board1:GetAttribute(A.World))
+		check(
+			top < Dojo.ROOF_Y * ws1,
+			string.format("띠 표지판 위 끝 %.1f < 천장 %.0f", top / ws1, Dojo.ROOF_Y)
+		)
+		local rb = Belts.byId and Belts.byId("rainbow")
+		if rb then
+			check(#BeltLook.colors(rb) >= 6, "무지개 띠 = 무지개 6색")
+		end
+		local yt = Belts.byId and Belts.byId("youtube")
+		if yt then
+			local cell
+			for _, d in board1:GetDescendants() do
+				if d.Name == "Belt_" .. yt.index then
+					cell = d
 				end
 			end
-		end
-		check(
-			cellsOk == Belts.COUNT and inside and overlapCells == 0 and gradOk,
-			string.format(
-				"월드 %d 띠 표지판: Belt_1..%d 칸이 다 판 안 · 안 겹침 · 여러 색 띠는 그러데이션 (%d칸)",
-				w,
-				Belts.COUNT,
-				cellsOk
-			)
-		)
-	end
-	local board1 = CollectionService:GetTagged(Tags.BeltBoard)[1]
-	local top = board1.PrimaryPart.CFrame.Position.Y + board1.PrimaryPart.Size.Y / 2
-	local ws1 = MapLayout.worldScale(board1:GetAttribute(A.World))
-	check(top < Dojo.ROOF_Y * ws1, string.format("띠 표지판 위 끝 %.1f < 천장 %.0f", top / ws1, Dojo.ROOF_Y))
-	local rb = Belts.byId and Belts.byId("rainbow")
-	if rb then
-		check(#BeltLook.colors(rb) >= 6, "무지개 띠 = 무지개 6색")
-	end
-	local yt = Belts.byId and Belts.byId("youtube")
-	if yt then
-		local cell
-		for _, d in board1:GetDescendants() do
-			if d.Name == "Belt_" .. yt.index then
-				cell = d
+			local imgs = 0
+			for _, d in cell and cell:GetDescendants() or {} do
+				if d:IsA("ImageLabel") or d:IsA("Decal") then
+					imgs += 1
+				end
 			end
+			check(cell and imgs == 0, "유튜브 띠 칸: 이름 + 빨강·흰 천만 (그림·로고 없음)")
 		end
-		local imgs = 0
-		for _, d in cell and cell:GetDescendants() or {} do
-			if d:IsA("ImageLabel") or d:IsA("Decal") then
-				imgs += 1
-			end
-		end
-		check(cell and imgs == 0, "유튜브 띠 칸: 이름 + 빨강·흰 천만 (그림·로고 없음)")
 	end
-
 	print("[크기 (사장님 결정 13번) — 월드 배율 · 맵]")
 	local Sizes = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Sizes"))
 	local Build = requireNode(Loader.get("ServerScriptService/Server/Map/Build"))
@@ -1497,7 +1604,7 @@ local function body()
 		return (col.R + col.G + col.B) / 3
 	end
 	local shadowOk = true
-	for w = 2, 3 do
+	for w = 1, 3 do
 		for _, d in map["World" .. w].Lobby.Roof:GetDescendants() do
 			if d:IsA("BasePart") and d.CastShadow then
 				shadowOk = false
@@ -1505,7 +1612,10 @@ local function body()
 			end
 		end
 	end
-	check(shadowOk, "큰 월드(2·3) 도장 지붕은 그림자를 안 드리움 (해·하늘빛이 안으로)")
+	check(
+		shadowOk,
+		"세 월드 도장 지붕은 그림자를 안 드리움 (해·하늘빛이 안으로 — 천장이 높아져도 바닥 밝기 그대로)"
+	)
 	local lobby3 = map.World3.Lobby
 	local glow, glowBad = 0, false
 	for _, d in lobby3:GetChildren() do

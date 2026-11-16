@@ -37,6 +37,7 @@ local Ui = require(Client.UI.Ui)
 local ActionButton = require(Client.UI.ActionButton)
 local NotifyController = require(script.Parent.NotifyController)
 local Cracks = require(Client.Cracks)
+local BreakFx = require(Client.BreakFx)
 
 local BreakController = {}
 BreakController.button = nil :: ActionButton.Handle?
@@ -329,6 +330,48 @@ local function shards(model: Model)
 	end
 end
 
+-- 화면 흔들림: 카메라가 자리를 정한 바로 뒤(RenderPriority.Camera + 1)에 작은 회전을 곱함 — 카메라 스크립트와 안 싸우고
+--   쌓이지 않음 (다음 프레임에 카메라가 다시 정함). angle 도 · seconds 초 동안 점점 줄어듦. 반환: 흔들었나
+BreakController.lastShake = nil :: { angle: number, seconds: number }?
+local shakeAngle, shakeSeconds, shakeStart = 0, 0, 0
+local shakeBound = false
+function BreakController.shakeCamera(angle: number, seconds: number): boolean
+	if angle <= 0 or seconds <= 0 then
+		return false
+	end
+	BreakController.lastShake = { angle = angle, seconds = seconds }
+	-- 더 센 흔들림이 오면 덮어씀 (약한 것이 센 것을 끊지 않게)
+	local now = os.clock()
+	local remain = shakeSeconds - (now - shakeStart)
+	if remain > 0 and shakeAngle * remain / math.max(shakeSeconds, 1e-3) > angle then
+		return true
+	end
+	shakeAngle, shakeSeconds, shakeStart = angle, seconds, now
+	if shakeBound then
+		return true
+	end
+	shakeBound = true
+	pcall(function()
+		RunService:BindToRenderStep("BreakShake", Enum.RenderPriority.Camera.Value + 1, function()
+			local camera = Workspace.CurrentCamera
+			local u = 1 - (os.clock() - shakeStart) / math.max(shakeSeconds, 1e-3)
+			if u <= 0 or not camera then
+				shakeBound = false
+				RunService:UnbindFromRenderStep("BreakShake")
+				return
+			end
+			local a = math.rad(shakeAngle) * u
+			camera.CFrame = camera.CFrame
+				* CFrame.Angles(
+					(math.random() * 2 - 1) * a,
+					(math.random() * 2 - 1) * a,
+					(math.random() * 2 - 1) * a * 0.5
+				)
+		end)
+	end)
+	return true
+end
+
 function BreakController.onHitResult(r: any)
 	if type(r) ~= "table" or type(r.targetId) ~= "string" then
 		return
@@ -353,6 +396,9 @@ function BreakController.onHitResult(r: any)
 		floatText(hitbox, top + k, "-" .. Format.number(damage), C.white, 26, 0.6, 3 * k)
 	end
 	if r.broken then
+		-- 클수록 크게 흔들림 (사장님 결정 18번 — 소리는 SoundController.playBreak, 둘 다 BreakFx.plan). 저사양이면 안 흔듦
+		local fx = BreakFx.plan(id, State.setting("lowGraphics", false))
+		BreakController.shakeCamera(fx.shake.angle, fx.shake.seconds)
 		shards(model)
 		Cracks.clear(model)
 		known[id] = nil

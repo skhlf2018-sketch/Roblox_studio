@@ -1,5 +1,5 @@
 --!nocheck
--- Products: 힘 배수 순서대로 열림 (2배를 사야 4배) · 가진 패스로 배수 (boostFromOwnedPasses) · id 0
+-- Products: 힘 배수 순서대로 열림 (2배를 사야 4배) · 가진 패스로 배수 (boostFromOwnedPasses) · 이상한 id
 return function(T, Loader)
 	local Products = Loader.require("ReplicatedStorage/Shared/Data/Products")
 
@@ -42,14 +42,24 @@ return function(T, Loader)
 		T.eq(Products.boostFromOwnedPasses(all), 2048, "다 가짐")
 	end)
 
-	T.test("id 0 이면 byPassId / byProductId 는 nil (영수증으로 패스를 주지 않음)", function()
-		T.eq(Products.byPassId(0), nil)
-		T.eq(Products.byProductId(0), nil)
-		T.eq(Products.byProductId(-1), nil)
-		T.eq(Products.byPassId(0 / 0), nil)
-		T.truthy(Products.isValidBoost(1))
-		T.truthy(Products.isValidBoost(2048))
-		T.falsy(Products.isValidBoost(3))
-		T.eq(Products.get(nil), nil)
-	end)
+	T.test(
+		"이상한 id (0 · 음수 · NaN · ±무한 · 소수 · 글자 · 모르는 id) 이면 byPassId / byProductId 는 nil (영수증으로 패스를 주지 않음)",
+		function()
+			T.eq(Products.byPassId(0), nil)
+			T.eq(Products.byProductId(0), nil)
+			T.eq(Products.byProductId(-1), nil)
+			T.eq(Products.byPassId(0 / 0), nil)
+			for _, id in { -1, math.huge, -math.huge, 1.5, 12345, "2092088488", {}, true } do
+				T.eq(Products.byPassId(id), nil, "byPassId " .. tostring(id))
+			end
+			local real = Products.get("power_2").productId
+			T.eq(Products.byPassId(real + 0.5), nil, "소수")
+			T.eq(Products.byPassId(real + 1), nil, "남의 패스 id (한 칸 옆)")
+			T.eq(Products.byProductId(real), nil, "패스 id 로 개발자 상품 영수증 안 됨")
+			T.truthy(Products.isValidBoost(1))
+			T.truthy(Products.isValidBoost(2048))
+			T.falsy(Products.isValidBoost(3))
+			T.eq(Products.get(nil), nil)
+		end
+	)
 end

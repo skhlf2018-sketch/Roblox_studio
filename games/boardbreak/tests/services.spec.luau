@@ -354,16 +354,12 @@ return function(T, Loader)
 	end)
 
 	T.test(
-		"syncPasses: id 가 붙으면 소유 확인으로 (웹에서 건너뛰어 산 것은 낸 값만큼, 절대 낮추지 않음)",
+		"syncPasses: 진짜 패스 id 로 소유 확인 (웹에서 건너뛰어 산 것은 낸 값만큼, 절대 낮추지 않음)",
 		function()
 			local H = setup()
 			local Products = H.shared("Data/Products")
-			-- 시험용 id 붙이기 (진짜 표는 0)
-			for i, prod in Products.powerBoosts do
-				prod.productId = 9000 + i
-			end
 			local p, session, data = join(H, 1)
-			H.market.owned[1] = { [9000 + 3] = true } -- power_8 만 (8 R$)
+			H.market.owned[1] = { [Products.get("power_8").productId] = true } -- power_8 만 (8 R$)
 			H.run(function()
 				return H.S.Product.syncPasses(p)
 			end)
@@ -374,9 +370,6 @@ return function(T, Loader)
 				return H.S.Product.syncPasses(p)
 			end)
 			T.eq(data.powerBoost, 4, "확인에 없어도 낮추지 않음")
-			for _, prod in Products.powerBoosts do
-				prod.productId = 0
-			end
 			H.uninstall()
 		end
 	)

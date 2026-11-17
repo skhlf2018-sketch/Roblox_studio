@@ -1853,12 +1853,57 @@ local function body()
 		find(find(boostWin, "Boost_power_4"), "State").Text == "2배 먼저 필요",
 		'4배 카드 "2배 먼저 필요"'
 	)
-	check(find(find(boostWin, "Boost_power_2"), "State").Text == "준비 중", 'id 0 → "준비 중"')
+	-- 게시 (2026-11-17) 뒤: 패스 id 가 붙어 있음 → 다음 배수만 진짜 구매창 (PromptGamePassPurchase, 그 패스 id)
+	local Products = shared("Data/Products")
+	local function lastPrompt()
+		return marketPrompts[#marketPrompts]
+	end
+	local function closePrompt() -- 구매창이 닫힌 척 (Purchase 연타 방지 풀기)
+		MarketplaceStub.PromptGamePassPurchaseFinished:Fire(nil, 0, false)
+	end
+	check(find(find(boostWin, "Boost_power_2"), "State").Text == "", '진짜 id → "준비 중" 아님')
+	local prompts0 = #marketPrompts
 	press(find(find(boostWin, "Boost_power_2"), "BuyBoost"))
-	check(#marketPrompts == 0, "준비 중 상품 → 구매창 안 띄움 (토스트)")
+	check(
+		#marketPrompts == prompts0 + 1
+			and lastPrompt().pass == true
+			and lastPrompt().id == Products.get("power_2").productId,
+		"다음 배수(2배) → PromptGamePassPurchase(power_2 진짜 id)"
+	)
+	closePrompt()
+	for _, key in { "power_4", "power_8", "power_2048" } do
+		press(find(find(boostWin, "Boost_" .. key), "BuyBoost"))
+	end
+	check(#marketPrompts == prompts0 + 1, "잠긴 배수 (4 · 8 · 2048배) 는 구매창 안 띄움")
+	press(find(find(boostWin, "Boost_money_2"), "BuyBoost"))
+	check(
+		#marketPrompts == prompts0 + 2
+			and lastPrompt().pass == true
+			and lastPrompt().id == Products.get("money_2").productId,
+		"돈 2배 → PromptGamePassPurchase(money_2 진짜 id)"
+	)
+	closePrompt()
+	-- "준비 중" (id 가 없는 상품) 은 이 시험 안에서만 id 를 잠깐 0 으로
+	local p2 = Products.get("power_2")
+	local realId = p2.productId
+	p2.productId = 0
+	Boost.render()
+	check(find(find(boostWin, "Boost_power_2"), "State").Text == "준비 중", 'id 0 (시험용) → "준비 중"')
+	press(find(find(boostWin, "Boost_power_2"), "BuyBoost"))
+	check(#marketPrompts == prompts0 + 2, "준비 중 상품 → 구매창 안 띄움 (토스트)")
+	p2.productId = realId
+	Boost.render()
 	setAttr(A.PowerBoost, 2)
 	Boost.render()
 	check(Boost.cardState(2) == "active" and Boost.cardState(4) == "buy", "2배를 사면 4배가 열림")
+	press(find(find(boostWin, "Boost_power_4"), "BuyBoost"))
+	check(
+		#marketPrompts == prompts0 + 3 and lastPrompt().id == Products.get("power_4").productId,
+		"×2 → 다음 배수 4배 구매창 (power_4 id)"
+	)
+	press(find(find(boostWin, "Boost_power_2"), "BuyBoost"))
+	check(#marketPrompts == prompts0 + 3, "이미 가진 2배 카드는 구매창 안 띄움")
+	closePrompt()
 	check(find(boostWin, "Boost_money_2") ~= nil, "돈 2배 카드")
 	check(Purchase.granted({ key = "power_4", kind = "powerBoost" }), "ProductGranted → 축하 연출")
 	Windows.close()

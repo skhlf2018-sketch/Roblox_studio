@@ -581,12 +581,62 @@ end
 -- 월드 · 맵
 ------------------------------------------------------------------
 
+------------------------------------------------------------------
+-- 투명벽 (사장님 결정 19번: "맵은 투명벽으로 사방이 막혀있어")
+--   땅(Ground) 바깥 테두리 = MapLayout.worldRect 에 안쪽 면을 맞춘 벽 4줄 (밖으로 두께만큼). 남·북 벽이 두께만큼 더 길어서
+--   모서리가 닫힘. 아래 끝은 땅 아랫면보다 아래 (틈 없음). 배율 1 로 지은 뒤 다른 파트와 같이 키움 → 2,000 넘으면 조각 (Build.tile).
+--   높이 = 진짜 WALL_REAL_HEIGHT (≥ 3 × (가장 큰 몸 점프 + 키) ≈ 528) · 두께 = WALL_THICK × 월드 배율
+--     (가장 빠른 몸 ≈ 450 스터드/초 → 물리 한 걸음(1/240초)에 ≈ 1.9 스터드 — 월드 1 도 6 이면 세 걸음 넘게 두꺼움)
+--   보이지 않음 · 그림자 없음 · 부딪힘(모든 몸 — GiantPass 아님) · 클릭·레이캐스트·카메라에 안 걸림 (CanQuery·CanTouch 끔.
+--   로블록스 카메라 Popper 는 거의 투명한 파트와 CanQuery 꺼진 파트를 무시함)
+--   바다(월드 2)·산·빌딩 일부는 벽 밖 (닿을 수 없는 배경)
+------------------------------------------------------------------
+
+MapBuilder.WALL_THICK = 6 -- 배율 1 두께 (진짜 = × 월드 배율)
+MapBuilder.WALL_REAL_HEIGHT = math.ceil(
+	3 * (Sizes.jumpHeight(Sizes.MAX_SCALE) + Sizes.MAX_SCALE * Sizes.AVATAR_HEIGHT) / 50 + 1
+) * 50 -- 진짜 스터드 (3 × (100.6 + 75.5) = 528 → 50 단위로 올리고 한 칸 더 = 600)
+MapBuilder.WALL_BELOW = 5 -- 배율 1: 바닥(0) 아래로 (땅 판 아랫면 -2.5 보다 아래)
+
+local function boundaryWalls(world: number, parent: Instance)
+	local folder = Build.folder("Boundary", parent)
+	local r = Layout.worldRect(world)
+	local ws = MapLayout.worldScale(world)
+	local t = MapBuilder.WALL_THICK
+	local h = MapBuilder.WALL_REAL_HEIGHT / ws + MapBuilder.WALL_BELOW
+	local y = -MapBuilder.WALL_BELOW + h / 2
+	local w = r.x1 - r.x0
+	local d = r.z1 - r.z0
+	local cx, cz = (r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2
+	type Run = { name: string, size: Vector3, at: Vector3 }
+	local runs: { Run } = {
+		{ name = "WallNorth", size = Vector3.new(w + 2 * t, h, t), at = Vector3.new(cx, y, r.z1 + t / 2) },
+		{ name = "WallSouth", size = Vector3.new(w + 2 * t, h, t), at = Vector3.new(cx, y, r.z0 - t / 2) },
+		{ name = "WallEast", size = Vector3.new(t, h, d), at = Vector3.new(r.x1 + t / 2, y, cz) },
+		{ name = "WallWest", size = Vector3.new(t, h, d), at = Vector3.new(r.x0 - t / 2, y, cz) },
+	}
+	for _, run in runs do
+		local p = Build.part(folder, "Block", run.size, CFrame.new(run.at), WHITE, M.SmoothPlastic, {
+			collide = true,
+			query = false,
+			transparency = 1,
+			shadow = false,
+			name = "BoundaryWall",
+		})
+		p.CanTouch = false
+		p:SetAttribute("Run", run.name)
+	end
+	return folder
+end
+MapBuilder.boundaryWalls = boundaryWalls
+
 local function buildWorld(world: number, parent: Instance): Folder
 	local theme = MapBuilder.THEMES[world]
 	local folder = Build.folder("World" .. tostring(world), parent)
 	folder:SetAttribute(PA.World, world)
 	Dojo.build(world, folder, theme.dojo)
 	ground(world, folder, theme)
+	boundaryWalls(world, folder)
 	roadMats(world, folder, theme)
 	local targets = Build.folder("Targets", folder)
 	for _, target in Targets.byWorld(world) do

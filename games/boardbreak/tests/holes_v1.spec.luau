@@ -888,22 +888,12 @@ return function(T, Loader)
 	T.suite("holes_v1 5: 로벅스 패스")
 	------------------------------------------------------------------
 
+	-- (게시 전에는 시험용 id 를 잠깐 붙였음 — 2026-11-17 게시 뒤 진짜 id 가 붙어 있어 그대로 씀)
 	local function withPassIds(H, fn)
-		local ids = {}
-		for i, prod in H.Products.powerBoosts do
-			ids[prod] = prod.productId
-			prod.productId = 9000 + i
+		for _, prod in H.Products.passes do
+			assert(H.Products.isConfigured(prod), prod.key .. " id 없음")
 		end
-		local money = H.Products.get("money_2")
-		ids[money] = money.productId
-		money.productId = 9100
-		local ok, err = pcall(fn)
-		for prod, id in ids do
-			prod.productId = id
-		end
-		if not ok then
-			error(err, 0)
-		end
+		fn()
 	end
 
 	T.test(
@@ -1012,25 +1002,27 @@ return function(T, Loader)
 	)
 
 	T.test(
-		"패스 id 가 전부 0 이라 진짜 구매 경로가 닫혀 있음 (id 0 · 음수 · NaN · 글자 · 모르는 id 모두 지급 없음)",
+		"진짜 구매 경로 (패스 id 12개 — 게시 2026-11-17): id 0 · 음수 · NaN · 글자 · 모르는 id · 남의 패스 id 는 소유 확인도 안 하고 지급 없음 · 아무것도 안 가진 사람은 12개 확인 뒤에도 그대로",
 		function()
 			local H = setup()
 			local p, _, data = join(H, 1)
 			for _, prod in H.Products.passes do
-				T.eq(prod.productId, 0, prod.key .. " id 는 0 (게시 전)")
-				T.falsy(H.Products.isConfigured(prod))
+				T.truthy(H.Products.isConfigured(prod), prod.key .. " id 붙음")
 			end
-			for _, id in { 0, -1, 0 / 0, math.huge, 1e300, "power_2", 12345 } do
+			local other = H.Products.get("power_2").productId + 1 -- 우리 것이 아닌 패스 id
+			for _, id in { 0, -1, 0 / 0, math.huge, 1e300, "power_2", 12345, other, {} } do
 				H.S.Product.onGamePassPurchaseFinished(p, id, true)
 			end
-			T.eq(H.market.calls, 0, "소유 확인을 아예 안 부름")
+			T.eq(H.market.calls, 0, "모르는 id 는 소유 확인을 아예 안 부름")
 			T.eq(data.powerBoost, 1)
 			T.eq(data.moneyPass, false)
 			T.eq(#H.sent(p, "ProductGranted"), 0)
 			T.truthy(H.run(function()
 				return H.S.Product.syncPasses(p)
 			end))
-			T.eq(H.market.calls, 0)
+			T.eq(H.market.calls, #H.Products.passes, "12개 다 확인")
+			T.eq(data.powerBoost, 1, "안 가졌으면 그대로")
+			T.eq(data.moneyPass, false)
 			local decision = H.run(function()
 				return H.S.Product.processReceipt({ PlayerId = 1, ProductId = 0, PurchaseId = "x" })
 			end)

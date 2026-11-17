@@ -28,6 +28,7 @@ local specs = {
 	{ "holes_v2.spec", require("./holes_v2.spec") },
 	{ "sizes.spec", require("./sizes.spec") },
 	{ "size_service.spec", require("./size_service.spec") },
+	{ "product_service.spec", require("./product_service.spec") },
 	{ "holes_v3.spec", require("./holes_v3.spec") },
 }
 

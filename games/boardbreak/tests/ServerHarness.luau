@@ -571,19 +571,50 @@ function ServerHarness.install(Loader, T, options)
 	----------------------------------------------------------------
 	-- 가짜 MarketplaceService (게임패스 소유 확인 · 구매 끝 신호 · ProcessReceipt)
 	--   H.market.owned[userId][gamePassId] = true 이면 가짐. H.market.failNext = n 이면 다음 n 번 확인이 오류
+	--   (더한 것 — 예전 시험은 그대로): H.market.failAlways = true 면 늘 오류 · failFor[gamePassId] = true 면 그 패스만 오류
+	--   · delaySeconds = n 이면 답하기 전에 n 초 기다림 (가상 시간) · hang = true 면 끝내 답하지 않음 (시간 초과)
+	--   · weird = 값 이면 그 값을 돌려줌 (boolean 이 아닌 답) · lateOwned[userId][gamePassId] = n 이면 n 번째 확인부터 가짐
+	--   · log = { { userId, gamePassId } … } 확인한 차례
 	----------------------------------------------------------------
 	local market = {
 		owned = {},
 		failNext = 0,
+		failAlways = false,
+		failFor = {},
+		delaySeconds = 0,
+		hang = false,
+		weird = nil,
+		lateOwned = {},
+		seen = {},
+		log = {},
 		calls = 0,
 		ProcessReceipt = nil,
 		PromptGamePassPurchaseFinished = newSignal(),
 	}
 	function market:UserOwnsGamePassAsync(userId, gamePassId)
 		self.calls += 1
+		table.insert(self.log, { userId, gamePassId })
+		if self.hang then
+			coroutine.yield() -- 아무도 다시 깨우지 않음 = 답이 끝내 안 옴
+		end
+		if self.delaySeconds > 0 then
+			fakeTask.wait(self.delaySeconds)
+		end
 		if self.failNext > 0 then
 			self.failNext -= 1
 			error("UserOwnsGamePassAsync 실패 (가짜)")
+		end
+		if self.failAlways or self.failFor[gamePassId] then
+			error("UserOwnsGamePassAsync 실패 (가짜)")
+		end
+		if self.weird ~= nil then
+			return self.weird
+		end
+		local late = self.lateOwned[userId]
+		if late and late[gamePassId] then
+			local key = tostring(userId) .. ":" .. tostring(gamePassId)
+			self.seen[key] = (self.seen[key] or 0) + 1
+			return self.seen[key] >= late[gamePassId]
 		end
 		local set = self.owned[userId]
 		return set ~= nil and set[gamePassId] == true

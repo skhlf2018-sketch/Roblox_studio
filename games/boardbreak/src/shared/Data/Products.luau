@@ -4,14 +4,14 @@
 
 	게임패스 12개 (전부 isPass = true, 영구, 한 번만 삼):
 	  - power_2 … power_2048 (11개, kind "powerBoost"): 힘 ×value — 아령으로 오르는 힘과 칠 때 깎는 힘 둘 다.
-	      **순서대로만 열림** (2배를 사야 4배). 가진 것 중 가장 큰 배수 하나만 (곱이 아님). 가격 = 배수 [본부장 추정]
+	      **순서대로만 열림** (2배를 사야 4배). 가진 것 중 가장 큰 배수 하나만 (곱이 아님). 가격 = 배수 로벅스 (사장님 확인)
 	  - money_2 (kind "moneyPass"): 깬 돈 2배 (199 로벅스, 사장님)
 	구매창은 클라 MarketplaceService:PromptGamePassPurchase(player, productId). ProcessReceipt 는 안 옴 →
-	서버 ProductService 가 UserOwnsGamePassAsync 로 소유를 확인해서 반영 (접속할 때 syncPasses + PromptGamePassPurchaseFinished).
-	서버로 "사 줘" 하는 Remote 는 없음 (위조 방지).
+	서버 ProductService 가 UserOwnsGamePassAsync 로 소유를 확인해서 반영 (접속할 때 syncPasses + PromptGamePassPurchaseFinished
+	— 구매 끝 신호가 와도 서버가 다시 확인). 서버로 "사 줘" 하는 Remote 는 없음 (위조 방지).
 
-	id 는 아래 IDS 한 곳에만 (0 = 아직 Creator Dashboard 에서 안 만듦 → Products.isConfigured = false → 화면 "준비 중").
-	게임을 게시한 뒤 어른과 함께 만들고 숫자를 붙여 넣음. 개발 명령 /buy <key> 로 시험.
+	id 는 아래 IDS 한 곳에만 — 2026-11-17 게시한 체험 (universe 10777294360 · place 87244998186948) 에 만든 진짜 게임패스 12개.
+	Products.isConfigured(product) = id 가 있나 (없으면 화면 "준비 중" — 지금은 12개 전부 있음). 개발 명령 /buy <key> 로도 시험.
 ]]
 
 local Config = require(script.Parent.Config)
@@ -31,20 +31,21 @@ local Kinds = {
 	moneyPass = "moneyPass",
 }
 
--- ★ 게임패스 id (Creator Dashboard → Monetization → Passes 의 Pass ID). 0 = 아직 없음
+-- ★ 게임패스 id (Creator Dashboard → Monetization → Passes 의 Pass ID)
+--   2026-11-17 게시한 체험 (universe 10777294360) 에 Open Cloud 로 만든 진짜 id — 바꾸지 말 것
 local IDS: { [string]: number } = {
-	power_2 = 0,
-	power_4 = 0,
-	power_8 = 0,
-	power_16 = 0,
-	power_32 = 0,
-	power_64 = 0,
-	power_128 = 0,
-	power_256 = 0,
-	power_512 = 0,
-	power_1024 = 0,
-	power_2048 = 0,
-	money_2 = 0,
+	power_2 = 2092088488,
+	power_4 = 2092238475,
+	power_8 = 2094368437,
+	power_16 = 2092472455,
+	power_32 = 2092538462,
+	power_64 = 2093432475,
+	power_128 = 2092700472,
+	power_256 = 2092844452,
+	power_512 = 2093798444,
+	power_1024 = 2092364442,
+	power_2048 = 2093090450,
+	money_2 = 2093966468,
 }
 
 -- 힘 배수 (= 로벅스 가격)
@@ -213,7 +214,7 @@ function Products.isValidBoost(value: number): boolean
 	return value == 1 or boostByValue[value] ~= nil
 end
 
--- id 가 붙어 있나 (false 면 화면은 "준비 중")
+-- id 가 붙어 있나 (false 면 화면은 "준비 중" — 지금은 12개 전부 true)
 function Products.isConfigured(product: Product): boolean
 	return product.productId > 0
 end

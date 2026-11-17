@@ -53,6 +53,7 @@
 - **C-1 고침**: `ExamService.near` 가 좌표 NaN 이면 바로 거짓 + 거리 비교를 "안쪽이면 참" (`<=`) 으로 뒤집음 · `MapLayout.isOnTrainMat` · `doorAt` 높이 검사를 `not (y >= 아래 and y <= 위)` 로 (NaN 이 아닌 값은 결과 그대로) · 같은 모양을 `SizeService.isOnTrainMat` (NaN 이면 거짓) · `BreakRules.inReach` (수평 비교 뒤집음) 에도. `TrainService` 는 `SizeService.isOnTrainMat` 을, `WorldService` 는 위치 비교가 없음. `holes_v3` B-6b · B-6c 를 `T.test` 로, B-6d (매트 · 문 · 물건 닿기에 NaN 축 하나씩, 월드 3개 · 큰 몸) 추가.
 - **C-2 고침**: `DataSchema.reconcile` — 띠가 범위 밖 (23 · 1e15 · 1e308 · 0 · 음수 · NaN · 무한) 이면 1 (`integerOr`, 맨 위로 안 맞춤) · `grandMaster = Progression.isGrandMaster(belt)` (저장된 표시는 안 봄). D-3b · D-3c 를 `T.test` 로.
 - **C-3 안 고침 (일부러)**: 게시 전이라 옛 12띠 저장이 없음 — D-4 는 `T.skip` 그대로, 이유에 "게시 전이라 일부러 안 고침" 을 적음.
+- **게임패스 소유 확인 (위 "시험하지 못한 것" 의 게임패스 줄) — 이제 시험함** (2026-11-17, 게시 뒤 진짜 id 12개): 새 `tests/product_service.spec.luau` 17개 — 가짜 MarketplaceService (오류 · 한 패스만 오류 · 늦은 답 · 끝내 안 오는 답 · boolean 이 아닌 답 · 늦게 반영되는 소유) 로 접속 확인 (`syncPasses`) · 구매 끝 신호 (안 샀음 / 샀다지만 안 가짐 → 서버가 다시 확인해서 안 줌 / 가짐 → 한 번만) · 순서 건너뛴 패스 = `boostFromOwnedPasses` · 이상한 id · 클라 Remote · 영수증 · 힘 배수 ↛ 몸 크기 · 돈 2배 한 번만 · `/buy` `/unbuy` (스튜디오만) · 다음 접속 때 다시 확인 (DataStore 왕복). ProductService 는 원래도 구매 끝 신호를 믿지 않고 다시 확인했음. 고친 것 2가지: 확인이 도는 사이 `/unbuy` 하면 늦게 온 결과로 다시 올리던 것 · 구매 직후 소유 반영이 늦으면 바로 "확인 중" 으로 끝나던 것 (3초 간격 3번까지 다시 물음).
 - **C-4 고침**: 주석 6곳 (`Remotes.luau` · `Tags.luau` · `Theme.luau` · `BeltController.luau` · `Visuals.luau` · `TrainController.luau`) · 안 쓰던 `MapLayout.WORLD_SPACING` 지움 (읽는 곳 없음 — F-2 가 `nil` 인지도 봄). F-2 를 `T.test` 로.
 
 ### 참고 (고칠 것 아님)

@@ -327,27 +327,46 @@ return function(T, Loader)
 
 	T.suite("data: 게임패스 12개 · Config")
 
-	T.test("power_2 … power_2048 (11) + money_2 = 12, 전부 게임패스, id 0", function()
-		T.eq(#Products.passes, 12, "패스 수")
-		T.eq(#Products.list, 12, "상품 수")
-		local m = 2
-		for i, p in Products.powerBoosts do
-			T.eq(p.key, "power_" .. m, "key " .. i)
-			T.eq(p.value, m, "배수")
-			T.eq(p.robux, m, "가격 = 배수")
-			T.eq(p.kind, "powerBoost", "kind")
-			m *= 2
+	T.test(
+		"power_2 … power_2048 (11) + money_2 = 12, 전부 게임패스 · id 붙음 (게시 2026-11-17)",
+		function()
+			T.eq(#Products.passes, 12, "패스 수")
+			T.eq(#Products.list, 12, "상품 수")
+			local m = 2
+			for i, p in Products.powerBoosts do
+				T.eq(p.key, "power_" .. m, "key " .. i)
+				T.eq(p.value, m, "배수")
+				T.eq(p.robux, m, "가격 = 배수")
+				T.eq(p.kind, "powerBoost", "kind")
+				m *= 2
+			end
+			T.eq(#Products.powerBoosts, 11, "힘 배수 11개")
+			local money = Products.get("money_2")
+			T.eq(money.robux, 199, "돈 2배 199")
+			T.eq(money.kind, "moneyPass", "kind")
+			-- 진짜 게임패스 id (universe 10777294360 에 Open Cloud 로 만듦): 양의 정수 · 서로 다름 · byPassId 로 되돌아감
+			local seen = {}
+			for _, p in Products.list do
+				T.eq(p.isPass, true, p.key .. " 게임패스")
+				local id = p.productId
+				T.truthy(
+					type(id) == "number" and id > 0 and id % 1 == 0 and id < 2 ^ 53,
+					p.key .. " id 양의 정수 " .. tostring(id)
+				)
+				T.falsy(seen[id], p.key .. " id 겹침 (" .. tostring(seen[id]) .. ")")
+				seen[id] = p.key
+				T.eq(Products.IDS[p.key], id, p.key .. " IDS 표와 같음")
+				T.eq(Products.byPassId(id), p, p.key .. " byPassId 로 되돌아감")
+				T.eq(Products.byProductId(id), nil, p.key .. " 개발자 상품 영수증으로는 안 옴")
+				T.eq(Products.isConfigured(p), true, p.key .. " 살 수 있음")
+			end
+			local count = 0
+			for _ in Products.IDS do
+				count += 1
+			end
+			T.eq(count, 12, "IDS 12개")
 		end
-		T.eq(#Products.powerBoosts, 11, "힘 배수 11개")
-		local money = Products.get("money_2")
-		T.eq(money.robux, 199, "돈 2배 199")
-		T.eq(money.kind, "moneyPass", "kind")
-		for _, p in Products.list do
-			T.eq(p.isPass, true, p.key .. " 게임패스")
-			T.eq(p.productId, 0, p.key .. " id 0")
-			T.eq(Products.isConfigured(p), false, p.key .. " 준비 중")
-		end
-	end)
+	)
 
 	T.test("Config: 상한 1e60 · 심사 10장 20초 · 대결 15장 · DataStore 이름", function()
 		T.eq(Config.POWER_MAX, 1e60, "힘 상한")

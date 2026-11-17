@@ -10,7 +10,11 @@
 	      · MarketplaceService.PromptGamePassPurchaseFinished (서버에서만 믿음): wasPurchased 이고 우리 패스면 소유를 다시 확인해서
 	        true 일 때만 반영 + ProductGranted · Notify · 저장 시도. 같은 패스로 ProductGranted 는 접속당 1번
 	      · 웹에서 순서를 건너뛰어 산 패스는 낸 값만큼만 (boostFromOwnedPasses — 2배를 사야 4배)
-	  - id 가 전부 0 (아직 안 만듦) → 확인할 패스 없음 → 화면은 "준비 중". 개발 명령 /buy <key> 로 시험 (grant)
+	  - 패스 id 12개는 Data/Products IDS (2026-11-17 게시한 체험 universe 10777294360). 개발 명령 /buy <key> 로도 시험 (grant)
+	  - 구매가 끝났다는 신호만으로는 주지 않음 — 서버가 UserOwnsGamePassAsync 로 다시 확인 (거짓이면 PURCHASE_CONFIRM_TRIES 번까지
+	    PURCHASE_CONFIRM_SECONDS 마다 다시 — 로블록스 쪽 소유 반영이 늦는 경우). 그래도 아니면 안내 글만 (다음 접속 때 syncPasses)
+	  - 게임을 만든 사람은 자기 게임패스를 처음부터 전부 가진 것으로 나옴 (로블록스 규칙) → 스튜디오에서 새 플레이어 화면을 보려면
+	    개발 명령 /unbuy (setIgnorePassesForTest — 이 접속 동안 소유 확인을 쉼, 이미 돌고 있던 확인 결과도 안 씀)
 	- ProcessReceipt = processReceipt: 개발자 상품용 (지금은 없음 → 모르는 상품 = NotProcessedYet + 경고). 영수증 기록·저장 확인은
 	  첫 게임과 같음 (나중에 개발자 상품을 더하면 그대로 씀)
 	- grant(player, key, source): 시험·개발 명령 지급 (영수증 확인 없음)
@@ -47,6 +51,8 @@ ProductService.RECEIPT_ID_MAX = 64
 ProductService.PASS_CHECK_RETRIES = 2
 ProductService.PASS_RETRY_SECONDS = 1
 ProductService.PASS_CHECK_TIMEOUT = 30
+ProductService.PURCHASE_CONFIRM_TRIES = 3 -- 구매 직후 소유 확인이 "아니요" 면 이만큼 (처음 포함)
+ProductService.PURCHASE_CONFIRM_SECONDS = 3
 ProductService.PASS_CHECKING_TEXT = "구매 확인 중 · 잠시 후 재접속 시 적용"
 
 local function boostText(boost: number): string
@@ -318,8 +324,8 @@ function ProductService.syncPasses(player: Player): boolean
 		return true
 	end
 	local answers = checkPasses(player, list)
-	if not stillHere(player, data) then
-		return false
+	if not stillHere(player, data) or ignoringPasses[player] then
+		return false -- 확인하는 사이 나감 · 확인하는 사이 /unbuy (시험용 — 늦게 온 결과로 다시 올리지 않음)
 	end
 	local answered = false
 	for key, has in answers do
@@ -344,9 +350,8 @@ function ProductService.onGamePassPurchaseFinished(player: Player, gamePassId: n
 	end
 	local product = Products.byPassId(gamePassId)
 	if not product then
-		return
+		return -- 모르는 id · 남의 게임 패스 · 0 · 음수 · NaN · 글자
 	end
-	ignoringPasses[player] = nil
 	local session, data = waitLoaded(player)
 	if not session or not data then
 		return
@@ -359,8 +364,16 @@ function ProductService.onGamePassPurchaseFinished(player: Player, gamePassId: n
 	if announced[product.key] then
 		return
 	end
-	announced[product.key] = true
+	announced[product.key] = true -- yield 전에 표시 → 동시에 두 번 와도 한 번만
+	-- 구매가 끝났다는 신호만 믿지 않고 서버가 소유를 다시 확인 ("아니요" 면 조금 뒤 몇 번 더 — 반영이 늦을 때)
 	local owned = ownsPass(player, product.productId)
+	for _ = 2, ProductService.PURCHASE_CONFIRM_TRIES do
+		if owned ~= false or not stillHere(player, data) then
+			break
+		end
+		task.wait(ProductService.PURCHASE_CONFIRM_SECONDS)
+		owned = ownsPass(player, product.productId)
+	end
 	if not stillHere(player, data) then
 		announced[product.key] = nil
 		return
@@ -370,6 +383,7 @@ function ProductService.onGamePassPurchaseFinished(player: Player, gamePassId: n
 		Net.notify(player, "info", ProductService.PASS_CHECKING_TEXT)
 		return
 	end
+	ignoringPasses[player] = nil -- 진짜로 샀으면 시험용 "패스 확인 쉼"은 풀림
 	session.ownedPasses[product.key] = true
 	ProductService.syncPasses(player)
 	if not stillHere(player, data) then

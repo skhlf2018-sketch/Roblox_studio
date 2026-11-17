@@ -1599,6 +1599,158 @@ local function body()
 		)
 	end
 
+	-- 투명벽 (사장님 결정 19번: "맵은 투명벽으로 사방이 막혀있어")
+	do
+		print("[투명벽 (결정 19번)]")
+		local SizesW = requireNode(Loader.get("ReplicatedStorage/Shared/Data/Sizes"))
+		local needH = 3 * (SizesW.jumpHeight(SizesW.MAX_SCALE) + SizesW.MAX_SCALE * SizesW.AVATAR_HEIGHT)
+		local halfW = SizesW.MAX_SCALE * 1.45 -- 가장 큰 몸 반 너비 (보통 몸 너비 2 × 너비 배율(근육 1) ÷ 2)
+		for w = 1, 3 do
+			local ws = MapLayout.worldScale(w)
+			local wf = map["World" .. w]
+			local walls, grounds = {}, {}
+			local propOk, maxW, lowest, highest = true, 0, math.huge, -math.huge
+			local groundBottom = math.huge
+			for _, d in wf:GetDescendants() do
+				if d:IsA("BasePart") and d.Name == "BoundaryWall" then
+					local x0, x1, z0, z1, top = aabb(d)
+					local bottom = d.CFrame.Position.Y - d.Size.Y / 2
+					table.insert(walls, { x0 = x0, x1 = x1, z0 = z0, z1 = z1 })
+					lowest = math.min(lowest, bottom)
+					highest = math.min(if highest == -math.huge then math.huge else highest, top)
+					maxW = math.max(maxW, d.Size.X, d.Size.Y, d.Size.Z)
+					if
+						d.Transparency ~= 1
+						or not d.CanCollide
+						or d.CanQuery
+						or d.CanTouch
+						or d.CastShadow
+						or d:GetAttribute("GiantPass")
+						or d.CollisionGroup == Build.PASS_GROUP
+						or d.Parent.Name ~= "Boundary"
+					then
+						propOk = false
+					end
+				elseif d:IsA("BasePart") and d.Name == "Ground" then
+					local x0, x1, z0, z1 = aabb(d)
+					table.insert(grounds, { x0 = x0, x1 = x1, z0 = z0, z1 = z1 })
+					groundBottom = math.min(groundBottom, d.CFrame.Position.Y - d.Size.Y / 2)
+				end
+			end
+			check(
+				#walls >= 4 and propOk,
+				string.format(
+					"월드 %d 투명벽 %d조각: 안 보임 · 그림자 없음 · 부딪힘 · GiantPass 아님 · CanQuery/CanTouch 꺼짐",
+					w,
+					#walls
+				)
+			)
+			check(
+				highest >= needH and lowest < groundBottom and maxW <= 2048,
+				string.format(
+					"월드 %d 벽 높이 %.0f ≥ %.0f (3 × (가장 큰 점프 + 키)) · 아래 끝 %.1f < 땅 아랫면 %.1f · 가장 긴 축 %.0f ≤ 2048",
+					w,
+					highest,
+					needH,
+					lowest,
+					groundBottom,
+					maxW
+				)
+			)
+			local function inAny(list, x, z)
+				for _, b in list do
+					if x >= b.x0 and x <= b.x1 and z >= b.z0 and z <= b.z1 then
+						return true
+					end
+				end
+				return false
+			end
+			-- 스폰에서 16 방향으로 걸어 나가면 땅을 벗어나기 전에 벽
+			local sp = MapLayout.spawn(w)
+			local escaped = {}
+			for k = 0, 15 do
+				local a = k * math.pi / 8
+				local dx, dz = math.cos(a), math.sin(a)
+				local step = 0.5 * ws
+				local hitWall = false
+				for i = 1, 40000 do
+					local x, z = sp.x + dx * step * i, sp.z + dz * step * i
+					if inAny(walls, x, z) then
+						hitWall = true
+						break
+					elseif not inAny(grounds, x, z) then
+						break
+					end
+				end
+				if not hitWall then
+					table.insert(escaped, tostring(k * 22.5) .. "°")
+				end
+			end
+			check(
+				#escaped == 0,
+				string.format(
+					"월드 %d: 스폰에서 16 방향 모두 땅을 벗어나기 전에 벽%s",
+					w,
+					if #escaped > 0 then " — 빠져나감: " .. table.concat(escaped, ", ") else ""
+				)
+			)
+			-- 모서리 닫힘: 땅 네 모서리 바로 바깥(대각선)이 벽 안
+			local rect = MapLayout.worldRect(w)
+			local tt = MapBuilder.WALL_THICK * ws
+			local cornerOk = true
+			for _, c in
+				{
+					{ rect.x0, rect.z0, -1, -1 },
+					{ rect.x1, rect.z0, 1, -1 },
+					{ rect.x0, rect.z1, -1, 1 },
+					{ rect.x1, rect.z1, 1, 1 },
+				}
+			do
+				if not inAny(walls, c[1] + c[3] * tt / 2, c[2] + c[4] * tt / 2) then
+					cornerOk = false
+				end
+			end
+			check(cornerOk, "월드 " .. w .. " 벽 네 모서리가 닫힘 (두께 " .. tt .. ")")
+			-- 쓰는 자리는 전부 벽 안, 가장 큰 몸 반 너비 이상 떨어짐
+			local spots = {}
+			for _, id in MapLayout.targetIds(w) do
+				local p = MapLayout.targetPosition(id)
+				local r = MapLayout.targetRadius(id) * MapLayout.FOOTPRINT
+				table.insert(spots, { id, p.x, p.z, r })
+			end
+			for _, m in MapLayout.roadMats(w) do
+				table.insert(spots, { "길가 매트 " .. m.targetId, m.x, m.z, 0 })
+			end
+			for i, m in MapLayout.trainMats(w) do
+				table.insert(spots, { "도장 매트 " .. i, m.x, m.z, 0 })
+			end
+			local ep, da = MapLayout.examPad(w), MapLayout.duelArena(w)
+			table.insert(spots, { "스폰", sp.x, sp.z, 0 })
+			table.insert(spots, { "심사대", ep.x, ep.z, 0 })
+			table.insert(spots, { "대결장", da.x, da.z, 0 })
+			for _, d in MapLayout.doors(w) do
+				table.insert(spots, { "포털 → " .. d.world, d.x, d.z, 0 })
+			end
+			local tight = {}
+			for _, s in spots do
+				local m = math.min(s[2] - rect.x0, rect.x1 - s[2], s[3] - rect.z0, rect.z1 - s[3]) - s[4]
+				if m < halfW then
+					table.insert(tight, string.format("%s %.1f", s[1], m))
+				end
+			end
+			check(
+				#tight == 0,
+				string.format(
+					"월드 %d: 물건(가장자리)·매트·심사대·대결장·포털·스폰 %d곳 모두 벽 안쪽 %.1f 이상%s",
+					w,
+					#spots,
+					halfW,
+					if #tight > 0 then " — 가까움: " .. table.concat(tight, ", ") else ""
+				)
+			)
+		end
+	end
+
 	-- 큰 월드가 어둡지 않게 (본부장 2026-11-16: 월드 3 도장 안이 거의 까맘)
 	local function lum(col)
 		return (col.R + col.G + col.B) / 3
